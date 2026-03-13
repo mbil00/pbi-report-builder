@@ -356,19 +356,51 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "string", "Legend font family",
         container_key="legend", container_prop="fontFamily", objects_path="objects",
     ),
-    # Category axis (X axis)
+    "legend.bold": PropertyDef(
+        None, "boolean", "Legend bold",
+        container_key="legend", container_prop="bold", objects_path="objects",
+    ),
+    "legend.italic": PropertyDef(
+        None, "boolean", "Legend italic",
+        container_key="legend", container_prop="italic", objects_path="objects",
+    ),
+    "legend.showTitle": PropertyDef(
+        None, "boolean", "Show legend title",
+        container_key="legend", container_prop="showTitle", objects_path="objects",
+    ),
+    "legend.titleText": PropertyDef(
+        None, "string", "Legend title text",
+        container_key="legend", container_prop="titleText", objects_path="objects",
+    ),
+    # ── Category axis (X axis) ────────────────────────────────
     "xAxis.show": PropertyDef(
         None, "boolean", "Show category axis",
         container_key="categoryAxis", container_prop="show", objects_path="objects",
     ),
-    "xAxis.title": PropertyDef(
-        None, "boolean", "Show category axis title",
-        container_key="categoryAxis", container_prop="showAxisTitle", objects_path="objects",
+    "xAxis.position": PropertyDef(
+        None, "enum", "Category axis position",
+        container_key="categoryAxis", container_prop="position", objects_path="objects",
+        enum_values=("Left", "Right"),
     ),
-    "xAxis.titleText": PropertyDef(
-        None, "string", "Category axis title text",
-        container_key="categoryAxis", container_prop="axisTitle", objects_path="objects",
+    "xAxis.axisScale": PropertyDef(
+        None, "enum", "Category axis scale",
+        container_key="categoryAxis", container_prop="axisScale", objects_path="objects",
+        enum_values=("linear", "log"),
     ),
+    "xAxis.axisType": PropertyDef(
+        None, "enum", "Category axis type",
+        container_key="categoryAxis", container_prop="axisType", objects_path="objects",
+        enum_values=("Scalar", "Categorical"),
+    ),
+    "xAxis.start": PropertyDef(
+        None, "number", "Category axis range start",
+        container_key="categoryAxis", container_prop="start", objects_path="objects",
+    ),
+    "xAxis.end": PropertyDef(
+        None, "number", "Category axis range end",
+        container_key="categoryAxis", container_prop="end", objects_path="objects",
+    ),
+    # Labels
     "xAxis.color": PropertyDef(
         None, "color", "Category axis label color",
         container_key="categoryAxis", container_prop="labelColor", objects_path="objects",
@@ -377,6 +409,61 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Category axis font size",
         container_key="categoryAxis", container_prop="fontSize", objects_path="objects",
     ),
+    "xAxis.fontFamily": PropertyDef(
+        None, "string", "Category axis font family",
+        container_key="categoryAxis", container_prop="fontFamily", objects_path="objects",
+    ),
+    "xAxis.bold": PropertyDef(
+        None, "boolean", "Category axis labels bold",
+        container_key="categoryAxis", container_prop="bold", objects_path="objects",
+    ),
+    "xAxis.italic": PropertyDef(
+        None, "boolean", "Category axis labels italic",
+        container_key="categoryAxis", container_prop="italic", objects_path="objects",
+    ),
+    "xAxis.displayUnits": PropertyDef(
+        None, "string", "Category axis display units (0=Auto, 1=None, 1000=K, 1000000=M)",
+        container_key="categoryAxis", container_prop="labelDisplayUnits", objects_path="objects",
+    ),
+    "xAxis.precision": PropertyDef(
+        None, "number", "Category axis decimal places",
+        container_key="categoryAxis", container_prop="labelPrecision", objects_path="objects",
+    ),
+    "xAxis.concatenateLabels": PropertyDef(
+        None, "boolean", "Concatenate category labels",
+        container_key="categoryAxis", container_prop="concatenateLabels", objects_path="objects",
+    ),
+    "xAxis.innerPadding": PropertyDef(
+        None, "number", "Inner padding between columns/bars",
+        container_key="categoryAxis", container_prop="innerPadding", objects_path="objects",
+    ),
+    # Title
+    "xAxis.title": PropertyDef(
+        None, "boolean", "Show category axis title",
+        container_key="categoryAxis", container_prop="showAxisTitle", objects_path="objects",
+    ),
+    "xAxis.titleText": PropertyDef(
+        None, "string", "Category axis title text",
+        container_key="categoryAxis", container_prop="axisTitle", objects_path="objects",
+    ),
+    "xAxis.titleColor": PropertyDef(
+        None, "color", "Category axis title color",
+        container_key="categoryAxis", container_prop="titleColor", objects_path="objects",
+    ),
+    "xAxis.titleFontSize": PropertyDef(
+        None, "number", "Category axis title font size",
+        container_key="categoryAxis", container_prop="titleFontSize", objects_path="objects",
+    ),
+    "xAxis.titleFontFamily": PropertyDef(
+        None, "string", "Category axis title font family",
+        container_key="categoryAxis", container_prop="titleFontFamily", objects_path="objects",
+    ),
+    "xAxis.axisStyle": PropertyDef(
+        None, "enum", "Category axis style",
+        container_key="categoryAxis", container_prop="axisStyle", objects_path="objects",
+        enum_values=("showTitleOnly", "showUnitOnly", "showBoth"),
+    ),
+    # Gridlines
     "xAxis.gridlines": PropertyDef(
         None, "boolean", "Show category axis gridlines",
         container_key="categoryAxis", container_prop="gridlineShow", objects_path="objects",
@@ -385,34 +472,33 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "color", "Category axis gridline color",
         container_key="categoryAxis", container_prop="gridlineColor", objects_path="objects",
     ),
-    # Value axis (Y axis)
+    "xAxis.gridlineThickness": PropertyDef(
+        None, "number", "Category axis gridline thickness",
+        container_key="categoryAxis", container_prop="gridlineThickness", objects_path="objects",
+    ),
+    "xAxis.gridlineStyle": PropertyDef(
+        None, "enum", "Category axis gridline style",
+        container_key="categoryAxis", container_prop="gridlineStyle", objects_path="objects",
+        enum_values=("dashed", "solid", "dotted"),
+    ),
+    "xAxis.invertAxis": PropertyDef(
+        None, "boolean", "Invert category axis order",
+        container_key="categoryAxis", container_prop="invertAxis", objects_path="objects",
+    ),
+    # ── Value axis (Y axis) ───────────────────────────────────
     "yAxis.show": PropertyDef(
         None, "boolean", "Show value axis",
         container_key="valueAxis", container_prop="show", objects_path="objects",
     ),
-    "yAxis.title": PropertyDef(
-        None, "boolean", "Show value axis title",
-        container_key="valueAxis", container_prop="showAxisTitle", objects_path="objects",
+    "yAxis.position": PropertyDef(
+        None, "enum", "Value axis position",
+        container_key="valueAxis", container_prop="position", objects_path="objects",
+        enum_values=("Left", "Right"),
     ),
-    "yAxis.titleText": PropertyDef(
-        None, "string", "Value axis title text",
-        container_key="valueAxis", container_prop="axisTitle", objects_path="objects",
-    ),
-    "yAxis.color": PropertyDef(
-        None, "color", "Value axis label color",
-        container_key="valueAxis", container_prop="labelColor", objects_path="objects",
-    ),
-    "yAxis.fontSize": PropertyDef(
-        None, "number", "Value axis font size",
-        container_key="valueAxis", container_prop="fontSize", objects_path="objects",
-    ),
-    "yAxis.gridlines": PropertyDef(
-        None, "boolean", "Show value axis gridlines",
-        container_key="valueAxis", container_prop="gridlineShow", objects_path="objects",
-    ),
-    "yAxis.gridlineColor": PropertyDef(
-        None, "color", "Value axis gridline color",
-        container_key="valueAxis", container_prop="gridlineColor", objects_path="objects",
+    "yAxis.axisScale": PropertyDef(
+        None, "enum", "Value axis scale",
+        container_key="valueAxis", container_prop="axisScale", objects_path="objects",
+        enum_values=("linear", "log"),
     ),
     "yAxis.start": PropertyDef(
         None, "number", "Value axis range start",
@@ -422,10 +508,125 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Value axis range end",
         container_key="valueAxis", container_prop="end", objects_path="objects",
     ),
-    # Secondary axis (Y2, for combo charts)
+    # Labels
+    "yAxis.color": PropertyDef(
+        None, "color", "Value axis label color",
+        container_key="valueAxis", container_prop="labelColor", objects_path="objects",
+    ),
+    "yAxis.fontSize": PropertyDef(
+        None, "number", "Value axis font size",
+        container_key="valueAxis", container_prop="fontSize", objects_path="objects",
+    ),
+    "yAxis.fontFamily": PropertyDef(
+        None, "string", "Value axis font family",
+        container_key="valueAxis", container_prop="fontFamily", objects_path="objects",
+    ),
+    "yAxis.bold": PropertyDef(
+        None, "boolean", "Value axis labels bold",
+        container_key="valueAxis", container_prop="bold", objects_path="objects",
+    ),
+    "yAxis.italic": PropertyDef(
+        None, "boolean", "Value axis labels italic",
+        container_key="valueAxis", container_prop="italic", objects_path="objects",
+    ),
+    "yAxis.displayUnits": PropertyDef(
+        None, "string", "Value axis display units (0=Auto, 1=None, 1000=K, 1000000=M)",
+        container_key="valueAxis", container_prop="labelDisplayUnits", objects_path="objects",
+    ),
+    "yAxis.precision": PropertyDef(
+        None, "number", "Value axis decimal places",
+        container_key="valueAxis", container_prop="labelPrecision", objects_path="objects",
+    ),
+    # Title
+    "yAxis.title": PropertyDef(
+        None, "boolean", "Show value axis title",
+        container_key="valueAxis", container_prop="showAxisTitle", objects_path="objects",
+    ),
+    "yAxis.titleText": PropertyDef(
+        None, "string", "Value axis title text",
+        container_key="valueAxis", container_prop="axisTitle", objects_path="objects",
+    ),
+    "yAxis.titleColor": PropertyDef(
+        None, "color", "Value axis title color",
+        container_key="valueAxis", container_prop="titleColor", objects_path="objects",
+    ),
+    "yAxis.titleFontSize": PropertyDef(
+        None, "number", "Value axis title font size",
+        container_key="valueAxis", container_prop="titleFontSize", objects_path="objects",
+    ),
+    "yAxis.titleFontFamily": PropertyDef(
+        None, "string", "Value axis title font family",
+        container_key="valueAxis", container_prop="titleFontFamily", objects_path="objects",
+    ),
+    "yAxis.axisStyle": PropertyDef(
+        None, "enum", "Value axis style",
+        container_key="valueAxis", container_prop="axisStyle", objects_path="objects",
+        enum_values=("showTitleOnly", "showUnitOnly", "showBoth"),
+    ),
+    # Gridlines
+    "yAxis.gridlines": PropertyDef(
+        None, "boolean", "Show value axis gridlines",
+        container_key="valueAxis", container_prop="gridlineShow", objects_path="objects",
+    ),
+    "yAxis.gridlineColor": PropertyDef(
+        None, "color", "Value axis gridline color",
+        container_key="valueAxis", container_prop="gridlineColor", objects_path="objects",
+    ),
+    "yAxis.gridlineThickness": PropertyDef(
+        None, "number", "Value axis gridline thickness",
+        container_key="valueAxis", container_prop="gridlineThickness", objects_path="objects",
+    ),
+    "yAxis.gridlineStyle": PropertyDef(
+        None, "enum", "Value axis gridline style",
+        container_key="valueAxis", container_prop="gridlineStyle", objects_path="objects",
+        enum_values=("dashed", "solid", "dotted"),
+    ),
+    "yAxis.invertAxis": PropertyDef(
+        None, "boolean", "Invert value axis",
+        container_key="valueAxis", container_prop="invertAxis", objects_path="objects",
+    ),
+    # ── Secondary axis (Y2) ──────────────────────────────────
     "y2Axis.show": PropertyDef(
         None, "boolean", "Show secondary value axis",
         container_key="y2Axis", container_prop="show", objects_path="objects",
+    ),
+    "y2Axis.position": PropertyDef(
+        None, "enum", "Secondary axis position",
+        container_key="y2Axis", container_prop="position", objects_path="objects",
+        enum_values=("Left", "Right"),
+    ),
+    "y2Axis.axisScale": PropertyDef(
+        None, "enum", "Secondary axis scale",
+        container_key="y2Axis", container_prop="axisScale", objects_path="objects",
+        enum_values=("linear", "log"),
+    ),
+    "y2Axis.start": PropertyDef(
+        None, "number", "Secondary axis range start",
+        container_key="y2Axis", container_prop="start", objects_path="objects",
+    ),
+    "y2Axis.end": PropertyDef(
+        None, "number", "Secondary axis range end",
+        container_key="y2Axis", container_prop="end", objects_path="objects",
+    ),
+    "y2Axis.color": PropertyDef(
+        None, "color", "Secondary axis label color",
+        container_key="y2Axis", container_prop="labelColor", objects_path="objects",
+    ),
+    "y2Axis.fontSize": PropertyDef(
+        None, "number", "Secondary axis font size",
+        container_key="y2Axis", container_prop="fontSize", objects_path="objects",
+    ),
+    "y2Axis.fontFamily": PropertyDef(
+        None, "string", "Secondary axis font family",
+        container_key="y2Axis", container_prop="fontFamily", objects_path="objects",
+    ),
+    "y2Axis.displayUnits": PropertyDef(
+        None, "string", "Secondary axis display units",
+        container_key="y2Axis", container_prop="labelDisplayUnits", objects_path="objects",
+    ),
+    "y2Axis.precision": PropertyDef(
+        None, "number", "Secondary axis decimal places",
+        container_key="y2Axis", container_prop="labelPrecision", objects_path="objects",
     ),
     "y2Axis.title": PropertyDef(
         None, "boolean", "Show secondary axis title",
@@ -435,7 +636,23 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "string", "Secondary axis title text",
         container_key="y2Axis", container_prop="axisTitle", objects_path="objects",
     ),
-    # Data labels
+    "y2Axis.titleColor": PropertyDef(
+        None, "color", "Secondary axis title color",
+        container_key="y2Axis", container_prop="titleColor", objects_path="objects",
+    ),
+    "y2Axis.titleFontSize": PropertyDef(
+        None, "number", "Secondary axis title font size",
+        container_key="y2Axis", container_prop="titleFontSize", objects_path="objects",
+    ),
+    "y2Axis.gridlines": PropertyDef(
+        None, "boolean", "Show secondary axis gridlines",
+        container_key="y2Axis", container_prop="gridlineShow", objects_path="objects",
+    ),
+    "y2Axis.gridlineColor": PropertyDef(
+        None, "color", "Secondary axis gridline color",
+        container_key="y2Axis", container_prop="gridlineColor", objects_path="objects",
+    ),
+    # ── Data labels ───────────────────────────────────────────
     "labels.show": PropertyDef(
         None, "boolean", "Show data labels",
         container_key="labels", container_prop="show", objects_path="objects",
@@ -452,20 +669,49 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "string", "Data label font family",
         container_key="labels", container_prop="fontFamily", objects_path="objects",
     ),
+    "labels.bold": PropertyDef(
+        None, "boolean", "Data label bold",
+        container_key="labels", container_prop="bold", objects_path="objects",
+    ),
+    "labels.italic": PropertyDef(
+        None, "boolean", "Data label italic",
+        container_key="labels", container_prop="italic", objects_path="objects",
+    ),
     "labels.position": PropertyDef(
         None, "enum", "Data label position",
         container_key="labels", container_prop="labelPosition", objects_path="objects",
         enum_values=("Auto", "InsideEnd", "OutsideEnd", "InsideCenter", "InsideBase"),
     ),
     "labels.format": PropertyDef(
-        None, "string", "Data label display units",
+        None, "string", "Data label display units (0=Auto, 1000=K, 1000000=M)",
         container_key="labels", container_prop="labelDisplayUnits", objects_path="objects",
     ),
     "labels.precision": PropertyDef(
         None, "number", "Data label decimal places",
         container_key="labels", container_prop="labelPrecision", objects_path="objects",
     ),
-    # Plot area
+    "labels.enableBackground": PropertyDef(
+        None, "boolean", "Enable label background",
+        container_key="labels", container_prop="enableBackground", objects_path="objects",
+    ),
+    "labels.backgroundColor": PropertyDef(
+        None, "color", "Label background color",
+        container_key="labels", container_prop="backgroundColor", objects_path="objects",
+    ),
+    "labels.backgroundTransparency": PropertyDef(
+        None, "number", "Label background transparency",
+        container_key="labels", container_prop="backgroundTransparency", objects_path="objects",
+    ),
+    "labels.labelDensity": PropertyDef(
+        None, "number", "Label density (how many labels to show)",
+        container_key="labels", container_prop="labelDensity", objects_path="objects",
+    ),
+    "labels.labelStyle": PropertyDef(
+        None, "enum", "Label style (pie/donut)",
+        container_key="labels", container_prop="labelStyle", objects_path="objects",
+        enum_values=("Data", "Category", "Percent of total", "All detail labels"),
+    ),
+    # ── Plot area ─────────────────────────────────────────────
     "plotArea.transparency": PropertyDef(
         None, "number", "Plot area transparency",
         container_key="plotArea", container_prop="transparency", objects_path="objects",
@@ -474,7 +720,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "color", "Plot area background color",
         container_key="plotArea", container_prop="color", objects_path="objects",
     ),
-    # Data colors
+    # ── Data colors ───────────────────────────────────────────
     "dataColors.default": PropertyDef(
         None, "color", "Default data color",
         container_key="dataPoint", container_prop="defaultColor", objects_path="objects",
@@ -483,9 +729,9 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "boolean", "Show all data colors",
         container_key="dataPoint", container_prop="showAllDataPoints", objects_path="objects",
     ),
-    # Line formatting (line/area charts)
+    # ── Line formatting (line/area charts) ────────────────────
     "line.show": PropertyDef(
-        None, "boolean", "Show line",
+        None, "boolean", "Show line markers",
         container_key="lineStyles", container_prop="showMarker", objects_path="objects",
     ),
     "line.style": PropertyDef(
@@ -497,10 +743,189 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Line stroke width",
         container_key="lineStyles", container_prop="strokeWidth", objects_path="objects",
     ),
+    "line.stepped": PropertyDef(
+        None, "boolean", "Stepped line (step chart)",
+        container_key="lineStyles", container_prop="stepped", objects_path="objects",
+    ),
+    "line.shadeArea": PropertyDef(
+        None, "boolean", "Shade area under line",
+        container_key="lineStyles", container_prop="shadeArea", objects_path="objects",
+    ),
     # Shape formatting
     "shapes.showMarkers": PropertyDef(
         None, "boolean", "Show data point markers",
         container_key="shapes", container_prop="showMarkers", objects_path="objects",
+    ),
+    "shapes.markerShape": PropertyDef(
+        None, "string", "Marker shape",
+        container_key="shapes", container_prop="markerShape", objects_path="objects",
+    ),
+    "shapes.markerSize": PropertyDef(
+        None, "number", "Marker size",
+        container_key="shapes", container_prop="markerSize", objects_path="objects",
+    ),
+    # ── Pie/donut ─────────────────────────────────────────────
+    "slices.innerRadius": PropertyDef(
+        None, "number", "Donut inner radius (0 = pie, higher = larger hole)",
+        container_key="slices", container_prop="innerRadiusRatio", objects_path="objects",
+    ),
+    # ── Card visual ───────────────────────────────────────────
+    "categoryLabels.show": PropertyDef(
+        None, "boolean", "Show category label (card)",
+        container_key="categoryLabels", container_prop="show", objects_path="objects",
+    ),
+    "categoryLabels.color": PropertyDef(
+        None, "color", "Category label color (card)",
+        container_key="categoryLabels", container_prop="color", objects_path="objects",
+    ),
+    "categoryLabels.fontSize": PropertyDef(
+        None, "number", "Category label font size (card)",
+        container_key="categoryLabels", container_prop="fontSize", objects_path="objects",
+    ),
+    "categoryLabels.fontFamily": PropertyDef(
+        None, "string", "Category label font family (card)",
+        container_key="categoryLabels", container_prop="fontFamily", objects_path="objects",
+    ),
+    "wordWrap.show": PropertyDef(
+        None, "boolean", "Enable word wrap (card)",
+        container_key="wordWrap", container_prop="show", objects_path="objects",
+    ),
+    # ── Slicer visual ────────────────────────────────────────
+    "slicerHeader.show": PropertyDef(
+        None, "boolean", "Show slicer header",
+        container_key="header", container_prop="show", objects_path="objects",
+    ),
+    "slicerHeader.fontColor": PropertyDef(
+        None, "color", "Slicer header font color",
+        container_key="header", container_prop="fontColor", objects_path="objects",
+    ),
+    "slicerHeader.background": PropertyDef(
+        None, "color", "Slicer header background",
+        container_key="header", container_prop="background", objects_path="objects",
+    ),
+    "slicerHeader.fontSize": PropertyDef(
+        None, "number", "Slicer header font size",
+        container_key="header", container_prop="textSize", objects_path="objects",
+    ),
+    "slicerHeader.fontFamily": PropertyDef(
+        None, "string", "Slicer header font family",
+        container_key="header", container_prop="fontFamily", objects_path="objects",
+    ),
+    "slicerHeader.bold": PropertyDef(
+        None, "boolean", "Slicer header bold",
+        container_key="header", container_prop="bold", objects_path="objects",
+    ),
+    "slicerItems.fontColor": PropertyDef(
+        None, "color", "Slicer items font color",
+        container_key="items", container_prop="fontColor", objects_path="objects",
+    ),
+    "slicerItems.background": PropertyDef(
+        None, "color", "Slicer items background",
+        container_key="items", container_prop="background", objects_path="objects",
+    ),
+    "slicerItems.fontSize": PropertyDef(
+        None, "number", "Slicer items font size",
+        container_key="items", container_prop="textSize", objects_path="objects",
+    ),
+    "slicerItems.fontFamily": PropertyDef(
+        None, "string", "Slicer items font family",
+        container_key="items", container_prop="fontFamily", objects_path="objects",
+    ),
+    "slicer.selectAll": PropertyDef(
+        None, "boolean", "Enable select all checkbox",
+        container_key="selection", container_prop="selectAllCheckboxEnabled", objects_path="objects",
+    ),
+    "slicer.singleSelect": PropertyDef(
+        None, "boolean", "Single selection mode",
+        container_key="selection", container_prop="singleSelect", objects_path="objects",
+    ),
+    # ── KPI visual ───────────────────────────────────────────
+    "kpi.showIcon": PropertyDef(
+        None, "boolean", "Show KPI status icon",
+        container_key="indicator", container_prop="showIcon", objects_path="objects",
+    ),
+    "kpi.displayUnits": PropertyDef(
+        None, "string", "KPI display units",
+        container_key="indicator", container_prop="indicatorDisplayUnits", objects_path="objects",
+    ),
+    "kpi.precision": PropertyDef(
+        None, "number", "KPI decimal places",
+        container_key="indicator", container_prop="indicatorPrecision", objects_path="objects",
+    ),
+    "kpi.direction": PropertyDef(
+        None, "enum", "KPI direction (high is good or bad)",
+        container_key="status", container_prop="direction", objects_path="objects",
+        enum_values=("Positive", "Negative"),
+    ),
+    "kpi.goodColor": PropertyDef(
+        None, "color", "KPI good status color",
+        container_key="status", container_prop="goodColor", objects_path="objects",
+    ),
+    "kpi.neutralColor": PropertyDef(
+        None, "color", "KPI neutral status color",
+        container_key="status", container_prop="neutralColor", objects_path="objects",
+    ),
+    "kpi.badColor": PropertyDef(
+        None, "color", "KPI bad status color",
+        container_key="status", container_prop="badColor", objects_path="objects",
+    ),
+    "kpi.showTrendline": PropertyDef(
+        None, "boolean", "Show KPI trendline",
+        container_key="trendline", container_prop="show", objects_path="objects",
+    ),
+    "kpi.showGoal": PropertyDef(
+        None, "boolean", "Show KPI goal",
+        container_key="goals", container_prop="showGoal", objects_path="objects",
+    ),
+    "kpi.showDistance": PropertyDef(
+        None, "boolean", "Show KPI distance to goal",
+        container_key="goals", container_prop="showDistance", objects_path="objects",
+    ),
+    # ── Gauge visual ─────────────────────────────────────────
+    "gauge.max": PropertyDef(
+        None, "number", "Gauge maximum value",
+        container_key="axis", container_prop="max", objects_path="objects",
+    ),
+    "gauge.target": PropertyDef(
+        None, "number", "Gauge target value",
+        container_key="axis", container_prop="target", objects_path="objects",
+    ),
+    "gauge.targetColor": PropertyDef(
+        None, "color", "Gauge target line color",
+        container_key="target", container_prop="color", objects_path="objects",
+    ),
+    "gauge.targetShow": PropertyDef(
+        None, "boolean", "Show gauge target label",
+        container_key="target", container_prop="show", objects_path="objects",
+    ),
+    "gauge.calloutShow": PropertyDef(
+        None, "boolean", "Show gauge callout value",
+        container_key="calloutValue", container_prop="show", objects_path="objects",
+    ),
+    "gauge.calloutColor": PropertyDef(
+        None, "color", "Gauge callout value color",
+        container_key="calloutValue", container_prop="color", objects_path="objects",
+    ),
+    "gauge.calloutDisplayUnits": PropertyDef(
+        None, "string", "Gauge callout display units",
+        container_key="calloutValue", container_prop="labelDisplayUnits", objects_path="objects",
+    ),
+    "gauge.calloutPrecision": PropertyDef(
+        None, "number", "Gauge callout decimal places",
+        container_key="calloutValue", container_prop="labelPrecision", objects_path="objects",
+    ),
+    # ── Waterfall ─────────────────────────────────────────────
+    "waterfall.increaseColor": PropertyDef(
+        None, "color", "Waterfall increase color",
+        container_key="sentimentColors", container_prop="increaseFill", objects_path="objects",
+    ),
+    "waterfall.decreaseColor": PropertyDef(
+        None, "color", "Waterfall decrease color",
+        container_key="sentimentColors", container_prop="decreaseFill", objects_path="objects",
+    ),
+    "waterfall.totalColor": PropertyDef(
+        None, "color", "Waterfall total color",
+        container_key="sentimentColors", container_prop="totalFill", objects_path="objects",
     ),
     # ── Table/matrix global formatting (visual.objects) ───────
     # Column headers (global)

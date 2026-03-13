@@ -300,49 +300,211 @@ pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=cente
 | `altText` | string | Accessibility alt text |
 | `stylePreset` | string | Style preset name |
 
-**Chart formatting** (encoded as PBI visual objects):
+**Chart formatting** (encoded as PBI visual objects — applies to charts, tables, slicers, KPIs, gauges):
+
+*Legend (bar, column, line, area, combo, pie, donut, scatter, waterfall, ribbon, funnel, treemap):*
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `legend.show` | boolean | Show legend |
-| `legend.position` | enum | `Top`, `Bottom`, `Left`, `Right`, `TopCenter`, `BottomCenter`, `LeftCenter`, `RightCenter` |
+| `legend.position` | enum | `Top`, `Bottom`, `Left`, `Right`, `TopCenter`, `BottomCenter` |
 | `legend.color` | color | Legend text color |
 | `legend.fontSize` | number | Legend font size |
 | `legend.fontFamily` | string | Legend font family |
+| `legend.bold` | boolean | Legend bold |
+| `legend.italic` | boolean | Legend italic |
+| `legend.showTitle` | boolean | Show legend title |
+| `legend.titleText` | string | Legend title text |
+
+*Category axis / X-axis (bar, column, line, area, combo, waterfall, ribbon):*
+
+| Property | Type | Description |
+|----------|------|-------------|
 | `xAxis.show` | boolean | Show category axis |
+| `xAxis.position` | enum | `Left`, `Right` |
 | `xAxis.title` | boolean | Show axis title |
 | `xAxis.titleText` | string | Axis title text |
-| `xAxis.color` | color | Label color |
-| `xAxis.fontSize` | number | Label font size |
+| `xAxis.titleColor` | color | Axis title color |
+| `xAxis.titleFontSize` | number | Axis title font size |
+| `xAxis.titleFontFamily` | string | Axis title font family |
+| `xAxis.color` | color | Axis label color |
+| `xAxis.fontSize` | number | Axis label font size |
+| `xAxis.fontFamily` | string | Axis label font family |
+| `xAxis.bold` | boolean | Axis labels bold |
+| `xAxis.italic` | boolean | Axis labels italic |
+| `xAxis.axisScale` | enum | `linear`, `log` |
+| `xAxis.axisType` | enum | `Scalar`, `Categorical` |
+| `xAxis.axisStyle` | enum | `showTitleOnly`, `showUnitOnly`, `showBoth` |
+| `xAxis.start` | number | Axis range start |
+| `xAxis.end` | number | Axis range end |
+| `xAxis.displayUnits` | string | Display units (`0`=Auto, `1`=None, `1000`=K, `1000000`=M) |
+| `xAxis.precision` | number | Decimal places |
 | `xAxis.gridlines` | boolean | Show gridlines |
 | `xAxis.gridlineColor` | color | Gridline color |
+| `xAxis.gridlineStyle` | enum | `dashed`, `solid`, `dotted` |
+| `xAxis.gridlineThickness` | number | Gridline thickness |
+| `xAxis.innerPadding` | number | Inner padding between columns/bars |
+| `xAxis.concatenateLabels` | boolean | Concatenate category labels |
+| `xAxis.invertAxis` | boolean | Invert axis order |
+
+*Value axis / Y-axis (bar, column, line, area, combo, scatter, waterfall, ribbon):*
+
+| Property | Type | Description |
+|----------|------|-------------|
 | `yAxis.show` | boolean | Show value axis |
+| `yAxis.position` | enum | `Left`, `Right` |
 | `yAxis.title` | boolean | Show axis title |
 | `yAxis.titleText` | string | Axis title text |
-| `yAxis.color` | color | Label color |
-| `yAxis.fontSize` | number | Label font size |
-| `yAxis.gridlines` | boolean | Show gridlines |
-| `yAxis.gridlineColor` | color | Gridline color |
+| `yAxis.titleColor` | color | Axis title color |
+| `yAxis.titleFontSize` | number | Axis title font size |
+| `yAxis.titleFontFamily` | string | Axis title font family |
+| `yAxis.color` | color | Axis label color |
+| `yAxis.fontSize` | number | Axis label font size |
+| `yAxis.fontFamily` | string | Axis label font family |
+| `yAxis.bold` | boolean | Axis labels bold |
+| `yAxis.italic` | boolean | Axis labels italic |
+| `yAxis.axisScale` | enum | `linear`, `log` |
+| `yAxis.axisStyle` | enum | `showTitleOnly`, `showUnitOnly`, `showBoth` |
 | `yAxis.start` | number | Axis range start |
 | `yAxis.end` | number | Axis range end |
+| `yAxis.displayUnits` | string | Display units (`0`=Auto, `1`=None, `1000`=K, `1000000`=M) |
+| `yAxis.precision` | number | Decimal places |
+| `yAxis.gridlines` | boolean | Show gridlines |
+| `yAxis.gridlineColor` | color | Gridline color |
+| `yAxis.gridlineStyle` | enum | `dashed`, `solid`, `dotted` |
+| `yAxis.gridlineThickness` | number | Gridline thickness |
+| `yAxis.invertAxis` | boolean | Invert value axis |
+
+*Secondary Y-axis (combo charts):*
+
+| Property | Type | Description |
+|----------|------|-------------|
 | `y2Axis.show` | boolean | Show secondary axis |
-| `y2Axis.title` | boolean | Show secondary axis title |
-| `y2Axis.titleText` | string | Secondary axis title |
+| `y2Axis.position` | enum | `Left`, `Right` |
+| `y2Axis.title` | boolean | Show axis title |
+| `y2Axis.titleText` | string | Axis title text |
+| `y2Axis.titleColor` | color | Axis title color |
+| `y2Axis.titleFontSize` | number | Axis title font size |
+| `y2Axis.color` | color | Axis label color |
+| `y2Axis.fontSize` | number | Axis label font size |
+| `y2Axis.fontFamily` | string | Axis label font family |
+| `y2Axis.axisScale` | enum | `linear`, `log` |
+| `y2Axis.start` | number | Axis range start |
+| `y2Axis.end` | number | Axis range end |
+| `y2Axis.displayUnits` | string | Display units |
+| `y2Axis.precision` | number | Decimal places |
+| `y2Axis.gridlines` | boolean | Show gridlines |
+| `y2Axis.gridlineColor` | color | Gridline color |
+
+*Data labels (most chart types):*
+
+| Property | Type | Description |
+|----------|------|-------------|
 | `labels.show` | boolean | Show data labels |
 | `labels.color` | color | Label color |
 | `labels.fontSize` | number | Label font size |
 | `labels.fontFamily` | string | Label font family |
+| `labels.bold` | boolean | Label bold |
+| `labels.italic` | boolean | Label italic |
 | `labels.position` | enum | `Auto`, `InsideEnd`, `OutsideEnd`, `InsideCenter`, `InsideBase` |
-| `labels.format` | string | Label display units |
+| `labels.format` | string | Display units (`0`=Auto, `1000`=K, `1000000`=M) |
 | `labels.precision` | number | Decimal places |
+| `labels.labelStyle` | enum | `Data`, `Category`, `Percent of total`, `All detail labels` (pie/donut) |
+| `labels.enableBackground` | boolean | Enable label background |
+| `labels.backgroundColor` | color | Label background color |
+| `labels.backgroundTransparency` | number | Label background transparency |
+| `labels.labelDensity` | number | Label density (how many labels to show) |
+
+*Plot area & data colors (most chart types):*
+
+| Property | Type | Description |
+|----------|------|-------------|
 | `plotArea.transparency` | number | Plot area transparency |
 | `plotArea.color` | color | Plot area background |
 | `dataColors.default` | color | Default data color |
 | `dataColors.showAll` | boolean | Show all data colors |
+
+*Line & area charts:*
+
+| Property | Type | Description |
+|----------|------|-------------|
 | `line.show` | boolean | Show line markers |
 | `line.style` | enum | `solid`, `dashed`, `dotted` |
 | `line.width` | number | Line stroke width |
+| `line.stepped` | boolean | Stepped line (step chart) |
+| `line.shadeArea` | boolean | Shade area under line |
 | `shapes.showMarkers` | boolean | Show data point markers |
+| `shapes.markerShape` | string | Marker shape |
+| `shapes.markerSize` | number | Marker size |
+
+*Pie & donut:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `slices.innerRadius` | number | Donut inner radius (0 = pie, higher = larger hole) |
+
+*Card visual:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `categoryLabels.show` | boolean | Show category label |
+| `categoryLabels.color` | color | Category label color |
+| `categoryLabels.fontSize` | number | Category label font size |
+| `categoryLabels.fontFamily` | string | Category label font family |
+| `wordWrap.show` | boolean | Enable word wrap |
+
+*Slicer visual:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `slicerHeader.show` | boolean | Show slicer header |
+| `slicerHeader.fontColor` | color | Header font color |
+| `slicerHeader.background` | color | Header background |
+| `slicerHeader.fontSize` | number | Header font size |
+| `slicerHeader.fontFamily` | string | Header font family |
+| `slicerHeader.bold` | boolean | Header bold |
+| `slicerItems.fontColor` | color | Items font color |
+| `slicerItems.background` | color | Items background |
+| `slicerItems.fontSize` | number | Items font size |
+| `slicerItems.fontFamily` | string | Items font family |
+| `slicer.selectAll` | boolean | Enable select all checkbox |
+| `slicer.singleSelect` | boolean | Single selection mode |
+
+*KPI visual:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `kpi.showIcon` | boolean | Show KPI status icon |
+| `kpi.displayUnits` | string | KPI display units |
+| `kpi.precision` | number | KPI decimal places |
+| `kpi.direction` | enum | `Positive` (high is good), `Negative` (high is bad) |
+| `kpi.goodColor` | color | Good status color |
+| `kpi.neutralColor` | color | Neutral status color |
+| `kpi.badColor` | color | Bad status color |
+| `kpi.showTrendline` | boolean | Show trendline |
+| `kpi.showGoal` | boolean | Show goal |
+| `kpi.showDistance` | boolean | Show distance to goal |
+
+*Gauge visual:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `gauge.max` | number | Gauge maximum value |
+| `gauge.target` | number | Gauge target value |
+| `gauge.targetColor` | color | Target line color |
+| `gauge.targetShow` | boolean | Show target label |
+| `gauge.calloutShow` | boolean | Show callout value |
+| `gauge.calloutColor` | color | Callout value color |
+| `gauge.calloutDisplayUnits` | string | Callout display units |
+| `gauge.calloutPrecision` | number | Callout decimal places |
+
+*Waterfall chart:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `waterfall.increaseColor` | color | Increase color |
+| `waterfall.decreaseColor` | color | Decrease color |
+| `waterfall.totalColor` | color | Total color |
 
 Any property not listed above can be accessed via raw JSON dot-path (e.g. `visual.objects.legend`).
 
@@ -350,6 +512,18 @@ Any property not listed above can be accessed via raw JSON dot-path (e.g. `visua
 pbi visual set "Sales" chart background.color="#FFFFFF"
 pbi visual set "Sales" chart border.show=true title.text="Revenue by Category" title.alignment=center
 pbi visual set "Sales" chart legend.show=true legend.position=Top labels.show=false
+
+# Axis formatting
+pbi visual set "Sales" chart xAxis.show=true xAxis.title=true xAxis.titleText="Product Category"
+pbi visual set "Sales" chart yAxis.show=true yAxis.displayUnits=1000000 yAxis.precision=1 yAxis.gridlineStyle=dashed
+pbi visual set "Sales" chart yAxis.start=0 yAxis.end=1000000 yAxis.axisScale=linear
+
+# Chart-type specific
+pbi visual set "Sales" donut slices.innerRadius=50 labels.labelStyle="Percent of total"
+pbi visual set "Sales" kpiCard kpi.showIcon=true kpi.direction=Positive kpi.goodColor="#00B050"
+pbi visual set "Sales" gauge gauge.max=100 gauge.target=75 gauge.targetShow=true
+pbi visual set "Sales" slicer slicerHeader.show=true slicerHeader.bold=true slicer.singleSelect=false
+pbi visual set "Sales" waterfall waterfall.increaseColor="#00B050" waterfall.decreaseColor="#FF0000"
 ```
 
 ### pbi visual move
