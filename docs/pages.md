@@ -17,8 +17,11 @@ pbi page get <page> <property>         # single property value
 
 ## pbi page set
 
+Supports single property or batch mode:
+
 ```bash
-pbi page set <page> <property> <value>
+pbi page set <page> <property> <value>                          # single (legacy)
+pbi page set <page> prop=value [prop=value ...]                  # batch
 ```
 
 **Properties:**
@@ -36,11 +39,13 @@ pbi page set <page> <property> <value>
 | `outspace.transparency` | number | Outspace transparency |
 
 ```bash
+pbi page set "Sales" width=1920
+pbi page set "Sales" visibility=HiddenInViewMode
+pbi page set "Sales" background.color="#F5F5F5" background.transparency=0
+pbi page set "Sales" outspace.color="#E0E0E0"
+
+# Legacy single-property syntax still works
 pbi page set "Sales" width 1920
-pbi page set "Sales" visibility HiddenInViewMode
-pbi page set "Sales" background.color "#F5F5F5"
-pbi page set "Sales" background.transparency 0
-pbi page set "Sales" outspace.color "#E0E0E0"
 ```
 
 ## pbi page create

@@ -222,7 +222,7 @@ Page background support has been added to the CLI (2026-03-13).
 
 ## BUG-004: `--measure` flag generates invalid selector format for per-measure styling
 
-**Status:** Open
+**Status:** Partially fixed (2026-03-13) — color encoding fixed via BUG-010; selector format already uses correct `metadata` pattern
 **Severity:** Breaking — reports fail schema validation in Power BI Desktop
 **Found:** 2026-03-13
 
@@ -350,87 +350,348 @@ across 3 visuals that all show as `?.?`.
 
 ---
 
-## Missing CLI Features — Manual JSON Edits Required
+## BUG-006: `pbi page set` writes malformed JSON for page background
 
-Most formatting capabilities originally documented here have since been implemented
-in the CLI. The features below are the remaining gaps that still require manual JSON
-editing or are not yet available.
+**Status:** Fixed (2026-03-13) — `page set` now supports batch `prop=value` syntax
+**Severity:** Breaking — page.json becomes invalid, report may fail to load
+**Found:** 2026-03-13
+**Reproduced:** Twice (Licensing & M365 Usage page, Software Inventory page)
 
-### Previously documented features — now implemented
+### Symptom
 
-The following were documented as missing but are now supported. Use these CLI commands
-instead of editing JSON directly:
+Running `pbi page set "Software Inventory" background.color="#F5F5F5" background.transparency=0`
+writes this to page.json:
 
-| Feature | CLI Command |
-|---------|-------------|
-| Table formatting (grid, columnHeaders, values, total) | `pbi visual set ... grid.*`, `columnHeaders.*`, `values.*`, `total.*` |
-| Card visual formatting (layout, accentBar, value, label, divider, shape, padding) | `pbi visual set ... layout.*`, `accentBar.*`, `cardValue.*`, `cardLabel.*`, `cardDivider.*`, `cardShape.*`, `cardPadding.*` |
-| Per-measure selectors | `pbi visual set ... --measure "Table.Measure"` |
-| Matrix/pivot table formatting (rowHeaders, subTotals) | `pbi visual set ... rowHeaders.*`, `subTotals.*` |
-| Chart axis/label formatting (xAxis, yAxis, labels, legend) | `pbi visual set ... xAxis.*`, `yAxis.*`, `labels.*`, `legend.*` |
-| Visual deletion | `pbi visual delete <page> <visual>` |
-| Data binding (add/remove fields) | `pbi visual bind`, `pbi visual unbind` |
-| Slicer formatting (header, items) | `pbi visual set ... slicerHeader.*`, `slicerItems.*`, `slicer.*` |
-
----
-
-### FEAT-005: Theme management
-
-**Priority:** Low — can be done via PBI Desktop UI
-
-Currently the CLI has no commands for theme management. Theme files are JSON files
-that PBI Desktop manages via `report.json` → `themeCollection` + `resourcePackages`.
-
-Useful CLI operations would be:
-- `pbi theme apply <theme.json>` — copy theme to `StaticResources/RegisteredResources/`
-  and update `report.json` references
-- `pbi theme export` — extract current theme to a standalone JSON file
-- `pbi theme list` — show active base and custom themes
-
-Note: PBI Desktop overwrites `report.json` on save, so theme changes via file editing
-only work when PBI Desktop is closed.
-
----
-
-### FEAT-010: Batch/bulk visual operations
-
-**Priority:** Medium — saves significant time when styling multiple visuals
-
-When redesigning a full page, the same styling is often applied to many visuals
-(e.g. all slicers get the same border/title/header styling). Currently each visual
-must be targeted individually. The batch mode of `pbi visual set` helps for a single
-visual but doesn't span multiple visuals.
-
-Useful batch operations:
-
-```bash
-# Apply same property to all visuals of a type on a page
-pbi visual set <page> --all-type=slicer border.radius=4 border.show=true title.fontSize=9
-
-# Clone visual formatting from one visual to another
-pbi visual copy-style <page> <source-visual> <target-visual>
-
-# Apply a saved style preset
-pbi visual apply-style <page> <visual> --preset card-container
+```json
+"background": {
+  "color=#F5F5F5": "background.transparency=0"
+}
 ```
 
-This would dramatically reduce the effort needed for page redesigns. For the User Estate
-page redesign, styling 6 identical slicers required writing 6 separate JSON files with
-the same `visualContainerObjects` block. A batch command would have done it in one line.
+This is a flat key-value string — not valid PBIR format. The CLI appears to be concatenating
+the `key=value` arguments into a string instead of building the nested expression structure.
+
+### Expected Output
+
+The correct PBIR format for page background is inside `objects.background`:
+
+```json
+"objects": {
+  "background": [
+    {
+      "properties": {
+        "color": {
+          "solid": {
+            "color": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#F5F5F5'"
+                }
+              }
+            }
+          }
+        },
+        "transparency": {
+          "expr": {
+            "Literal": {
+              "Value": "0D"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+### Root Cause
+
+The `pbi page set` command does not handle the page `objects` structure. Page-level objects
+(background, outspacePane) live inside `page.json → objects`, using the same expression format
+as visual objects. The CLI currently writes to a top-level `background` key instead of into
+`objects.background[]`, and does not wrap values in the PBIR expression format.
+
+### Workaround
+
+Edit page.json manually. Remove the broken `background` key and add the correct
+`objects.background` array.
 
 ---
 
-### FEAT-011: Page template / page style preset
+## BUG-007: Card visual `pbi visual create` produces minimal layout — causes text clipping
 
-**Priority:** Low — nice-to-have for consistency across pages
+**Status:** Fixed (2026-03-13) — cardVisual create now generates full scaffold with multi-entry objects
+**Severity:** High — KPI strips created via CLI have clipped/unreadable text
+**Found:** 2026-03-13
 
-When multiple pages share the same layout pattern (slicers → KPI strip → table → charts),
-it would be useful to save and apply page templates:
+### Symptom
 
-```bash
-# Save current page layout as a template
-pbi page save-template <page> <template-name>
+Card visuals created via `pbi visual create` (and subsequently styled with `pbi visual set`)
+produce a minimal `objects.layout` with only `style`, `columnCount`, and `calloutSize`.
+The resulting card visual has text that clips to the bottom and is unreadable, particularly
+in KPI strip configurations (short height, multiple measures).
 
-# Apply template to a new page (creates visuals with matching positions/styles)
-pbi page apply-template <page> <template-name>
+This was observed on the Security & Compliance and Licensing & M365 Usage KPI strips, both
+built via CLI. The Device Estate and User Estate KPI strips (built in Power BI Desktop) render
+correctly because they have a much richer layout structure.
+
+### Root Cause
+
+The CLI sets layout properties individually, but a working card visual requires **multiple
+array entries** in several object types, with different selectors:
+
+**Missing objects entirely** (CLI has no property mappings for these):
+- `shapeCustomRectangle` — rounded card tiles (`rectangleRoundedCurve`, `tileShape`)
+- `overFlow` — controls text overflow behavior (`overFlowStyle: 1D`, `overFlowDirection: 0D`)
+- `shadowCustom` — card-level shadow (inside `objects`, separate from container `dropShadow`)
+- `border` (inside `objects`) — card-level border (separate from container `border`)
+- `padding` (inside `objects`) — card-level `paddingUniform` (separate from container `padding`)
+
+**Missing properties in `layout`:**
+- `autoGrid`, `alignment`, `contentOrder`, `orientation`, `cellPadding` — all absent
+- Only one `layout` array entry when the working format requires **two**: one for the grid
+  settings (no selector) and one for per-card settings (`{"selector": {"id": "default"}}`)
+  with `paddingUniform` and `backgroundShow`
+
+**Missing structure in `value`:**
+- Only one `value` entry when the working format requires multiple: a `show` entry, a
+  `horizontalAlignment`+`fontSize` entry (with `{"selector": {"id": "default"}}`), and
+  per-measure `labelDisplayUnits` entries (each with `{"selector": {"metadata": "..."}}`
+  using the numeric `1D` format, not the string `'1'`)
+
+**Missing selectors on `divider` and `label`:**
+- These need `{"selector": {"id": "default"}}` which the CLI omits
+
+### Correct Layout Format
+
+See the Device Estate KPI strip for the complete working structure:
+`pages/4b4331154ee80a15c346/visuals/12d04b96672712dea0ee/visual.json`
+
+Key objects and their entries:
+
 ```
+objects.shapeCustomRectangle[0]  → rectangleRoundedCurve=5L, tileShape  (selector: default)
+objects.padding[0]               → paddingUniform=7L                     (selector: default)
+objects.layout[0]                → calloutSize, autoGrid, alignment=middle, contentOrder,
+                                   columnCount, style=Cards, orientation=2D, cellPadding=8L
+objects.layout[1]                → paddingUniform=6L, backgroundShow=false (selector: default)
+objects.divider[0]               → show=true                             (selector: default)
+objects.value[0]                 → show=true                             (no selector)
+objects.value[1]                 → horizontalAlignment=center, fontSize  (selector: default)
+objects.value[2..N]              → labelDisplayUnits=1D                  (selector: metadata per measure)
+objects.label[0]                 → show=true, fontSize=10D               (selector: default)
+objects.overFlow[0]              → overFlowStyle=1D, overFlowDirection=0D
+objects.border[0]                → show=false                            (selector: default)
+objects.shadowCustom[0]          → show=false                            (selector: default)
+```
+
+### Suggested Fix
+
+When creating a `cardVisual` with `pbi visual create`, generate the full layout
+structure (all objects above with correct selectors) instead of the minimal version.
+Alternatively, add CLI properties for the missing objects so they can be set via
+`pbi visual set`.
+
+---
+
+## BUG-009: `pbi visual set` writes some properties at document root instead of `visual.objects`
+
+**Status:** Fixed (2026-03-13) — unknown properties now raise error instead of writing to raw path
+**Severity:** Breaking — report fails schema validation, visuals won't render
+**Found:** 2026-03-13
+
+### Symptom
+
+After styling a table with multiple `pbi visual set` calls, Power BI Desktop reports:
+
+```
+Property 'grid' has not been defined and the schema does not allow additional properties.
+Path 'grid', line 547, position 9.
+Property 'values' has not been defined and the schema does not allow additional properties.
+Path 'values', line 553, position 11.
+```
+
+### Root Cause
+
+When setting properties on a visual that **had no prior `objects` section** (brand new /
+unstyled visual), the CLI splits the properties across two locations:
+
+1. Some properties go into `visual.objects` correctly (e.g. `grid.rowPadding`,
+   `grid.textSize`, `values.fontSize`, `columnHeaders.*`)
+2. Other properties from the **same objects** get written as **flat key-value pairs at
+   the document root** — outside the `visual` wrapper entirely:
+
+```json
+{
+  "$schema": "...",
+  "name": "tableDeviceApps",
+  "position": { ... },
+  "visual": {
+    "objects": {
+      "grid": [{ "properties": { "rowPadding": ..., "textSize": ... } }],
+      "values": [{ "properties": { "fontSize": ..., "fontFamily": ... } }]
+    }
+  },
+  "grid": {                          // ← WRONG: at document root
+    "gridVertical": false,
+    "gridHorizontal": true,
+    "gridHorizontalColor": "#EDEBE9",
+    "gridHorizontalWeight": 1
+  },
+  "values": {                        // ← WRONG: at document root
+    "fontColorPrimary": "#323130",
+    "backColorPrimary": "#FFFFFF",
+    "backColorSecondary": "#F8F8F8"
+  }
+}
+```
+
+The split seems related to the property type: non-color properties go to `visual.objects`
+with correct expression format, while color-based properties (`gridHorizontalColor`,
+`fontColorPrimary`, `backColorPrimary`, `backColorSecondary`) and boolean grid properties
+get written at the root without expression wrappers.
+
+### Affected Properties
+
+Observed on `tableEx` visuals. Properties that end up at root level:
+- `grid.gridVertical`, `grid.gridHorizontal`, `grid.gridHorizontalColor`, `grid.gridHorizontalWeight`
+- `values.fontColorPrimary`, `values.backColorPrimary`, `values.backColorSecondary`
+
+### Workaround
+
+After using the CLI, manually verify that no top-level keys were added outside the
+`visual` object. Move them into `visual.objects` and wrap values in expression format.
+
+---
+
+## BUG-010: Color values written without PBIR expression wrapper
+
+**Status:** Fixed (2026-03-13) — `encode_pbi_value("color")` now wraps in `expr.Literal.Value`
+**Severity:** May cause validation errors or silent rendering failures
+**Found:** 2026-03-13
+
+### Symptom
+
+When setting color properties via `pbi visual set`, the CLI writes some colors as:
+
+```json
+"fontColor": {
+  "solid": {
+    "color": "#FFFFFF"
+  }
+}
+```
+
+Instead of the correct PBIR expression format:
+
+```json
+"fontColor": {
+  "solid": {
+    "color": {
+      "expr": {
+        "Literal": {
+          "Value": "'#FFFFFF'"
+        }
+      }
+    }
+  }
+}
+```
+
+Note two differences:
+1. Missing `expr.Literal.Value` wrapper around the color string
+2. Missing single quotes inside the value (`'#FFFFFF'` not `#FFFFFF`)
+
+### Affected Properties
+
+Observed on these properties when set via CLI on previously-unstyled visuals:
+- `columnHeaders.fontColor`, `columnHeaders.backColor`
+- `total.fontColor`, `total.backColor`
+- `grid.gridHorizontalColor` (when written to document root per BUG-009)
+
+Properties that **are** written correctly (with expression wrapper):
+- `values.fontSize`, `values.fontFamily`, `columnHeaders.fontSize`, `grid.textSize`, etc.
+- All non-color literal values (booleans, numbers, strings)
+
+### Impact
+
+Power BI Desktop may still load these, but they may render incorrectly or cause
+validation warnings. They also break strict schema validation.
+
+---
+
+## BUG-008: `pbi visual set-all` output does not show property changes
+
+**Status:** Fixed (2026-03-13) — Rich markup brackets removed from output string
+**Severity:** Cosmetic
+**Found:** 2026-03-13
+
+### Symptom
+
+Running `pbi visual set-all "Software Inventory" border.show=true border.radius=4 --type slicer`
+outputs only:
+
+```
+Applied  to 4 visuals (type=slicer)
+```
+
+Note the empty space between "Applied" and "to" — the property summary is missing. The individual
+`pbi visual set` command correctly shows before/after values for each property, but `set-all`
+does not.
+
+### Expected Output
+
+Should show which properties were set and their values, similar to:
+
+```
+Applied border.show=true border.radius=4 to 4 visuals (type=slicer)
+```
+
+Or per-visual output like:
+```
+slicerPlatform:  border.show: None → True, border.radius: None → 4.0
+slicerPublisher: border.show: None → True, border.radius: None → 4.0
+...
+```
+
+---
+
+## CLI Gaps — Features That Still Require Manual JSON Editing
+
+### GAP-001: Multi-entry object arrays with different selectors
+
+~~The CLI can't create multi-entry object arrays with different selectors~~ — Fixed.
+PropertyDef now supports a `selector` field ("default" for `{"id": "default"}`).
+`_set_container_prop` routes writes to the correct entry based on the selector.
+Card visual properties updated with correct selectors.
+
+### GAP-002: Chart-level objects not exposed as properties
+
+~~Missing property mappings for chart-level objects~~ — Fixed.
+Added CLI properties for:
+- `cardShape.*` → `shapeCustomRectangle` (tile shape, rounding, color)
+- `cardOverflow.*` → `overFlow` (style, direction)
+- `cardShadow.*` → `shadowCustom` (show)
+- `cardBorder.*` → `border` inside objects (show)
+- `cardPadding.*` → `padding` inside objects (uniform, top/bottom/left/right)
+
+### GAP-003: Page-level object properties
+
+~~`pbi page set` cannot set page `objects` properties~~ — Fixed via BUG-006.
+Page background and outspace properties now work via batch syntax:
+`pbi page set "Sales" background.color="#F5F5F5" background.transparency=0`
+
+---
+
+## Previously Implemented Features
+
+Most formatting capabilities originally documented here have since been implemented.
+See the docs for current CLI commands:
+- [visuals.md](visuals.md) — visual CRUD, set, set-all, paste-style, sort, format, column
+- [properties.md](properties.md) — all visual/container properties reference
+- [pages.md](pages.md) — page CRUD, templates, drillthrough, tooltip
+- [data.md](data.md) — data binding, semantic model, filters
+- [interactions.md](interactions.md) — visual interactions, button actions
+- [bookmarks.md](bookmarks.md) — bookmark management
+- [themes.md](themes.md) — theme apply/export/remove
+- [validation.md](validation.md) — validation, PBIR file structure

@@ -179,11 +179,10 @@ def page_get(
 @page_app.command("set")
 def page_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    prop: Annotated[str, typer.Argument(help="Property path (e.g. 'width', 'displayName').")],
-    value: Annotated[str, typer.Argument(help="New value.")],
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...] or prop value (single pair).")],
     project: ProjectOpt = None,
 ) -> None:
-    """Set a page property."""
+    """Set page properties. Supports batch: prop=value prop=value ..."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -191,16 +190,29 @@ def page_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    old = get_property(pg.data, prop, PAGE_PROPERTIES)
-    try:
-        set_property(pg.data, prop, value, PAGE_PROPERTIES)
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+    # Parse assignments — support both "prop=value" and legacy "prop value" (2 args)
+    pairs: list[tuple[str, str]] = []
+    if len(assignments) == 2 and "=" not in assignments[0] and "=" not in assignments[1]:
+        pairs.append((assignments[0], assignments[1]))
+    else:
+        for arg in assignments:
+            eq = arg.find("=")
+            if eq == -1:
+                console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
+                raise typer.Exit(1)
+            pairs.append((arg[:eq], arg[eq + 1:]))
+
+    for prop, value in pairs:
+        old = get_property(pg.data, prop, PAGE_PROPERTIES)
+        try:
+            set_property(pg.data, prop, value, PAGE_PROPERTIES)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {prop}: {e}")
+            raise typer.Exit(1)
+        new = get_property(pg.data, prop, PAGE_PROPERTIES)
+        console.print(f"[dim]{prop}:[/dim] {old} [dim]→[/dim] {new}")
 
     pg.save()
-    new = get_property(pg.data, prop, PAGE_PROPERTIES)
-    console.print(f"[dim]{prop}:[/dim] {old} [dim]→[/dim] {new}")
 
 
 @page_app.command("props")
@@ -716,8 +728,8 @@ def visual_set_all(
         count += 1
 
     scope = f'type={type_filter}' if type_filter else "all"
-    props_str = ", ".join(f"{p}={v}" for p, v in pairs)
-    console.print(f'Applied [{props_str}] to [cyan]{count}[/cyan] visuals ({scope})')
+    props_str = " ".join(f"{p}={v}" for p, v in pairs)
+    console.print(f'Applied {props_str} to [cyan]{count}[/cyan] visuals ({scope})')
 
 
 @visual_app.command("move")

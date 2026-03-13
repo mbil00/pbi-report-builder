@@ -21,6 +21,7 @@ class PropertyDef:
     container_prop: str | None = None
     objects_path: str = "visualContainerObjects"  # or "objects" for chart formatting
     top_level: bool = False  # True for page-level objects (data.objects vs data.visual.objects)
+    selector: str | None = None  # "default" for {"id": "default"} selector entry
 
 
 # ── Visual properties ──────────────────────────────────────────────
@@ -820,7 +821,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         container_key="wordWrap", container_prop="show", objects_path="objects",
     ),
     # ── New card visual (cardVisual) ──────────────────────────
-    # Layout
+    # Layout — global entry (no selector)
     "layout.style": PropertyDef(
         None, "string", "Card layout style (Cards or Callout)",
         container_key="layout", container_prop="style", objects_path="objects",
@@ -833,6 +834,37 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Callout font size",
         container_key="layout", container_prop="calloutSize", objects_path="objects",
     ),
+    "layout.autoGrid": PropertyDef(
+        None, "boolean", "Auto-size grid",
+        container_key="layout", container_prop="autoGrid", objects_path="objects",
+    ),
+    "layout.alignment": PropertyDef(
+        None, "string", "Vertical alignment (top, middle, bottom)",
+        container_key="layout", container_prop="alignment", objects_path="objects",
+    ),
+    "layout.contentOrder": PropertyDef(
+        None, "long", "Content order",
+        container_key="layout", container_prop="contentOrder", objects_path="objects",
+    ),
+    "layout.orientation": PropertyDef(
+        None, "number", "Card orientation (0=horizontal, 2=vertical)",
+        container_key="layout", container_prop="orientation", objects_path="objects",
+    ),
+    "layout.cellPadding": PropertyDef(
+        None, "long", "Cell padding between cards",
+        container_key="layout", container_prop="cellPadding", objects_path="objects",
+    ),
+    # Layout — per-card entry (selector: default)
+    "layout.padding": PropertyDef(
+        None, "long", "Card internal padding",
+        container_key="layout", container_prop="paddingUniform", objects_path="objects",
+        selector="default",
+    ),
+    "layout.backgroundShow": PropertyDef(
+        None, "boolean", "Show card background",
+        container_key="layout", container_prop="backgroundShow", objects_path="objects",
+        selector="default",
+    ),
     # Accent bar
     "accentBar.show": PropertyDef(
         None, "boolean", "Show accent bar",
@@ -842,107 +874,165 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "color", "Accent bar color",
         container_key="accentBar", container_prop="color", objects_path="objects",
     ),
-    # Card value (callout)
+    # Card value — show entry (no selector)
+    "cardValue.show": PropertyDef(
+        None, "boolean", "Show card values",
+        container_key="value", container_prop="show", objects_path="objects",
+    ),
+    # Card value — formatting entry (selector: default)
     "cardValue.fontSize": PropertyDef(
         None, "number", "Card value font size",
         container_key="value", container_prop="fontSize", objects_path="objects",
+        selector="default",
     ),
     "cardValue.fontFamily": PropertyDef(
         None, "string", "Card value font family",
         container_key="value", container_prop="fontFamily", objects_path="objects",
+        selector="default",
     ),
     "cardValue.bold": PropertyDef(
         None, "boolean", "Card value bold",
         container_key="value", container_prop="bold", objects_path="objects",
+        selector="default",
     ),
     "cardValue.italic": PropertyDef(
         None, "boolean", "Card value italic",
         container_key="value", container_prop="italic", objects_path="objects",
+        selector="default",
     ),
     "cardValue.color": PropertyDef(
         None, "color", "Card value font color",
         container_key="value", container_prop="fontColor", objects_path="objects",
+        selector="default",
     ),
+    "cardValue.alignment": PropertyDef(
+        None, "enum", "Card value horizontal alignment",
+        container_key="value", container_prop="horizontalAlignment", objects_path="objects",
+        enum_values=("left", "center", "right"), selector="default",
+    ),
+    # Card value — per-measure (use --measure flag)
     "cardValue.displayUnits": PropertyDef(
-        None, "string", "Card value display units (0=Auto, 1000=K, 1000000=M)",
+        None, "number", "Card value display units (0=Auto, 1=None, 1000=K, 1000000=M)",
         container_key="value", container_prop="labelDisplayUnits", objects_path="objects",
     ),
     "cardValue.precision": PropertyDef(
         None, "number", "Card value decimal places",
         container_key="value", container_prop="labelPrecision", objects_path="objects",
     ),
-    # Card label
+    # Card label (selector: default)
     "cardLabel.show": PropertyDef(
         None, "boolean", "Show card label",
         container_key="label", container_prop="show", objects_path="objects",
+        selector="default",
     ),
     "cardLabel.color": PropertyDef(
         None, "color", "Card label font color",
         container_key="label", container_prop="fontColor", objects_path="objects",
+        selector="default",
     ),
     "cardLabel.fontSize": PropertyDef(
         None, "number", "Card label font size",
         container_key="label", container_prop="fontSize", objects_path="objects",
+        selector="default",
     ),
     "cardLabel.fontFamily": PropertyDef(
         None, "string", "Card label font family",
         container_key="label", container_prop="fontFamily", objects_path="objects",
+        selector="default",
     ),
     "cardLabel.bold": PropertyDef(
         None, "boolean", "Card label bold",
         container_key="label", container_prop="bold", objects_path="objects",
+        selector="default",
     ),
     "cardLabel.italic": PropertyDef(
         None, "boolean", "Card label italic",
         container_key="label", container_prop="italic", objects_path="objects",
+        selector="default",
     ),
-    # Card shape (background rectangle)
+    # Card shape (background rectangle, selector: default)
     "cardShape.color": PropertyDef(
         None, "color", "Card background color",
         container_key="shapeCustomRectangle", container_prop="color", objects_path="objects",
+        selector="default",
     ),
     "cardShape.radius": PropertyDef(
-        None, "number", "Card corner radius",
-        container_key="shapeCustomRectangle", container_prop="radius", objects_path="objects",
+        None, "long", "Card corner radius",
+        container_key="shapeCustomRectangle", container_prop="rectangleRoundedCurve",
+        objects_path="objects", selector="default",
     ),
     "cardShape.transparency": PropertyDef(
         None, "number", "Card background transparency",
-        container_key="shapeCustomRectangle", container_prop="transparency", objects_path="objects",
+        container_key="shapeCustomRectangle", container_prop="transparency",
+        objects_path="objects", selector="default",
+    ),
+    "cardShape.tileShape": PropertyDef(
+        None, "boolean", "Use tile shape",
+        container_key="shapeCustomRectangle", container_prop="tileShape",
+        objects_path="objects", selector="default",
     ),
     # Card overflow
-    "cardOverflow.show": PropertyDef(
-        None, "boolean", "Enable text overflow",
-        container_key="overFlow", container_prop="overflow", objects_path="objects",
+    "cardOverflow.style": PropertyDef(
+        None, "number", "Overflow style (1=overflow visible)",
+        container_key="overFlow", container_prop="overFlowStyle", objects_path="objects",
     ),
-    # Card internal padding
+    "cardOverflow.direction": PropertyDef(
+        None, "number", "Overflow direction (0=default)",
+        container_key="overFlow", container_prop="overFlowDirection", objects_path="objects",
+    ),
+    # Card internal padding (selector: default)
+    "cardPadding.uniform": PropertyDef(
+        None, "long", "Card uniform internal padding",
+        container_key="padding", container_prop="paddingUniform", objects_path="objects",
+        selector="default",
+    ),
     "cardPadding.top": PropertyDef(
         None, "number", "Card internal top padding",
         container_key="padding", container_prop="top", objects_path="objects",
+        selector="default",
     ),
     "cardPadding.bottom": PropertyDef(
         None, "number", "Card internal bottom padding",
         container_key="padding", container_prop="bottom", objects_path="objects",
+        selector="default",
     ),
     "cardPadding.left": PropertyDef(
         None, "number", "Card internal left padding",
         container_key="padding", container_prop="left", objects_path="objects",
+        selector="default",
     ),
     "cardPadding.right": PropertyDef(
         None, "number", "Card internal right padding",
         container_key="padding", container_prop="right", objects_path="objects",
+        selector="default",
     ),
-    # Card divider (between cards)
+    # Card divider (selector: default)
     "cardDivider.show": PropertyDef(
         None, "boolean", "Show card divider",
         container_key="divider", container_prop="show", objects_path="objects",
+        selector="default",
     ),
     "cardDivider.color": PropertyDef(
         None, "color", "Card divider color",
         container_key="divider", container_prop="color", objects_path="objects",
+        selector="default",
     ),
     "cardDivider.width": PropertyDef(
         None, "number", "Card divider width",
         container_key="divider", container_prop="width", objects_path="objects",
+        selector="default",
+    ),
+    # Card-level border (inside objects, selector: default)
+    "cardBorder.show": PropertyDef(
+        None, "boolean", "Show card-level border",
+        container_key="border", container_prop="show", objects_path="objects",
+        selector="default",
+    ),
+    # Card-level shadow (inside objects, selector: default)
+    "cardShadow.show": PropertyDef(
+        None, "boolean", "Show card-level shadow",
+        container_key="shadowCustom", container_prop="show", objects_path="objects",
+        selector="default",
     ),
     # ── Slicer visual ────────────────────────────────────────
     "slicerHeader.show": PropertyDef(
@@ -1388,11 +1478,7 @@ PAGE_PROPERTIES: dict[str, PropertyDef] = {
 
 def encode_pbi_value(value: str, value_type: str) -> Any:
     """Encode a CLI string value into PBI JSON format."""
-    if value_type == "color":
-        color = value if value.startswith("#") else f"#{value}"
-        return {"solid": {"color": color}}
-    elif value_type == "page_color":
-        # Page-level colors nest the expr inside solid.color
+    if value_type in ("color", "page_color"):
         color = value if value.startswith("#") else f"#{value}"
         return {"solid": {"color": {"expr": {"Literal": {"Value": f"'{color}'"}}}}}
     elif value_type == "number":
@@ -1497,9 +1583,30 @@ def set_property(
     elif prop_def and prop_def.json_path:
         coerced = _coerce_simple(value, prop_def.value_type)
         _set_by_path(data, prop_def.json_path, coerced)
-    else:
-        # Raw path fallback — try to auto-detect type
-        _set_by_path(data, prop_name, _auto_coerce(value))
+    elif prop_def is None:
+        raise ValueError(
+            f'Unknown property "{prop_name}". '
+            f"Use 'pbi visual props' or 'pbi page props' to see available properties."
+        )
+
+
+def _find_entry(entries: list[dict], selector: str | None) -> dict | None:
+    """Find an entry matching a selector in an object array.
+
+    selector=None → entry with no selector (first selectorless entry)
+    selector="default" → entry with {"id": "default"}
+    """
+    if selector == "default":
+        for entry in entries:
+            if entry.get("selector", {}).get("id") == "default":
+                return entry
+        return None
+    # No selector → first entry without a selector key
+    for entry in entries:
+        if "selector" not in entry:
+            return entry
+    # Fallback to first entry
+    return entries[0] if entries else None
 
 
 def _get_container_prop(
@@ -1514,15 +1621,16 @@ def _get_container_prop(
         return None
 
     if measure_ref:
-        # Find the entry with matching selector.metadata
         for entry in entries:
             if entry.get("selector", {}).get("metadata") == measure_ref:
                 raw = entry.get("properties", {}).get(prop_def.container_prop)
                 return decode_pbi_value(raw) if raw is not None else None
         return None
 
-    props = entries[0].get("properties", {})
-    raw = props.get(prop_def.container_prop)
+    target = _find_entry(entries, prop_def.selector)
+    if target is None:
+        return None
+    raw = target.get("properties", {}).get(prop_def.container_prop)
     if raw is None:
         return None
     return decode_pbi_value(raw)
@@ -1534,19 +1642,18 @@ def _set_container_prop(
 ) -> None:
     """Write to object collections, creating structure as needed.
 
-    When measure_ref is provided, writes to (or creates) an entry with a
-    per-measure metadata selector: {"metadata": "<measure_ref>"}.
+    Selector routing:
+      measure_ref → entry with {"metadata": "<measure_ref>"}
+      prop_def.selector="default" → entry with {"id": "default"}
+      prop_def.selector=None → first selectorless entry (index 0)
     """
     root = data if prop_def.top_level else data.setdefault("visual", {})
     objects = root.setdefault(prop_def.objects_path, {})
-    entries = objects.setdefault(prop_def.container_key, [{}])
-    if not entries:
-        entries.append({})
+    entries = objects.setdefault(prop_def.container_key, [])
 
     encoded = encode_pbi_value(value, prop_def.value_type)
 
     if measure_ref:
-        # Find or create per-measure entry with metadata selector
         target = None
         for entry in entries:
             if entry.get("selector", {}).get("metadata") == measure_ref:
@@ -1559,9 +1666,17 @@ def _set_container_prop(
             }
             entries.append(target)
         target.setdefault("properties", {})[prop_def.container_prop] = encoded
-    else:
-        props = entries[0].setdefault("properties", {})
-        props[prop_def.container_prop] = encoded
+        return
+
+    # Use prop_def.selector to find the right entry
+    target = _find_entry(entries, prop_def.selector)
+    if target is None:
+        # Create new entry with appropriate selector
+        target = {"properties": {}}
+        if prop_def.selector == "default":
+            target["selector"] = {"id": "default"}
+        entries.append(target)
+    target.setdefault("properties", {})[prop_def.container_prop] = encoded
 
 
 def _get_by_path(data: dict, path: str) -> Any:
@@ -1593,21 +1708,6 @@ def _coerce_simple(value: str, value_type: str) -> Any:
             return float(value)
     elif value_type == "boolean":
         return value.lower() in ("true", "1", "yes", "on")
-    return value
-
-
-def _auto_coerce(value: str) -> Any:
-    """Auto-detect type for raw path values."""
-    if value.lower() in ("true", "false"):
-        return value.lower() == "true"
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        pass
     return value
 
 

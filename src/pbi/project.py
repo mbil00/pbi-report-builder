@@ -408,7 +408,7 @@ class Project:
             "visual": {
                 "visualType": visual_type,
                 "query": {"queryState": {}},
-                "objects": {},
+                "objects": _card_scaffold() if visual_type == "cardVisual" else {},
             },
         }
         _write_json(visual_dir / "visual.json", data)
@@ -695,6 +695,108 @@ def _resolve_projection_field(field_data: dict) -> tuple[str, str, str]:
                 return entity, prop, "aggregation"
 
     return "?", "?", "column"
+
+
+def _card_scaffold() -> dict:
+    """Generate a complete cardVisual objects scaffold.
+
+    Produces the full multi-entry structure needed for card visuals to render
+    correctly: layout (global + per-card), value (show + defaults), label,
+    divider, shapeCustomRectangle, overflow, border, shadow, and padding.
+    """
+    _lit = lambda v: {"expr": {"Literal": {"Value": v}}}
+    _sel_default = {"id": "default"}
+
+    return {
+        "layout": [
+            {
+                "properties": {
+                    "style": _lit("'Cards'"),
+                    "autoGrid": _lit("true"),
+                    "alignment": _lit("'middle'"),
+                    "orientation": _lit("2D"),
+                },
+            },
+            {
+                "properties": {
+                    "paddingUniform": _lit("6L"),
+                    "backgroundShow": _lit("false"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "value": [
+            {
+                "properties": {
+                    "show": _lit("true"),
+                },
+            },
+            {
+                "properties": {
+                    "horizontalAlignment": _lit("'center'"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "label": [
+            {
+                "properties": {
+                    "show": _lit("true"),
+                    "fontSize": _lit("10D"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "divider": [
+            {
+                "properties": {
+                    "show": _lit("true"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "shapeCustomRectangle": [
+            {
+                "properties": {
+                    "rectangleRoundedCurve": _lit("5L"),
+                    "tileShape": _lit("true"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "padding": [
+            {
+                "properties": {
+                    "paddingUniform": _lit("7L"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "overFlow": [
+            {
+                "properties": {
+                    "overFlowStyle": _lit("1D"),
+                    "overFlowDirection": _lit("0D"),
+                },
+            },
+        ],
+        "border": [
+            {
+                "properties": {
+                    "show": _lit("false"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+        "shadowCustom": [
+            {
+                "properties": {
+                    "show": _lit("false"),
+                },
+                "selector": _sel_default,
+            },
+        ],
+    }
 
 
 def _read_json(path: Path) -> dict:
