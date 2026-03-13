@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import secrets
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -282,6 +284,250 @@ class Project:
             f'Visual "{identifier}" not found on "{page.display_name}". '
             f"Available: {available}"
         )
+
+
+    # ── Page CRUD ──────────────────────────────────────────────
+
+    def create_page(
+        self,
+        display_name: str,
+        width: int = 1280,
+        height: int = 720,
+        display_option: str = "FitToPage",
+    ) -> Page:
+        """Create a new page."""
+        page_id = secrets.token_hex(10)
+        page_dir = self.definition_folder / "pages" / page_id
+        page_dir.mkdir(parents=True)
+        (page_dir / "visuals").mkdir()
+
+        data = {
+            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+            "name": page_id,
+            "displayName": display_name,
+            "displayOption": display_option,
+            "width": width,
+            "height": height,
+            "visibility": "AlwaysVisible",
+        }
+        _write_json(page_dir / "page.json", data)
+        self._add_to_page_order(page_id)
+        return Page(folder=page_dir, data=data)
+
+    def copy_page(self, source: Page, new_name: str) -> Page:
+        """Deep-copy a page and all its visuals."""
+        new_id = secrets.token_hex(10)
+        new_dir = self.definition_folder / "pages" / new_id
+        shutil.copytree(source.folder, new_dir)
+
+        # Update page identity
+        new_data = _read_json(new_dir / "page.json")
+        new_data["name"] = new_id
+        new_data["displayName"] = new_name
+        _write_json(new_dir / "page.json", new_data)
+
+        # Give each visual a new unique name
+        visuals_dir = new_dir / "visuals"
+        if visuals_dir.exists():
+            for visual_dir in list(visuals_dir.iterdir()):
+                if not visual_dir.is_dir():
+                    continue
+                new_visual_id = secrets.token_hex(10)
+                new_visual_dir = visuals_dir / new_visual_id
+                visual_dir.rename(new_visual_dir)
+                visual_json = new_visual_dir / "visual.json"
+                if visual_json.exists():
+                    vdata = _read_json(visual_json)
+                    vdata["name"] = new_visual_id
+                    _write_json(visual_json, vdata)
+
+        self._add_to_page_order(new_id)
+        return Page(folder=new_dir, data=_read_json(new_dir / "page.json"))
+
+    def delete_page(self, page: Page) -> None:
+        """Delete a page and all its visuals."""
+        shutil.rmtree(page.folder)
+        self._remove_from_page_order(page.name)
+
+    def _add_to_page_order(self, page_id: str) -> None:
+        meta_path = self.definition_folder / "pages" / "pages.json"
+        if meta_path.exists():
+            meta = _read_json(meta_path)
+        else:
+            meta = {
+                "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.0.0/schema.json",
+            }
+        meta.setdefault("pageOrder", []).append(page_id)
+        _write_json(meta_path, meta)
+
+    def _remove_from_page_order(self, page_id: str) -> None:
+        meta_path = self.definition_folder / "pages" / "pages.json"
+        if not meta_path.exists():
+            return
+        meta = _read_json(meta_path)
+        order = meta.get("pageOrder", [])
+        if page_id in order:
+            order.remove(page_id)
+            meta["pageOrder"] = order
+        # If deleted page was active, set first remaining page as active
+        if meta.get("activePageName") == page_id and order:
+            meta["activePageName"] = order[0]
+        _write_json(meta_path, meta)
+
+    # ── Visual CRUD ────────────────────────────────────────────
+
+    def create_visual(
+        self,
+        page: Page,
+        visual_type: str,
+        x: int = 0,
+        y: int = 0,
+        width: int = 300,
+        height: int = 200,
+    ) -> Visual:
+        """Create a new visual on a page."""
+        visual_id = secrets.token_hex(10)
+        visual_dir = page.folder / "visuals" / visual_id
+        visual_dir.mkdir(parents=True, exist_ok=True)
+
+        # Determine z-order (above existing visuals)
+        existing = self.get_visuals(page)
+        max_z = max((v.position.get("z", 0) for v in existing), default=0)
+
+        data = {
+            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+            "name": visual_id,
+            "position": {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "z": max_z + 1000,
+                "tabOrder": len(existing),
+            },
+            "visual": {
+                "visualType": visual_type,
+                "query": {"queryState": {}},
+                "objects": {},
+            },
+        }
+        _write_json(visual_dir / "visual.json", data)
+        return Visual(folder=visual_dir, data=data)
+
+    def copy_visual(
+        self,
+        source: Visual,
+        target_page: Page,
+        new_name: str | None = None,
+    ) -> Visual:
+        """Copy a visual, optionally to a different page."""
+        new_id = secrets.token_hex(10)
+        new_dir = target_page.folder / "visuals" / new_id
+        shutil.copytree(source.folder, new_dir)
+
+        new_data = _read_json(new_dir / "visual.json")
+        new_data["name"] = new_name or new_id
+        _write_json(new_dir / "visual.json", new_data)
+        return Visual(folder=new_dir, data=new_data)
+
+    def delete_visual(self, visual: Visual) -> None:
+        """Delete a visual."""
+        shutil.rmtree(visual.folder)
+
+    # ── Data bindings ──────────────────────────────────────────
+
+    @staticmethod
+    def add_binding(
+        visual: Visual,
+        role: str,
+        entity: str,
+        prop: str,
+        field_type: str = "column",
+        display_name: str | None = None,
+    ) -> None:
+        """Add a data binding (column or measure) to a visual's query."""
+        field_key = "Column" if field_type == "column" else "Measure"
+        projection = {
+            "field": {
+                field_key: {
+                    "Expression": {"SourceRef": {"Entity": entity}},
+                    "Property": prop,
+                }
+            },
+            "queryRef": f"{entity}.{prop}",
+            "nativeQueryRef": display_name or prop,
+        }
+
+        query_state = (
+            visual.data
+            .setdefault("visual", {})
+            .setdefault("query", {})
+            .setdefault("queryState", {})
+        )
+        role_config = query_state.setdefault(role, {"projections": []})
+        role_config["projections"].append(projection)
+        visual.save()
+
+    @staticmethod
+    def remove_binding(
+        visual: Visual,
+        role: str,
+        field_ref: str | None = None,
+    ) -> int:
+        """Remove bindings from a visual. Returns count of removed bindings.
+
+        If field_ref is given (e.g. 'Product.Category'), removes that specific
+        binding. Otherwise removes the entire role.
+        """
+        query_state = (
+            visual.data
+            .get("visual", {})
+            .get("query", {})
+            .get("queryState", {})
+        )
+        if role not in query_state:
+            return 0
+
+        if field_ref is None:
+            removed = len(query_state[role].get("projections", []))
+            del query_state[role]
+            visual.save()
+            return removed
+
+        projections = query_state[role].get("projections", [])
+        original_count = len(projections)
+        query_state[role]["projections"] = [
+            p for p in projections
+            if p.get("queryRef", "").lower() != field_ref.lower()
+        ]
+        removed = original_count - len(query_state[role]["projections"])
+        if not query_state[role]["projections"]:
+            del query_state[role]
+        visual.save()
+        return removed
+
+    @staticmethod
+    def get_bindings(visual: Visual) -> list[tuple[str, str, str, str]]:
+        """Get all bindings as (role, entity, property, field_type) tuples."""
+        query_state = (
+            visual.data
+            .get("visual", {})
+            .get("query", {})
+            .get("queryState", {})
+        )
+        bindings = []
+        for role, config in query_state.items():
+            for proj in config.get("projections", []):
+                field_data = proj.get("field", {})
+                if "Column" in field_data:
+                    entity = field_data["Column"]["Expression"]["SourceRef"]["Entity"]
+                    prop = field_data["Column"]["Property"]
+                    bindings.append((role, entity, prop, "column"))
+                elif "Measure" in field_data:
+                    entity = field_data["Measure"]["Expression"]["SourceRef"]["Entity"]
+                    prop = field_data["Measure"]["Property"]
+                    bindings.append((role, entity, prop, "measure"))
+        return bindings
 
 
 def _read_json(path: Path) -> dict:
