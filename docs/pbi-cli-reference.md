@@ -443,7 +443,29 @@ pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=cente
 |----------|------|-------------|
 | `slices.innerRadius` | number | Donut inner radius (0 = pie, higher = larger hole) |
 
-*Card visual:*
+*Shape visual:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `shape.type` | enum | `rectangle`, `roundedRectangle`, `oval`, `triangle`, `pentagon`, `hexagon`, `octagon`, `arrow`, `star5`, `heart`, `diamond`, etc. |
+| `shape.fill` | color | Fill color |
+| `shape.fillShow` | boolean | Show fill |
+| `shape.fillTransparency` | number | Fill transparency (0-100) |
+| `shape.lineColor` | color | Line/border color |
+| `shape.lineShow` | boolean | Show line/border |
+| `shape.lineWeight` | number | Line weight |
+| `shape.lineTransparency` | number | Line transparency (0-100) |
+| `shape.roundEdge` | number | Corner rounding |
+| `shape.rotation` | number | Rotation angle |
+
+*Image visual:*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `image.url` | string | Image URL |
+| `image.scaling` | enum | `Fit`, `Fill`, `Normal` |
+
+*Card visual (legacy `card`):*
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -637,6 +659,22 @@ Use `--name` / `-n` to assign a friendly name at creation. Without it, the visua
 ```bash
 pbi visual create "Sales" clusteredColumnChart --name revenueChart -W 600 -H 400
 pbi visual create "Sales" card -n totalSales --x 700 -W 200 -H 150
+
+# Shapes and decorative visuals
+pbi visual create "Sales" shape -n headerBg -W 1920 -H 80
+pbi visual create "Sales" textbox -n pageTitle --x 50 --y 10 -W 400 -H 50
+pbi visual create "Sales" image -n logo --x 1700 --y 10 -W 150 -H 60
+pbi visual create "Sales" actionButton -n navButton --x 1800 --y 20 -W 100 -H 40
+```
+
+Shape visuals are purely decorative (no data bindings). After creation, style them with `visual set`:
+
+```bash
+# Rectangle header background
+pbi visual set "Sales" headerBg shape.type=roundedRectangle shape.fill="#003D6A" shape.lineShow=false shape.roundEdge=8
+
+# Image
+pbi visual set "Sales" logo image.url="https://example.com/logo.png" image.scaling=Fit
 ```
 
 ### pbi visual rename
@@ -670,6 +708,31 @@ pbi visual copy "Sales" revenueChart --to-page "Overview" --name revenueChartCop
 ```bash
 pbi visual delete <page> <visual>         # interactive confirmation
 pbi visual delete <page> <visual> -f      # skip confirmation
+```
+
+### pbi visual group
+
+Group visuals together into a visual group container. The group's bounding box is computed automatically from the children's positions.
+
+```bash
+pbi visual group <page> <vis1> <vis2> [vis3 ...] [--name "Group Name"]
+```
+
+```bash
+pbi visual group "Sales" revenueChart profitChart --name "Revenue Charts"
+pbi visual group "Sales" 1 2 3 -n "Top Row"
+```
+
+### pbi visual ungroup
+
+Dissolve a visual group, freeing its children as independent visuals.
+
+```bash
+pbi visual ungroup <page> <group>
+```
+
+```bash
+pbi visual ungroup "Sales" "Revenue Charts"
 ```
 
 ### pbi visual sort
@@ -1066,6 +1129,67 @@ pbi model fields <table>
 ```
 
 Lists all columns and measures with their `Table.Field` reference — the exact format used by `visual bind`.
+
+---
+
+## Theme Commands
+
+### pbi theme list
+
+Show active base and custom themes.
+
+```bash
+pbi theme list
+```
+
+### pbi theme apply
+
+Apply a custom theme JSON file to the project. Copies the theme to `StaticResources/RegisteredResources/` and updates `report.json`.
+
+```bash
+pbi theme apply <theme.json>
+```
+
+```bash
+pbi theme apply ./corporate-theme.json
+pbi theme apply /path/to/dark-mode.json
+```
+
+### pbi theme export
+
+Export the active custom theme to a standalone JSON file.
+
+```bash
+pbi theme export <output-path>
+```
+
+```bash
+pbi theme export ./my-theme-backup.json
+```
+
+### pbi theme remove
+
+Remove the custom theme from the project (reverts to base theme only).
+
+```bash
+pbi theme remove
+```
+
+**Theme JSON structure:**
+
+```json
+{
+  "name": "Corporate Theme",
+  "dataColors": ["#0078D4", "#40E0D0", "#FFA500", "#DC143C"],
+  "background": "#FFFFFF",
+  "foreground": "#323130",
+  "tableAccent": "#0078D4",
+  "textClasses": {
+    "label": { "fontFace": "Segoe UI", "fontSize": 11 },
+    "title": { "fontFace": "Segoe UI Semibold", "fontSize": 14 }
+  }
+}
+```
 
 ---
 

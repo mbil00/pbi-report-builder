@@ -29,10 +29,12 @@ page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
 visual_app = typer.Typer(help="Visual operations.", no_args_is_help=True)
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
+theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
 app.add_typer(model_app, name="model")
 app.add_typer(filter_app, name="filter")
+app.add_typer(theme_app, name="theme")
 
 console = Console()
 
@@ -656,6 +658,57 @@ def visual_delete(
 
     proj.delete_visual(vis)
     console.print(f'Deleted [cyan]{vis.visual_type}[/cyan] "{vis.name}"')
+
+
+@visual_app.command("group")
+def visual_group(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visuals: Annotated[list[str], typer.Argument(help="Visuals to group (at least 2).")],
+    name: Annotated[Optional[str], typer.Option("--name", "-n", help="Group display name.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Group visuals together into a visual group."""
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis_list = [proj.find_visual(pg, v) for v in visuals]
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        group = proj.create_group(pg, vis_list, display_name=name)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    names = ", ".join(f'"{v.name}"' for v in vis_list)
+    console.print(f'Grouped {names} → "[cyan]{group.name}[/cyan]"')
+
+
+@visual_app.command("ungroup")
+def visual_ungroup(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    group: Annotated[str, typer.Argument(help="Group name or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Ungroup a visual group, freeing its children."""
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        grp = proj.find_visual(pg, group)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        children = proj.ungroup(pg, grp)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    names = ", ".join(f'"{c.name}"' for c in children)
+    console.print(f'Ungrouped "[cyan]{grp.name}[/cyan]": freed {names or "no children"}')
 
 
 @visual_app.command("bind")
@@ -1470,6 +1523,92 @@ def filter_remove(
         console.print(f'Removed {removed} filter(s) matching "{field}" at {level} level')
     else:
         console.print(f'[yellow]No filter matching "{field}" found at {level} level.[/yellow]')
+
+
+# ── Theme commands ─────────────────────────────────────────────
+
+@theme_app.command("list")
+def theme_list(
+    project: ProjectOpt = None,
+) -> None:
+    """List active themes (base + custom)."""
+    from pbi.themes import get_themes
+
+    proj = _get_project(project)
+    themes = get_themes(proj)
+
+    if not themes:
+        console.print("[yellow]No themes configured.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Type")
+    table.add_column("Name")
+    table.add_column("Source")
+    for t in themes:
+        label = "custom" if t.is_custom else "base"
+        table.add_row(label, t.name, t.source)
+    console.print(table)
+
+
+@theme_app.command("apply")
+def theme_apply(
+    theme_file: Annotated[str, typer.Argument(help="Path to theme JSON file.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Apply a custom theme JSON file to the project."""
+    import json
+    from pbi.themes import apply_theme
+
+    proj = _get_project(project)
+    path = Path(theme_file).resolve()
+    if not path.exists():
+        console.print(f"[red]Error:[/red] File not found: {path}")
+        raise typer.Exit(1)
+
+    try:
+        name = apply_theme(proj, path)
+    except (json.JSONDecodeError, ValueError) as e:
+        console.print(f"[red]Error:[/red] Invalid theme file: {e}")
+        raise typer.Exit(1)
+
+    console.print(f'Applied theme "[cyan]{name}[/cyan]"')
+
+
+@theme_app.command("export")
+def theme_export(
+    output: Annotated[str, typer.Argument(help="Output path for the theme JSON file.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Export the active custom theme to a standalone JSON file."""
+    from pbi.themes import export_theme
+
+    proj = _get_project(project)
+    out_path = Path(output).resolve()
+
+    try:
+        name = export_theme(proj, out_path)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(f'Exported theme "[cyan]{name}[/cyan]" → {out_path}')
+
+
+@theme_app.command("remove")
+def theme_remove(
+    project: ProjectOpt = None,
+) -> None:
+    """Remove the custom theme from the project (reverts to base theme)."""
+    from pbi.themes import remove_theme
+
+    proj = _get_project(project)
+    name = remove_theme(proj)
+
+    if name:
+        console.print(f'Removed custom theme "[cyan]{name}[/cyan]"')
+    else:
+        console.print("[yellow]No custom theme to remove.[/yellow]")
 
 
 if __name__ == "__main__":

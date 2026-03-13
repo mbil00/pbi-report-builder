@@ -434,6 +434,94 @@ class Project:
         """Delete a visual."""
         shutil.rmtree(visual.folder)
 
+    # ── Visual grouping ─────────────────────────────────────────
+
+    def create_group(
+        self,
+        page: Page,
+        visuals: list[Visual],
+        display_name: str | None = None,
+    ) -> Visual:
+        """Group visuals together. Returns the group container visual.
+
+        Creates a group container that encompasses all provided visuals
+        and sets parentGroupName on each child.
+        """
+        if len(visuals) < 2:
+            raise ValueError("Need at least 2 visuals to group")
+
+        # Check none are already in a group
+        for v in visuals:
+            if v.data.get("parentGroupName"):
+                raise ValueError(
+                    f'Visual "{v.name}" is already in group '
+                    f'"{v.data["parentGroupName"]}"'
+                )
+            if "visualGroup" in v.data:
+                raise ValueError(f'"{v.name}" is a group container, not a visual')
+
+        # Calculate bounding box from children
+        min_x = min(v.position.get("x", 0) for v in visuals)
+        min_y = min(v.position.get("y", 0) for v in visuals)
+        max_x = max(
+            v.position.get("x", 0) + v.position.get("width", 0)
+            for v in visuals
+        )
+        max_y = max(
+            v.position.get("y", 0) + v.position.get("height", 0)
+            for v in visuals
+        )
+        max_z = max(v.position.get("z", 0) for v in visuals)
+
+        # Create group container
+        group_id = secrets.token_hex(10)
+        group_dir = page.folder / "visuals" / group_id
+        group_dir.mkdir(parents=True, exist_ok=True)
+
+        group_data = {
+            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+            "name": display_name or group_id,
+            "position": {
+                "x": min_x,
+                "y": min_y,
+                "width": max_x - min_x,
+                "height": max_y - min_y,
+                "z": max_z + 1,
+                "tabOrder": 0,
+            },
+            "visualGroup": {
+                "displayName": display_name or group_id,
+                "groupMode": "ScaleMode",
+                "objects": {},
+            },
+        }
+        _write_json(group_dir / "visual.json", group_data)
+
+        # Update children to reference the group
+        group_name = group_data["name"]
+        for v in visuals:
+            v.data["parentGroupName"] = group_name
+            v.save()
+
+        return Visual(folder=group_dir, data=group_data)
+
+    def ungroup(self, page: Page, group: Visual) -> list[Visual]:
+        """Ungroup a visual group. Returns the freed child visuals."""
+        if "visualGroup" not in group.data:
+            raise ValueError(f'"{group.name}" is not a group')
+
+        group_name = group.name
+        children = []
+        for v in self.get_visuals(page):
+            if v.data.get("parentGroupName") == group_name:
+                v.data.pop("parentGroupName", None)
+                v.save()
+                children.append(v)
+
+        # Delete the group container
+        self.delete_visual(group)
+        return children
+
     # ── Data bindings ──────────────────────────────────────────
 
     @staticmethod

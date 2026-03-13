@@ -220,269 +220,113 @@ Page background support has been added to the CLI (2026-03-13).
 
 ---
 
-## Missing CLI Features — Manual JSON Edits Required
+## BUG-004: `--measure` flag generates invalid selector format for per-measure styling
 
-The following formatting capabilities are not yet supported by the CLI and required
-direct editing of `visual.json` files. These are candidates for new CLI commands.
+**Status:** Open
+**Severity:** Breaking — reports fail schema validation in Power BI Desktop
+**Found:** 2026-03-13
 
-### FEAT-001: Table visual formatting (`tableEx` objects)
+### Symptom
 
-**Status:** Implemented (2026-03-13)
-**Priority:** High — tables are in nearly every report
+After running `pbi visual set <page> <visual> accentBar.color="#2E7D8C" --measure "Measures Table.Compliance Rate"`,
+Power BI Desktop reports schema validation errors:
 
-The `tableEx` visual type supports these formatting object groups in `visual.objects`:
-
-#### `grid` — Row/gridline formatting
-
-```json
-"grid": [{
-  "properties": {
-    "gridVertical": { "expr": { "Literal": { "Value": "false" } } },
-    "gridHorizontal": { "expr": { "Literal": { "Value": "true" } } },
-    "gridHorizontalColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#EDEBE9'" } } } } },
-    "gridHorizontalWeight": { "expr": { "Literal": { "Value": "1D" } } },
-    "rowPadding": { "expr": { "Literal": { "Value": "3D" } } },
-    "textSize": { "expr": { "Literal": { "Value": "9D" } } }
-  }
-}]
+```
+Invalid type. Expected Array but got Object.
+Path 'visual.objects.accentBar[1].selector.data', line 165, position 21.
 ```
 
-**Properties:** `gridVertical` (bool), `gridHorizontal` (bool), `gridHorizontalColor` (color),
-`gridHorizontalWeight` (double), `gridVerticalColor` (color), `gridVerticalWeight` (double),
-`rowPadding` (double), `textSize` (double), `imageHeight` (double)
+This repeats for every per-measure entry (indices 1–5 in a 5-measure card).
 
-#### `columnHeaders` — Header row formatting
+### Root Cause
 
-```json
-"columnHeaders": [{
-  "properties": {
-    "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#FFFFFF'" } } } } },
-    "backColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#2E7D8C'" } } } } },
-    "fontSize": { "expr": { "Literal": { "Value": "9D" } } },
-    "fontFamily": { "expr": { "Literal": { "Value": "'Segoe UI Semibold'" } } },
-    "wordWrap": { "expr": { "Literal": { "Value": "false" } } }
-  }
-}]
-```
-
-**Properties:** `fontColor` (color), `backColor` (color), `fontSize` (double),
-`fontFamily` (string), `wordWrap` (bool), `alignment` (string), `outline` (string)
-
-#### `values` — Data row formatting
-
-```json
-"values": [{
-  "properties": {
-    "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#323130'" } } } } },
-    "backColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#FFFFFF'" } } } } },
-    "backColorAlternate": { "solid": { "color": { "expr": { "Literal": { "Value": "'#F8F8F8'" } } } } },
-    "fontSize": { "expr": { "Literal": { "Value": "8D" } } },
-    "fontFamily": { "expr": { "Literal": { "Value": "'Segoe UI'" } } },
-    "wordWrap": { "expr": { "Literal": { "Value": "false" } } },
-    "urlIcon": { "expr": { "Literal": { "Value": "true" } } }
-  }
-}]
-```
-
-**Properties:** `fontColor` (color), `backColor` (color), `backColorAlternate` (color),
-`fontSize` (double), `fontFamily` (string), `wordWrap` (bool), `urlIcon` (bool),
-`alignment` (string), `outline` (string)
-
-#### `total` — Totals row formatting
-
-```json
-"total": [{
-  "properties": {
-    "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#323130'" } } } } },
-    "backColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#E8F5F7'" } } } } },
-    "fontSize": { "expr": { "Literal": { "Value": "9D" } } },
-    "fontFamily": { "expr": { "Literal": { "Value": "'Segoe UI Semibold'" } } }
-  }
-}]
-```
-
-**Properties:** Same as `values` minus `backColorAlternate` and `urlIcon`.
-
-#### Suggested CLI syntax
-
-```bash
-# Table grid
-pbi visual set <page> <visual> grid.gridHorizontal=true
-pbi visual set <page> <visual> grid.rowPadding=3
-
-# Column headers
-pbi visual set <page> <visual> columnHeaders.backColor=#2E7D8C
-pbi visual set <page> <visual> columnHeaders.fontColor=#FFFFFF
-
-# Values / alternating rows
-pbi visual set <page> <visual> values.backColorAlternate=#F8F8F8
-
-# Totals
-pbi visual set <page> <visual> total.backColor=#E8F5F7
-```
-
----
-
-### FEAT-002: Card visual formatting (`cardVisual` objects)
-
-**Status:** Implemented (2026-03-13)
-**Priority:** High — cards/KPIs are in nearly every report
-
-The `cardVisual` visual type supports these formatting object groups in `visual.objects`:
-
-#### `layout` — Card arrangement
-
-```json
-"layout": [{
-  "properties": {
-    "style": { "expr": { "Literal": { "Value": "'Cards'" } } },
-    "columnCount": { "expr": { "Literal": { "Value": "5L" } } },
-    "calloutSize": { "expr": { "Literal": { "Value": "16D" } } }
-  }
-}]
-```
-
-**Properties:** `style` (string: `'Cards'`|`'Callout'`), `columnCount` (long),
-`calloutSize` (double)
-
-#### `accentBar` — Colored accent bars per card
-
-Supports **per-measure selectors** using `selector.data.dataViewWildcard.matchingOption`:
-
-```json
-"accentBar": [
-  {
-    "properties": {
-      "show": { "expr": { "Literal": { "Value": "true" } } },
-      "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#4CAF50'" } } } } }
-    }
-  },
-  {
-    "properties": {
-      "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#E8A83E'" } } } } }
-    },
-    "selector": {
-      "data": {
-        "dataViewWildcard": {
-          "matchingOption": "InstancesAndTotals"
-        }
-      },
-      "id": "<queryRef of the specific measure>"
-    }
-  }
-]
-```
-
-**Properties:** `show` (bool), `color` (color)
-
-#### `divider` — Separator line between cards
-
-```json
-"divider": [{
-  "properties": {
-    "show": { "expr": { "Literal": { "Value": "true" } } },
-    "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#EDEBE9'" } } } } },
-    "width": { "expr": { "Literal": { "Value": "1D" } } }
-  }
-}]
-```
-
-#### `value` / `label` — Callout and label formatting
-
-```json
-"value": [{
-  "properties": {
-    "fontSize": { "expr": { "Literal": { "Value": "18D" } } },
-    "bold": { "expr": { "Literal": { "Value": "true" } } },
-    "fontFamily": { "expr": { "Literal": { "Value": "'Segoe UI Semibold'" } } }
-  }
-}]
-```
-
-```json
-"label": [{
-  "properties": {
-    "show": { "expr": { "Literal": { "Value": "true" } } },
-    "fontSize": { "expr": { "Literal": { "Value": "9D" } } },
-    "fontFamily": { "expr": { "Literal": { "Value": "'Segoe UI'" } } }
-  }
-}]
-```
-
-#### Other cardVisual objects
-
-- `shapeCustomRectangle` — card background shape (color, radius, transparency)
-- `overFlow` — text overflow behaviour (`overflow` property)
-- `padding` (card-internal) — inner padding per card cell
-
-#### Suggested CLI syntax
-
-```bash
-# Layout
-pbi visual set <page> <visual> layout.style=Cards
-pbi visual set <page> <visual> layout.columnCount=5
-
-# Accent bar (default)
-pbi visual set <page> <visual> accentBar.show=true
-pbi visual set <page> <visual> accentBar.color=#4CAF50
-
-# Accent bar per measure (needs new selector syntax)
-pbi visual set <page> <visual> accentBar.color=#E8A83E --measure "Stale Devices 30d"
-
-# Divider
-pbi visual set <page> <visual> divider.show=true
-
-# Value / Label
-pbi visual set <page> <visual> value.fontSize=18
-pbi visual set <page> <visual> label.show=true
-```
-
----
-
-### FEAT-003: Per-measure selectors for formatting objects
-
-**Status:** Implemented (2026-03-13)
-**Priority:** Medium — needed for multi-measure cards and conditional formatting
-
-Some formatting objects (like `accentBar` in cardVisuals) support per-measure selectors,
-allowing different formatting for each measure in a multi-measure visual. This requires
-a `selector` block referencing a specific measure's `queryRef`:
+The CLI's `--measure` flag generates this selector format:
 
 ```json
 {
-  "properties": { ... },
+  "properties": {
+    "color": "#2E7D8C"
+  },
   "selector": {
     "data": {
       "dataViewWildcard": {
         "matchingOption": "InstancesAndTotals"
       }
     },
-    "id": "Sum(Devices.StaleDevices30d)"
+    "id": "Measures Table.Compliance Rate"
   }
 }
 ```
 
-The CLI currently has no way to target a specific measure when setting formatting properties.
+**Two problems:**
 
-#### Suggested CLI syntax
+1. **`selector.data` must be an array**, not an object. The schema defines `data` as an array type.
+   The CLI writes `"data": { ... }` (object) instead of `"data": [{ ... }]` (array).
 
-```bash
-pbi visual set <page> <visual> accentBar.color=#E8A83E --measure "Stale Devices 30d"
-pbi visual set <page> <visual> value.fontColor=#D64554 --measure "Non-Compliant"
+2. **The selector format itself is wrong for per-measure card formatting.** Working Power BI reports
+   use `"selector": { "metadata": "Measures Table.Compliance Rate" }` — a simple string reference
+   to the measure's query metadata. The `data`/`dataViewWildcard`/`id` pattern is for a different
+   kind of selector entirely.
+
+3. **Color values are not wrapped in expression format.** The CLI writes flat `"color": "#hex"`
+   instead of the required `"solid": { "color": { "expr": { "Literal": { "Value": "'#hex'" } } } }`.
+
+### Correct Format
+
+Per-measure selectors should use the `metadata` pattern:
+
+```json
+{
+  "properties": {
+    "color": {
+      "solid": {
+        "color": {
+          "expr": {
+            "Literal": {
+              "Value": "'#2E7D8C'"
+            }
+          }
+        }
+      }
+    }
+  },
+  "selector": {
+    "metadata": "Measures Table.Compliance Rate"
+  }
+}
 ```
+
+The default entry (shared properties like `show`, `position`, `width`) uses `"selector": { "id": "default" }`.
+
+### Workaround
+
+Edit the visual JSON manually. Replace the CLI-generated `selector.data`/`selector.id` entries
+with `selector.metadata` entries, and wrap color values in the proper `solid.color.expr.Literal.Value`
+format. See the working KPI strips on the Device Estate and Security & Compliance pages for reference.
 
 ---
 
-### FEAT-004: Matrix/Pivot table formatting (`pivotTable` objects)
+## Missing CLI Features — Manual JSON Edits Required
 
-**Status:** Implemented (2026-03-13)
-**Priority:** Medium — same structure as `tableEx`
+Most formatting capabilities originally documented here have since been implemented
+in the CLI. The features below are the remaining gaps that still require manual JSON
+editing or are not yet available.
 
-The `pivotTable` visual type uses the same formatting groups as `tableEx` plus:
+### Previously documented features — now implemented
 
-- `rowHeaders` — row header formatting (fontColor, backColor, fontSize, fontFamily)
-- `subTotals` — subtotal row formatting
-- `columnGrandTotal` / `rowGrandTotal` — grand total formatting
+The following were documented as missing but are now supported. Use these CLI commands
+instead of editing JSON directly:
+
+| Feature | CLI Command |
+|---------|-------------|
+| Table formatting (grid, columnHeaders, values, total) | `pbi visual set ... grid.*`, `columnHeaders.*`, `values.*`, `total.*` |
+| Card visual formatting (layout, accentBar, value, label, divider, shape, padding) | `pbi visual set ... layout.*`, `accentBar.*`, `cardValue.*`, `cardLabel.*`, `cardDivider.*`, `cardShape.*`, `cardPadding.*` |
+| Per-measure selectors | `pbi visual set ... --measure "Table.Measure"` |
+| Matrix/pivot table formatting (rowHeaders, subTotals) | `pbi visual set ... rowHeaders.*`, `subTotals.*` |
+| Chart axis/label formatting (xAxis, yAxis, labels, legend) | `pbi visual set ... xAxis.*`, `yAxis.*`, `labels.*`, `legend.*` |
+| Visual deletion | `pbi visual delete <page> <visual>` |
+| Data binding (add/remove fields) | `pbi visual bind`, `pbi visual unbind` |
+| Slicer formatting (header, items) | `pbi visual set ... slicerHeader.*`, `slicerItems.*`, `slicer.*` |
 
 ---
 
@@ -501,3 +345,48 @@ Useful CLI operations would be:
 
 Note: PBI Desktop overwrites `report.json` on save, so theme changes via file editing
 only work when PBI Desktop is closed.
+
+---
+
+### FEAT-010: Batch/bulk visual operations
+
+**Priority:** Medium — saves significant time when styling multiple visuals
+
+When redesigning a full page, the same styling is often applied to many visuals
+(e.g. all slicers get the same border/title/header styling). Currently each visual
+must be targeted individually. The batch mode of `pbi visual set` helps for a single
+visual but doesn't span multiple visuals.
+
+Useful batch operations:
+
+```bash
+# Apply same property to all visuals of a type on a page
+pbi visual set <page> --all-type=slicer border.radius=4 border.show=true title.fontSize=9
+
+# Clone visual formatting from one visual to another
+pbi visual copy-style <page> <source-visual> <target-visual>
+
+# Apply a saved style preset
+pbi visual apply-style <page> <visual> --preset card-container
+```
+
+This would dramatically reduce the effort needed for page redesigns. For the User Estate
+page redesign, styling 6 identical slicers required writing 6 separate JSON files with
+the same `visualContainerObjects` block. A batch command would have done it in one line.
+
+---
+
+### FEAT-011: Page template / page style preset
+
+**Priority:** Low — nice-to-have for consistency across pages
+
+When multiple pages share the same layout pattern (slicers → KPI strip → table → charts),
+it would be useful to save and apply page templates:
+
+```bash
+# Save current page layout as a template
+pbi page save-template <page> <template-name>
+
+# Apply template to a new page (creates visuals with matching positions/styles)
+pbi page apply-template <page> <template-name>
+```

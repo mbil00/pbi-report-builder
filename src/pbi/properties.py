@@ -1052,6 +1052,65 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "color", "Waterfall total color",
         container_key="sentimentColors", container_prop="totalFill", objects_path="objects",
     ),
+    # ── Shape visual ──────────────────────────────────────────
+    "shape.type": PropertyDef(
+        None, "enum", "Shape type",
+        container_key="general", container_prop="shapeType", objects_path="objects",
+        enum_values=(
+            "rectangle", "roundedRectangle", "oval", "triangle",
+            "pentagon", "hexagon", "octagon",
+            "arrow", "arrowUp", "arrowDown", "arrowLeft", "arrowRight",
+            "star5", "star6", "star8", "heart", "diamond",
+            "parallelogram", "trapezoid", "homePlate",
+            "speechBubble", "callout", "cloud",
+        ),
+    ),
+    "shape.fill": PropertyDef(
+        None, "color", "Shape fill color",
+        container_key="fill", container_prop="fillColor", objects_path="objects",
+    ),
+    "shape.fillShow": PropertyDef(
+        None, "boolean", "Show shape fill",
+        container_key="fill", container_prop="show", objects_path="objects",
+    ),
+    "shape.fillTransparency": PropertyDef(
+        None, "number", "Shape fill transparency (0-100)",
+        container_key="fill", container_prop="transparency", objects_path="objects",
+    ),
+    "shape.lineColor": PropertyDef(
+        None, "color", "Shape line/border color",
+        container_key="line", container_prop="lineColor", objects_path="objects",
+    ),
+    "shape.lineShow": PropertyDef(
+        None, "boolean", "Show shape line/border",
+        container_key="line", container_prop="show", objects_path="objects",
+    ),
+    "shape.lineWeight": PropertyDef(
+        None, "number", "Shape line weight",
+        container_key="line", container_prop="weight", objects_path="objects",
+    ),
+    "shape.lineTransparency": PropertyDef(
+        None, "number", "Shape line transparency (0-100)",
+        container_key="line", container_prop="transparency", objects_path="objects",
+    ),
+    "shape.roundEdge": PropertyDef(
+        None, "number", "Shape corner rounding",
+        container_key="line", container_prop="roundEdge", objects_path="objects",
+    ),
+    "shape.rotation": PropertyDef(
+        None, "number", "Shape rotation angle",
+        container_key="rotation", container_prop="angle", objects_path="objects",
+    ),
+    # ── Image visual ──────────────────────────────────────────
+    "image.url": PropertyDef(
+        None, "string", "Image URL",
+        container_key="imageUrl", container_prop="imageUrl", objects_path="objects",
+    ),
+    "image.scaling": PropertyDef(
+        None, "enum", "Image scaling mode",
+        container_key="imageScaling", container_prop="imageScalingType", objects_path="objects",
+        enum_values=("Fit", "Fill", "Normal"),
+    ),
     # ── Table/matrix global formatting (visual.objects) ───────
     # Column headers (global)
     "columnHeaders.fontColor": PropertyDef(
