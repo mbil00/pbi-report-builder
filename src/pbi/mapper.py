@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from pbi.project import Project, Page, Visual
+from pbi.filters import get_filters, parse_filter
 from pbi.properties import decode_pbi_value
 
 
@@ -23,6 +24,9 @@ def generate_map(project: Project) -> str:
 
     # Semantic model
     _write_model_section(lines, project)
+
+    # Report-level filters
+    _write_filters_section(lines, project.get_report_meta(), "report", indent=0)
 
     # Pages
     lines.append("pages:")
@@ -80,6 +84,9 @@ def _write_page(
     lines.append(f"    id: {page.name}")
     lines.append(f"    path: {rel(page.folder)}")
     lines.append(f"    size: {page.width} x {page.height}")
+
+    # Page-level filters
+    _write_filters_section(lines, page.data, "page", indent=4)
 
     if not visuals:
         lines.append("    visuals: []")
@@ -188,6 +195,19 @@ def _write_visual(
                     suffix = " (measure)" if ftype == "measure" else ""
                     lines.append(f"{pad}      - {entity}.{_ys(prop)}{suffix}")
 
+    # Sort definition
+    sorts = project.get_sort(visual)
+    if sorts:
+        entity, prop, ftype, direction = sorts[0]
+        suffix = " (measure)" if ftype == "measure" else ""
+        lines.append(f"{pad}  sort: {entity}.{_ys(prop)}{suffix} {direction}")
+
+    # Key chart formatting
+    _write_chart_summary(lines, visual, pad)
+
+    # Visual-level filters
+    _write_filters_section(lines, visual.data, "visual", indent=len(pad) + 2)
+
 
 def _get_visual_title(visual: Visual) -> str | None:
     """Extract title text from visualContainerObjects."""
@@ -220,6 +240,82 @@ def _ys(value: str) -> str:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
     return value
+
+
+def _write_filters_section(
+    lines: list[str], data: dict, level: str, indent: int,
+) -> None:
+    """Write a filters summary if any filters exist."""
+    filters = get_filters(data)
+    if not filters:
+        return
+
+    pad = " " * indent
+    items = []
+    for f in filters:
+        info = parse_filter(f, level)
+        vals = ", ".join(info.values) if info.values else "all"
+        flags = []
+        if info.is_hidden:
+            flags.append("hidden")
+        if info.is_locked:
+            flags.append("locked")
+        flag_str = f" ({', '.join(flags)})" if flags else ""
+        items.append(f"{info.field_entity}.{info.field_prop} {info.filter_type}: {vals}{flag_str}")
+
+    lines.append(f"{pad}filters:")
+    for item in items:
+        lines.append(f"{pad}  - {item}")
+
+
+def _write_chart_summary(lines: list[str], visual: Visual, pad: str) -> None:
+    """Write key chart formatting properties if present."""
+    objects = visual.data.get("visual", {}).get("objects", {})
+    if not objects:
+        return
+
+    summaries = []
+
+    # Legend
+    legend = _get_obj_prop(objects, "legend", "show")
+    if legend is not None:
+        pos = _get_obj_prop(objects, "legend", "position")
+        legend_str = f"legend: {_fmt_val(legend)}"
+        if pos is not None:
+            legend_str += f" ({_fmt_val(pos)})"
+        summaries.append(legend_str)
+
+    # Labels
+    labels_show = _get_obj_prop(objects, "labels", "show")
+    if labels_show is not None:
+        summaries.append(f"labels: {_fmt_val(labels_show)}")
+
+    # Axes
+    for axis_key, axis_name in [("categoryAxis", "xAxis"), ("valueAxis", "yAxis")]:
+        show = _get_obj_prop(objects, axis_key, "show")
+        if show is not None:
+            summaries.append(f"{axis_name}: {_fmt_val(show)}")
+
+    if summaries:
+        lines.append(f"{pad}  formatting: {{{', '.join(summaries)}}}")
+
+
+def _get_obj_prop(objects: dict, key: str, prop: str) -> object | None:
+    """Read a single property from visual objects."""
+    entries = objects.get(key, [])
+    if not entries or not isinstance(entries, list):
+        return None
+    raw = entries[0].get("properties", {}).get(prop)
+    if raw is None:
+        return None
+    return decode_pbi_value(raw)
+
+
+def _fmt_val(val: object) -> str:
+    """Format a decoded PBI value for display."""
+    if isinstance(val, bool):
+        return str(val).lower()
+    return str(val)
 
 
 def _rel_path_fn(root: Path):

@@ -529,6 +529,69 @@ class Project:
                     bindings.append((role, entity, prop, "measure"))
         return bindings
 
+    # ── Sort definitions ──────────────────────────────────────────
+
+    @staticmethod
+    def set_sort(
+        visual: Visual,
+        entity: str,
+        prop: str,
+        field_type: str = "column",
+        descending: bool = True,
+    ) -> None:
+        """Set the sort definition on a visual."""
+        field_key = "Column" if field_type == "column" else "Measure"
+        sort_entry = {
+            "field": {
+                field_key: {
+                    "Expression": {"SourceRef": {"Entity": entity}},
+                    "Property": prop,
+                }
+            },
+            "direction": "Descending" if descending else "Ascending",
+        }
+
+        query = (
+            visual.data
+            .setdefault("visual", {})
+            .setdefault("query", {})
+        )
+        query["sortDefinition"] = {
+            "sort": [sort_entry],
+            "isDefaultSort": False,
+        }
+        visual.save()
+
+    @staticmethod
+    def clear_sort(visual: Visual) -> bool:
+        """Remove sort definition from a visual. Returns True if one was removed."""
+        query = visual.data.get("visual", {}).get("query", {})
+        if "sortDefinition" in query:
+            del query["sortDefinition"]
+            visual.save()
+            return True
+        return False
+
+    @staticmethod
+    def get_sort(visual: Visual) -> list[tuple[str, str, str, str]]:
+        """Get sort definitions as (entity, property, field_type, direction) tuples."""
+        sort_def = (
+            visual.data
+            .get("visual", {})
+            .get("query", {})
+            .get("sortDefinition", {})
+        )
+        result = []
+        for entry in sort_def.get("sort", []):
+            field_data = entry.get("field", {})
+            direction = entry.get("direction", "Ascending")
+            for key, ftype in [("Column", "column"), ("Measure", "measure")]:
+                if key in field_data:
+                    entity = field_data[key]["Expression"]["SourceRef"]["Entity"]
+                    prop = field_data[key]["Property"]
+                    result.append((entity, prop, ftype, direction))
+        return result
+
 
 def _read_json(path: Path) -> dict:
     with open(path, encoding="utf-8-sig") as f:

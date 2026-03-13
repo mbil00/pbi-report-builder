@@ -378,6 +378,14 @@ def visual_get(
                 fields.append(ref)
             table.add_row(f"[dim]Data:[/dim] {role}", ", ".join(fields))
 
+    # Show sort definition
+    sorts = proj.get_sort(vis)
+    if sorts:
+        table.add_section()
+        for entity, sort_prop, ftype, direction in sorts:
+            kind = " (measure)" if ftype == "measure" else ""
+            table.add_row("[dim]Sort:[/dim]", f"{entity}.{sort_prop}{kind} {direction}")
+
     console.print(table)
 
 
@@ -385,11 +393,10 @@ def visual_get(
 def visual_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    prop: Annotated[str, typer.Argument(help="Property path (e.g. 'position.x', 'background.color').")],
-    value: Annotated[str, typer.Argument(help="New value.")],
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value or prop value (single pair).")],
     project: ProjectOpt = None,
 ) -> None:
-    """Set a visual property."""
+    """Set visual properties. Supports batch: prop=value prop=value ..."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -398,16 +405,30 @@ def visual_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    old = get_property(vis.data, prop, VISUAL_PROPERTIES)
-    try:
-        set_property(vis.data, prop, value, VISUAL_PROPERTIES)
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+    # Parse assignments — support both "prop=value" and legacy "prop value" (2 args)
+    pairs: list[tuple[str, str]] = []
+    if len(assignments) == 2 and "=" not in assignments[0] and "=" not in assignments[1]:
+        # Legacy: pbi visual set page visual prop value
+        pairs.append((assignments[0], assignments[1]))
+    else:
+        for arg in assignments:
+            eq = arg.find("=")
+            if eq == -1:
+                console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
+                raise typer.Exit(1)
+            pairs.append((arg[:eq], arg[eq + 1:]))
+
+    for prop, value in pairs:
+        old = get_property(vis.data, prop, VISUAL_PROPERTIES)
+        try:
+            set_property(vis.data, prop, value, VISUAL_PROPERTIES)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {prop}: {e}")
+            raise typer.Exit(1)
+        new = get_property(vis.data, prop, VISUAL_PROPERTIES)
+        console.print(f"[dim]{prop}:[/dim] {old} [dim]→[/dim] {new}")
 
     vis.save()
-    new = get_property(vis.data, prop, VISUAL_PROPERTIES)
-    console.print(f"[dim]{prop}:[/dim] {old} [dim]→[/dim] {new}")
 
 
 @visual_app.command("move")
@@ -698,6 +719,69 @@ def visual_types(
 
     console.print(table)
     console.print("\n[dim]Use 'pbi visual types <type>' for detailed role info.[/dim]")
+
+
+@visual_app.command("sort")
+def visual_sort(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
+    field: Annotated[Optional[str], typer.Argument(help="Sort field as Table.Field (omit to show current sort).")] = None,
+    desc: Annotated[bool, typer.Option("--desc", help="Sort descending.")] = True,
+    asc: Annotated[bool, typer.Option("--asc", help="Sort ascending.")] = False,
+    clear: Annotated[bool, typer.Option("--clear", help="Remove sort definition.")] = False,
+    measure: Annotated[bool, typer.Option("--measure", "-m", help="Treat field as a measure.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Set, show, or clear a visual's sort definition."""
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if clear:
+        if proj.clear_sort(vis):
+            console.print("Sort definition removed.")
+        else:
+            console.print("[dim]No sort definition to remove.[/dim]")
+        return
+
+    if field is None:
+        # Show current sort
+        sorts = proj.get_sort(vis)
+        if not sorts:
+            console.print("[dim]No sort definition.[/dim]")
+            return
+        for entity, prop, ftype, direction in sorts:
+            kind = " (measure)" if ftype == "measure" else ""
+            console.print(f"[cyan]{entity}.{prop}[/cyan]{kind} {direction}")
+        return
+
+    # Parse Table.Field
+    dot = field.find(".")
+    if dot == -1:
+        console.print("[red]Error:[/red] Field must be Table.Field format.")
+        raise typer.Exit(1)
+    entity, prop = field[:dot], field[dot + 1:]
+
+    # Auto-detect field type from semantic model
+    field_type = "measure" if measure else "column"
+    if not measure:
+        try:
+            from pbi.model import SemanticModel
+            model = SemanticModel.load(proj.root)
+            _, prop, field_type = model.resolve_field(field)
+        except (FileNotFoundError, ValueError):
+            pass
+
+    descending = not asc  # --asc overrides default --desc
+    proj.set_sort(vis, entity, prop, field_type=field_type, descending=descending)
+    direction = "Descending" if descending else "Ascending"
+    console.print(
+        f'Sort set: [cyan]{entity}.{prop}[/cyan] {direction}'
+    )
 
 
 @visual_app.command("props")

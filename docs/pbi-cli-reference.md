@@ -56,11 +56,16 @@ model:
     columns: [Quantity, Net Price, Order Date]
     measures: [Sales Amount, Total Orders]
 
+filters:                                              # report-level filters
+  - Product.Color Categorical: Red, Blue (hidden)
+
 pages:
   - name: Sales Overview  # active
     id: page1
     path: Report.Report/definition/pages/page1
     size: 1920 x 1080
+    filters:                                          # page-level filters
+      - Product.Category Categorical: Bikes
     visuals:
       - name: revenueChart
         type: clusteredColumnChart
@@ -71,6 +76,10 @@ pages:
         bindings:
           Category: Product.Category
           Y: Sales.Sales Amount (measure)
+        sort: Sales.Sales Amount (measure) Descending  # sort definition
+        formatting: {legend: true (Top), labels: false} # key chart formatting
+        filters:                                        # visual-level filters
+          - Sales.Sales Amount Advanced: >= 1000
 ```
 
 ---
@@ -160,8 +169,19 @@ pbi visual get <page> <visual> --raw             # full JSON
 
 ### pbi visual set
 
+Supports single property or batch mode:
+
 ```bash
-pbi visual set <page> <visual> <property> <value>
+pbi visual set <page> <visual> <property> <value>          # single (legacy)
+pbi visual set <page> <visual> prop=value [prop=value ...]  # batch
+```
+
+Batch examples:
+
+```bash
+pbi visual set "Sales" chart legend.show=true legend.position=Top labels.show=false
+pbi visual set "Sales" chart position.x=50 position.y=100 position.width=600
+pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=center background.color="#FFFFFF"
 ```
 
 **Position properties** (direct values):
@@ -212,13 +232,52 @@ pbi visual set <page> <visual> <property> <value>
 | `shadow.transparency` | number | Shadow transparency |
 | `shadow.position` | string | Shadow position |
 
+**Chart formatting** (encoded as PBI visual objects):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `legend.show` | boolean | Show legend |
+| `legend.position` | enum | `Top`, `Bottom`, `Left`, `Right`, `TopCenter`, `BottomCenter`, `LeftCenter`, `RightCenter` |
+| `legend.color` | color | Legend text color |
+| `legend.fontSize` | number | Legend font size |
+| `legend.fontFamily` | string | Legend font family |
+| `xAxis.show` | boolean | Show category axis |
+| `xAxis.title` | boolean | Show axis title |
+| `xAxis.titleText` | string | Axis title text |
+| `xAxis.color` | color | Label color |
+| `xAxis.fontSize` | number | Label font size |
+| `xAxis.gridlines` | boolean | Show gridlines |
+| `xAxis.gridlineColor` | color | Gridline color |
+| `yAxis.show` | boolean | Show value axis |
+| `yAxis.title` | boolean | Show axis title |
+| `yAxis.titleText` | string | Axis title text |
+| `yAxis.color` | color | Label color |
+| `yAxis.fontSize` | number | Label font size |
+| `yAxis.gridlines` | boolean | Show gridlines |
+| `yAxis.start` | number | Axis range start |
+| `yAxis.end` | number | Axis range end |
+| `y2Axis.show` | boolean | Show secondary axis |
+| `y2Axis.title` | boolean | Show secondary axis title |
+| `y2Axis.titleText` | string | Secondary axis title |
+| `labels.show` | boolean | Show data labels |
+| `labels.color` | color | Label color |
+| `labels.fontSize` | number | Label font size |
+| `labels.position` | enum | `Auto`, `InsideEnd`, `OutsideEnd`, `InsideCenter`, `InsideBase` |
+| `labels.precision` | number | Decimal places |
+| `plotArea.transparency` | number | Plot area transparency |
+| `plotArea.color` | color | Plot area background |
+| `dataColors.default` | color | Default data color |
+| `dataColors.showAll` | boolean | Show all data colors |
+| `line.style` | enum | `solid`, `dashed`, `dotted` |
+| `line.width` | number | Line stroke width |
+| `shapes.showMarkers` | boolean | Show data point markers |
+
 Any property not listed above can be accessed via raw JSON dot-path (e.g. `visual.objects.legend`).
 
 ```bash
-pbi visual set "Sales" chart background.color "#FFFFFF"
-pbi visual set "Sales" chart border.show true
-pbi visual set "Sales" chart title.text "Revenue by Category"
-pbi visual set "Sales" chart title.alignment center
+pbi visual set "Sales" chart background.color="#FFFFFF"
+pbi visual set "Sales" chart border.show=true title.text="Revenue by Category" title.alignment=center
+pbi visual set "Sales" chart legend.show=true legend.position=Top labels.show=false
 ```
 
 ### pbi visual move
@@ -277,6 +336,24 @@ pbi visual copy "Sales" revenueChart --to-page "Overview" --name revenueChartCop
 ```bash
 pbi visual delete <page> <visual>         # interactive confirmation
 pbi visual delete <page> <visual> -f      # skip confirmation
+```
+
+### pbi visual sort
+
+Set, show, or clear the sort definition on a visual.
+
+```bash
+pbi visual sort <page> <visual>                                # show current sort
+pbi visual sort <page> <visual> <Table.Field>                  # sort descending (default)
+pbi visual sort <page> <visual> <Table.Field> --asc            # sort ascending
+pbi visual sort <page> <visual> --clear                        # remove sort
+```
+
+Field type is auto-detected from the semantic model. Use `--measure` / `-m` to override.
+
+```bash
+pbi visual sort "Sales" chart "Sales.Sales Amount"             # sort by measure descending
+pbi visual sort "Sales" chart Product.Category --asc           # sort by column ascending
 ```
 
 ### pbi visual props
@@ -355,6 +432,46 @@ Table of all bindings: role, table, field, and type (column/measure).
 
 ---
 
+## Filter Commands
+
+Filters operate at three levels: report (default), page (`--page`), or visual (`--page` + `--visual`).
+
+### pbi filter list
+
+```bash
+pbi filter list                                        # report-level filters
+pbi filter list --page "Sales"                         # page-level filters
+pbi filter list --page "Sales" --visual chart          # visual-level filters
+```
+
+### pbi filter add
+
+Categorical filter (exact values):
+
+```bash
+pbi filter add Product.Color --values "Red,Blue,Black"
+pbi filter add Product.Category --values "Bikes" --page "Sales" --hidden
+```
+
+Range filter (min/max):
+
+```bash
+pbi filter add "Sales.Sales Amount" --min 1000 --max 50000
+pbi filter add Sales.OrderDate --min "2024-01-01" --page "Sales"
+```
+
+Options: `--hidden` (hide in view mode), `--locked` (lock in view mode), `--measure` / `-m` (treat field as measure).
+
+### pbi filter remove
+
+```bash
+pbi filter remove Product.Color                        # remove by field reference
+pbi filter remove Filter_4c73676c90f2d32d              # remove by filter name
+pbi filter remove Product.Color --page "Sales"         # from page level
+```
+
+---
+
 ## Semantic Model Commands
 
 ### pbi model tables
@@ -421,9 +538,11 @@ Project/
   visual         — {
     visualType          — chart type string
     query.queryState    — data bindings by role
-    objects             — visual-specific formatting
+    query.sortDefinition — sort field and direction
+    objects             — visual-specific formatting (legend, axes, labels, ...)
     visualContainerObjects — container formatting (background, border, title, ...)
   }
+  filterConfig   — visual-level filters
   isHidden       — visibility flag
   parentGroupName — group membership (if grouped)
 }
