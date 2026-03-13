@@ -589,6 +589,31 @@ pbi visual set "Sales" card cardLabel.show=true cardLabel.fontSize=10
 pbi visual set "Sales" card cardShape.color="#FFFFFF" cardShape.radius=8
 ```
 
+### pbi visual paste-style
+
+Copy formatting from one visual to another (format painter). Copies container formatting (title, border, background, shadow, padding, etc.) and chart formatting (legend, axes, labels, etc.) without affecting data bindings, filters, sort, or position.
+
+```bash
+pbi visual paste-style <page> <source> <target>                              # same page
+pbi visual paste-style <page> <source> <target> --to-page "Other Page"       # cross-page
+pbi visual paste-style <page> <source> <target> --container-only             # only container (title, border, bg)
+pbi visual paste-style <page> <source> <target> --chart-only                 # only chart objects (legend, axes)
+```
+
+```bash
+# Copy all formatting from revenueChart to profitChart on the same page
+pbi visual paste-style "Sales" revenueChart profitChart
+
+# Copy formatting to a visual on a different page
+pbi visual paste-style "Sales" revenueChart chart2 --to-page "Overview"
+
+# Copy only container formatting (title style, border, background, shadow)
+pbi visual paste-style "Sales" revenueChart profitChart --container-only
+
+# Copy only chart formatting (legend, axes, labels, data colors)
+pbi visual paste-style "Sales" revenueChart profitChart --chart-only
+```
+
 ### pbi visual move
 
 ```bash

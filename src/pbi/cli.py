@@ -542,6 +542,75 @@ def visual_copy(
     )
 
 
+@visual_app.command("paste-style")
+def visual_paste_style(
+    page: Annotated[str, typer.Argument(help="Source page name, display name, or index.")],
+    source: Annotated[str, typer.Argument(help="Source visual (copy style FROM).")],
+    target: Annotated[str, typer.Argument(help="Target visual (paste style TO).")],
+    to_page: Annotated[Optional[str], typer.Option("--to-page", help="Target page if different from source.")] = None,
+    container_only: Annotated[bool, typer.Option("--container-only", help="Copy only container formatting (title, border, background, shadow, etc.).")] = False,
+    chart_only: Annotated[bool, typer.Option("--chart-only", help="Copy only chart formatting (legend, axes, labels, etc.).")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Copy formatting from one visual to another (format painter).
+
+    Copies visual styling without affecting data bindings, filters, sort, or position.
+    By default copies both container and chart formatting. Use --container-only or
+    --chart-only to limit scope.
+    """
+    import copy
+
+    if container_only and chart_only:
+        console.print("[red]Error:[/red] --container-only and --chart-only are mutually exclusive.")
+        raise typer.Exit(1)
+
+    proj = _get_project(project)
+    try:
+        src_page = proj.find_page(page)
+        src_vis = proj.find_visual(src_page, source)
+        tgt_page = proj.find_page(to_page) if to_page else src_page
+        tgt_vis = proj.find_visual(tgt_page, target)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    copied = []
+    src_visual = src_vis.data.get("visual", {})
+
+    # Container formatting (visualContainerObjects)
+    if not chart_only:
+        container = src_visual.get("visualContainerObjects")
+        if container:
+            tgt_vis.data.setdefault("visual", {})["visualContainerObjects"] = copy.deepcopy(container)
+            copied.append("container")
+        else:
+            # Remove from target if source has none
+            tgt_vis.data.get("visual", {}).pop("visualContainerObjects", None)
+
+    # Chart formatting (objects)
+    if not container_only:
+        objects = src_visual.get("objects")
+        if objects:
+            tgt_vis.data.setdefault("visual", {})["objects"] = copy.deepcopy(objects)
+            copied.append("chart")
+        else:
+            tgt_vis.data.get("visual", {}).pop("objects", None)
+
+    if not copied:
+        console.print("[yellow]Source visual has no formatting to copy.[/yellow]")
+        raise typer.Exit(0)
+
+    tgt_vis.save()
+    scope = " + ".join(copied)
+    tgt_label = f'"{tgt_vis.name}"'
+    if to_page:
+        tgt_label += f' on "{tgt_page.display_name}"'
+    console.print(
+        f'Copied [cyan]{scope}[/cyan] formatting: '
+        f'"{src_vis.name}" → {tgt_label}'
+    )
+
+
 @visual_app.command("rename")
 def visual_rename(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
