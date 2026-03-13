@@ -94,7 +94,7 @@ SemanticModel/
 | `pages.json` | `pageOrder` array, `activePageName` |
 | `page.json` | `displayName`, `width`, `height`, `type`, `visibility`, `pageBinding`, `filterConfig`, `visualInteractions` |
 | `visual.json` | `name`, `position`, `visual` (type, bindings, objects, containerObjects) or `visualGroup` |
-| `bookmarks.json` | `bookmarkOrder` array |
+| `bookmarks.json` | `items` array of bookmark/group metadata |
 | `*.bookmark.json` | `displayName`, `name`, `explorationState`, `options` |
 
 ### Static vs Conditional Formatting

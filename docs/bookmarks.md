@@ -80,7 +80,7 @@ Bookmarks are stored in `definition/bookmarks/`:
 ```
 definition/
   bookmarks/
-    bookmarks.json                    # metadata (schema, bookmarkOrder)
+    bookmarks.json                    # metadata (schema, items)
     a1b2c3d4e5.bookmark.json         # individual bookmark
     f6g7h8i9j0.bookmark.json
 ```
@@ -116,12 +116,15 @@ Each bookmark file (schema v2.1.0):
 }
 ```
 
-The `bookmarks.json` metadata tracks ordering:
+The `bookmarks.json` metadata tracks ordering with schema-defined `items`:
 
 ```json
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmarkMetadata/1.0.0/schema.json",
-  "bookmarkOrder": ["a1b2c3d4e5", "f6g7h8i9j0"]
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmarksMetadata/1.0.0/schema.json",
+  "items": [
+    { "name": "a1b2c3d4e5" },
+    { "name": "f6g7h8i9j0" }
+  ]
 }
 ```
 

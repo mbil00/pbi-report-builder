@@ -105,6 +105,13 @@ pbi filter add Product.Category --values "Bikes" --page "Sales"
 pbi filter add Product.Category --values "Bikes" --page "Sales" --visual chart
 ```
 
+**Include / Exclude filters** — schema-backed variants of value matching:
+
+```bash
+pbi filter add Product.Category --values "Bikes,Accessories" --mode include
+pbi filter add Product.Category --values "Obsolete" --mode exclude
+```
+
 **Range filter** — numeric or date range:
 
 ```bash
@@ -113,36 +120,42 @@ pbi filter add Sales.Revenue --min 1000
 pbi filter add Sales.OrderDate --min "2024-01-01" --max "2024-12-31"
 ```
 
-**Top N filter** — top or bottom N items by a measure:
+**Top N filter** — keep top or bottom N values by another field:
 
 ```bash
-pbi filter add Product.Category --topn 10 --topn-by Sales.Revenue
-pbi filter add Product.Category --topn 5 --topn-by Sales.Revenue --bottom
+pbi filter add Customers.Region --topn 7 --topn-by Order_Details.Revenue
+pbi filter add Customers.Region --topn 5 --topn-by Order_Details.Revenue --bottom
 ```
 
-**Relative date filter** — dynamic date ranges:
+### pbi filter tuple
+
+Add a tuple filter from one or more row tuples:
 
 ```bash
-pbi filter add Sales.OrderDate --relative "InLast 7 Days"
-pbi filter add Sales.OrderDate --relative "InThis 1 Months"
-pbi filter add Sales.OrderDate --relative "InNext 2 Weeks" --no-include-today
+pbi filter tuple "Product.Color=Red,Product.Size=Large"
+pbi filter tuple \
+  "Product.Color=Red,Product.Size=Large" \
+  "Product.Color=Blue,Product.Size=Medium"
 ```
 
-Relative date operators: `InLast`, `InThis`, `InNext`
-Time units: `Days`, `Weeks`, `Months`, `Quarters`, `Years`
+**Relative date** filters are still blocked by the CLI.
+The earlier implementation emitted semantic-query objects that did not match
+Microsoft's published PBIR schema, so that option still fails fast instead of
+writing malformed report JSON.
 
 **Options:**
 
 | Option | Description |
 |--------|-------------|
 | `--values`, `-v` | Comma-separated values for categorical filter |
+| `--mode` | Value filter mode: `categorical`, `include`, or `exclude` |
 | `--min` | Minimum value for range filter |
 | `--max` | Maximum value for range filter |
 | `--topn` | Top N items count |
-| `--topn-by` | Order-by field for Top N (`Table.Measure`) |
+| `--topn-by` | Order-by field for Top N (`Table.Field`) |
 | `--bottom` | Use Bottom N instead of Top N |
-| `--relative` | Relative date: `"Operator Count Unit"` |
-| `--include-today` / `--no-include-today` | Include today in relative date (default: yes) |
+| `--relative` | Reserved for a future schema-valid Relative Date implementation |
+| `--include-today` / `--no-include-today` | Reserved for a future schema-valid Relative Date implementation |
 | `--page` | Apply at page level |
 | `--visual` | Apply at visual level (requires `--page`) |
 | `--hidden` | Hide filter in view mode |

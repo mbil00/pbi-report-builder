@@ -1435,6 +1435,116 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     ),
 }
 
+# ── Report properties ──────────────────────────────────────────────
+
+REPORT_PROPERTIES: dict[str, PropertyDef] = {
+    "layoutOptimization": PropertyDef(
+        "layoutOptimization", "enum", "Mobile layout optimization mode",
+        enum_values=("None", "PhonePortrait"),
+    ),
+    "reportSource": PropertyDef(
+        "reportSource", "enum", "How the report was originally created",
+        enum_values=(
+            "Default",
+            "SharePoint",
+            "Teams",
+            "QuickCreate",
+            "EmbedQuickCreate",
+            "Datamart",
+            "DataExplore",
+        ),
+    ),
+    "settings.isPersistentUserStateDisabled": PropertyDef(
+        "settings.isPersistentUserStateDisabled", "boolean",
+        "Disable saving viewer slicer/filter changes",
+    ),
+    "settings.hideVisualContainerHeader": PropertyDef(
+        "settings.hideVisualContainerHeader", "boolean",
+        "Hide visual container header in view mode",
+    ),
+    "settings.useStylableVisualContainerHeader": PropertyDef(
+        "settings.useStylableVisualContainerHeader", "boolean",
+        "Use stylable visual container header",
+    ),
+    "settings.exportDataMode": PropertyDef(
+        "settings.exportDataMode", "enum", "Allowed export data mode",
+        enum_values=("AllowSummarized", "AllowSummarizedAndUnderlying", "None"),
+    ),
+    "settings.isReportAnnotationsDisabled": PropertyDef(
+        "settings.isReportAnnotationsDisabled", "boolean",
+        "Disable report comments",
+    ),
+    "settings.defaultFilterActionIsDataFilter": PropertyDef(
+        "settings.defaultFilterActionIsDataFilter", "boolean",
+        "Use filter instead of highlight as the default interaction",
+    ),
+    "settings.defaultDrillFilterOtherVisuals": PropertyDef(
+        "settings.defaultDrillFilterOtherVisuals", "boolean",
+        "Apply drill on one visual as a filter to other visuals by default",
+    ),
+    "settings.useCrossReportDrillthrough": PropertyDef(
+        "settings.useCrossReportDrillthrough", "boolean",
+        "Allow drillthrough from other reports",
+    ),
+    "settings.allowChangeFilterTypes": PropertyDef(
+        "settings.allowChangeFilterTypes", "boolean",
+        "Allow changing filter types in view mode",
+    ),
+    "settings.allowInlineExploration": PropertyDef(
+        "settings.allowInlineExploration", "boolean",
+        "Allow personalize-this-visual style exploration",
+    ),
+    "settings.useEnhancedTooltips": PropertyDef(
+        "settings.useEnhancedTooltips", "boolean",
+        "Use enhanced tooltips",
+    ),
+    "settings.useScaledTooltips": PropertyDef(
+        "settings.useScaledTooltips", "boolean",
+        "Scale tooltips with canvas zoom",
+    ),
+    "settings.filterPaneHiddenInEditMode": PropertyDef(
+        "settings.filterPaneHiddenInEditMode", "boolean",
+        "Hide filter pane in edit/view mode",
+    ),
+    "settings.disableFilterPaneSearch": PropertyDef(
+        "settings.disableFilterPaneSearch", "boolean",
+        "Disable filter pane search",
+    ),
+    "settings.pagesPosition": PropertyDef(
+        "settings.pagesPosition", "enum", "Page navigator position",
+        enum_values=("PagesPane", "Bottom"),
+    ),
+    "settings.allowAutomatedInsightsNotification": PropertyDef(
+        "settings.allowAutomatedInsightsNotification", "boolean",
+        "Allow automated insights notifications",
+    ),
+    "settings.useDefaultAggregateDisplayName": PropertyDef(
+        "settings.useDefaultAggregateDisplayName", "boolean",
+        "Show default aggregate names for summarized data",
+    ),
+    "settings.enableDeveloperMode": PropertyDef(
+        "settings.enableDeveloperMode", "boolean",
+        "Enable developer mode for private custom visuals",
+    ),
+    "settings.pauseQueries": PropertyDef(
+        "settings.pauseQueries", "boolean",
+        "Allow pausing queries while editing visuals",
+    ),
+    "settings.queryLimitOption": PropertyDef(
+        "settings.queryLimitOption", "enum", "Visual query limit profile",
+        enum_values=("None", "Shared", "Premium", "SQLServerAS", "AzureAS", "Custom", "Auto"),
+    ),
+    "settings.customMemoryLimit": PropertyDef(
+        "settings.customMemoryLimit", "string",
+        "Custom query memory limit",
+    ),
+    "settings.customTimeoutLimit": PropertyDef(
+        "settings.customTimeoutLimit", "string",
+        "Custom query timeout limit",
+    ),
+}
+
+
 # ── Page properties ────────────────────────────────────────────────
 
 PAGE_PROPERTIES: dict[str, PropertyDef] = {
@@ -1463,7 +1573,7 @@ PAGE_PROPERTIES: dict[str, PropertyDef] = {
     # Page outspace (area outside the page canvas)
     "outspace.color": PropertyDef(
         None, "page_color", "Outspace background color",
-        container_key="outspace", container_prop="backgroundColor",
+        container_key="outspace", container_prop="color",
         objects_path="objects", top_level=True,
     ),
     "outspace.transparency": PropertyDef(

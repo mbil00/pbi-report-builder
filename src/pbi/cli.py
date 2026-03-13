@@ -14,11 +14,13 @@ from rich import box
 from pbi.project import Project
 from pbi.properties import (
     VISUAL_PROPERTIES,
+    REPORT_PROPERTIES,
     PAGE_PROPERTIES,
     get_property,
     set_property,
     list_properties,
 )
+from pbi.schema_refs import REPORT_SCHEMA
 
 app = typer.Typer(
     name="pbi",
@@ -32,6 +34,8 @@ filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
 bookmark_app = typer.Typer(help="Bookmark operations.", no_args_is_help=True)
 interaction_app = typer.Typer(help="Visual interaction operations.", no_args_is_help=True)
+report_app = typer.Typer(help="Report metadata operations.", no_args_is_help=True)
+app.add_typer(report_app, name="report")
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
 app.add_typer(model_app, name="model")
@@ -106,7 +110,144 @@ def info(project: ProjectOpt = None) -> None:
     console.print(tree)
 
 
+@app.command()
+def capabilities(
+    status: Annotated[
+        Optional[str],
+        typer.Option(
+            "--status",
+            help="Filter by status: supported, partial, blocked, planned.",
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output the capability matrix as JSON."),
+    ] = False,
+) -> None:
+    """Show the CLI capability matrix versus PBIR/Power BI authoring features."""
+    import json as json_mod
+    from pbi.capabilities import list_capabilities
+
+    valid_statuses = {"supported", "partial", "blocked", "planned"}
+    if status and status not in valid_statuses:
+        console.print(
+            f"[red]Error:[/red] Invalid status '{status}'. "
+            f"Use one of: {', '.join(sorted(valid_statuses))}"
+        )
+        raise typer.Exit(1)
+
+    capabilities = list_capabilities(status=status)
+
+    if as_json:
+        console.print_json(json_mod.dumps([cap.to_dict() for cap in capabilities], indent=2))
+        return
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Domain", style="cyan")
+    table.add_column("Feature")
+    table.add_column("Status", style="bold")
+    table.add_column("Next Step", style="dim")
+
+    status_style = {
+        "supported": "[green]supported[/green]",
+        "partial": "[yellow]partial[/yellow]",
+        "blocked": "[red]blocked[/red]",
+        "planned": "[blue]planned[/blue]",
+    }
+
+    for cap in capabilities:
+        table.add_row(
+            cap.domain,
+            cap.feature,
+            status_style.get(cap.status, cap.status),
+            cap.next_step,
+        )
+
+    console.print(table)
+
 # ── Page commands ──────────────────────────────────────────────────
+
+@report_app.command("get")
+def report_get(
+    prop: Annotated[Optional[str], typer.Argument(help="Property to read (omit for overview).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Show report metadata or a specific report property."""
+    proj = _get_project(project)
+    data = proj.get_report_meta()
+
+    if prop:
+        value = get_property(data, prop, REPORT_PROPERTIES)
+        console.print(value)
+        return
+
+    table = Table(title="Report", box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+
+    for key in (
+        "layoutOptimization",
+        "reportSource",
+        "settings.pagesPosition",
+        "settings.exportDataMode",
+        "settings.useEnhancedTooltips",
+        "settings.allowInlineExploration",
+        "settings.useCrossReportDrillthrough",
+    ):
+        value = get_property(data, key, REPORT_PROPERTIES)
+        if value is not None:
+            table.add_row(key, str(value))
+
+    console.print(table)
+
+
+@report_app.command("set")
+def report_set(
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...].")],
+    project: ProjectOpt = None,
+) -> None:
+    """Set report metadata properties."""
+    from pbi.project import _write_json
+
+    proj = _get_project(project)
+    data = proj.get_report_meta()
+    data.setdefault("$schema", REPORT_SCHEMA)
+    data.setdefault("layoutOptimization", "None")
+    data.setdefault("themeCollection", {})
+
+    pairs: list[tuple[str, str]] = []
+    for arg in assignments:
+        eq = arg.find("=")
+        if eq == -1:
+            console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
+            raise typer.Exit(1)
+        pairs.append((arg[:eq], arg[eq + 1:]))
+
+    for prop, value in pairs:
+        old = get_property(data, prop, REPORT_PROPERTIES)
+        try:
+            set_property(data, prop, value, REPORT_PROPERTIES)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {prop}: {e}")
+            raise typer.Exit(1)
+        new = get_property(data, prop, REPORT_PROPERTIES)
+        console.print(f"[dim]{prop}:[/dim] {old} [dim]→[/dim] {new}")
+
+    _write_json(proj.definition_folder / "report.json", data)
+
+
+@report_app.command("props")
+def report_props() -> None:
+    """List available report metadata properties."""
+    table = Table(title="Report Properties", box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Type", style="dim")
+    table.add_column("Description")
+
+    for name, vtype, desc in list_properties(REPORT_PROPERTIES):
+        table.add_row(name, vtype, desc)
+
+    console.print(table)
 
 @page_app.command("list")
 def page_list(project: ProjectOpt = None) -> None:
@@ -1601,6 +1742,43 @@ def model_fields(
 
 # ── Filter commands ─────────────────────────────────────────────────
 
+
+def _load_filter_model(project: Path | None):
+    """Best-effort semantic model loader for filter typing."""
+    try:
+        from pbi.model import SemanticModel
+
+        proj_obj = _get_project(project)
+        return SemanticModel.load(proj_obj.root)
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _resolve_filter_field(
+    field: str,
+    *,
+    measure: bool,
+    model,
+) -> tuple[str, str, str, str | None]:
+    """Resolve a filter field into entity, prop, field_type, data_type."""
+    dot = field.find(".")
+    if dot == -1:
+        raise ValueError("Field must be Table.Field format.")
+
+    entity, prop = field[:dot], field[dot + 1:]
+    if measure or model is None:
+        return entity, prop, ("measure" if measure else "column"), None
+
+    resolved_entity, resolved_prop, field_type = model.resolve_field(field)
+    data_type = None
+    if field_type == "column":
+        table = model.find_table(resolved_entity)
+        for col in table.columns:
+            if col.name == resolved_prop:
+                data_type = col.data_type
+                break
+    return resolved_entity, resolved_prop, field_type, data_type
+
 @filter_app.command("list")
 def filter_list(
     page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
@@ -1631,8 +1809,13 @@ def filter_list(
 
     for f in filters:
         info = parse_filter(f, level)
+        field_label = (
+            f"{info.field_entity}.{info.field_prop}"
+            if info.field_entity != "?" and info.field_prop != "?"
+            else f.get("displayName", "(tuple)")
+        )
         table.add_row(
-            f"{info.field_entity}.{info.field_prop}",
+            field_label,
             info.filter_type,
             ", ".join(info.values) if info.values else "-",
             "yes" if info.is_hidden else "",
@@ -1646,13 +1829,20 @@ def filter_list(
 def filter_add(
     field: Annotated[str, typer.Argument(help="Field as Table.Field (e.g. Product.Category).")],
     values: Annotated[Optional[str], typer.Option("--values", "-v", help="Comma-separated values for categorical filter.")] = None,
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="Value filter mode when using --values: categorical, include, or exclude.",
+        ),
+    ] = "categorical",
     min_val: Annotated[Optional[str], typer.Option("--min", help="Minimum value for range filter.")] = None,
     max_val: Annotated[Optional[str], typer.Option("--max", help="Maximum value for range filter.")] = None,
     topn: Annotated[Optional[int], typer.Option("--topn", help="Top N items count.")] = None,
-    topn_by: Annotated[Optional[str], typer.Option("--topn-by", help="Order-by field for TopN (Table.Measure).")] = None,
+    topn_by: Annotated[Optional[str], typer.Option("--topn-by", help="Order-by field for Top N (Table.Field).")] = None,
     bottom: Annotated[bool, typer.Option("--bottom", help="Use Bottom N instead of Top N.")] = False,
-    relative: Annotated[Optional[str], typer.Option("--relative", help="Relative date: 'InLast 7 Days', 'InThis 1 Months', 'InNext 2 Weeks'.")] = None,
-    include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Include today in relative date filter.")] = True,
+    relative: Annotated[Optional[str], typer.Option("--relative", help="Reserved for a future schema-valid Relative Date implementation.")] = None,
+    include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Reserved for a future schema-valid Relative Date implementation.")] = True,
     page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
     visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
     hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
@@ -1660,12 +1850,26 @@ def filter_add(
     measure: Annotated[bool, typer.Option("--measure", "-m", help="Field is a measure.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Add a filter. Use --values for categorical, --min/--max for range, --topn for Top N, --relative for relative date."""
+    """Add a filter.
+
+    Schema-backed writes currently support categorical, include, exclude,
+    tuple, range, and Top N filters.
+    Relative Date remains reserved until this CLI has a
+    Microsoft-schema-valid PBIR implementation for that filter type.
+    """
     from pbi.filters import (
         load_level_data, save_level_data,
-        add_categorical_filter, add_range_filter,
+        add_categorical_filter, add_exclude_filter, add_include_filter, add_range_filter,
         add_topn_filter, add_relative_date_filter,
     )
+
+    valid_modes = {"categorical", "include", "exclude"}
+    if mode not in valid_modes:
+        console.print(
+            f"[red]Error:[/red] Invalid --mode '{mode}'. "
+            f"Use one of: {', '.join(sorted(valid_modes))}."
+        )
+        raise typer.Exit(1)
 
     has_categorical = values is not None
     has_range = min_val is not None or max_val is not None
@@ -1674,28 +1878,22 @@ def filter_add(
     filter_count = sum([has_categorical, has_range, has_topn, has_relative])
 
     if filter_count == 0:
-        console.print("[red]Error:[/red] Specify --values (categorical), --min/--max (range), --topn (Top N), or --relative (relative date).")
+        console.print("[red]Error:[/red] Specify --values, --min/--max, --topn, or --relative.")
         raise typer.Exit(1)
     if filter_count > 1:
         console.print("[red]Error:[/red] Use only one filter type per command.")
         raise typer.Exit(1)
 
-    dot = field.find(".")
-    if dot == -1:
-        console.print("[red]Error:[/red] Field must be Table.Field format.")
+    model = _load_filter_model(project)
+    try:
+        entity, prop, field_type, data_type = _resolve_filter_field(
+            field,
+            measure=measure,
+            model=model,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
-    entity, prop = field[:dot], field[dot + 1:]
-
-    # Auto-detect field type from model
-    field_type = "measure" if measure else "column"
-    if not measure:
-        try:
-            from pbi.model import SemanticModel
-            proj_obj = _get_project(project)
-            model = SemanticModel.load(proj_obj.root)
-            _, prop, field_type = model.resolve_field(field)
-        except (FileNotFoundError, ValueError):
-            pass
 
     proj = _get_project(project)
     try:
@@ -1706,19 +1904,31 @@ def filter_add(
 
     if has_categorical:
         val_list = [v.strip() for v in values.split(",")]
-        add_categorical_filter(
-            data, entity, prop, val_list,
-            field_type=field_type, is_hidden=hidden, is_locked=locked,
+        add_fn = {
+            "categorical": add_categorical_filter,
+            "include": add_include_filter,
+            "exclude": add_exclude_filter,
+        }[mode]
+        add_fn(
+            data,
+            entity,
+            prop,
+            val_list,
+            field_type=field_type,
+            is_hidden=hidden,
+            is_locked=locked,
+            data_type=data_type,
         )
         save_level_data(data, target)
+        label = "categorical" if mode == "categorical" else mode
         console.print(
-            f'Added categorical filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Added {label} filter on [cyan]{entity}.{prop}[/cyan] '
             f'= [{", ".join(val_list)}] at {level} level'
         )
     elif has_range:
         add_range_filter(
             data, entity, prop, min_val=min_val, max_val=max_val,
-            field_type=field_type, is_hidden=hidden,
+            field_type=field_type, is_hidden=hidden, data_type=data_type,
         )
         save_level_data(data, target)
         bounds = []
@@ -1732,27 +1942,31 @@ def filter_add(
         )
     elif has_topn:
         if not topn_by:
-            console.print("[red]Error:[/red] --topn requires --topn-by (Table.Measure) to specify the order-by field.")
+            console.print("[red]Error:[/red] --topn requires --topn-by (Table.Field) to specify the order-by field.")
             raise typer.Exit(1)
-        by_dot = topn_by.find(".")
-        if by_dot == -1:
-            console.print("[red]Error:[/red] --topn-by must be Table.Field format.")
+        if field_type != "column":
+            console.print("[red]Error:[/red] Top N filters require a column target field.")
             raise typer.Exit(1)
-        order_entity, order_prop = topn_by[:by_dot], topn_by[by_dot + 1:]
-        order_field_type = "measure"  # TopN order-by is typically a measure
         try:
-            from pbi.model import SemanticModel
-            model = SemanticModel.load(proj.root)
-            _, order_prop, order_field_type = model.resolve_field(topn_by)
-        except (FileNotFoundError, ValueError):
-            pass
+            order_entity, order_prop, order_field_type, _ = _resolve_filter_field(
+                topn_by,
+                measure=(model is None),
+                model=model,
+            )
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
         direction = "Bottom" if bottom else "Top"
-        add_topn_filter(
-            data, entity, prop, n=topn,
-            order_entity=order_entity, order_prop=order_prop,
-            order_field_type=order_field_type, direction=direction,
-            field_type=field_type, is_hidden=hidden,
-        )
+        try:
+            add_topn_filter(
+                data, entity, prop, n=topn,
+                order_entity=order_entity, order_prop=order_prop,
+                order_field_type=order_field_type, direction=direction,
+                field_type=field_type, is_hidden=hidden, is_locked=locked,
+            )
+        except (NotImplementedError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
         save_level_data(data, target)
         console.print(
             f'Added {direction} {topn} filter on [cyan]{entity}.{prop}[/cyan] '
@@ -1780,17 +1994,105 @@ def filter_add(
         except ValueError:
             console.print(f"[red]Error:[/red] Count must be an integer, got '{rel_count_str}'.")
             raise typer.Exit(1)
-        add_relative_date_filter(
-            data, entity, prop,
-            operator=rel_op, time_units_count=rel_count,
-            time_unit_type=rel_unit, include_today=include_today,
-            field_type=field_type, is_hidden=hidden,
-        )
+        try:
+            add_relative_date_filter(
+                data, entity, prop,
+                operator=rel_op, time_units_count=rel_count,
+                time_unit_type=rel_unit, include_today=include_today,
+                field_type=field_type, is_hidden=hidden,
+            )
+        except NotImplementedError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
         save_level_data(data, target)
         console.print(
             f'Added relative date filter on [cyan]{entity}.{prop}[/cyan] '
             f'{rel_op.lower()} {rel_count} {rel_unit.lower()} at {level} level'
         )
+
+
+@filter_app.command("tuple")
+def filter_tuple(
+    rows: Annotated[
+        list[str],
+        typer.Argument(
+            help=(
+                "Tuple rows as comma-separated Field=Value pairs. "
+                'Example: "Product.Color=Red,Product.Size=Large"'
+            )
+        ),
+    ],
+    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
+    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
+    hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
+    locked: Annotated[bool, typer.Option("--locked", help="Lock filter in view mode.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Add a Tuple filter from one or more row tuples."""
+    from pbi.filters import TupleField, add_tuple_filter, load_level_data, save_level_data
+
+    if not rows:
+        console.print("[red]Error:[/red] Provide at least one tuple row.")
+        raise typer.Exit(1)
+
+    model = _load_filter_model(project)
+    parsed_rows: list[list[TupleField]] = []
+
+    for row in rows:
+        parsed_fields: list[TupleField] = []
+        for part in row.split(","):
+            assignment = part.strip()
+            eq = assignment.find("=")
+            if eq == -1:
+                console.print(
+                    f"[red]Error:[/red] Invalid tuple assignment '{assignment}'. "
+                    "Use Field=Value."
+                )
+                raise typer.Exit(1)
+            field_ref = assignment[:eq].strip()
+            value = assignment[eq + 1:].strip()
+            try:
+                entity, prop, field_type, data_type = _resolve_filter_field(
+                    field_ref,
+                    measure=False,
+                    model=model,
+                )
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                raise typer.Exit(1)
+            parsed_fields.append(
+                TupleField(
+                    entity=entity,
+                    prop=prop,
+                    value=value,
+                    field_type=field_type,
+                    data_type=data_type,
+                )
+            )
+        parsed_rows.append(parsed_fields)
+
+    proj = _get_project(project)
+    try:
+        data, level, target = load_level_data(proj, page, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        add_tuple_filter(
+            data,
+            parsed_rows,
+            is_hidden=hidden,
+            is_locked=locked,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    save_level_data(data, target)
+    console.print(
+        f'Added tuple filter with [cyan]{len(parsed_rows)}[/cyan] row(s) at {level} level'
+    )
 
 
 @filter_app.command("remove")

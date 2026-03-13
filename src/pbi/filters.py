@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +21,17 @@ class FilterInfo:
     is_hidden: bool
     is_locked: bool
     level: str  # "report", "page", or "visual"
+
+
+@dataclass(frozen=True)
+class TupleField:
+    """One field/value pair within a tuple filter row."""
+
+    entity: str
+    prop: str
+    value: str
+    field_type: str = "column"
+    data_type: str | None = None
 
 
 def get_filter_config(data: dict) -> dict:
@@ -66,41 +78,104 @@ def add_categorical_filter(
     field_type: str = "column",
     is_hidden: bool = False,
     is_locked: bool = False,
+    data_type: str | None = None,
 ) -> dict:
     """Add a categorical filter to a JSON structure. Returns the filter dict."""
+    return _add_value_filter(
+        data,
+        entity,
+        prop,
+        values,
+        field_type=field_type,
+        filter_type="Categorical",
+        how_created="User",
+        is_hidden=is_hidden,
+        is_locked=is_locked,
+        data_type=data_type,
+    )
+
+
+def add_include_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    values: list[str],
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+    data_type: str | None = None,
+) -> dict:
+    """Add an Include filter to a JSON structure."""
+    return _add_value_filter(
+        data,
+        entity,
+        prop,
+        values,
+        field_type=field_type,
+        filter_type="Include",
+        how_created="Include",
+        is_hidden=is_hidden,
+        is_locked=is_locked,
+        data_type=data_type,
+    )
+
+
+def add_exclude_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    values: list[str],
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+    data_type: str | None = None,
+) -> dict:
+    """Add an Exclude filter to a JSON structure."""
+    return _add_value_filter(
+        data,
+        entity,
+        prop,
+        values,
+        field_type=field_type,
+        filter_type="Exclude",
+        how_created="Exclude",
+        is_hidden=is_hidden,
+        is_locked=is_locked,
+        data_type=data_type,
+    )
+
+
+def _add_value_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    values: list[str],
+    *,
+    field_type: str,
+    filter_type: str,
+    how_created: str,
+    is_hidden: bool,
+    is_locked: bool,
+    data_type: str | None = None,
+) -> dict:
+    """Build a single-field In filter container."""
     filter_name = f"Filter_{secrets.token_hex(8)}"
 
-    field_key = "Column" if field_type == "column" else "Measure"
-    field_ref = {
-        field_key: {
-            "Expression": {"SourceRef": {"Entity": entity}},
-            "Property": prop,
-        }
-    }
-
-    # Build the semantic filter expression
-    pbi_values = [
-        [{"Literal": {"Value": f"'{v}'"}}] for v in values
-    ]
+    field_ref = _field_expr(entity, prop, field_type, entity)
+    alias = "f"
+    pbi_values = [[_literal_expr(v, data_type=data_type)] for v in values]
 
     filter_obj = {
         "name": filter_name,
-        "type": "Categorical",
+        "type": filter_type,
         "filter": {
             "Version": 2,
-            "From": [{"Name": "f", "Entity": entity, "Type": 0}],
+            "From": [{"Name": alias, "Entity": entity, "Type": 0}],
             "Where": [
                 {
                     "Condition": {
                         "In": {
-                            "Expressions": [
-                                {
-                                    field_key: {
-                                        "Expression": {"SourceRef": {"Source": "f"}},
-                                        "Property": prop,
-                                    }
-                                }
-                            ],
+                            "Expressions": [_field_expr(entity, prop, field_type, alias)],
                             "Values": pbi_values,
                         }
                     }
@@ -108,6 +183,72 @@ def add_categorical_filter(
             ],
         },
         "field": field_ref,
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": is_locked,
+        "howCreated": how_created,
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
+
+
+def add_tuple_filter(
+    data: dict,
+    rows: list[list[TupleField]],
+    *,
+    is_hidden: bool = False,
+    is_locked: bool = False,
+) -> dict:
+    """Add a Tuple filter to a JSON structure."""
+    if not rows:
+        raise ValueError("Tuple filters require at least one row.")
+
+    first_row = rows[0]
+    if not first_row:
+        raise ValueError("Tuple filter rows may not be empty.")
+
+    signature = [(f.entity, f.prop, f.field_type) for f in first_row]
+    for row in rows[1:]:
+        if [(f.entity, f.prop, f.field_type) for f in row] != signature:
+            raise ValueError(
+                "All tuple rows must reference the same fields in the same order."
+            )
+
+    alias_map: dict[str, str] = {}
+    sources = []
+    for entity, _prop, _field_type in signature:
+        if entity not in alias_map:
+            alias = f"f{len(alias_map)}"
+            alias_map[entity] = alias
+            sources.append({"Name": alias, "Entity": entity, "Type": 0})
+
+    expressions = [
+        _field_expr(entity, prop, field_type, alias_map[entity])
+        for entity, prop, field_type in signature
+    ]
+    values = [
+        [_literal_expr(field.value, data_type=field.data_type) for field in row]
+        for row in rows
+    ]
+
+    filter_obj = {
+        "name": f"Filter_{secrets.token_hex(8)}",
+        "type": "Tuple",
+        "filter": {
+            "Version": 2,
+            "From": sources,
+            "Where": [
+                {
+                    "Condition": {
+                        "In": {
+                            "Expressions": expressions,
+                            "Values": values,
+                        }
+                    }
+                }
+            ],
+        },
         "isHiddenInViewMode": is_hidden,
         "isLockedInViewMode": is_locked,
         "howCreated": "User",
@@ -126,26 +267,16 @@ def add_range_filter(
     max_val: str | None = None,
     field_type: str = "column",
     is_hidden: bool = False,
+    data_type: str | None = None,
 ) -> dict:
     """Add a range filter (between min and max). Returns the filter dict."""
     filter_name = f"Filter_{secrets.token_hex(8)}"
 
-    field_key = "Column" if field_type == "column" else "Measure"
-    field_ref = {
-        field_key: {
-            "Expression": {"SourceRef": {"Entity": entity}},
-            "Property": prop,
-        }
-    }
+    field_ref = _field_expr(entity, prop, field_type, entity)
 
     # Build conditions
     conditions = []
-    col_expr = {
-        field_key: {
-            "Expression": {"SourceRef": {"Source": "f"}},
-            "Property": prop,
-        }
-    }
+    col_expr = _field_expr(entity, prop, field_type, "f")
 
     if min_val is not None:
         conditions.append({
@@ -153,7 +284,7 @@ def add_range_filter(
                 "Comparison": {
                     "ComparisonKind": 2,  # GreaterThanOrEqual
                     "Left": col_expr,
-                    "Right": {"Literal": {"Value": f"{min_val}D"}},
+                    "Right": _literal_expr(min_val, data_type=data_type),
                 }
             }
         })
@@ -164,7 +295,7 @@ def add_range_filter(
                 "Comparison": {
                     "ComparisonKind": 4,  # LessThanOrEqual
                     "Left": col_expr,
-                    "Right": {"Literal": {"Value": f"{max_val}D"}},
+                    "Right": _literal_expr(max_val, data_type=data_type),
                 }
             }
         })
@@ -199,79 +330,88 @@ def add_topn_filter(
     direction: str = "Top",
     field_type: str = "column",
     is_hidden: bool = False,
+    is_locked: bool = False,
 ) -> dict:
-    """Add a Top N filter. Returns the filter dict.
+    """Add a Top N filter using the schema-backed subquery form."""
+    if field_type != "column":
+        raise ValueError("Top N filters currently require a column target field.")
+    if n <= 0:
+        raise ValueError("Top N filters require a positive --topn value.")
+    if direction not in {"Top", "Bottom"}:
+        raise ValueError("Top N direction must be 'Top' or 'Bottom'.")
 
-    Args:
-        entity: Target field entity (e.g. "Product")
-        prop: Target field property (e.g. "Category")
-        n: Number of items to show
-        order_entity: Order-by field entity (e.g. "Sales")
-        order_prop: Order-by field property (e.g. "Total Revenue")
-        order_field_type: "measure" or "column" for the order-by field
-        direction: "Top" or "Bottom"
-        field_type: "column" or "measure" for the target field
-    """
     filter_name = f"Filter_{secrets.token_hex(8)}"
+    field_ref = _field_expr(entity, prop, field_type, entity)
 
-    target_key = "Column" if field_type == "column" else "Measure"
-    field_ref = {
-        target_key: {
-            "Expression": {"SourceRef": {"Entity": entity}},
-            "Property": prop,
-        }
-    }
+    target_alias = "c1"
+    order_alias = target_alias if order_entity == entity else "o"
+    outer_subquery_alias = "subquery"
+    sort_direction = 2 if direction == "Top" else 1
 
-    order_key = "Column" if order_field_type == "column" else "Measure"
-    order_expr = {
-        order_key: {
-            "Expression": {"SourceRef": {"Source": "f"}},
-            "Property": order_prop,
-        }
-    }
+    subquery_sources = [{"Name": target_alias, "Entity": entity, "Type": 0}]
+    if order_alias != target_alias:
+        subquery_sources.append({"Name": order_alias, "Entity": order_entity, "Type": 0})
 
-    target_expr = {
-        target_key: {
-            "Expression": {"SourceRef": {"Source": "f"}},
-            "Property": prop,
-        }
+    subquery = {
+        "Version": 2,
+        "From": subquery_sources,
+        "Select": [
+            {
+                **_field_expr(entity, prop, field_type, target_alias),
+                "Name": "field",
+            }
+        ],
+        "OrderBy": [
+            {
+                "Direction": sort_direction,
+                "Expression": _field_expr(
+                    order_entity,
+                    order_prop,
+                    order_field_type,
+                    order_alias,
+                ),
+            }
+        ],
+        "Top": n,
     }
 
     filter_obj = {
         "name": filter_name,
+        "field": field_ref,
         "type": "TopN",
         "filter": {
             "Version": 2,
             "From": [
-                {"Name": "f", "Entity": entity, "Type": 0},
-                {"Name": "o", "Entity": order_entity, "Type": 0},
+                {
+                    "Name": outer_subquery_alias,
+                    "Expression": {"Subquery": {"Query": subquery}},
+                    "Type": 2,
+                },
+                {
+                    "Name": target_alias,
+                    "Entity": entity,
+                    "Type": 0,
+                },
             ],
             "Where": [
                 {
                     "Condition": {
-                        "Top": {
-                            "Expression": target_expr,
-                            "Count": n,
-                            "OrderBy": [
-                                {
-                                    "Expression": {
-                                        "Aggregation": {
-                                            "Expression": order_expr,
-                                            "Function": 0,  # Sum
-                                        }
-                                    },
-                                    "Direction": 2 if direction == "Top" else 1,
-                                }
+                        "In": {
+                            "Expressions": [
+                                _field_expr(entity, prop, field_type, target_alias)
                             ],
+                            "Table": {
+                                "SourceRef": {
+                                    "Source": outer_subquery_alias,
+                                }
+                            },
                         }
                     }
                 }
             ],
         },
-        "field": field_ref,
         "isHiddenInViewMode": is_hidden,
-        "isLockedInViewMode": False,
-        "howCreated": "User",
+        "isLockedInViewMode": is_locked,
     }
 
     config = data.setdefault("filterConfig", {})
@@ -290,63 +430,16 @@ def add_relative_date_filter(
     field_type: str = "column",
     is_hidden: bool = False,
 ) -> dict:
-    """Add a relative date filter. Returns the filter dict.
+    """Relative date filter creation is intentionally blocked.
 
-    Args:
-        entity: Date field entity (e.g. "Calendar")
-        prop: Date field property (e.g. "Date")
-        operator: "InLast", "InThis", or "InNext"
-        time_units_count: Number of time units
-        time_unit_type: "Days", "Weeks", "Months", "Quarters", or "Years"
-        include_today: Whether to include the current day
+    Power BI supports relative date filters, but the current PBIR schema references
+    in this project do not expose a schema-valid query expression shape for the
+    implementation that used to be emitted here. Refuse to write malformed JSON instead.
     """
-    filter_name = f"Filter_{secrets.token_hex(8)}"
-
-    field_key = "Column" if field_type == "column" else "Measure"
-    field_ref = {
-        field_key: {
-            "Expression": {"SourceRef": {"Entity": entity}},
-            "Property": prop,
-        }
-    }
-
-    filter_obj = {
-        "name": filter_name,
-        "type": "RelativeDate",
-        "filter": {
-            "Version": 2,
-            "From": [{"Name": "f", "Entity": entity, "Type": 0}],
-            "Where": [
-                {
-                    "Condition": {
-                        "RelativeDate": {
-                            "Expression": {
-                                field_key: {
-                                    "Expression": {"SourceRef": {"Source": "f"}},
-                                    "Property": prop,
-                                }
-                            },
-                            "Operator": {"InLast": 0, "InThis": 1, "InNext": 2}.get(operator, 0),
-                            "TimeUnitsCount": time_units_count,
-                            "TimeUnitType": {
-                                "Days": 0, "Weeks": 1, "Months": 2,
-                                "Quarters": 3, "Years": 4,
-                            }.get(time_unit_type, 0),
-                            "IncludeToday": include_today,
-                        }
-                    }
-                }
-            ],
-        },
-        "field": field_ref,
-        "isHiddenInViewMode": is_hidden,
-        "isLockedInViewMode": False,
-        "howCreated": "User",
-    }
-
-    config = data.setdefault("filterConfig", {})
-    config.setdefault("filters", []).append(filter_obj)
-    return filter_obj
+    raise NotImplementedError(
+        "Relative date filters are not emitted by this CLI because the previous "
+        "writer did not match Microsoft’s published PBIR semanticQuery schema."
+    )
 
 
 def remove_filter(data: dict, identifier: str) -> int:
@@ -393,32 +486,32 @@ def _extract_filter_values(f: dict) -> list[str]:
     filter_data = f.get("filter", {})
     where = filter_data.get("Where", [])
 
+    if f.get("type") == "TopN":
+        summary = _extract_topn_summary(filter_data)
+        if summary:
+            values.append(summary)
+
     for clause in where:
         cond = clause.get("Condition", {})
 
         # Categorical: In condition
         if "In" in cond:
+            tuple_values = []
             for val_list in cond["In"].get("Values", []):
-                for val in val_list:
-                    if "Literal" in val:
-                        raw = val["Literal"]["Value"]
-                        # Strip quotes and type suffixes
-                        if raw.startswith("'") and raw.endswith("'"):
-                            values.append(raw[1:-1])
-                        elif raw.endswith("D") or raw.endswith("L"):
-                            values.append(raw[:-1])
-                        else:
-                            values.append(raw)
+                decoded = [_decode_literal_expr(val) for val in val_list]
+                if len(decoded) == 1:
+                    values.append(decoded[0])
+                else:
+                    tuple_values.append("(" + ", ".join(decoded) + ")")
+            values.extend(tuple_values)
 
         # Range: Comparison conditions
         if "Comparison" in cond:
             comp = cond["Comparison"]
             kind = comp.get("ComparisonKind", 0)
             right = comp.get("Right", {})
-            literal = right.get("Literal", {}).get("Value", "?")
-            if literal.endswith("D"):
-                literal = literal[:-1]
-            op_map = {0: "==", 1: "<", 2: ">=", 3: ">", 4: "<=", 5: "!="}
+            literal = _decode_literal_expr(right)
+            op_map = {0: "==", 1: ">", 2: ">=", 3: "<", 4: "<="}
             op = op_map.get(kind, "?")
             values.append(f"{op} {literal}")
 
@@ -442,6 +535,139 @@ def _extract_filter_values(f: dict) -> list[str]:
             values.append(f"{op} {count} {unit}")
 
     return values
+
+
+def _extract_topn_summary(filter_data: dict) -> str | None:
+    """Extract a short display summary for a schema-backed Top N filter."""
+    subquery = None
+    for source in filter_data.get("From", []):
+        if source.get("Type") == 2:
+            subquery = (
+                source.get("Expression", {})
+                .get("Subquery", {})
+                .get("Query", {})
+            )
+            if subquery:
+                break
+
+    if not subquery:
+        return None
+
+    count = subquery.get("Top")
+    if count is None:
+        return None
+
+    alias_map = {
+        source.get("Name"): source.get("Entity")
+        for source in subquery.get("From", [])
+        if source.get("Name") and source.get("Entity")
+    }
+    order_items = subquery.get("OrderBy", [])
+    direction = "top"
+    order_label = None
+    if order_items:
+        order_item = order_items[0]
+        direction = "top" if order_item.get("Direction", 2) == 2 else "bottom"
+        order_entity, order_prop = _extract_expression_ref(
+            order_item.get("Expression", {}),
+            alias_map=alias_map,
+        )
+        if order_entity != "?" and order_prop != "?":
+            order_label = f"{order_entity}.{order_prop}"
+
+    summary = f"{direction} {count}"
+    if order_label:
+        summary += f" by {order_label}"
+    return summary
+
+
+def _extract_expression_ref(
+    expr: dict,
+    *,
+    alias_map: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Extract an entity/property reference from a query expression."""
+    alias_map = alias_map or {}
+    for key in ("Column", "Measure"):
+        if key not in expr:
+            continue
+        source_ref = expr[key].get("Expression", {}).get("SourceRef", {})
+        entity = source_ref.get("Entity")
+        if entity is None:
+            entity = alias_map.get(source_ref.get("Source", ""), "?")
+        prop = expr[key].get("Property", "?")
+        return entity, prop
+    return "?", "?"
+
+
+def _field_expr(entity: str, prop: str, field_type: str, source_name: str) -> dict:
+    """Build a semantic query field expression container."""
+    field_key = "Column" if field_type == "column" else "Measure"
+    source_key = "Entity" if source_name == entity else "Source"
+    return {
+        field_key: {
+            "Expression": {"SourceRef": {source_key: source_name}},
+            "Property": prop,
+        }
+    }
+
+
+def _literal_expr(value: str, data_type: str | None = None) -> dict:
+    """Build a semantic query literal expression from CLI text."""
+    return {"Literal": {"Value": _format_literal(value, data_type=data_type)}}
+
+
+def _format_literal(value: str, data_type: str | None = None) -> str:
+    """Format a CLI literal for semanticQuery."""
+    raw = value.strip()
+    normalized_type = (data_type or "").lower()
+
+    if raw.lower() == "true":
+        return "true"
+    if raw.lower() == "false":
+        return "false"
+    if raw.lower() == "null":
+        return "null"
+
+    if normalized_type in {"date", "datetime", "datetimeoffset"} or _looks_like_date(raw):
+        if "T" in raw:
+            return f"datetime'{raw}'"
+        return f"datetime'{raw}T00:00:00'"
+
+    if normalized_type in {"int64", "int32", "integer", "whole", "whole number"}:
+        if re.fullmatch(r"-?\d+", raw):
+            return f"{raw}L"
+
+    if normalized_type in {"double", "decimal", "currency", "number"} or _looks_like_number(raw):
+        return f"{raw}D"
+
+    escaped = raw.replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _decode_literal_expr(node: dict) -> str:
+    """Decode a semantic query literal node into display text."""
+    if "Literal" not in node:
+        return str(node)
+    raw = node["Literal"].get("Value", "?")
+    if raw.startswith("datetime'") and raw.endswith("'"):
+        return raw[len("datetime'"):-1]
+    if raw.startswith("'") and raw.endswith("'"):
+        return raw[1:-1].replace("''", "'")
+    if raw.endswith("D") or raw.endswith("L"):
+        return raw[:-1]
+    return raw
+
+
+def _looks_like_date(value: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+        or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?", value)
+    )
+
+
+def _looks_like_number(value: str) -> bool:
+    return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", value))
 
 
 # ── Level-aware load/save ──────────────────────────────────────

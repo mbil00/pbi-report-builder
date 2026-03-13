@@ -75,6 +75,9 @@ def validate_project(project: Project) -> list[ValidationIssue]:
     # Validate bookmarks
     bookmarks_dir = project.definition_folder / "bookmarks"
     if bookmarks_dir.exists():
+        meta_path = bookmarks_dir / "bookmarks.json"
+        if meta_path.exists():
+            issues.extend(_validate_bookmarks_meta(meta_path))
         for bm_file in sorted(bookmarks_dir.glob("*.bookmark.json")):
             issues.extend(_validate_bookmark(bm_file))
 
@@ -101,6 +104,36 @@ def _validate_report(path: Path) -> list[ValidationIssue]:
 
     if "$schema" not in data:
         issues.append(ValidationIssue(rel, "warning", "Missing $schema field"))
+
+    for i, pkg in enumerate(data.get("resourcePackages", [])):
+        if "resourcePackage" in pkg:
+            issues.append(ValidationIssue(
+                rel,
+                "error",
+                "resourcePackages entries must be ResourcePackage objects directly, "
+                "not wrapped in a 'resourcePackage' property",
+                path=f"resourcePackages[{i}]",
+            ))
+            continue
+
+        if isinstance(pkg.get("type"), int):
+            issues.append(ValidationIssue(
+                rel,
+                "error",
+                "resourcePackages.type must use the schema string enum (for example 'RegisteredResources'), not numeric codes",
+                path=f"resourcePackages[{i}].type",
+            ))
+
+        for j, item in enumerate(pkg.get("items", [])):
+            if isinstance(item.get("type"), int):
+                issues.append(ValidationIssue(
+                    rel,
+                    "error",
+                    "resourcePackages item.type must use the schema string enum (for example 'CustomTheme'), not numeric codes",
+                    path=f"resourcePackages[{i}].items[{j}].type",
+                ))
+
+    issues.extend(_validate_filter_config(data.get("filterConfig"), rel, "filterConfig"))
 
     return issues
 
@@ -210,6 +243,18 @@ def _validate_page(path: Path) -> list[ValidationIssue]:
                     f"Invalid interaction type '{itype}'"
                 ))
 
+    for i, entry in enumerate(data.get("objects", {}).get("outspace", [])):
+        props = entry.get("properties", {})
+        if "backgroundColor" in props:
+            issues.append(ValidationIssue(
+                rel,
+                "error",
+                "page.objects.outspace properties use 'color', not 'backgroundColor'",
+                path=f"objects.outspace[{i}].properties.backgroundColor",
+            ))
+
+    issues.extend(_validate_filter_config(data.get("filterConfig"), rel, "filterConfig"))
+
     return issues
 
 
@@ -250,6 +295,12 @@ def _validate_visual(path: Path, rel: str) -> list[ValidationIssue]:
             ))
 
         # Check for common property errors in visualContainerObjects
+        if "visualContainerObjects" in data:
+            issues.append(ValidationIssue(
+                rel, "error",
+                "visualContainerObjects must be nested under visual.visualContainerObjects, not at the root of visual.json"
+            ))
+
         container_objects = visual.get("visualContainerObjects", {})
         for obj_name, entries in container_objects.items():
             if not isinstance(entries, list):
@@ -287,6 +338,8 @@ def _validate_visual(path: Path, rel: str) -> list[ValidationIssue]:
             f"parentGroupName must be a string, got {type(parent).__name__}"
         ))
 
+    issues.extend(_validate_filter_config(data.get("filterConfig"), rel, "filterConfig"))
+
     return issues
 
 
@@ -312,5 +365,88 @@ def _validate_bookmark(path: Path) -> list[ValidationIssue]:
         issues.append(ValidationIssue(
             rel, "warning", "explorationState missing activeSection"
         ))
+
+    for section_name, section_state in exploration.get("sections", {}).items():
+        if "visualContainers" not in section_state:
+            issues.append(ValidationIssue(
+                rel,
+                "error",
+                f'Section "{section_name}" is missing required visualContainers state',
+                path=f"explorationState.sections.{section_name}",
+            ))
+            continue
+
+        for visual_name, visual_state in section_state.get("visualContainers", {}).items():
+            single_visual = visual_state.get("singleVisual", {})
+            if "displayState" in single_visual:
+                issues.append(ValidationIssue(
+                    rel,
+                    "error",
+                    "Bookmark uses singleVisual.displayState; the published bookmark schema requires singleVisual.display",
+                    path=(
+                        "explorationState.sections."
+                        f"{section_name}.visualContainers.{visual_name}.singleVisual.displayState"
+                    ),
+                ))
+
+    return issues
+
+
+def _validate_bookmarks_meta(path: Path) -> list[ValidationIssue]:
+    """Validate bookmarks metadata shape."""
+    data, issues = _validate_json_file(path)
+    if data is None:
+        return issues
+
+    rel = "definition/bookmarks/bookmarks.json"
+
+    if "bookmarkOrder" in data:
+        issues.append(ValidationIssue(
+            rel,
+            "error",
+            "bookmarks.json uses legacy bookmarkOrder; the published schema requires an items array",
+            path="bookmarkOrder",
+        ))
+
+    items = data.get("items")
+    if items is None:
+        issues.append(ValidationIssue(rel, "error", "Missing items array"))
+    elif not isinstance(items, list):
+        issues.append(ValidationIssue(rel, "error", "items must be an array"))
+
+    return issues
+
+
+def _validate_filter_config(
+    filter_config: dict | None,
+    rel: str,
+    path_prefix: str,
+) -> list[ValidationIssue]:
+    """Validate filter structures against the published PBIR schema."""
+    issues: list[ValidationIssue] = []
+    if not filter_config:
+        return issues
+
+    for i, filter_obj in enumerate(filter_config.get("filters", [])):
+        filter_path = f"{path_prefix}.filters[{i}]"
+        where = filter_obj.get("filter", {}).get("Where", [])
+
+        if filter_obj.get("type") == "TopN":
+            if any("Top" in clause.get("Condition", {}) for clause in where):
+                issues.append(ValidationIssue(
+                    rel,
+                    "error",
+                    "TopN filter uses unsupported Condition.Top payload; the published PBIR semanticQuery schema does not define it",
+                    path=filter_path,
+                ))
+
+        if filter_obj.get("type") == "RelativeDate":
+            if any("RelativeDate" in clause.get("Condition", {}) for clause in where):
+                issues.append(ValidationIssue(
+                    rel,
+                    "error",
+                    "RelativeDate filter uses unsupported Condition.RelativeDate payload; the published PBIR semanticQuery schema does not define it",
+                    path=filter_path,
+                ))
 
     return issues

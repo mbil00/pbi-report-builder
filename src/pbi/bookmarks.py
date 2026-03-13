@@ -13,10 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pbi.project import Project, Page, Visual, _read_json, _write_json
-
-
-BOOKMARK_SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json"
-BOOKMARKS_META_SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmarkMetadata/1.0.0/schema.json"
+from pbi.schema_refs import BOOKMARK_SCHEMA, BOOKMARKS_METADATA_SCHEMA
 
 
 @dataclass
@@ -43,17 +40,17 @@ def _meta_path(project: Project) -> Path:
 def _load_meta(project: Project) -> dict:
     path = _meta_path(project)
     if path.exists():
-        return _read_json(path)
+        return _normalize_meta(_read_json(path))
     return {
-        "$schema": BOOKMARKS_META_SCHEMA,
-        "bookmarkOrder": [],
+        "$schema": BOOKMARKS_METADATA_SCHEMA,
+        "items": [],
     }
 
 
 def _save_meta(project: Project, meta: dict) -> None:
     path = _meta_path(project)
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_json(path, meta)
+    _write_json(path, _normalize_meta(meta))
 
 
 def list_bookmarks(project: Project) -> list[BookmarkInfo]:
@@ -84,7 +81,7 @@ def list_bookmarks(project: Project) -> list[BookmarkInfo]:
 
     # Sort by bookmark order if available
     meta = _load_meta(project)
-    order = meta.get("bookmarkOrder", [])
+    order = _bookmark_order(meta)
     if order:
         order_map = {name: i for i, name in enumerate(order)}
         result.sort(key=lambda b: order_map.get(b.name, 999))
@@ -157,7 +154,7 @@ def create_bookmark(
 
         if vis_name in hidden_set:
             container_state["singleVisual"] = {
-                "displayState": {"mode": "hidden"},
+                "display": {"mode": "hidden"},
             }
 
         if container_state:
@@ -168,12 +165,11 @@ def create_bookmark(
         "version": "2.1",
         "activeSection": page.name,
         "sections": {
-            page.name: {},
+            page.name: {
+                "visualContainers": visual_containers,
+            },
         },
     }
-
-    if visual_containers:
-        exploration_state["sections"][page.name]["visualContainers"] = visual_containers
 
     # Build options
     options: dict = {}
@@ -203,7 +199,7 @@ def create_bookmark(
 
     # Update metadata
     meta = _load_meta(project)
-    meta.setdefault("bookmarkOrder", []).append(bookmark_id)
+    meta.setdefault("items", []).append({"name": bookmark_id})
     _save_meta(project, meta)
 
     return data
@@ -235,7 +231,7 @@ def update_bookmark_visuals(
     active_section = exploration.get("activeSection", "")
 
     if active_section and active_section not in sections:
-        sections[active_section] = {}
+        sections[active_section] = {"visualContainers": {}}
 
     section = sections.get(active_section, {})
     containers = section.setdefault("visualContainers", {})
@@ -245,7 +241,7 @@ def update_bookmark_visuals(
         for vis_name in hidden_visuals:
             containers[vis_name] = {
                 "singleVisual": {
-                    "displayState": {"mode": "hidden"},
+                    "display": {"mode": "hidden"},
                 },
             }
 
@@ -254,10 +250,6 @@ def update_bookmark_visuals(
         for vis_name in visible_visuals:
             if vis_name in containers:
                 del containers[vis_name]
-
-    # Clean up empty structures
-    if not containers:
-        section.pop("visualContainers", None)
 
     if active_section:
         sections[active_section] = section
@@ -276,10 +268,7 @@ def delete_bookmark(project: Project, identifier: str) -> str:
 
     # Update metadata
     meta = _load_meta(project)
-    order = meta.get("bookmarkOrder", [])
-    if bm_name in order:
-        order.remove(bm_name)
-        meta["bookmarkOrder"] = order
+    meta["items"] = _remove_bookmark_from_meta(meta.get("items", []), bm_name)
     _save_meta(project, meta)
 
     return display_name
@@ -316,3 +305,58 @@ def _find_bookmark_file(project: Project, identifier: str) -> tuple[dict, Path]:
             return data, f
 
     raise FileNotFoundError(f'Bookmark "{identifier}" not found')
+
+
+def _normalize_meta(meta: dict) -> dict:
+    """Normalize bookmarks metadata to the published schema shape."""
+    if isinstance(meta.get("items"), list):
+        meta["$schema"] = BOOKMARKS_METADATA_SCHEMA
+        return meta
+
+    items = []
+    for name in meta.get("bookmarkOrder", []):
+        if isinstance(name, str):
+            items.append({"name": name})
+    return {
+        "$schema": BOOKMARKS_METADATA_SCHEMA,
+        "items": items,
+    }
+
+
+def _bookmark_order(meta: dict) -> list[str]:
+    """Flatten standalone bookmarks and grouped bookmarks into display order."""
+    order: list[str] = []
+    for item in meta.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children")
+        if isinstance(children, list):
+            order.extend(child for child in children if isinstance(child, str))
+            continue
+        name = item.get("name")
+        if isinstance(name, str):
+            order.append(name)
+    return order
+
+
+def _remove_bookmark_from_meta(items: list[dict], bookmark_name: str) -> list[dict]:
+    """Remove a bookmark reference from bookmarks metadata."""
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("name") == bookmark_name and "children" not in item:
+            continue
+        if "children" in item:
+            children = [
+                child for child in item.get("children", [])
+                if child != bookmark_name
+            ]
+            if not children:
+                continue
+            updated = dict(item)
+            updated["children"] = children
+            result.append(updated)
+            continue
+        result.append(item)
+    return result

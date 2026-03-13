@@ -8,6 +8,12 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from pbi.schema_refs import (
+    PAGE_SCHEMA,
+    PAGES_METADATA_SCHEMA,
+    VISUAL_CONTAINER_SCHEMA,
+)
+
 
 @dataclass
 class Visual:
@@ -302,7 +308,7 @@ class Project:
         (page_dir / "visuals").mkdir()
 
         data = {
-            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+            "$schema": PAGE_SCHEMA,
             "name": page_id,
             "displayName": display_name,
             "displayOption": display_option,
@@ -355,7 +361,7 @@ class Project:
             meta = _read_json(meta_path)
         else:
             meta = {
-                "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.0.0/schema.json",
+                "$schema": PAGES_METADATA_SCHEMA,
             }
         meta.setdefault("pageOrder", []).append(page_id)
         _write_json(meta_path, meta)
@@ -395,7 +401,7 @@ class Project:
         max_z = max((v.position.get("z", 0) for v in existing), default=0)
 
         data = {
-            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+            "$schema": VISUAL_CONTAINER_SCHEMA,
             "name": visual_id,
             "position": {
                 "x": x,
@@ -479,7 +485,7 @@ class Project:
         group_dir.mkdir(parents=True, exist_ok=True)
 
         group_data = {
-            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+            "$schema": VISUAL_CONTAINER_SCHEMA,
             "name": display_name or group_id,
             "position": {
                 "x": min_x,

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from pbi.project import Project, Page, Visual
+from pbi.schema_refs import VISUAL_CONTAINER_SCHEMA
 
 
 def save_template(
@@ -206,7 +207,7 @@ def _create_from_entry(
         vg = entry["visualGroup"]
         name = entry.get("name", visual_id)
         data = {
-            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+            "$schema": VISUAL_CONTAINER_SCHEMA,
             "name": name,
             "position": copy.deepcopy(pos),
             "visualGroup": {
@@ -230,7 +231,7 @@ def _create_from_entry(
             visual_block["visualContainerObjects"] = copy.deepcopy(container_objects)
 
         data = {
-            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+            "$schema": VISUAL_CONTAINER_SCHEMA,
             "name": name,
             "position": copy.deepcopy(pos),
             "visual": visual_block,

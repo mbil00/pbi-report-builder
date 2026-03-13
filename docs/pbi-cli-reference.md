@@ -88,10 +88,33 @@ pages:
 
 Check project files for structural errors. See [Validation](validation.md).
 
+### pbi capabilities
+
+Show a capability matrix for the current CLI surface: what is already covered, what is partial, and what is still missing for a fuller PBIR editor.
+
+```bash
+pbi capabilities
+pbi capabilities --status blocked
+pbi capabilities --json
+```
+
+### pbi report
+
+Show or edit schema-backed report metadata in `definition/report.json`.
+
+```bash
+pbi report get
+pbi report get layoutOptimization
+pbi report set layoutOptimization=PhonePortrait
+pbi report set settings.useEnhancedTooltips=true settings.pagesPosition=Bottom
+pbi report props
+```
+
 ## Detailed References
 
 | Topic | File |
 |-------|------|
+| [Report Commands](report.md) | Report metadata and settings |
 | [Page Commands](pages.md) | Create, configure, template, drillthrough, tooltip pages |
 | [Visual Commands](visuals.md) | Create, style, move, group, sort, format visuals |
 | [Properties Reference](properties.md) | All visual and container properties |
@@ -99,4 +122,7 @@ Check project files for structural errors. See [Validation](validation.md).
 | [Interactions & Navigation](interactions.md) | Visual interactions, button actions |
 | [Bookmarks](bookmarks.md) | Bookmark management |
 | [Themes](themes.md) | Theme apply, export, remove |
+| [Capabilities & Roadmap](capabilities.md) | Current coverage and next expansion areas |
+| [Fixture Spec](fixtures.md) | PBIP/PBIR examples still needed to close feature gaps |
+| [Implementation Roadmap](roadmap.md) | Schema-first expansion priorities |
 | [Validation & Structure](validation.md) | Schema validation, PBIR file structure |
