@@ -222,7 +222,7 @@ Page background support has been added to the CLI (2026-03-13).
 
 ## BUG-004: `--measure` flag generates invalid selector format for per-measure styling
 
-**Status:** Fixed (2026-03-13)
+**Status:** Open
 **Severity:** Breaking — reports fail schema validation in Power BI Desktop
 **Found:** 2026-03-13
 
@@ -306,6 +306,50 @@ format. See the working KPI strips on the Device Estate and Security & Complianc
 
 ---
 
+## BUG-005: `pbi visual column` shows `?.?` for Aggregation fields
+
+**Status:** Open
+**Severity:** Cosmetic — renaming by index still works
+**Found:** 2026-03-13
+
+### Symptom
+
+When listing columns on a table or pivot that contains `Aggregation` fields (e.g. `Sum(...)`,
+`Min(...)`, `Count(...)`), the CLI displays `?.?` for both the field reference and display name:
+
+```
+  #     Field                      Display Name    Type     Width   Formatting
+ ──────────────────────────────────────────────────────────────────────────────
+  1     LicenseUtilization.SkuP…   SkuPartNumber   column     200   -
+  2     ?.?                        ?               column      90   -
+  3     ?.?                        ?               column      90   -
+```
+
+Column operations by index (`pbi visual column ... 2 --rename "Enabled"`) work correctly,
+but referencing these columns by field name fails since the CLI can't resolve them.
+
+### Root Cause
+
+The column listing logic only handles `Column` and `Measure` field types when resolving
+projection references. Fields of type `Aggregation` (which wrap a `Column` in a `Function`
+like Sum=0, Min=5, Count=3, etc.) are not recognized, so their `Entity.Property` and
+`nativeQueryRef` are not extracted.
+
+### Expected Behavior
+
+Aggregation fields should display their `nativeQueryRef` (e.g. `Sum of EnabledUnits`) or
+`queryRef` (e.g. `Sum(LicenseUtilization.EnabledUnits)`) as the field reference, and their
+`nativeQueryRef` or `displayName` as the display name. The CLI should also allow referencing
+these columns by their `queryRef` string for `--rename`, `--width`, etc.
+
+### Affected Visuals
+
+Any `tableEx` or `pivotTable` containing aggregation columns — common in licensing, usage,
+and summary tables. Example: the Licensing & M365 Usage page has 12 aggregation columns
+across 3 visuals that all show as `?.?`.
+
+---
+
 ## Missing CLI Features — Manual JSON Edits Required
 
 Most formatting capabilities originally documented here have since been implemented
@@ -332,12 +376,9 @@ instead of editing JSON directly:
 
 ### FEAT-005: Theme management
 
-**Status:** Implemented (2026-03-13)
 **Priority:** Low — can be done via PBI Desktop UI
 
-Implemented as `pbi theme list`, `pbi theme apply`, `pbi theme export`, `pbi theme remove`.
-
-Previously: the CLI had no commands for theme management. Theme files are JSON files
+Currently the CLI has no commands for theme management. Theme files are JSON files
 that PBI Desktop manages via `report.json` → `themeCollection` + `resourcePackages`.
 
 Useful CLI operations would be:
@@ -353,7 +394,6 @@ only work when PBI Desktop is closed.
 
 ### FEAT-010: Batch/bulk visual operations
 
-**Status:** Implemented (2026-03-13)
 **Priority:** Medium — saves significant time when styling multiple visuals
 
 When redesigning a full page, the same styling is often applied to many visuals
@@ -382,7 +422,6 @@ the same `visualContainerObjects` block. A batch command would have done it in o
 
 ### FEAT-011: Page template / page style preset
 
-**Status:** Implemented (2026-03-13)
 **Priority:** Low — nice-to-have for consistency across pages
 
 When multiple pages share the same layout pattern (slicers → KPI strip → table → charts),

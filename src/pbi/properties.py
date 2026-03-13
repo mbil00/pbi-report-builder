@@ -328,6 +328,35 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Tooltip transparency",
         container_key="visualTooltip", container_prop="transparency",
     ),
+    # Button actions (visualLink)
+    "action.show": PropertyDef(
+        None, "boolean", "Enable button action",
+        container_key="visualLink", container_prop="show",
+    ),
+    "action.type": PropertyDef(
+        None, "string", "Action type (Back, Bookmark, Drillthrough, PageNavigation, QnA, WebUrl)",
+        container_key="visualLink", container_prop="type",
+    ),
+    "action.bookmark": PropertyDef(
+        None, "string", "Target bookmark name (for Bookmark action)",
+        container_key="visualLink", container_prop="bookmark",
+    ),
+    "action.page": PropertyDef(
+        None, "string", "Target page name (for PageNavigation action)",
+        container_key="visualLink", container_prop="navigationSection",
+    ),
+    "action.drillthrough": PropertyDef(
+        None, "string", "Target drillthrough page (for Drillthrough action)",
+        container_key="visualLink", container_prop="drillthroughSection",
+    ),
+    "action.url": PropertyDef(
+        None, "string", "Target URL (for WebUrl action)",
+        container_key="visualLink", container_prop="webUrl",
+    ),
+    "action.tooltip": PropertyDef(
+        None, "string", "Button tooltip text",
+        container_key="visualLink", container_prop="tooltip",
+    ),
     # Style preset
     "stylePreset": PropertyDef(
         None, "string", "Style preset name",

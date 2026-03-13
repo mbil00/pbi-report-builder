@@ -30,11 +30,15 @@ visual_app = typer.Typer(help="Visual operations.", no_args_is_help=True)
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
+bookmark_app = typer.Typer(help="Bookmark operations.", no_args_is_help=True)
+interaction_app = typer.Typer(help="Visual interaction operations.", no_args_is_help=True)
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
 app.add_typer(model_app, name="model")
 app.add_typer(filter_app, name="filter")
 app.add_typer(theme_app, name="theme")
+app.add_typer(bookmark_app, name="bookmark")
+app.add_typer(interaction_app, name="interaction")
 
 console = Console()
 
@@ -364,6 +368,138 @@ def page_delete_template(
         console.print(f'Deleted template "[cyan]{template_name}[/cyan]"')
     else:
         console.print(f'[yellow]Template "{template_name}" not found.[/yellow]')
+
+
+@page_app.command("set-drillthrough")
+def page_set_drillthrough(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    fields: Annotated[list[str], typer.Argument(help="Drillthrough fields as Table.Field (e.g. Product.Category).")],
+    cross_report: Annotated[bool, typer.Option("--cross-report", help="Enable cross-report drillthrough.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Configure a page as a drillthrough target.
+
+    The page becomes hidden and accepts filter context from source visuals
+    through the specified fields. Users right-click a data point to drill through.
+    """
+    from pbi.drillthrough import configure_drillthrough
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    parsed: list[tuple[str, str, str]] = []
+    for field in fields:
+        dot = field.find(".")
+        if dot == -1:
+            console.print(f"[red]Error:[/red] Field '{field}' must be Table.Field format.")
+            raise typer.Exit(1)
+        entity, prop = field[:dot], field[dot + 1:]
+        field_type = "column"
+        try:
+            from pbi.model import SemanticModel
+            model = SemanticModel.load(proj.root)
+            _, prop, field_type = model.resolve_field(field)
+        except (FileNotFoundError, ValueError):
+            pass
+        parsed.append((entity, prop, field_type))
+
+    configure_drillthrough(pg, parsed, cross_report=cross_report)
+    pg.save()
+
+    field_list = ", ".join(fields)
+    cross = " (cross-report)" if cross_report else ""
+    console.print(
+        f'Configured "[cyan]{pg.display_name}[/cyan]" as drillthrough page{cross}: {field_list}'
+    )
+
+
+@page_app.command("clear-drillthrough")
+def page_clear_drillthrough(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Remove drillthrough configuration from a page."""
+    from pbi.drillthrough import clear_drillthrough
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if clear_drillthrough(pg):
+        pg.save()
+        console.print(f'Removed drillthrough from "[cyan]{pg.display_name}[/cyan]"')
+    else:
+        console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
+
+
+@page_app.command("set-tooltip")
+def page_set_tooltip(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    fields: Annotated[Optional[list[str]], typer.Argument(help="Auto-match fields as Table.Field (optional).")] = None,
+    width: Annotated[int, typer.Option("-W", "--width", help="Tooltip page width.")] = 320,
+    height: Annotated[int, typer.Option("-H", "--height", help="Tooltip page height.")] = 240,
+    project: ProjectOpt = None,
+) -> None:
+    """Configure a page as a custom tooltip page.
+
+    Tooltip pages are shown on hover over data points. Default size is 320x240.
+    Optionally specify fields for automatic tooltip matching.
+    Link visuals to this tooltip with: pbi visual set <page> <visual> tooltip.type=ReportPage tooltip.section=<page-id>
+    """
+    from pbi.drillthrough import configure_tooltip_page
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    parsed: list[tuple[str, str, str]] = []
+    if fields:
+        for field in fields:
+            dot = field.find(".")
+            if dot == -1:
+                console.print(f"[red]Error:[/red] Field '{field}' must be Table.Field format.")
+                raise typer.Exit(1)
+            entity, prop = field[:dot], field[dot + 1:]
+            parsed.append((entity, prop, "column"))
+
+    configure_tooltip_page(pg, parsed or None, width=width, height=height)
+    pg.save()
+
+    console.print(
+        f'Configured "[cyan]{pg.display_name}[/cyan]" as tooltip page ({width}x{height})'
+    )
+
+
+@page_app.command("clear-tooltip")
+def page_clear_tooltip(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Remove tooltip configuration from a page."""
+    from pbi.drillthrough import clear_tooltip_page
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if clear_tooltip_page(pg):
+        pg.save()
+        console.print(f'Removed tooltip config from "[cyan]{pg.display_name}[/cyan]"')
+    else:
+        console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
 
 
 # ── Visual commands ────────────────────────────────────────────────
@@ -1754,6 +1890,353 @@ def theme_remove(
         console.print(f'Removed custom theme "[cyan]{name}[/cyan]"')
     else:
         console.print("[yellow]No custom theme to remove.[/yellow]")
+
+
+# ── Interaction commands ───────────────────────────────────────
+
+@interaction_app.command("list")
+def interaction_list(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """List visual interactions on a page."""
+    from pbi.interactions import get_interactions
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    interactions = get_interactions(pg)
+    if not interactions:
+        console.print("[dim]No custom interactions (all using default behavior).[/dim]")
+        return
+
+    table = Table(title=f'Interactions on "{pg.display_name}"', box=box.SIMPLE)
+    table.add_column("Source", style="cyan")
+    table.add_column("Target", style="cyan")
+    table.add_column("Type")
+
+    for entry in interactions:
+        table.add_row(entry.get("source", ""), entry.get("target", ""), entry.get("type", ""))
+
+    console.print(table)
+
+
+@interaction_app.command("set")
+def interaction_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    source: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    target: Annotated[str, typer.Argument(help="Target visual name or index.")],
+    interaction_type: Annotated[str, typer.Argument(help="Interaction type: DataFilter, HighlightFilter, NoFilter, Default.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Set interaction between two visuals.
+
+    Controls what happens to the target when the user selects data in the source:
+      DataFilter       — selection filters the target
+      HighlightFilter  — selection highlights in the target
+      NoFilter         — target ignores the selection
+      Default          — use default behavior for the target type
+    """
+    from pbi.interactions import set_interaction
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        src_vis = proj.find_visual(pg, source)
+        tgt_vis = proj.find_visual(pg, target)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        set_interaction(pg, src_vis.name, tgt_vis.name, interaction_type)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    pg.save()
+    console.print(
+        f'Set interaction: [cyan]{src_vis.name}[/cyan] → '
+        f'[cyan]{tgt_vis.name}[/cyan] = [bold]{interaction_type}[/bold]'
+    )
+
+
+@interaction_app.command("remove")
+def interaction_remove(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    source: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    target: Annotated[Optional[str], typer.Argument(help="Target visual (omit to remove all from source).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Remove custom interactions from a visual."""
+    from pbi.interactions import remove_interaction
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        src_vis = proj.find_visual(pg, source)
+        tgt_vis = proj.find_visual(pg, target) if target else None
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    removed = remove_interaction(pg, src_vis.name, tgt_vis.name if tgt_vis else None)
+    if removed:
+        pg.save()
+        scope = f'→ "{tgt_vis.name}"' if tgt_vis else "(all targets)"
+        console.print(f'Removed {removed} interaction(s) from [cyan]{src_vis.name}[/cyan] {scope}')
+    else:
+        console.print("[yellow]No matching interactions found.[/yellow]")
+
+
+# ── Validate command ──────────────────────────────────────────
+
+@app.command()
+def validate(
+    project: ProjectOpt = None,
+) -> None:
+    """Validate project files for structural errors.
+
+    Checks JSON validity, required fields, schema consistency, and
+    cross-references (page order, visual interactions, group membership).
+    """
+    from pbi.validate import validate_project
+
+    proj = _get_project(project)
+    issues = validate_project(proj)
+
+    if not issues:
+        console.print("[green]No issues found.[/green]")
+        return
+
+    errors = [i for i in issues if i.level == "error"]
+    warnings = [i for i in issues if i.level == "warning"]
+
+    if errors:
+        console.print(f"\n[red bold]{len(errors)} error(s):[/red bold]")
+        for issue in errors:
+            console.print(f"  [red]ERROR[/red] {issue.file}: {issue.message}")
+
+    if warnings:
+        console.print(f"\n[yellow bold]{len(warnings)} warning(s):[/yellow bold]")
+        for issue in warnings:
+            console.print(f"  [yellow]WARN[/yellow]  {issue.file}: {issue.message}")
+
+    if errors:
+        raise typer.Exit(1)
+
+
+# ── Bookmark commands ──────────────────────────────────────────
+
+@bookmark_app.command("list")
+def bookmark_list(
+    project: ProjectOpt = None,
+) -> None:
+    """List all bookmarks in the project."""
+    from pbi.bookmarks import list_bookmarks
+
+    proj = _get_project(project)
+    bookmarks = list_bookmarks(proj)
+
+    if not bookmarks:
+        console.print("[yellow]No bookmarks. Use `pbi bookmark create` to add one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Display Name")
+    table.add_column("Active Page")
+    table.add_column("Targets", style="dim")
+    table.add_column("Options", style="dim")
+
+    for bm in bookmarks:
+        targets = ", ".join(bm.target_visuals) if bm.target_visuals else "all"
+        opts = []
+        if bm.suppress_data:
+            opts.append("no-data")
+        if bm.suppress_display:
+            opts.append("no-display")
+        table.add_row(
+            bm.name[:16] + "..." if len(bm.name) > 16 else bm.name,
+            bm.display_name,
+            bm.active_section[:16] + "..." if len(bm.active_section) > 16 else bm.active_section,
+            targets,
+            ", ".join(opts) or "-",
+        )
+
+    console.print(table)
+
+
+@bookmark_app.command("show")
+def bookmark_show(
+    bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Show raw JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show bookmark details."""
+    import json as json_mod
+    from pbi.bookmarks import get_bookmark
+
+    proj = _get_project(project)
+    try:
+        data = get_bookmark(proj, bookmark)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if raw:
+        console.print_json(json_mod.dumps(data, indent=2))
+        return
+
+    exploration = data.get("explorationState", {})
+    options = data.get("options", {})
+
+    table = Table(title=data.get("displayName", ""), box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+
+    table.add_row("Name", data.get("name", ""))
+    table.add_row("Display Name", data.get("displayName", ""))
+    table.add_row("Active Section", exploration.get("activeSection", ""))
+
+    # Options
+    if options:
+        table.add_section()
+        if options.get("suppressActiveSection"):
+            table.add_row("Suppress Active Section", "true")
+        if options.get("suppressData"):
+            table.add_row("Suppress Data", "true")
+        if options.get("suppressDisplay"):
+            table.add_row("Suppress Display", "true")
+        if options.get("applyOnlyToTargetVisuals"):
+            targets = options.get("targetVisualNames", [])
+            table.add_row("Target Visuals", ", ".join(targets))
+
+    # Visual states
+    sections = exploration.get("sections", {})
+    for section_name, section_data in sections.items():
+        containers = section_data.get("visualContainers", {})
+        if containers:
+            table.add_section()
+            for vis_name, vis_state in containers.items():
+                single = vis_state.get("singleVisual", {})
+                display_state = single.get("displayState", {})
+                mode = display_state.get("mode", "normal")
+                table.add_row(f"[dim]{section_name}[/dim] {vis_name}", mode)
+
+    console.print(table)
+
+
+@bookmark_app.command("create")
+def bookmark_create(
+    name: Annotated[str, typer.Argument(help="Display name for the bookmark.")],
+    page: Annotated[str, typer.Argument(help="Page to bookmark (name, display name, or index).")],
+    hide: Annotated[Optional[list[str]], typer.Option("--hide", help="Visual names to hide in this bookmark.")] = None,
+    target: Annotated[Optional[list[str]], typer.Option("--target", help="Only apply bookmark to these visuals.")] = None,
+    suppress_data: Annotated[bool, typer.Option("--no-data", help="Don't capture data/filter state.")] = False,
+    suppress_display: Annotated[bool, typer.Option("--no-display", help="Don't capture display state.")] = False,
+    suppress_page: Annotated[bool, typer.Option("--no-page", help="Don't switch page when applying.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Create a bookmark capturing page state.
+
+    By default captures the active page and all visual states. Use --hide to
+    mark specific visuals as hidden. Use --target to limit bookmark scope.
+    """
+    from pbi.bookmarks import create_bookmark
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    visuals = proj.get_visuals(pg)
+    data = create_bookmark(
+        proj,
+        display_name=name,
+        page=pg,
+        visuals=visuals,
+        hidden_visuals=hide,
+        target_visuals=target,
+        suppress_data=suppress_data,
+        suppress_display=suppress_display,
+        suppress_active_section=suppress_page,
+    )
+
+    hidden_count = len(hide) if hide else 0
+    console.print(
+        f'Created bookmark "[cyan]{name}[/cyan]" on page "{pg.display_name}"'
+        f'{f" ({hidden_count} hidden)" if hidden_count else ""}'
+    )
+
+
+@bookmark_app.command("update")
+def bookmark_update(
+    bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
+    hide: Annotated[Optional[list[str]], typer.Option("--hide", help="Visual names to set as hidden.")] = None,
+    show: Annotated[Optional[list[str]], typer.Option("--show", help="Visual names to set as visible.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Update visual visibility in an existing bookmark."""
+    from pbi.bookmarks import update_bookmark_visuals
+
+    proj = _get_project(project)
+
+    if not hide and not show:
+        console.print("[red]Error:[/red] Specify --hide or --show to update visual states.")
+        raise typer.Exit(1)
+
+    try:
+        data = update_bookmark_visuals(
+            proj,
+            bookmark,
+            hidden_visuals=hide,
+            visible_visuals=show,
+        )
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    changes = []
+    if hide:
+        changes.append(f"hidden: {', '.join(hide)}")
+    if show:
+        changes.append(f"visible: {', '.join(show)}")
+    console.print(
+        f'Updated bookmark "[cyan]{data.get("displayName", bookmark)}[/cyan]": '
+        f'{"; ".join(changes)}'
+    )
+
+
+@bookmark_app.command("delete")
+def bookmark_delete(
+    bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete a bookmark."""
+    from pbi.bookmarks import delete_bookmark
+
+    proj = _get_project(project)
+
+    if not force:
+        confirm = typer.confirm(f'Delete bookmark "{bookmark}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        display_name = delete_bookmark(proj, bookmark)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(f'Deleted bookmark "[cyan]{display_name}[/cyan]"')
 
 
 if __name__ == "__main__":
