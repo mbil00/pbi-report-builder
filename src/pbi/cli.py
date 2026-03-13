@@ -439,6 +439,60 @@ def visual_set(
     vis.save()
 
 
+@visual_app.command("set-all")
+def visual_set_all(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value ...")],
+    type_filter: Annotated[str | None, typer.Option("--type", "-t", help="Only apply to visuals of this type (e.g. slicer, card, tableEx).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set properties on multiple visuals at once.
+
+    Applies the same property assignments to all visuals on a page, or only
+    to visuals of a specific type with --type.
+    """
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    visuals = proj.get_visuals(pg)
+    if type_filter:
+        visuals = [v for v in visuals if v.visual_type == type_filter]
+        if not visuals:
+            console.print(f'[yellow]No visuals of type "{type_filter}" on page "{pg.display_name}".[/yellow]')
+            raise typer.Exit(0)
+
+    # Skip group containers
+    visuals = [v for v in visuals if "visualGroup" not in v.data]
+
+    # Parse assignments
+    pairs: list[tuple[str, str]] = []
+    for arg in assignments:
+        eq = arg.find("=")
+        if eq == -1:
+            console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
+            raise typer.Exit(1)
+        pairs.append((arg[:eq], arg[eq + 1:]))
+
+    count = 0
+    for vis in visuals:
+        for prop, value in pairs:
+            try:
+                set_property(vis.data, prop, value, VISUAL_PROPERTIES)
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {vis.name}: {prop}: {e}")
+                continue
+        vis.save()
+        count += 1
+
+    scope = f'type={type_filter}' if type_filter else "all"
+    props_str = ", ".join(f"{p}={v}" for p, v in pairs)
+    console.print(f'Applied [{props_str}] to [cyan]{count}[/cyan] visuals ({scope})')
+
+
 @visual_app.command("move")
 def visual_move(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],

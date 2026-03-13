@@ -222,7 +222,7 @@ Page background support has been added to the CLI (2026-03-13).
 
 ## BUG-004: `--measure` flag generates invalid selector format for per-measure styling
 
-**Status:** Open
+**Status:** Fixed (2026-03-13)
 **Severity:** Breaking — reports fail schema validation in Power BI Desktop
 **Found:** 2026-03-13
 
@@ -332,9 +332,12 @@ instead of editing JSON directly:
 
 ### FEAT-005: Theme management
 
+**Status:** Implemented (2026-03-13)
 **Priority:** Low — can be done via PBI Desktop UI
 
-Currently the CLI has no commands for theme management. Theme files are JSON files
+Implemented as `pbi theme list`, `pbi theme apply`, `pbi theme export`, `pbi theme remove`.
+
+Previously: the CLI had no commands for theme management. Theme files are JSON files
 that PBI Desktop manages via `report.json` → `themeCollection` + `resourcePackages`.
 
 Useful CLI operations would be:
@@ -350,6 +353,7 @@ only work when PBI Desktop is closed.
 
 ### FEAT-010: Batch/bulk visual operations
 
+**Status:** Implemented (2026-03-13)
 **Priority:** Medium — saves significant time when styling multiple visuals
 
 When redesigning a full page, the same styling is often applied to many visuals

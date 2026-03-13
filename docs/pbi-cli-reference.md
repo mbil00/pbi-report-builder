@@ -611,6 +611,26 @@ pbi visual set "Sales" card cardLabel.show=true cardLabel.fontSize=10
 pbi visual set "Sales" card cardShape.color="#FFFFFF" cardShape.radius=8
 ```
 
+### pbi visual set-all
+
+Apply the same property assignments to multiple visuals on a page. Use `--type` to target only visuals of a specific type.
+
+```bash
+pbi visual set-all <page> prop=value [prop=value ...]                       # all visuals on page
+pbi visual set-all <page> prop=value [prop=value ...] --type slicer         # only slicers
+```
+
+```bash
+# Style all slicers on a page identically
+pbi visual set-all "Sales" border.radius=4 border.show=true title.fontSize=9 --type slicer
+
+# Set background on all visuals
+pbi visual set-all "Sales" background.show=true background.color="#FFFFFF"
+
+# Style all cards
+pbi visual set-all "Sales" cardValue.bold=true cardLabel.show=true --type cardVisual
+```
+
 ### pbi visual paste-style
 
 Copy formatting from one visual to another (format painter). Copies container formatting (title, border, background, shadow, padding, etc.) and chart formatting (legend, axes, labels, etc.) without affecting data bindings, filters, sort, or position.

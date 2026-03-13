@@ -1485,9 +1485,9 @@ def _get_container_prop(
         return None
 
     if measure_ref:
-        # Find the entry with matching selector.id
+        # Find the entry with matching selector.metadata
         for entry in entries:
-            if entry.get("selector", {}).get("id") == measure_ref:
+            if entry.get("selector", {}).get("metadata") == measure_ref:
                 raw = entry.get("properties", {}).get(prop_def.container_prop)
                 return decode_pbi_value(raw) if raw is not None else None
         return None
@@ -1506,8 +1506,7 @@ def _set_container_prop(
     """Write to object collections, creating structure as needed.
 
     When measure_ref is provided, writes to (or creates) an entry with a
-    per-measure selector: {"data": {"dataViewWildcard": {"matchingOption":
-    "InstancesAndTotals"}}, "id": "<measure_ref>"}.
+    per-measure metadata selector: {"metadata": "<measure_ref>"}.
     """
     root = data if prop_def.top_level else data.setdefault("visual", {})
     objects = root.setdefault(prop_def.objects_path, {})
@@ -1518,23 +1517,16 @@ def _set_container_prop(
     encoded = encode_pbi_value(value, prop_def.value_type)
 
     if measure_ref:
-        # Find or create per-measure entry
+        # Find or create per-measure entry with metadata selector
         target = None
         for entry in entries:
-            if entry.get("selector", {}).get("id") == measure_ref:
+            if entry.get("selector", {}).get("metadata") == measure_ref:
                 target = entry
                 break
         if target is None:
             target = {
                 "properties": {},
-                "selector": {
-                    "data": {
-                        "dataViewWildcard": {
-                            "matchingOption": "InstancesAndTotals",
-                        },
-                    },
-                    "id": measure_ref,
-                },
+                "selector": {"metadata": measure_ref},
             }
             entries.append(target)
         target.setdefault("properties", {})[prop_def.container_prop] = encoded
