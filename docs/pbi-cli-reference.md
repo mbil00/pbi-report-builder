@@ -156,6 +156,51 @@ pbi page delete <page> -f      # skip confirmation
 
 List all settable page properties with types.
 
+### pbi page save-template
+
+Save a page's layout and formatting as a reusable template. Captures visual positions, types, and all formatting. Does not capture data bindings, filters, or sort — those are applied separately after applying the template.
+
+```bash
+pbi page save-template <page> <template-name>
+```
+
+```bash
+pbi page save-template "Sales Overview" sales-layout
+pbi page save-template "KPI Dashboard" kpi-strip
+```
+
+### pbi page apply-template
+
+Apply a saved template to a page. Creates visuals matching the template's layout and formatting. Sets page dimensions and background from the template.
+
+```bash
+pbi page apply-template <page> <template-name>
+```
+
+```bash
+# Create a new page and apply a template
+pbi page create "Q2 Sales"
+pbi page apply-template "Q2 Sales" sales-layout
+```
+
+### pbi page templates
+
+List all available templates.
+
+```bash
+pbi page templates
+```
+
+### pbi page delete-template
+
+Delete a saved template.
+
+```bash
+pbi page delete-template <template-name>
+```
+
+Templates are stored in `<project>/.pbi-templates/` as JSON files that can be version-controlled.
+
 ---
 
 ## Visual Commands

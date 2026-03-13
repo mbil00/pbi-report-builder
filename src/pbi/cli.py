@@ -275,6 +275,97 @@ def page_delete(
     console.print(f'Deleted page "[cyan]{pg.display_name}[/cyan]"')
 
 
+@page_app.command("save-template")
+def page_save_template(
+    page: Annotated[str, typer.Argument(help="Page to save as template.")],
+    template_name: Annotated[str, typer.Argument(help="Name for the template.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Save a page's layout and formatting as a reusable template."""
+    from pbi.templates import save_template
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    visuals = proj.get_visuals(pg)
+    path = save_template(proj, pg, template_name, visuals)
+    console.print(
+        f'Saved template "[cyan]{template_name}[/cyan]" '
+        f"({len(visuals)} visuals) → {path}"
+    )
+
+
+@page_app.command("apply-template")
+def page_apply_template(
+    page: Annotated[str, typer.Argument(help="Target page to apply template to.")],
+    template_name: Annotated[str, typer.Argument(help="Template name to apply.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Apply a saved template to a page (creates visuals with matching layout/style)."""
+    from pbi.templates import apply_template
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        created = apply_template(proj, pg, template_name)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(
+        f'Applied template "[cyan]{template_name}[/cyan]" → '
+        f'"{pg.display_name}" ({len(created)} visuals created)'
+    )
+
+
+@page_app.command("templates")
+def page_templates(
+    project: ProjectOpt = None,
+) -> None:
+    """List available page templates."""
+    from pbi.templates import list_templates
+
+    proj = _get_project(project)
+    templates = list_templates(proj)
+
+    if not templates:
+        console.print("[yellow]No templates saved. Use `pbi page save-template` to create one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Visuals")
+    table.add_column("Page Size")
+    table.add_column("File", style="dim")
+    for t in templates:
+        table.add_row(t["name"], str(t["visuals"]), t["size"], t["file"])
+    console.print(table)
+
+
+@page_app.command("delete-template")
+def page_delete_template(
+    template_name: Annotated[str, typer.Argument(help="Template name to delete.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Delete a saved page template."""
+    from pbi.templates import delete_template
+
+    proj = _get_project(project)
+    if delete_template(proj, template_name):
+        console.print(f'Deleted template "[cyan]{template_name}[/cyan]"')
+    else:
+        console.print(f'[yellow]Template "{template_name}" not found.[/yellow]')
+
+
 # ── Visual commands ────────────────────────────────────────────────
 
 @visual_app.command("list")

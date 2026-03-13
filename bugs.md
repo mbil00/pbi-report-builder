@@ -382,6 +382,7 @@ the same `visualContainerObjects` block. A batch command would have done it in o
 
 ### FEAT-011: Page template / page style preset
 
+**Status:** Implemented (2026-03-13)
 **Priority:** Low — nice-to-have for consistency across pages
 
 When multiple pages share the same layout pattern (slicers → KPI strip → table → charts),
