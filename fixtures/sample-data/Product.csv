@@ -1,0 +1,10 @@
+ProductID,ProductName,Category,Color,Size
+P001,Road Bike,Bikes,Red,Large
+P002,Mountain Bike,Bikes,Blue,Medium
+P003,Touring Bike,Bikes,Black,Large
+P004,Helmet,Accessories,Black,Small
+P005,Water Bottle,Accessories,,Small
+P006,Repair Kit,Accessories,Blue,
+P007,Jersey,Clothing,Green,Medium
+P008,Gloves,Clothing,Red,Small
+P009,Rain Jacket,Clothing,,Large

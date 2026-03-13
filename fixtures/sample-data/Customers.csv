@@ -1,0 +1,9 @@
+CustomerID,CustomerName,Region,Segment
+C001,Northwind Bikes,North,SMB
+C002,South Ridge Retail,South,Enterprise
+C003,East Harbor Stores,East,Consumer
+C004,West Peak Outfitters,West,SMB
+C005,Central Metro Supply,Central,Enterprise
+C006,Northern Trail Co,North,Consumer
+C007,South Bay Sports,South,SMB
+C008,Eastline Wholesale,East,Enterprise
