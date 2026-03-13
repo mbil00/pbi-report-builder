@@ -12,13 +12,14 @@ from typing import Any
 
 @dataclass
 class PropertyDef:
-    json_path: str | None  # Dot path into the JSON, or None for container objects
+    json_path: str | None  # Dot path into the JSON, or None for object-style properties
     value_type: str  # "number", "string", "boolean", "color", "enum"
     description: str
     enum_values: tuple[str, ...] | None = None
-    # For visualContainerObjects properties
+    # For object-style properties (both visualContainerObjects and visual.objects)
     container_key: str | None = None
     container_prop: str | None = None
+    objects_path: str = "visualContainerObjects"  # or "objects" for chart formatting
 
 
 # ── Visual properties ──────────────────────────────────────────────
@@ -138,6 +139,175 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "string", "Shadow position",
         container_key="dropShadow", container_prop="position",
     ),
+    # ── Chart formatting (visual.objects) ──────────────────────
+    # Legend
+    "legend.show": PropertyDef(
+        None, "boolean", "Show legend",
+        container_key="legend", container_prop="show", objects_path="objects",
+    ),
+    "legend.position": PropertyDef(
+        None, "enum", "Legend position",
+        container_key="legend", container_prop="position", objects_path="objects",
+        enum_values=("Top", "Bottom", "Left", "Right", "TopCenter", "BottomCenter", "LeftCenter", "RightCenter"),
+    ),
+    "legend.color": PropertyDef(
+        None, "color", "Legend text color",
+        container_key="legend", container_prop="labelColor", objects_path="objects",
+    ),
+    "legend.fontSize": PropertyDef(
+        None, "number", "Legend font size",
+        container_key="legend", container_prop="fontSize", objects_path="objects",
+    ),
+    "legend.fontFamily": PropertyDef(
+        None, "string", "Legend font family",
+        container_key="legend", container_prop="fontFamily", objects_path="objects",
+    ),
+    # Category axis (X axis)
+    "xAxis.show": PropertyDef(
+        None, "boolean", "Show category axis",
+        container_key="categoryAxis", container_prop="show", objects_path="objects",
+    ),
+    "xAxis.title": PropertyDef(
+        None, "boolean", "Show category axis title",
+        container_key="categoryAxis", container_prop="showAxisTitle", objects_path="objects",
+    ),
+    "xAxis.titleText": PropertyDef(
+        None, "string", "Category axis title text",
+        container_key="categoryAxis", container_prop="axisTitle", objects_path="objects",
+    ),
+    "xAxis.color": PropertyDef(
+        None, "color", "Category axis label color",
+        container_key="categoryAxis", container_prop="labelColor", objects_path="objects",
+    ),
+    "xAxis.fontSize": PropertyDef(
+        None, "number", "Category axis font size",
+        container_key="categoryAxis", container_prop="fontSize", objects_path="objects",
+    ),
+    "xAxis.gridlines": PropertyDef(
+        None, "boolean", "Show category axis gridlines",
+        container_key="categoryAxis", container_prop="gridlineShow", objects_path="objects",
+    ),
+    "xAxis.gridlineColor": PropertyDef(
+        None, "color", "Category axis gridline color",
+        container_key="categoryAxis", container_prop="gridlineColor", objects_path="objects",
+    ),
+    # Value axis (Y axis)
+    "yAxis.show": PropertyDef(
+        None, "boolean", "Show value axis",
+        container_key="valueAxis", container_prop="show", objects_path="objects",
+    ),
+    "yAxis.title": PropertyDef(
+        None, "boolean", "Show value axis title",
+        container_key="valueAxis", container_prop="showAxisTitle", objects_path="objects",
+    ),
+    "yAxis.titleText": PropertyDef(
+        None, "string", "Value axis title text",
+        container_key="valueAxis", container_prop="axisTitle", objects_path="objects",
+    ),
+    "yAxis.color": PropertyDef(
+        None, "color", "Value axis label color",
+        container_key="valueAxis", container_prop="labelColor", objects_path="objects",
+    ),
+    "yAxis.fontSize": PropertyDef(
+        None, "number", "Value axis font size",
+        container_key="valueAxis", container_prop="fontSize", objects_path="objects",
+    ),
+    "yAxis.gridlines": PropertyDef(
+        None, "boolean", "Show value axis gridlines",
+        container_key="valueAxis", container_prop="gridlineShow", objects_path="objects",
+    ),
+    "yAxis.gridlineColor": PropertyDef(
+        None, "color", "Value axis gridline color",
+        container_key="valueAxis", container_prop="gridlineColor", objects_path="objects",
+    ),
+    "yAxis.start": PropertyDef(
+        None, "number", "Value axis range start",
+        container_key="valueAxis", container_prop="start", objects_path="objects",
+    ),
+    "yAxis.end": PropertyDef(
+        None, "number", "Value axis range end",
+        container_key="valueAxis", container_prop="end", objects_path="objects",
+    ),
+    # Secondary axis (Y2, for combo charts)
+    "y2Axis.show": PropertyDef(
+        None, "boolean", "Show secondary value axis",
+        container_key="y2Axis", container_prop="show", objects_path="objects",
+    ),
+    "y2Axis.title": PropertyDef(
+        None, "boolean", "Show secondary axis title",
+        container_key="y2Axis", container_prop="showAxisTitle", objects_path="objects",
+    ),
+    "y2Axis.titleText": PropertyDef(
+        None, "string", "Secondary axis title text",
+        container_key="y2Axis", container_prop="axisTitle", objects_path="objects",
+    ),
+    # Data labels
+    "labels.show": PropertyDef(
+        None, "boolean", "Show data labels",
+        container_key="labels", container_prop="show", objects_path="objects",
+    ),
+    "labels.color": PropertyDef(
+        None, "color", "Data label color",
+        container_key="labels", container_prop="color", objects_path="objects",
+    ),
+    "labels.fontSize": PropertyDef(
+        None, "number", "Data label font size",
+        container_key="labels", container_prop="fontSize", objects_path="objects",
+    ),
+    "labels.fontFamily": PropertyDef(
+        None, "string", "Data label font family",
+        container_key="labels", container_prop="fontFamily", objects_path="objects",
+    ),
+    "labels.position": PropertyDef(
+        None, "enum", "Data label position",
+        container_key="labels", container_prop="labelPosition", objects_path="objects",
+        enum_values=("Auto", "InsideEnd", "OutsideEnd", "InsideCenter", "InsideBase"),
+    ),
+    "labels.format": PropertyDef(
+        None, "string", "Data label display units",
+        container_key="labels", container_prop="labelDisplayUnits", objects_path="objects",
+    ),
+    "labels.precision": PropertyDef(
+        None, "number", "Data label decimal places",
+        container_key="labels", container_prop="labelPrecision", objects_path="objects",
+    ),
+    # Plot area
+    "plotArea.transparency": PropertyDef(
+        None, "number", "Plot area transparency",
+        container_key="plotArea", container_prop="transparency", objects_path="objects",
+    ),
+    "plotArea.color": PropertyDef(
+        None, "color", "Plot area background color",
+        container_key="plotArea", container_prop="color", objects_path="objects",
+    ),
+    # Data colors
+    "dataColors.default": PropertyDef(
+        None, "color", "Default data color",
+        container_key="dataPoint", container_prop="defaultColor", objects_path="objects",
+    ),
+    "dataColors.showAll": PropertyDef(
+        None, "boolean", "Show all data colors",
+        container_key="dataPoint", container_prop="showAllDataPoints", objects_path="objects",
+    ),
+    # Line formatting (line/area charts)
+    "line.show": PropertyDef(
+        None, "boolean", "Show line",
+        container_key="lineStyles", container_prop="showMarker", objects_path="objects",
+    ),
+    "line.style": PropertyDef(
+        None, "enum", "Line style",
+        container_key="lineStyles", container_prop="lineStyle", objects_path="objects",
+        enum_values=("solid", "dashed", "dotted"),
+    ),
+    "line.width": PropertyDef(
+        None, "number", "Line stroke width",
+        container_key="lineStyles", container_prop="strokeWidth", objects_path="objects",
+    ),
+    # Shape formatting
+    "shapes.showMarkers": PropertyDef(
+        None, "boolean", "Show data point markers",
+        container_key="shapes", container_prop="showMarkers", objects_path="objects",
+    ),
 }
 
 # ── Page properties ────────────────────────────────────────────────
@@ -252,9 +422,9 @@ def set_property(data: dict, prop_name: str, value: str, registry: dict[str, Pro
 
 
 def _get_container_prop(data: dict, prop_def: PropertyDef) -> Any:
-    """Read from visualContainerObjects (inside data.visual)."""
+    """Read from visual object collections (visualContainerObjects or objects)."""
     visual = data.get("visual", {})
-    objects = visual.get("visualContainerObjects", {})
+    objects = visual.get(prop_def.objects_path, {})
     entries = objects.get(prop_def.container_key, [])
     if not entries:
         return None
@@ -266,9 +436,9 @@ def _get_container_prop(data: dict, prop_def: PropertyDef) -> Any:
 
 
 def _set_container_prop(data: dict, prop_def: PropertyDef, value: str) -> None:
-    """Write to visualContainerObjects (inside data.visual), creating structure as needed."""
+    """Write to visual object collections, creating structure as needed."""
     visual = data.setdefault("visual", {})
-    objects = visual.setdefault("visualContainerObjects", {})
+    objects = visual.setdefault(prop_def.objects_path, {})
     entries = objects.setdefault(prop_def.container_key, [{}])
     if not entries:
         entries.append({})

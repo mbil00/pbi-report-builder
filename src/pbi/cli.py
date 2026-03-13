@@ -28,9 +28,11 @@ app = typer.Typer(
 page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
 visual_app = typer.Typer(help="Visual operations.", no_args_is_help=True)
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
+filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
 app.add_typer(model_app, name="model")
+app.add_typer(filter_app, name="filter")
 
 console = Console()
 
@@ -353,15 +355,16 @@ def visual_get(
     table.add_row("Hidden", str(vis.data.get("isHidden", False)))
 
     # Show container formatting if present
-    container_objects = vis.data.get("visual", {}).get("visualContainerObjects", {})
-    if container_objects:
-        table.add_section()
-        for obj_name, entries in container_objects.items():
-            if entries and isinstance(entries, list) and entries[0].get("properties"):
-                for pname, pval in entries[0]["properties"].items():
-                    from pbi.properties import decode_pbi_value
-                    decoded = decode_pbi_value(pval)
-                    table.add_row(f"{obj_name}.{pname}", str(decoded))
+    from pbi.properties import decode_pbi_value
+    for section, _ in [("visualContainerObjects", "Container"), ("objects", "Chart")]:
+        section_data = vis.data.get("visual", {}).get(section, {})
+        if section_data:
+            table.add_section()
+            for obj_name, entries in section_data.items():
+                if entries and isinstance(entries, list) and entries[0].get("properties"):
+                    for pname, pval in entries[0]["properties"].items():
+                        decoded = decode_pbi_value(pval)
+                        table.add_row(f"{obj_name}.{pname}", str(decoded))
 
     # Show data bindings summary
     query = vis.data.get("visual", {}).get("query", {}).get("queryState", {})
@@ -834,6 +837,149 @@ def model_fields(
         )
 
     console.print(table)
+
+
+# ── Filter commands ─────────────────────────────────────────────────
+
+@filter_app.command("list")
+def filter_list(
+    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
+    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """List filters at report, page, or visual level."""
+    from pbi.filters import load_level_data, get_filters, parse_filter
+
+    proj = _get_project(project)
+    try:
+        data, level, _ = load_level_data(proj, page, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    filters = get_filters(data)
+    if not filters:
+        console.print(f"[dim]No filters at {level} level.[/dim]")
+        return
+
+    table = Table(title=f"{level.title()} Filters", box=box.SIMPLE)
+    table.add_column("Field", style="cyan")
+    table.add_column("Type")
+    table.add_column("Values/Condition")
+    table.add_column("Hidden", style="dim", justify="center")
+    table.add_column("Locked", style="dim", justify="center")
+
+    for f in filters:
+        info = parse_filter(f, level)
+        table.add_row(
+            f"{info.field_entity}.{info.field_prop}",
+            info.filter_type,
+            ", ".join(info.values) if info.values else "-",
+            "yes" if info.is_hidden else "",
+            "yes" if info.is_locked else "",
+        )
+
+    console.print(table)
+
+
+@filter_app.command("add")
+def filter_add(
+    field: Annotated[str, typer.Argument(help="Field as Table.Field (e.g. Product.Category).")],
+    values: Annotated[Optional[str], typer.Option("--values", "-v", help="Comma-separated values for categorical filter.")] = None,
+    min_val: Annotated[Optional[str], typer.Option("--min", help="Minimum value for range filter.")] = None,
+    max_val: Annotated[Optional[str], typer.Option("--max", help="Maximum value for range filter.")] = None,
+    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
+    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
+    hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
+    locked: Annotated[bool, typer.Option("--locked", help="Lock filter in view mode.")] = False,
+    measure: Annotated[bool, typer.Option("--measure", "-m", help="Field is a measure.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Add a filter. Use --values for categorical or --min/--max for range."""
+    from pbi.filters import (
+        load_level_data, save_level_data,
+        add_categorical_filter, add_range_filter,
+    )
+
+    if not values and min_val is None and max_val is None:
+        console.print("[red]Error:[/red] Specify --values for categorical or --min/--max for range filter.")
+        raise typer.Exit(1)
+
+    dot = field.find(".")
+    if dot == -1:
+        console.print("[red]Error:[/red] Field must be Table.Field format.")
+        raise typer.Exit(1)
+    entity, prop = field[:dot], field[dot + 1:]
+
+    # Auto-detect field type from model
+    field_type = "measure" if measure else "column"
+    if not measure:
+        try:
+            from pbi.model import SemanticModel
+            proj_obj = _get_project(project)
+            model = SemanticModel.load(proj_obj.root)
+            _, prop, field_type = model.resolve_field(field)
+        except (FileNotFoundError, ValueError):
+            pass
+
+    proj = _get_project(project)
+    try:
+        data, level, target = load_level_data(proj, page, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if values:
+        val_list = [v.strip() for v in values.split(",")]
+        add_categorical_filter(
+            data, entity, prop, val_list,
+            field_type=field_type, is_hidden=hidden, is_locked=locked,
+        )
+        save_level_data(data, target)
+        console.print(
+            f'Added categorical filter on [cyan]{entity}.{prop}[/cyan] '
+            f'= [{", ".join(val_list)}] at {level} level'
+        )
+    else:
+        add_range_filter(
+            data, entity, prop, min_val=min_val, max_val=max_val,
+            field_type=field_type, is_hidden=hidden,
+        )
+        save_level_data(data, target)
+        bounds = []
+        if min_val is not None:
+            bounds.append(f">= {min_val}")
+        if max_val is not None:
+            bounds.append(f"<= {max_val}")
+        console.print(
+            f'Added range filter on [cyan]{entity}.{prop}[/cyan] '
+            f'{" and ".join(bounds)} at {level} level'
+        )
+
+
+@filter_app.command("remove")
+def filter_remove(
+    field: Annotated[str, typer.Argument(help="Filter field (Table.Field) or filter name to remove.")],
+    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
+    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Remove a filter by field reference or filter name."""
+    from pbi.filters import load_level_data, save_level_data, remove_filter
+
+    proj = _get_project(project)
+    try:
+        data, level, target = load_level_data(proj, page, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    removed = remove_filter(data, field)
+    if removed:
+        save_level_data(data, target)
+        console.print(f'Removed {removed} filter(s) matching "{field}" at {level} level')
+    else:
+        console.print(f'[yellow]No filter matching "{field}" found at {level} level.[/yellow]')
 
 
 if __name__ == "__main__":
