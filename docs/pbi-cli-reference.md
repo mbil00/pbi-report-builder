@@ -216,30 +216,87 @@ pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=cente
 
 | Property | Type | Description |
 |----------|------|-------------|
+| **Background** | | |
+| `background.show` | boolean | Show background |
 | `background.color` | color | Background color (`#hex`) |
 | `background.transparency` | number | 0–100 |
+| **Border** | | |
 | `border.show` | boolean | Show border |
 | `border.color` | color | Border color |
 | `border.width` | number | Border width |
 | `border.radius` | number | Corner radius |
-| `title.text` | string | Title text |
+| **Title** | | |
 | `title.show` | boolean | Show title |
+| `title.text` | string | Title text |
+| `title.heading` | string | Title heading level |
+| `title.wrap` | boolean | Wrap title text |
 | `title.color` | color | Title font color |
+| `title.background` | color | Title background color |
+| `title.alignment` | enum | `left`, `center`, `right` |
 | `title.fontSize` | number | Title font size |
 | `title.fontFamily` | string | Title font family |
-| `title.alignment` | enum | `left`, `center`, `right` |
-| `subtitle.text` | string | Subtitle text |
+| `title.bold` | boolean | Bold title |
+| `title.italic` | boolean | Italic title |
+| `title.underline` | boolean | Underline title |
+| **Subtitle** | | |
 | `subtitle.show` | boolean | Show subtitle |
+| `subtitle.text` | string | Subtitle text |
+| `subtitle.heading` | string | Subtitle heading level |
+| `subtitle.wrap` | boolean | Wrap subtitle text |
 | `subtitle.color` | color | Subtitle font color |
+| `subtitle.alignment` | enum | `left`, `center`, `right` |
 | `subtitle.fontSize` | number | Subtitle font size |
+| `subtitle.fontFamily` | string | Subtitle font family |
+| `subtitle.bold` | boolean | Bold subtitle |
+| `subtitle.italic` | boolean | Italic subtitle |
+| `subtitle.underline` | boolean | Underline subtitle |
+| **Divider** | | |
+| `divider.show` | boolean | Show divider between title and visual |
+| `divider.color` | color | Divider color |
+| `divider.width` | number | Divider width |
+| `divider.style` | string | Divider line style |
+| `divider.ignorePadding` | boolean | Divider ignores padding |
+| **Spacing** | | |
+| `spacing.customize` | boolean | Enable custom spacing |
+| `spacing.vertical` | number | Vertical spacing |
+| `spacing.belowTitle` | number | Space below title |
+| `spacing.belowSubtitle` | number | Space below subtitle |
+| `spacing.belowTitleArea` | number | Space below title area |
+| **Padding** | | |
 | `padding.top` | number | Top padding |
 | `padding.bottom` | number | Bottom padding |
 | `padding.left` | number | Left padding |
 | `padding.right` | number | Right padding |
+| **Drop Shadow** | | |
 | `shadow.show` | boolean | Show drop shadow |
+| `shadow.preset` | string | Shadow preset |
+| `shadow.position` | string | Shadow position |
 | `shadow.color` | color | Shadow color |
 | `shadow.transparency` | number | Shadow transparency |
-| `shadow.position` | string | Shadow position |
+| `shadow.spread` | number | Shadow spread |
+| `shadow.blur` | number | Shadow blur |
+| `shadow.angle` | number | Shadow angle |
+| `shadow.distance` | number | Shadow distance |
+| **Visual Header** | | |
+| `header.show` | boolean | Show visual header |
+| `header.background` | color | Header background color |
+| `header.border` | color | Header border color |
+| `header.transparency` | number | Header transparency |
+| `header.foreground` | color | Header icon color |
+| **Tooltip** | | |
+| `tooltip.show` | boolean | Show tooltip |
+| `tooltip.type` | string | Tooltip type (`Default` or `ReportPage`) |
+| `tooltip.section` | string | Tooltip report page name |
+| `tooltip.titleColor` | color | Tooltip title font color |
+| `tooltip.valueColor` | color | Tooltip value font color |
+| `tooltip.fontSize` | number | Tooltip font size |
+| `tooltip.fontFamily` | string | Tooltip font family |
+| `tooltip.background` | color | Tooltip background color |
+| `tooltip.transparency` | number | Tooltip transparency |
+| **Other** | | |
+| `lockAspect` | boolean | Lock aspect ratio |
+| `altText` | string | Accessibility alt text |
+| `stylePreset` | string | Style preset name |
 
 **Chart formatting** (encoded as PBI visual objects):
 
@@ -459,11 +516,11 @@ pbi filter list --page "Sales"                         # page-level filters
 pbi filter list --page "Sales" --visual chart          # visual-level filters
 ```
 
-Shows field, filter type (Categorical or Advanced), values/conditions, and hidden/locked status.
+Shows field, filter type (Categorical, Advanced, TopN, RelativeDate), values/conditions, and hidden/locked status.
 
 ### pbi filter add
 
-Two filter types:
+Four filter types:
 
 **Categorical** — filter to specific values using `--values` / `-v`:
 
@@ -481,6 +538,27 @@ pbi filter add "Sales.Sales Amount" --min 1000                 # open-ended (>= 
 pbi filter add Sales.OrderDate --min "2024-01-01" --page "Sales"
 ```
 
+**Top N** — show only the top or bottom N items by a measure:
+
+```bash
+pbi filter add Product.Category --topn 10 --topn-by "Sales.Sales Amount"
+pbi filter add Product.Category --topn 5 --topn-by "Sales.Sales Amount" --bottom
+pbi filter add Product.Category --topn 10 --topn-by "Sales.Total Orders" --page "Sales"
+```
+
+**Relative Date** — filter a date field relative to the current date:
+
+```bash
+pbi filter add Calendar.Date --relative "InLast 7 Days"
+pbi filter add Calendar.Date --relative "InThis 1 Months"
+pbi filter add Calendar.Date --relative "InNext 2 Weeks" --no-include-today
+pbi filter add Calendar.Date --relative "InLast 1 Years" --page "Sales"
+```
+
+Relative date format: `<Operator> <Count> <Unit>` where:
+- Operators: `InLast`, `InThis`, `InNext`
+- Units: `Days`, `Weeks`, `Months`, `Quarters`, `Years`
+
 **Options:**
 
 | Option | Description |
@@ -488,6 +566,11 @@ pbi filter add Sales.OrderDate --min "2024-01-01" --page "Sales"
 | `--values`, `-v` | Comma-separated values for categorical filter |
 | `--min` | Minimum value for range filter |
 | `--max` | Maximum value for range filter |
+| `--topn` | Number of items for Top N filter |
+| `--topn-by` | Order-by field for Top N (`Table.Measure`) |
+| `--bottom` | Use Bottom N instead of Top N |
+| `--relative` | Relative date expression (`"InLast 7 Days"`) |
+| `--include-today/--no-include-today` | Include today in relative date (default: yes) |
 | `--hidden` | Hide filter from view mode (users can't see it) |
 | `--locked` | Lock filter in view mode (users can see but can't change it) |
 | `--measure`, `-m` | Treat field as a measure instead of column |
@@ -499,6 +582,8 @@ Field type is auto-detected from the semantic model. Use `--measure` / `-m` to o
 ```bash
 pbi filter add Product.Color --values "Red,Blue" --hidden --locked
 pbi filter add "Sales.Sales Amount" --min 1000 --hidden --page "Sales" --visual chart
+pbi filter add Product.Category --topn 5 --topn-by "Sales.Sales Amount" --hidden
+pbi filter add Calendar.Date --relative "InLast 30 Days" --hidden --page "Sales"
 ```
 
 ### pbi filter remove

@@ -971,6 +971,11 @@ def filter_add(
     values: Annotated[Optional[str], typer.Option("--values", "-v", help="Comma-separated values for categorical filter.")] = None,
     min_val: Annotated[Optional[str], typer.Option("--min", help="Minimum value for range filter.")] = None,
     max_val: Annotated[Optional[str], typer.Option("--max", help="Maximum value for range filter.")] = None,
+    topn: Annotated[Optional[int], typer.Option("--topn", help="Top N items count.")] = None,
+    topn_by: Annotated[Optional[str], typer.Option("--topn-by", help="Order-by field for TopN (Table.Measure).")] = None,
+    bottom: Annotated[bool, typer.Option("--bottom", help="Use Bottom N instead of Top N.")] = False,
+    relative: Annotated[Optional[str], typer.Option("--relative", help="Relative date: 'InLast 7 Days', 'InThis 1 Months', 'InNext 2 Weeks'.")] = None,
+    include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Include today in relative date filter.")] = True,
     page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
     visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
     hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
@@ -978,14 +983,24 @@ def filter_add(
     measure: Annotated[bool, typer.Option("--measure", "-m", help="Field is a measure.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Add a filter. Use --values for categorical or --min/--max for range."""
+    """Add a filter. Use --values for categorical, --min/--max for range, --topn for Top N, --relative for relative date."""
     from pbi.filters import (
         load_level_data, save_level_data,
         add_categorical_filter, add_range_filter,
+        add_topn_filter, add_relative_date_filter,
     )
 
-    if not values and min_val is None and max_val is None:
-        console.print("[red]Error:[/red] Specify --values for categorical or --min/--max for range filter.")
+    has_categorical = values is not None
+    has_range = min_val is not None or max_val is not None
+    has_topn = topn is not None
+    has_relative = relative is not None
+    filter_count = sum([has_categorical, has_range, has_topn, has_relative])
+
+    if filter_count == 0:
+        console.print("[red]Error:[/red] Specify --values (categorical), --min/--max (range), --topn (Top N), or --relative (relative date).")
+        raise typer.Exit(1)
+    if filter_count > 1:
+        console.print("[red]Error:[/red] Use only one filter type per command.")
         raise typer.Exit(1)
 
     dot = field.find(".")
@@ -1012,7 +1027,7 @@ def filter_add(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if values:
+    if has_categorical:
         val_list = [v.strip() for v in values.split(",")]
         add_categorical_filter(
             data, entity, prop, val_list,
@@ -1023,7 +1038,7 @@ def filter_add(
             f'Added categorical filter on [cyan]{entity}.{prop}[/cyan] '
             f'= [{", ".join(val_list)}] at {level} level'
         )
-    else:
+    elif has_range:
         add_range_filter(
             data, entity, prop, min_val=min_val, max_val=max_val,
             field_type=field_type, is_hidden=hidden,
@@ -1037,6 +1052,67 @@ def filter_add(
         console.print(
             f'Added range filter on [cyan]{entity}.{prop}[/cyan] '
             f'{" and ".join(bounds)} at {level} level'
+        )
+    elif has_topn:
+        if not topn_by:
+            console.print("[red]Error:[/red] --topn requires --topn-by (Table.Measure) to specify the order-by field.")
+            raise typer.Exit(1)
+        by_dot = topn_by.find(".")
+        if by_dot == -1:
+            console.print("[red]Error:[/red] --topn-by must be Table.Field format.")
+            raise typer.Exit(1)
+        order_entity, order_prop = topn_by[:by_dot], topn_by[by_dot + 1:]
+        order_field_type = "measure"  # TopN order-by is typically a measure
+        try:
+            from pbi.model import SemanticModel
+            model = SemanticModel.load(proj.root)
+            _, order_prop, order_field_type = model.resolve_field(topn_by)
+        except (FileNotFoundError, ValueError):
+            pass
+        direction = "Bottom" if bottom else "Top"
+        add_topn_filter(
+            data, entity, prop, n=topn,
+            order_entity=order_entity, order_prop=order_prop,
+            order_field_type=order_field_type, direction=direction,
+            field_type=field_type, is_hidden=hidden,
+        )
+        save_level_data(data, target)
+        console.print(
+            f'Added {direction} {topn} filter on [cyan]{entity}.{prop}[/cyan] '
+            f'by {order_entity}.{order_prop} at {level} level'
+        )
+    elif has_relative:
+        # Parse "InLast 7 Days" format
+        parts = relative.split()
+        if len(parts) != 3:
+            console.print("[red]Error:[/red] --relative must be 'Operator Count Unit' (e.g. 'InLast 7 Days').")
+            console.print("[dim]Operators: InLast, InThis, InNext[/dim]")
+            console.print("[dim]Units: Days, Weeks, Months, Quarters, Years[/dim]")
+            raise typer.Exit(1)
+        rel_op, rel_count_str, rel_unit = parts
+        valid_ops = ("InLast", "InThis", "InNext")
+        valid_units = ("Days", "Weeks", "Months", "Quarters", "Years")
+        if rel_op not in valid_ops:
+            console.print(f"[red]Error:[/red] Operator must be one of: {', '.join(valid_ops)}")
+            raise typer.Exit(1)
+        if rel_unit not in valid_units:
+            console.print(f"[red]Error:[/red] Unit must be one of: {', '.join(valid_units)}")
+            raise typer.Exit(1)
+        try:
+            rel_count = int(rel_count_str)
+        except ValueError:
+            console.print(f"[red]Error:[/red] Count must be an integer, got '{rel_count_str}'.")
+            raise typer.Exit(1)
+        add_relative_date_filter(
+            data, entity, prop,
+            operator=rel_op, time_units_count=rel_count,
+            time_unit_type=rel_unit, include_today=include_today,
+            field_type=field_type, is_hidden=hidden,
+        )
+        save_level_data(data, target)
+        console.print(
+            f'Added relative date filter on [cyan]{entity}.{prop}[/cyan] '
+            f'{rel_op.lower()} {rel_count} {rel_unit.lower()} at {level} level'
         )
 
 

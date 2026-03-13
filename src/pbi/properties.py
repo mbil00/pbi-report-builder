@@ -37,7 +37,12 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     # Core
     "visualType": PropertyDef("visual.visualType", "string", "Visual chart type"),
     "isHidden": PropertyDef("isHidden", "boolean", "Hidden in view mode"),
-    # Container formatting: background
+    # ── visualContainerObjects ─────────────────────────────────
+    # Background
+    "background.show": PropertyDef(
+        None, "boolean", "Show background",
+        container_key="background", container_prop="show",
+    ),
     "background.color": PropertyDef(
         None, "color", "Background color",
         container_key="background", container_prop="color",
@@ -46,14 +51,14 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Background transparency (0-100)",
         container_key="background", container_prop="transparency",
     ),
-    # Container formatting: border
-    "border.color": PropertyDef(
-        None, "color", "Border color",
-        container_key="border", container_prop="color",
-    ),
+    # Border
     "border.show": PropertyDef(
         None, "boolean", "Show border",
         container_key="border", container_prop="show",
+    ),
+    "border.color": PropertyDef(
+        None, "color", "Border color",
+        container_key="border", container_prop="color",
     ),
     "border.width": PropertyDef(
         None, "number", "Border width",
@@ -63,50 +68,145 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Border radius",
         container_key="border", container_prop="radius",
     ),
-    # Container formatting: title
+    # Title
+    "title.show": PropertyDef(
+        None, "boolean", "Show title",
+        container_key="title", container_prop="show",
+    ),
     "title.text": PropertyDef(
         None, "string", "Title text",
         container_key="title", container_prop="text",
     ),
-    "title.show": PropertyDef(
-        None, "boolean", "Show title",
-        container_key="title", container_prop="show",
+    "title.heading": PropertyDef(
+        None, "string", "Title heading level",
+        container_key="title", container_prop="heading",
+    ),
+    "title.wrap": PropertyDef(
+        None, "boolean", "Wrap title text",
+        container_key="title", container_prop="titleWrap",
     ),
     "title.color": PropertyDef(
         None, "color", "Title font color",
         container_key="title", container_prop="fontColor",
     ),
-    "title.fontSize": PropertyDef(
-        None, "number", "Title font size",
-        container_key="title", container_prop="fontSize",
-    ),
-    "title.fontFamily": PropertyDef(
-        None, "string", "Title font family",
-        container_key="title", container_prop="fontFamily",
+    "title.background": PropertyDef(
+        None, "color", "Title background color",
+        container_key="title", container_prop="background",
     ),
     "title.alignment": PropertyDef(
         None, "enum", "Title alignment",
         container_key="title", container_prop="alignment",
         enum_values=("left", "center", "right"),
     ),
-    # Container formatting: subtitle
+    "title.fontSize": PropertyDef(
+        None, "number", "Title font size",
+        container_key="title", container_prop="fontSize",
+    ),
+    "title.bold": PropertyDef(
+        None, "boolean", "Title bold",
+        container_key="title", container_prop="bold",
+    ),
+    "title.italic": PropertyDef(
+        None, "boolean", "Title italic",
+        container_key="title", container_prop="italic",
+    ),
+    "title.underline": PropertyDef(
+        None, "boolean", "Title underline",
+        container_key="title", container_prop="underline",
+    ),
+    "title.fontFamily": PropertyDef(
+        None, "string", "Title font family",
+        container_key="title", container_prop="fontFamily",
+    ),
+    # Subtitle
+    "subtitle.show": PropertyDef(
+        None, "boolean", "Show subtitle",
+        container_key="subTitle", container_prop="show",
+    ),
     "subtitle.text": PropertyDef(
         None, "string", "Subtitle text",
         container_key="subTitle", container_prop="text",
     ),
-    "subtitle.show": PropertyDef(
-        None, "boolean", "Show subtitle",
-        container_key="subTitle", container_prop="show",
+    "subtitle.heading": PropertyDef(
+        None, "string", "Subtitle heading level",
+        container_key="subTitle", container_prop="heading",
+    ),
+    "subtitle.wrap": PropertyDef(
+        None, "boolean", "Wrap subtitle text",
+        container_key="subTitle", container_prop="titleWrap",
     ),
     "subtitle.color": PropertyDef(
         None, "color", "Subtitle font color",
         container_key="subTitle", container_prop="fontColor",
     ),
+    "subtitle.alignment": PropertyDef(
+        None, "enum", "Subtitle alignment",
+        container_key="subTitle", container_prop="alignment",
+        enum_values=("left", "center", "right"),
+    ),
     "subtitle.fontSize": PropertyDef(
         None, "number", "Subtitle font size",
         container_key="subTitle", container_prop="fontSize",
     ),
-    # Container formatting: padding
+    "subtitle.bold": PropertyDef(
+        None, "boolean", "Subtitle bold",
+        container_key="subTitle", container_prop="bold",
+    ),
+    "subtitle.italic": PropertyDef(
+        None, "boolean", "Subtitle italic",
+        container_key="subTitle", container_prop="italic",
+    ),
+    "subtitle.underline": PropertyDef(
+        None, "boolean", "Subtitle underline",
+        container_key="subTitle", container_prop="underline",
+    ),
+    "subtitle.fontFamily": PropertyDef(
+        None, "string", "Subtitle font family",
+        container_key="subTitle", container_prop="fontFamily",
+    ),
+    # Divider
+    "divider.show": PropertyDef(
+        None, "boolean", "Show divider between title and visual",
+        container_key="divider", container_prop="show",
+    ),
+    "divider.color": PropertyDef(
+        None, "color", "Divider color",
+        container_key="divider", container_prop="color",
+    ),
+    "divider.width": PropertyDef(
+        None, "number", "Divider width",
+        container_key="divider", container_prop="width",
+    ),
+    "divider.style": PropertyDef(
+        None, "string", "Divider style",
+        container_key="divider", container_prop="style",
+    ),
+    "divider.ignorePadding": PropertyDef(
+        None, "boolean", "Divider ignores padding",
+        container_key="divider", container_prop="ignorePadding",
+    ),
+    # Spacing
+    "spacing.customize": PropertyDef(
+        None, "boolean", "Enable custom spacing",
+        container_key="spacing", container_prop="customizeSpacing",
+    ),
+    "spacing.vertical": PropertyDef(
+        None, "number", "Vertical spacing",
+        container_key="spacing", container_prop="verticalSpacing",
+    ),
+    "spacing.belowTitle": PropertyDef(
+        None, "number", "Space below title",
+        container_key="spacing", container_prop="spaceBelowTitle",
+    ),
+    "spacing.belowSubtitle": PropertyDef(
+        None, "number", "Space below subtitle",
+        container_key="spacing", container_prop="spaceBelowSubTitle",
+    ),
+    "spacing.belowTitleArea": PropertyDef(
+        None, "number", "Space below title area",
+        container_key="spacing", container_prop="spaceBelowTitleArea",
+    ),
+    # Padding
     "padding.top": PropertyDef(
         None, "number", "Top padding",
         container_key="padding", container_prop="top",
@@ -123,22 +223,115 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "number", "Right padding",
         container_key="padding", container_prop="right",
     ),
-    # Container formatting: shadow
-    "shadow.color": PropertyDef(
-        None, "color", "Drop shadow color",
-        container_key="dropShadow", container_prop="color",
-    ),
+    # Drop shadow
     "shadow.show": PropertyDef(
         None, "boolean", "Show drop shadow",
         container_key="dropShadow", container_prop="show",
+    ),
+    "shadow.preset": PropertyDef(
+        None, "string", "Shadow preset",
+        container_key="dropShadow", container_prop="preset",
+    ),
+    "shadow.position": PropertyDef(
+        None, "string", "Shadow position",
+        container_key="dropShadow", container_prop="position",
+    ),
+    "shadow.color": PropertyDef(
+        None, "color", "Drop shadow color",
+        container_key="dropShadow", container_prop="color",
     ),
     "shadow.transparency": PropertyDef(
         None, "number", "Shadow transparency",
         container_key="dropShadow", container_prop="transparency",
     ),
-    "shadow.position": PropertyDef(
-        None, "string", "Shadow position",
-        container_key="dropShadow", container_prop="position",
+    "shadow.spread": PropertyDef(
+        None, "number", "Shadow spread",
+        container_key="dropShadow", container_prop="shadowSpread",
+    ),
+    "shadow.blur": PropertyDef(
+        None, "number", "Shadow blur",
+        container_key="dropShadow", container_prop="shadowBlur",
+    ),
+    "shadow.angle": PropertyDef(
+        None, "number", "Shadow angle",
+        container_key="dropShadow", container_prop="angle",
+    ),
+    "shadow.distance": PropertyDef(
+        None, "number", "Shadow distance",
+        container_key="dropShadow", container_prop="shadowDistance",
+    ),
+    # Lock aspect ratio
+    "lockAspect": PropertyDef(
+        None, "boolean", "Lock aspect ratio",
+        container_key="lockAspect", container_prop="show",
+    ),
+    # Alt text
+    "altText": PropertyDef(
+        None, "string", "Accessibility alt text",
+        container_key="general", container_prop="altText",
+    ),
+    # Visual header
+    "header.show": PropertyDef(
+        None, "boolean", "Show visual header",
+        container_key="visualHeader", container_prop="show",
+    ),
+    "header.background": PropertyDef(
+        None, "color", "Visual header background",
+        container_key="visualHeader", container_prop="background",
+    ),
+    "header.border": PropertyDef(
+        None, "color", "Visual header border color",
+        container_key="visualHeader", container_prop="border",
+    ),
+    "header.transparency": PropertyDef(
+        None, "number", "Visual header transparency",
+        container_key="visualHeader", container_prop="transparency",
+    ),
+    "header.foreground": PropertyDef(
+        None, "color", "Visual header icon color",
+        container_key="visualHeader", container_prop="foreground",
+    ),
+    # Visual tooltip
+    "tooltip.show": PropertyDef(
+        None, "boolean", "Show tooltip",
+        container_key="visualTooltip", container_prop="show",
+    ),
+    "tooltip.type": PropertyDef(
+        None, "string", "Tooltip type (Default or ReportPage)",
+        container_key="visualTooltip", container_prop="type",
+    ),
+    "tooltip.section": PropertyDef(
+        None, "string", "Tooltip report page name",
+        container_key="visualTooltip", container_prop="section",
+    ),
+    "tooltip.titleColor": PropertyDef(
+        None, "color", "Tooltip title font color",
+        container_key="visualTooltip", container_prop="titleFontColor",
+    ),
+    "tooltip.valueColor": PropertyDef(
+        None, "color", "Tooltip value font color",
+        container_key="visualTooltip", container_prop="valueFontColor",
+    ),
+    "tooltip.fontSize": PropertyDef(
+        None, "number", "Tooltip font size",
+        container_key="visualTooltip", container_prop="fontSize",
+    ),
+    "tooltip.fontFamily": PropertyDef(
+        None, "string", "Tooltip font family",
+        container_key="visualTooltip", container_prop="fontFamily",
+    ),
+    "tooltip.background": PropertyDef(
+        None, "color", "Tooltip background color",
+        container_key="visualTooltip", container_prop="background",
+    ),
+    "tooltip.transparency": PropertyDef(
+        None, "number", "Tooltip transparency",
+        container_key="visualTooltip", container_prop="transparency",
+    ),
+    # Style preset
+    "stylePreset": PropertyDef(
+        None, "string", "Style preset name",
+        container_key="stylePreset", container_prop="name",
     ),
     # ── Chart formatting (visual.objects) ──────────────────────
     # Legend

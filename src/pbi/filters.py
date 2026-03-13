@@ -188,6 +188,167 @@ def add_range_filter(
     return filter_obj
 
 
+def add_topn_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    n: int,
+    order_entity: str,
+    order_prop: str,
+    order_field_type: str = "measure",
+    direction: str = "Top",
+    field_type: str = "column",
+    is_hidden: bool = False,
+) -> dict:
+    """Add a Top N filter. Returns the filter dict.
+
+    Args:
+        entity: Target field entity (e.g. "Product")
+        prop: Target field property (e.g. "Category")
+        n: Number of items to show
+        order_entity: Order-by field entity (e.g. "Sales")
+        order_prop: Order-by field property (e.g. "Total Revenue")
+        order_field_type: "measure" or "column" for the order-by field
+        direction: "Top" or "Bottom"
+        field_type: "column" or "measure" for the target field
+    """
+    filter_name = f"Filter_{secrets.token_hex(8)}"
+
+    target_key = "Column" if field_type == "column" else "Measure"
+    field_ref = {
+        target_key: {
+            "Expression": {"SourceRef": {"Entity": entity}},
+            "Property": prop,
+        }
+    }
+
+    order_key = "Column" if order_field_type == "column" else "Measure"
+    order_expr = {
+        order_key: {
+            "Expression": {"SourceRef": {"Source": "f"}},
+            "Property": order_prop,
+        }
+    }
+
+    target_expr = {
+        target_key: {
+            "Expression": {"SourceRef": {"Source": "f"}},
+            "Property": prop,
+        }
+    }
+
+    filter_obj = {
+        "name": filter_name,
+        "type": "TopN",
+        "filter": {
+            "Version": 2,
+            "From": [
+                {"Name": "f", "Entity": entity, "Type": 0},
+                {"Name": "o", "Entity": order_entity, "Type": 0},
+            ],
+            "Where": [
+                {
+                    "Condition": {
+                        "Top": {
+                            "Expression": target_expr,
+                            "Count": n,
+                            "OrderBy": [
+                                {
+                                    "Expression": {
+                                        "Aggregation": {
+                                            "Expression": order_expr,
+                                            "Function": 0,  # Sum
+                                        }
+                                    },
+                                    "Direction": 2 if direction == "Top" else 1,
+                                }
+                            ],
+                        }
+                    }
+                }
+            ],
+        },
+        "field": field_ref,
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": False,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
+
+
+def add_relative_date_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    operator: str = "InLast",
+    time_units_count: int = 7,
+    time_unit_type: str = "Days",
+    include_today: bool = True,
+    field_type: str = "column",
+    is_hidden: bool = False,
+) -> dict:
+    """Add a relative date filter. Returns the filter dict.
+
+    Args:
+        entity: Date field entity (e.g. "Calendar")
+        prop: Date field property (e.g. "Date")
+        operator: "InLast", "InThis", or "InNext"
+        time_units_count: Number of time units
+        time_unit_type: "Days", "Weeks", "Months", "Quarters", or "Years"
+        include_today: Whether to include the current day
+    """
+    filter_name = f"Filter_{secrets.token_hex(8)}"
+
+    field_key = "Column" if field_type == "column" else "Measure"
+    field_ref = {
+        field_key: {
+            "Expression": {"SourceRef": {"Entity": entity}},
+            "Property": prop,
+        }
+    }
+
+    filter_obj = {
+        "name": filter_name,
+        "type": "RelativeDate",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": "f", "Entity": entity, "Type": 0}],
+            "Where": [
+                {
+                    "Condition": {
+                        "RelativeDate": {
+                            "Expression": {
+                                field_key: {
+                                    "Expression": {"SourceRef": {"Source": "f"}},
+                                    "Property": prop,
+                                }
+                            },
+                            "Operator": {"InLast": 0, "InThis": 1, "InNext": 2}.get(operator, 0),
+                            "TimeUnitsCount": time_units_count,
+                            "TimeUnitType": {
+                                "Days": 0, "Weeks": 1, "Months": 2,
+                                "Quarters": 3, "Years": 4,
+                            }.get(time_unit_type, 0),
+                            "IncludeToday": include_today,
+                        }
+                    }
+                }
+            ],
+        },
+        "field": field_ref,
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": False,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
+
+
 def remove_filter(data: dict, identifier: str) -> int:
     """Remove filter(s) by name or field reference. Returns count removed."""
     config = data.get("filterConfig", {})
@@ -260,6 +421,25 @@ def _extract_filter_values(f: dict) -> list[str]:
             op_map = {0: "==", 1: "<", 2: ">=", 3: ">", 4: "<=", 5: "!="}
             op = op_map.get(kind, "?")
             values.append(f"{op} {literal}")
+
+        # TopN
+        if "Top" in cond:
+            top = cond["Top"]
+            count = top.get("Count", "?")
+            order_by = top.get("OrderBy", [{}])
+            direction_code = order_by[0].get("Direction", 2) if order_by else 2
+            direction = "top" if direction_code == 2 else "bottom"
+            values.append(f"{direction} {count}")
+
+        # RelativeDate
+        if "RelativeDate" in cond:
+            rd = cond["RelativeDate"]
+            op_map = {0: "in last", 1: "in this", 2: "in next"}
+            unit_map = {0: "days", 1: "weeks", 2: "months", 3: "quarters", 4: "years"}
+            op = op_map.get(rd.get("Operator", 0), "?")
+            count = rd.get("TimeUnitsCount", "?")
+            unit = unit_map.get(rd.get("TimeUnitType", 0), "?")
+            values.append(f"{op} {count} {unit}")
 
     return values
 
