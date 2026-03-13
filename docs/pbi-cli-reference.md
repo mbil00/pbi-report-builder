@@ -116,10 +116,17 @@ pbi page set <page> <property> <value>
 | `height` | number | Pixels |
 | `displayOption` | enum | `FitToPage`, `FitToWidth`, `ActualSize` |
 | `visibility` | enum | `AlwaysVisible`, `HiddenInViewMode` |
+| `background.color` | color | Page background color (`#hex`) |
+| `background.transparency` | number | Background transparency (0–100) |
+| `outspace.color` | color | Outspace (area outside canvas) background color |
+| `outspace.transparency` | number | Outspace transparency |
 
 ```bash
 pbi page set "Sales" width 1920
 pbi page set "Sales" visibility HiddenInViewMode
+pbi page set "Sales" background.color "#F5F5F5"
+pbi page set "Sales" background.transparency 0
+pbi page set "Sales" outspace.color "#E0E0E0"
 ```
 
 ### pbi page create

@@ -13,13 +13,14 @@ from typing import Any
 @dataclass
 class PropertyDef:
     json_path: str | None  # Dot path into the JSON, or None for object-style properties
-    value_type: str  # "number", "string", "boolean", "color", "enum"
+    value_type: str  # "number", "string", "boolean", "color", "page_color", "enum"
     description: str
     enum_values: tuple[str, ...] | None = None
     # For object-style properties (both visualContainerObjects and visual.objects)
     container_key: str | None = None
     container_prop: str | None = None
     objects_path: str = "visualContainerObjects"  # or "objects" for chart formatting
+    top_level: bool = False  # True for page-level objects (data.objects vs data.visual.objects)
 
 
 # ── Visual properties ──────────────────────────────────────────────
@@ -69,7 +70,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     ),
     "title.show": PropertyDef(
         None, "boolean", "Show title",
-        container_key="title", container_prop="titleVisibility",
+        container_key="title", container_prop="show",
     ),
     "title.color": PropertyDef(
         None, "color", "Title font color",
@@ -95,7 +96,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     ),
     "subtitle.show": PropertyDef(
         None, "boolean", "Show subtitle",
-        container_key="subTitle", container_prop="subTitleVisibility",
+        container_key="subTitle", container_prop="show",
     ),
     "subtitle.color": PropertyDef(
         None, "color", "Subtitle font color",
@@ -324,6 +325,28 @@ PAGE_PROPERTIES: dict[str, PropertyDef] = {
         "visibility", "enum", "Page visibility",
         enum_values=("AlwaysVisible", "HiddenInViewMode"),
     ),
+    # Page background (page.objects.background)
+    "background.color": PropertyDef(
+        None, "page_color", "Page background color",
+        container_key="background", container_prop="color",
+        objects_path="objects", top_level=True,
+    ),
+    "background.transparency": PropertyDef(
+        None, "number", "Page background transparency (0-100)",
+        container_key="background", container_prop="transparency",
+        objects_path="objects", top_level=True,
+    ),
+    # Page outspace (area outside the page canvas)
+    "outspace.color": PropertyDef(
+        None, "page_color", "Outspace background color",
+        container_key="outspace", container_prop="backgroundColor",
+        objects_path="objects", top_level=True,
+    ),
+    "outspace.transparency": PropertyDef(
+        None, "number", "Outspace transparency",
+        container_key="outspace", container_prop="transparency",
+        objects_path="objects", top_level=True,
+    ),
 }
 
 
@@ -334,6 +357,10 @@ def encode_pbi_value(value: str, value_type: str) -> Any:
     if value_type == "color":
         color = value if value.startswith("#") else f"#{value}"
         return {"solid": {"color": color}}
+    elif value_type == "page_color":
+        # Page-level colors nest the expr inside solid.color
+        color = value if value.startswith("#") else f"#{value}"
+        return {"solid": {"color": {"expr": {"Literal": {"Value": f"'{color}'"}}}}}
     elif value_type == "number":
         num = float(value)
         return {"expr": {"Literal": {"Value": f"{num}D"}}}
@@ -350,9 +377,11 @@ def encode_pbi_value(value: str, value_type: str) -> Any:
 def decode_pbi_value(raw: Any) -> Any:
     """Decode a PBI JSON value into a human-readable form."""
     if isinstance(raw, dict):
-        # Color: {"solid": {"color": "#hex"}}
+        # Color: {"solid": {"color": "#hex"}} or {"solid": {"color": {expr...}}}
         if "solid" in raw:
-            return raw["solid"].get("color", raw)
+            color = raw["solid"].get("color", raw)
+            # Recurse for page-level colors where color is an expr dict
+            return decode_pbi_value(color) if isinstance(color, dict) else color
         # Expr literal: {"expr": {"Literal": {"Value": "..."}}}
         if "expr" in raw:
             literal = raw.get("expr", {}).get("Literal", {}).get("Value")
@@ -422,9 +451,9 @@ def set_property(data: dict, prop_name: str, value: str, registry: dict[str, Pro
 
 
 def _get_container_prop(data: dict, prop_def: PropertyDef) -> Any:
-    """Read from visual object collections (visualContainerObjects or objects)."""
-    visual = data.get("visual", {})
-    objects = visual.get(prop_def.objects_path, {})
+    """Read from object collections (visual-level or page-level)."""
+    root = data if prop_def.top_level else data.get("visual", {})
+    objects = root.get(prop_def.objects_path, {})
     entries = objects.get(prop_def.container_key, [])
     if not entries:
         return None
@@ -436,9 +465,9 @@ def _get_container_prop(data: dict, prop_def: PropertyDef) -> Any:
 
 
 def _set_container_prop(data: dict, prop_def: PropertyDef, value: str) -> None:
-    """Write to visual object collections, creating structure as needed."""
-    visual = data.setdefault("visual", {})
-    objects = visual.setdefault(prop_def.objects_path, {})
+    """Write to object collections, creating structure as needed."""
+    root = data if prop_def.top_level else data.setdefault("visual", {})
+    objects = root.setdefault(prop_def.objects_path, {})
     entries = objects.setdefault(prop_def.container_key, [{}])
     if not entries:
         entries.append({})
@@ -495,7 +524,9 @@ def _auto_coerce(value: str) -> Any:
 
 def list_properties(registry: dict[str, PropertyDef]) -> list[tuple[str, str, str]]:
     """Return (name, type, description) for all properties in a registry."""
+    # Display page_color as "color" — the encoding difference is internal
+    display_type = lambda t: "color" if t == "page_color" else t
     return [
-        (name, p.value_type, p.description)
+        (name, display_type(p.value_type), p.description)
         for name, p in sorted(registry.items())
     ]
