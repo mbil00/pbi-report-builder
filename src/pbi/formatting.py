@@ -1,0 +1,293 @@
+"""Conditional formatting for PBI visual objects.
+
+Supports measure-based (color by DAX measure) and FillRule gradient
+(2-stop or 3-stop color scale) conditional formatting on any visual
+object property.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+# ── Data types ────────────────────────────────────────────────────
+
+@dataclass
+class GradientStop:
+    """A color stop in a gradient."""
+    color: str   # hex color, e.g. "#FF0000"
+    value: float  # numeric threshold
+
+
+@dataclass
+class ConditionalFormatInfo:
+    """Parsed conditional formatting entry for display."""
+    object_name: str
+    property_name: str
+    format_type: str  # "measure", "gradient2", "gradient3"
+    field_ref: str  # "Table.Field" for the driving measure/field
+    details: str  # Human-readable summary
+
+
+# ── JSON node builders ────────────────────────────────────────────
+
+def _measure_expr(entity: str, prop: str) -> dict:
+    """Build a PBI Measure expression node."""
+    return {
+        "Measure": {
+            "Expression": {"SourceRef": {"Entity": entity}},
+            "Property": prop,
+        }
+    }
+
+
+def _literal_expr(value: str) -> dict:
+    """Build a PBI Literal expression node."""
+    return {"Literal": {"Value": value}}
+
+
+def _wildcard_selector() -> dict:
+    """Build the standard dataViewWildcard selector for conditional formatting."""
+    return {"data": [{"dataViewWildcard": {"matchingOption": 0}}]}
+
+
+# ── Format builders ───────────────────────────────────────────────
+
+def build_measure_format(entity: str, prop: str) -> dict:
+    """Build a measure-based conditional formatting value.
+
+    Returns the property value dict that replaces a static color value.
+    The measure should return a hex color string at runtime.
+    """
+    return {
+        "solid": {
+            "color": {
+                "expr": _measure_expr(entity, prop)
+            }
+        }
+    }
+
+
+def build_gradient_format(
+    input_entity: str,
+    input_prop: str,
+    min_stop: GradientStop,
+    max_stop: GradientStop,
+    mid_stop: GradientStop | None = None,
+) -> dict:
+    """Build a FillRule gradient conditional formatting value.
+
+    If mid_stop is provided, uses linearGradient3; otherwise linearGradient2.
+    """
+    def _stop(stop: GradientStop) -> dict:
+        color = stop.color if stop.color.startswith("#") else f"#{stop.color}"
+        return {
+            "color": {"expr": _literal_expr(f"'{color}'")},
+            "value": {"expr": _literal_expr(f"{stop.value}D")},
+        }
+
+    if mid_stop is not None:
+        gradient = {
+            "linearGradient3": {
+                "min": _stop(min_stop),
+                "mid": _stop(mid_stop),
+                "max": _stop(max_stop),
+            }
+        }
+    else:
+        gradient = {
+            "linearGradient2": {
+                "min": _stop(min_stop),
+                "max": _stop(max_stop),
+            }
+        }
+
+    return {
+        "solid": {
+            "color": {
+                "expr": {
+                    "FillRule": {
+                        "Input": _measure_expr(input_entity, input_prop),
+                        "FillRule": gradient,
+                    }
+                }
+            }
+        }
+    }
+
+
+# ── Read/display ──────────────────────────────────────────────────
+
+def get_conditional_formats(visual_data: dict) -> list[ConditionalFormatInfo]:
+    """Extract all conditional formatting entries from a visual."""
+    results = []
+    objects = visual_data.get("visual", {}).get("objects", {})
+
+    for obj_name, entries in objects.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            props = entry.get("properties", {})
+            for prop_name, prop_val in props.items():
+                info = _parse_conditional_value(obj_name, prop_name, prop_val)
+                if info is not None:
+                    results.append(info)
+
+    return results
+
+
+def _parse_conditional_value(
+    obj_name: str, prop_name: str, value: Any,
+) -> ConditionalFormatInfo | None:
+    """Check if a property value contains conditional formatting."""
+    if not isinstance(value, dict):
+        return None
+
+    # Drill into {"solid": {"color": {"expr": ...}}}
+    color_node = value.get("solid", {}).get("color", {})
+    if not isinstance(color_node, dict):
+        return None
+
+    expr = color_node.get("expr")
+    if expr is None:
+        return None
+
+    # Measure-based
+    if "Measure" in expr:
+        m = expr["Measure"]
+        entity = m.get("Expression", {}).get("SourceRef", {}).get("Entity", "?")
+        prop = m.get("Property", "?")
+        return ConditionalFormatInfo(
+            object_name=obj_name,
+            property_name=prop_name,
+            format_type="measure",
+            field_ref=f"{entity}.{prop}",
+            details=f"Measure: {entity}.{prop}",
+        )
+
+    # FillRule gradient
+    if "FillRule" in expr:
+        fr = expr["FillRule"]
+        input_expr = fr.get("Input", {})
+        # Input can be Measure or Column
+        for key in ("Measure", "Column"):
+            if key in input_expr:
+                entity = input_expr[key].get("Expression", {}).get("SourceRef", {}).get("Entity", "?")
+                prop = input_expr[key].get("Property", "?")
+                break
+        else:
+            entity, prop = "?", "?"
+
+        rule = fr.get("FillRule", {})
+        if "linearGradient3" in rule:
+            fmt_type = "gradient3"
+            details = _summarize_gradient(rule["linearGradient3"])
+        elif "linearGradient2" in rule:
+            fmt_type = "gradient2"
+            details = _summarize_gradient(rule["linearGradient2"])
+        else:
+            fmt_type = "gradient"
+            details = "Unknown gradient"
+
+        return ConditionalFormatInfo(
+            object_name=obj_name,
+            property_name=prop_name,
+            format_type=fmt_type,
+            field_ref=f"{entity}.{prop}",
+            details=details,
+        )
+
+    return None
+
+
+def _summarize_gradient(gradient: dict) -> str:
+    """Build a human-readable summary like '#FF0000@0 -> #FFFF00@50 -> #00FF00@100'."""
+    parts = []
+    for key in ("min", "mid", "max"):
+        stop = gradient.get(key)
+        if stop is None:
+            continue
+        color = _extract_literal(stop.get("color", {}))
+        val = _extract_literal(stop.get("value", {}))
+        parts.append(f"{color} @ {val}")
+    return " -> ".join(parts)
+
+
+def _extract_literal(node: dict) -> str:
+    """Extract a literal value from {'expr': {'Literal': {'Value': ...}}}."""
+    raw = node.get("expr", {}).get("Literal", {}).get("Value", "?")
+    if isinstance(raw, str):
+        if raw.startswith("'") and raw.endswith("'"):
+            return raw[1:-1]
+        if raw.endswith("D") or raw.endswith("d"):
+            return raw[:-1]
+    return str(raw)
+
+
+# ── Set/clear operations ─────────────────────────────────────────
+
+def set_conditional_format(
+    visual_data: dict,
+    object_name: str,
+    property_name: str,
+    value: dict,
+) -> None:
+    """Set conditional formatting on a visual object property.
+
+    Creates or updates a selector-bearing entry in the object array,
+    leaving the base static entry (index 0, no selector) untouched.
+    """
+    objects = visual_data.setdefault("visual", {}).setdefault("objects", {})
+    entries = objects.setdefault(object_name, [])
+
+    # Find existing entry with wildcard selector
+    target = None
+    for entry in entries:
+        sel = entry.get("selector", {})
+        dw = sel.get("data", [])
+        if any("dataViewWildcard" in d for d in dw):
+            target = entry
+            break
+
+    if target is None:
+        target = {"selector": _wildcard_selector(), "properties": {}}
+        entries.append(target)
+
+    target.setdefault("properties", {})[property_name] = value
+
+
+def clear_conditional_format(
+    visual_data: dict,
+    object_name: str,
+    property_name: str,
+) -> bool:
+    """Remove conditional formatting for a specific property.
+
+    Removes the property from any selector-bearing entry.
+    If that leaves the entry empty, removes the entry entirely.
+    Returns True if something was removed.
+    """
+    objects = visual_data.get("visual", {}).get("objects", {})
+    entries = objects.get(object_name, [])
+
+    removed = False
+    to_remove = []
+    for i, entry in enumerate(entries):
+        sel = entry.get("selector", {})
+        dw = sel.get("data", [])
+        if any("dataViewWildcard" in d for d in dw):
+            props = entry.get("properties", {})
+            if property_name in props:
+                del props[property_name]
+                removed = True
+            if not props:
+                to_remove.append(i)
+
+    for i in reversed(to_remove):
+        entries.pop(i)
+
+    if not entries:
+        objects.pop(object_name, None)
+
+    return removed

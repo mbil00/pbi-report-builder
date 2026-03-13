@@ -502,6 +502,209 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "boolean", "Show data point markers",
         container_key="shapes", container_prop="showMarkers", objects_path="objects",
     ),
+    # ── Table/matrix global formatting (visual.objects) ───────
+    # Column headers (global)
+    "columnHeaders.fontColor": PropertyDef(
+        None, "color", "Column header font color",
+        container_key="columnHeaders", container_prop="fontColor", objects_path="objects",
+    ),
+    "columnHeaders.backColor": PropertyDef(
+        None, "color", "Column header background color",
+        container_key="columnHeaders", container_prop="backColor", objects_path="objects",
+    ),
+    "columnHeaders.fontSize": PropertyDef(
+        None, "number", "Column header font size",
+        container_key="columnHeaders", container_prop="fontSize", objects_path="objects",
+    ),
+    "columnHeaders.fontFamily": PropertyDef(
+        None, "string", "Column header font family",
+        container_key="columnHeaders", container_prop="fontFamily", objects_path="objects",
+    ),
+    "columnHeaders.bold": PropertyDef(
+        None, "boolean", "Column header bold",
+        container_key="columnHeaders", container_prop="bold", objects_path="objects",
+    ),
+    "columnHeaders.italic": PropertyDef(
+        None, "boolean", "Column header italic",
+        container_key="columnHeaders", container_prop="italic", objects_path="objects",
+    ),
+    "columnHeaders.alignment": PropertyDef(
+        None, "enum", "Column header alignment",
+        container_key="columnHeaders", container_prop="alignment", objects_path="objects",
+        enum_values=("Left", "Center", "Right"),
+    ),
+    "columnHeaders.wordWrap": PropertyDef(
+        None, "boolean", "Column header word wrap",
+        container_key="columnHeaders", container_prop="wordWrap", objects_path="objects",
+    ),
+    "columnHeaders.autoSize": PropertyDef(
+        None, "boolean", "Auto-size column widths",
+        container_key="columnHeaders", container_prop="autoSizeColumnWidth", objects_path="objects",
+    ),
+    # Values (global data cells)
+    "values.fontColor": PropertyDef(
+        None, "color", "Data cell font color",
+        container_key="values", container_prop="fontColorPrimary", objects_path="objects",
+    ),
+    "values.backColor": PropertyDef(
+        None, "color", "Data cell primary background",
+        container_key="values", container_prop="backColorPrimary", objects_path="objects",
+    ),
+    "values.altBackColor": PropertyDef(
+        None, "color", "Data cell alternate row background",
+        container_key="values", container_prop="backColorSecondary", objects_path="objects",
+    ),
+    "values.fontSize": PropertyDef(
+        None, "number", "Data cell font size",
+        container_key="values", container_prop="fontSize", objects_path="objects",
+    ),
+    "values.fontFamily": PropertyDef(
+        None, "string", "Data cell font family",
+        container_key="values", container_prop="fontFamily", objects_path="objects",
+    ),
+    "values.wordWrap": PropertyDef(
+        None, "boolean", "Data cell word wrap",
+        container_key="values", container_prop="wordWrap", objects_path="objects",
+    ),
+    "values.urlIcon": PropertyDef(
+        None, "boolean", "Show URL icon for web URLs",
+        container_key="values", container_prop="urlIcon", objects_path="objects",
+    ),
+    # Grid
+    "grid.vertical": PropertyDef(
+        None, "boolean", "Show vertical gridlines",
+        container_key="grid", container_prop="gridVertical", objects_path="objects",
+    ),
+    "grid.verticalColor": PropertyDef(
+        None, "color", "Vertical gridline color",
+        container_key="grid", container_prop="gridVerticalColor", objects_path="objects",
+    ),
+    "grid.verticalWeight": PropertyDef(
+        None, "number", "Vertical gridline weight",
+        container_key="grid", container_prop="gridVerticalWeight", objects_path="objects",
+    ),
+    "grid.horizontal": PropertyDef(
+        None, "boolean", "Show horizontal gridlines",
+        container_key="grid", container_prop="gridHorizontal", objects_path="objects",
+    ),
+    "grid.horizontalColor": PropertyDef(
+        None, "color", "Horizontal gridline color",
+        container_key="grid", container_prop="gridHorizontalColor", objects_path="objects",
+    ),
+    "grid.horizontalWeight": PropertyDef(
+        None, "number", "Horizontal gridline weight",
+        container_key="grid", container_prop="gridHorizontalWeight", objects_path="objects",
+    ),
+    "grid.rowPadding": PropertyDef(
+        None, "number", "Row padding",
+        container_key="grid", container_prop="rowPadding", objects_path="objects",
+    ),
+    "grid.imageHeight": PropertyDef(
+        None, "number", "Image height in cells",
+        container_key="grid", container_prop="imageHeight", objects_path="objects",
+    ),
+    "grid.textSize": PropertyDef(
+        None, "number", "Grid text size",
+        container_key="grid", container_prop="textSize", objects_path="objects",
+    ),
+    # Total row
+    "total.show": PropertyDef(
+        None, "boolean", "Show totals row",
+        container_key="total", container_prop="totals", objects_path="objects",
+    ),
+    "total.label": PropertyDef(
+        None, "string", "Totals row label",
+        container_key="total", container_prop="label", objects_path="objects",
+    ),
+    "total.fontColor": PropertyDef(
+        None, "color", "Totals font color",
+        container_key="total", container_prop="fontColor", objects_path="objects",
+    ),
+    "total.backColor": PropertyDef(
+        None, "color", "Totals background color",
+        container_key="total", container_prop="backColor", objects_path="objects",
+    ),
+    "total.fontSize": PropertyDef(
+        None, "number", "Totals font size",
+        container_key="total", container_prop="fontSize", objects_path="objects",
+    ),
+    "total.fontFamily": PropertyDef(
+        None, "string", "Totals font family",
+        container_key="total", container_prop="fontFamily", objects_path="objects",
+    ),
+    "total.bold": PropertyDef(
+        None, "boolean", "Totals bold",
+        container_key="total", container_prop="bold", objects_path="objects",
+    ),
+    # ── Matrix-specific formatting (visual.objects) ───────────
+    # Row headers (matrix)
+    "rowHeaders.fontColor": PropertyDef(
+        None, "color", "Row header font color",
+        container_key="rowHeaders", container_prop="fontColor", objects_path="objects",
+    ),
+    "rowHeaders.backColor": PropertyDef(
+        None, "color", "Row header background",
+        container_key="rowHeaders", container_prop="backColor", objects_path="objects",
+    ),
+    "rowHeaders.fontSize": PropertyDef(
+        None, "number", "Row header font size",
+        container_key="rowHeaders", container_prop="fontSize", objects_path="objects",
+    ),
+    "rowHeaders.fontFamily": PropertyDef(
+        None, "string", "Row header font family",
+        container_key="rowHeaders", container_prop="fontFamily", objects_path="objects",
+    ),
+    "rowHeaders.bold": PropertyDef(
+        None, "boolean", "Row header bold",
+        container_key="rowHeaders", container_prop="bold", objects_path="objects",
+    ),
+    "rowHeaders.italic": PropertyDef(
+        None, "boolean", "Row header italic",
+        container_key="rowHeaders", container_prop="italic", objects_path="objects",
+    ),
+    "rowHeaders.alignment": PropertyDef(
+        None, "enum", "Row header alignment",
+        container_key="rowHeaders", container_prop="alignment", objects_path="objects",
+        enum_values=("Left", "Center", "Right"),
+    ),
+    "rowHeaders.wordWrap": PropertyDef(
+        None, "boolean", "Row header word wrap",
+        container_key="rowHeaders", container_prop="wordWrap", objects_path="objects",
+    ),
+    "rowHeaders.steppedLayout": PropertyDef(
+        None, "boolean", "Enable stepped layout for row headers",
+        container_key="rowHeaders", container_prop="stepped", objects_path="objects",
+    ),
+    "rowHeaders.steppedIndent": PropertyDef(
+        None, "number", "Stepped layout indentation (pixels)",
+        container_key="rowHeaders", container_prop="steppedLayoutIndentation", objects_path="objects",
+    ),
+    "rowHeaders.showExpandCollapse": PropertyDef(
+        None, "boolean", "Show expand/collapse buttons",
+        container_key="rowHeaders", container_prop="showExpandCollapseButtons", objects_path="objects",
+    ),
+    # Subtotals (matrix)
+    "subTotals.rowSubtotals": PropertyDef(
+        None, "boolean", "Show row subtotals",
+        container_key="subTotals", container_prop="rowSubtotals", objects_path="objects",
+    ),
+    "subTotals.columnSubtotals": PropertyDef(
+        None, "boolean", "Show column subtotals",
+        container_key="subTotals", container_prop="columnSubtotals", objects_path="objects",
+    ),
+    "subTotals.rowSubtotalsPosition": PropertyDef(
+        None, "enum", "Row subtotals position",
+        container_key="subTotals", container_prop="rowSubtotalsPosition", objects_path="objects",
+        enum_values=("Top", "Bottom"),
+    ),
+    "subTotals.perRowLevel": PropertyDef(
+        None, "boolean", "Per row-level subtotals",
+        container_key="subTotals", container_prop="perRowLevel", objects_path="objects",
+    ),
+    "subTotals.perColumnLevel": PropertyDef(
+        None, "boolean", "Per column-level subtotals",
+        container_key="subTotals", container_prop="perColumnLevel", objects_path="objects",
+    ),
 }
 
 # ── Page properties ────────────────────────────────────────────────

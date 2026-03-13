@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pbi.project import Project, Page, Visual
 from pbi.filters import get_filters, parse_filter
+from pbi.formatting import get_conditional_formats
 from pbi.properties import decode_pbi_value
 
 
@@ -205,6 +206,9 @@ def _write_visual(
     # Key chart formatting
     _write_chart_summary(lines, visual, pad)
 
+    # Conditional formatting
+    _write_conditional_formatting(lines, visual, pad)
+
     # Visual-level filters
     _write_filters_section(lines, visual.data, "visual", indent=len(pad) + 2)
 
@@ -298,6 +302,21 @@ def _write_chart_summary(lines: list[str], visual: Visual, pad: str) -> None:
 
     if summaries:
         lines.append(f"{pad}  formatting: {{{', '.join(summaries)}}}")
+
+
+def _write_conditional_formatting(lines: list[str], visual: Visual, pad: str) -> None:
+    """Write conditional formatting summary if present."""
+    formats = get_conditional_formats(visual.data)
+    if not formats:
+        return
+
+    items = []
+    for f in formats:
+        items.append(f"{f.object_name}.{f.property_name}: {f.details}")
+
+    lines.append(f"{pad}  conditionalFormatting:")
+    for item in items:
+        lines.append(f"{pad}    - {item}")
 
 
 def _get_obj_prop(objects: dict, key: str, prop: str) -> object | None:

@@ -37,7 +37,7 @@ pbi info
 
 ### pbi map
 
-Generate a human-readable YAML index that resolves all hex IDs and shows the full hierarchy: Page → Group → Visual → Role → Field. Includes filters at all levels, sort definitions, and key chart formatting. Every entry includes a relative file path.
+Generate a human-readable YAML index that resolves all hex IDs and shows the full hierarchy: Page → Group → Visual → Role → Field. Includes filters at all levels, sort definitions, key chart formatting, and conditional formatting. Every entry includes a relative file path.
 
 ```bash
 pbi map                     # stdout
@@ -78,6 +78,8 @@ pages:
           Y: Sales.Sales Amount (measure)
         sort: Sales.Sales Amount (measure) Descending  # sort definition
         formatting: {legend: true (Top), labels: false} # key chart formatting
+        conditionalFormatting:                           # conditional formatting
+          - dataPoint.fill: #FF0000 @ 0 -> #FFFF00 @ 50 -> #00FF00 @ 100
         filters:                                        # visual-level filters
           - Sales.Sales Amount Advanced: >= 1000
 ```
@@ -428,6 +430,177 @@ pbi visual sort "Sales" chart                                  # show current so
 pbi visual sort "Sales" chart --clear                          # remove sort
 ```
 
+### pbi visual format
+
+Set, show, or clear conditional formatting on a visual. Conditional formatting makes color properties dynamic — driven by a DAX measure or a gradient color scale.
+
+```bash
+pbi visual format <page> <visual>                          # show current conditional formatting
+pbi visual format <page> <visual> <object.prop> --measure <Table.Measure>     # color by measure
+pbi visual format <page> <visual> <object.prop> --gradient --input <Table.Field> --min-color <hex> --min-value <n> --max-color <hex> --max-value <n>  # 2-stop gradient
+pbi visual format <page> <visual> <object.prop> --clear    # remove conditional formatting
+```
+
+The `<object.prop>` references a property inside `visual.objects`, e.g. `dataPoint.fill`, `labels.color`.
+
+**Measure-based** — the DAX measure returns a hex color string at runtime:
+
+```bash
+pbi visual format "Sales" chart dataPoint.fill --measure "Sales.ColorMeasure"
+pbi visual format "Sales" chart labels.color --measure "Sales.LabelColor"
+```
+
+**Gradient (color scale)** — 2-stop or 3-stop, driven by a numeric field:
+
+```bash
+# 2-stop: red (low) to green (high)
+pbi visual format "Sales" chart dataPoint.fill --gradient \
+  --input "Sales.Revenue" \
+  --min-color "#FF0000" --min-value 0 \
+  --max-color "#00FF00" --max-value 100
+
+# 3-stop: red -> yellow -> green
+pbi visual format "Sales" chart dataPoint.fill --gradient \
+  --input "Sales.Revenue" \
+  --min-color "#FF0000" --min-value 0 \
+  --mid-color "#FFFF00" --mid-value 50 \
+  --max-color "#00FF00" --max-value 100
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--measure` | Measure reference (`Table.Measure`) for color-by-measure |
+| `--gradient` | Enable gradient (FillRule) mode |
+| `--input` | Input field for gradient (`Table.Field`) |
+| `--min-color`, `--min-value` | Gradient minimum stop |
+| `--mid-color`, `--mid-value` | Gradient midpoint (makes 3-stop) |
+| `--max-color`, `--max-value` | Gradient maximum stop |
+| `--clear` | Remove conditional formatting from the property |
+
+**Common target properties:**
+
+| Property | Used On |
+|----------|---------|
+| `dataPoint.fill` | Bar/column/pie/donut fill color |
+| `labels.color` | Data label color |
+| `categoryAxis.labelColor` | X-axis label color |
+| `valueAxis.labelColor` | Y-axis label color |
+| `legend.labelColor` | Legend text color |
+
+### pbi visual column
+
+List, resize, rename, or format individual columns in table (`tableEx`) and matrix (`pivotTable`) visuals.
+
+```bash
+pbi visual column <page> <visual>                                    # list all columns
+pbi visual column <page> <visual> <column>                           # show column details
+pbi visual column <page> <visual> <column> --width 200               # set width
+pbi visual column <page> <visual> <column> --rename "Display Name"   # rename header
+pbi visual column <page> <visual> <column> --align Right             # set alignment
+pbi visual column <page> <visual> <column> --clear-width             # remove width override
+pbi visual column <page> <visual> <column> --clear-format            # remove formatting
+```
+
+Columns can be referenced by `Table.Field`, display name, partial name, or 1-based index.
+
+**Multiple options can be combined in a single call:**
+
+```bash
+pbi visual column "Sales" table "Sales.Revenue" --width 150 --rename "Revenue ($)" --align Right --precision 2
+pbi visual column "Sales" table Product.Name --width 200 --font-color "#333333"
+pbi visual column "Sales" table 1 --rename "Product" --align Left
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--width`, `-w` | Column width in pixels |
+| `--rename` | Override column header display name |
+| `--align` | Alignment: `Left`, `Center`, `Right` |
+| `--font-color` | Column font color (`#hex`) |
+| `--back-color` | Column background color (`#hex`) |
+| `--display-units` | Label display units (0=auto, 1000=K, 1000000=M) |
+| `--precision` | Decimal places |
+| `--clear-width` | Remove column width override |
+| `--clear-format` | Remove per-column formatting |
+
+**Table/matrix global formatting** (via `pbi visual set`):
+
+These properties apply to all columns/rows globally:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| **Column Headers** | | |
+| `columnHeaders.fontColor` | color | Header font color |
+| `columnHeaders.backColor` | color | Header background |
+| `columnHeaders.fontSize` | number | Header font size |
+| `columnHeaders.fontFamily` | string | Header font family |
+| `columnHeaders.bold` | boolean | Bold headers |
+| `columnHeaders.italic` | boolean | Italic headers |
+| `columnHeaders.alignment` | enum | `Left`, `Center`, `Right` |
+| `columnHeaders.wordWrap` | boolean | Wrap header text |
+| `columnHeaders.autoSize` | boolean | Auto-size column widths |
+| **Data Cells** | | |
+| `values.fontColor` | color | Cell font color |
+| `values.backColor` | color | Primary row background |
+| `values.altBackColor` | color | Alternate row background |
+| `values.fontSize` | number | Cell font size |
+| `values.fontFamily` | string | Cell font family |
+| `values.wordWrap` | boolean | Wrap cell text |
+| `values.urlIcon` | boolean | Show URL icon |
+| **Grid** | | |
+| `grid.vertical` | boolean | Show vertical gridlines |
+| `grid.verticalColor` | color | Vertical gridline color |
+| `grid.verticalWeight` | number | Vertical gridline weight |
+| `grid.horizontal` | boolean | Show horizontal gridlines |
+| `grid.horizontalColor` | color | Horizontal gridline color |
+| `grid.horizontalWeight` | number | Horizontal gridline weight |
+| `grid.rowPadding` | number | Row padding |
+| `grid.textSize` | number | Grid text size |
+| **Totals Row** | | |
+| `total.show` | boolean | Show totals row |
+| `total.label` | string | Totals row label |
+| `total.fontColor` | color | Totals font color |
+| `total.backColor` | color | Totals background |
+| `total.fontSize` | number | Totals font size |
+| `total.fontFamily` | string | Totals font family |
+| `total.bold` | boolean | Bold totals |
+| **Row Headers (matrix)** | | |
+| `rowHeaders.fontColor` | color | Row header font color |
+| `rowHeaders.backColor` | color | Row header background |
+| `rowHeaders.fontSize` | number | Row header font size |
+| `rowHeaders.fontFamily` | string | Row header font family |
+| `rowHeaders.bold` | boolean | Bold row headers |
+| `rowHeaders.italic` | boolean | Italic row headers |
+| `rowHeaders.alignment` | enum | `Left`, `Center`, `Right` |
+| `rowHeaders.wordWrap` | boolean | Wrap row header text |
+| `rowHeaders.steppedLayout` | boolean | Enable stepped layout |
+| `rowHeaders.steppedIndent` | number | Stepped layout indent (px) |
+| `rowHeaders.showExpandCollapse` | boolean | Show expand/collapse buttons |
+| **Subtotals (matrix)** | | |
+| `subTotals.rowSubtotals` | boolean | Show row subtotals |
+| `subTotals.columnSubtotals` | boolean | Show column subtotals |
+| `subTotals.rowSubtotalsPosition` | enum | `Top`, `Bottom` |
+| `subTotals.perRowLevel` | boolean | Per row-level subtotals |
+| `subTotals.perColumnLevel` | boolean | Per column-level subtotals |
+
+```bash
+# Global table styling via visual set
+pbi visual set "Sales" table columnHeaders.backColor="#003D6A" columnHeaders.fontColor="#FFFFFF" columnHeaders.bold=true
+pbi visual set "Sales" table values.backColor="#FFFFFF" values.altBackColor="#F2F2F2"
+pbi visual set "Sales" table grid.vertical=true grid.horizontal=true grid.rowPadding=3
+pbi visual set "Sales" table total.show=true total.label="Grand Total" total.bold=true
+
+# Matrix-specific styling
+pbi visual set "Sales" matrix rowHeaders.steppedLayout=true rowHeaders.steppedIndent=20
+pbi visual set "Sales" matrix rowHeaders.showExpandCollapse=true rowHeaders.bold=true
+pbi visual set "Sales" matrix subTotals.rowSubtotals=true subTotals.columnSubtotals=true
+pbi visual set "Sales" matrix subTotals.rowSubtotalsPosition=Top
+```
+
 ### pbi visual props
 
 List all named visual properties with types and descriptions.
@@ -666,7 +839,11 @@ Project/
     visualType          — chart type string
     query.queryState    — data bindings by role
     query.sortDefinition — sort field and direction
-    objects             — visual-specific formatting (legend, axes, labels, ...)
+    objects             — chart formatting (legend, axes, labels, dataPoint, ...)
+                          Each key maps to an array of entries. Static formatting
+                          is at index 0. Conditional formatting adds entries with
+                          a "selector" (dataViewWildcard) and expression-based
+                          values (Measure or FillRule instead of Literal).
     visualContainerObjects — container formatting (background, border, title, ...)
   }
   filterConfig   — visual-level filters
@@ -674,3 +851,9 @@ Project/
   parentGroupName — group membership (if grouped)
 }
 ```
+
+**Static vs Conditional formatting:**
+
+- `pbi visual set` writes **static** values (Literal expressions) to `visual.objects` and `visual.visualContainerObjects`. These are fixed colors, sizes, and flags.
+- `pbi visual format` writes **conditional** values (Measure or FillRule expressions) to `visual.objects` as separate entries with a selector. These are dynamic — evaluated at runtime against the data.
+- Both can coexist on the same visual. Static formatting provides the baseline; conditional formatting overrides specific properties when data-driven rules apply.

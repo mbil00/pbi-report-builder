@@ -783,6 +783,262 @@ def visual_sort(
     )
 
 
+@visual_app.command("format")
+def visual_format(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
+    prop: Annotated[Optional[str], typer.Argument(help="Property as object.prop (e.g. dataPoint.fill). Omit to show all.")] = None,
+    measure: Annotated[Optional[str], typer.Option("--measure", help="Measure ref (Table.Measure) for color-by-measure.")] = None,
+    gradient: Annotated[bool, typer.Option("--gradient", help="Use gradient (color scale) mode.")] = False,
+    input_field: Annotated[Optional[str], typer.Option("--input", help="Input field for gradient (Table.Field).")] = None,
+    min_color: Annotated[Optional[str], typer.Option("--min-color", help="Gradient minimum color (#hex).")] = None,
+    min_value: Annotated[Optional[float], typer.Option("--min-value", help="Gradient minimum value.")] = None,
+    mid_color: Annotated[Optional[str], typer.Option("--mid-color", help="Gradient midpoint color (#hex). Makes 3-stop.")] = None,
+    mid_value: Annotated[Optional[float], typer.Option("--mid-value", help="Gradient midpoint value.")] = None,
+    max_color: Annotated[Optional[str], typer.Option("--max-color", help="Gradient maximum color (#hex).")] = None,
+    max_value: Annotated[Optional[float], typer.Option("--max-value", help="Gradient maximum value.")] = None,
+    clear: Annotated[bool, typer.Option("--clear", help="Remove conditional formatting from this property.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Set, show, or clear conditional formatting on a visual property."""
+    from pbi.formatting import (
+        get_conditional_formats,
+        build_measure_format, build_gradient_format, GradientStop,
+        set_conditional_format, clear_conditional_format,
+    )
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Show mode — no property specified
+    if prop is None:
+        formats = get_conditional_formats(vis.data)
+        if not formats:
+            console.print("[dim]No conditional formatting on this visual.[/dim]")
+            return
+        tbl = Table(title="Conditional Formatting", box=box.SIMPLE)
+        tbl.add_column("Property", style="cyan")
+        tbl.add_column("Type")
+        tbl.add_column("Field", style="bold")
+        tbl.add_column("Details", style="dim")
+        for f in formats:
+            tbl.add_row(f"{f.object_name}.{f.property_name}", f.format_type, f.field_ref, f.details)
+        console.print(tbl)
+        return
+
+    # Parse object.property
+    dot = prop.find(".")
+    if dot == -1:
+        console.print("[red]Error:[/red] Property must be object.prop format (e.g. dataPoint.fill).")
+        raise typer.Exit(1)
+    obj_name, prop_name = prop[:dot], prop[dot + 1:]
+
+    # Clear mode
+    if clear:
+        if clear_conditional_format(vis.data, obj_name, prop_name):
+            vis.save()
+            console.print(f"Cleared conditional formatting from [cyan]{prop}[/cyan].")
+        else:
+            console.print(f"[dim]No conditional formatting on {prop}.[/dim]")
+        return
+
+    # Validate: exactly one of --measure or --gradient
+    if measure and gradient:
+        console.print("[red]Error:[/red] Use either --measure or --gradient, not both.")
+        raise typer.Exit(1)
+    if not measure and not gradient:
+        console.print("[red]Error:[/red] Specify --measure or --gradient.")
+        raise typer.Exit(1)
+
+    # Measure mode
+    if measure:
+        m_dot = measure.find(".")
+        if m_dot == -1:
+            console.print("[red]Error:[/red] --measure must be Table.Measure format.")
+            raise typer.Exit(1)
+        m_entity, m_prop = measure[:m_dot], measure[m_dot + 1:]
+        value = build_measure_format(m_entity, m_prop)
+        set_conditional_format(vis.data, obj_name, prop_name, value)
+        vis.save()
+        console.print(
+            f"Set [cyan]{prop}[/cyan] = measure [bold]{m_entity}.{m_prop}[/bold]"
+        )
+        return
+
+    # Gradient mode
+    if not input_field:
+        console.print("[red]Error:[/red] --gradient requires --input (Table.Field).")
+        raise typer.Exit(1)
+    if min_color is None or min_value is None or max_color is None or max_value is None:
+        console.print("[red]Error:[/red] --gradient requires --min-color, --min-value, --max-color, --max-value.")
+        raise typer.Exit(1)
+
+    i_dot = input_field.find(".")
+    if i_dot == -1:
+        console.print("[red]Error:[/red] --input must be Table.Field format.")
+        raise typer.Exit(1)
+    i_entity, i_prop = input_field[:i_dot], input_field[i_dot + 1:]
+
+    min_c = min_color if min_color.startswith("#") else f"#{min_color}"
+    max_c = max_color if max_color.startswith("#") else f"#{max_color}"
+
+    mid_stop = None
+    if mid_color is not None and mid_value is not None:
+        mid_c = mid_color if mid_color.startswith("#") else f"#{mid_color}"
+        mid_stop = GradientStop(mid_c, mid_value)
+    elif mid_color is not None or mid_value is not None:
+        console.print("[red]Error:[/red] Both --mid-color and --mid-value are required for 3-stop gradient.")
+        raise typer.Exit(1)
+
+    value = build_gradient_format(
+        i_entity, i_prop,
+        min_stop=GradientStop(min_c, min_value),
+        max_stop=GradientStop(max_c, max_value),
+        mid_stop=mid_stop,
+    )
+    set_conditional_format(vis.data, obj_name, prop_name, value)
+    vis.save()
+
+    stops = f"{min_c}@{min_value}"
+    if mid_stop:
+        stops += f" -> {mid_stop.color}@{mid_stop.value}"
+    stops += f" -> {max_c}@{max_value}"
+    console.print(
+        f"Set [cyan]{prop}[/cyan] = gradient by [bold]{i_entity}.{i_prop}[/bold] [{stops}]"
+    )
+
+
+@visual_app.command("column")
+def visual_column(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
+    column: Annotated[Optional[str], typer.Argument(help="Column: Table.Field, display name, or index. Omit to list all.")] = None,
+    width: Annotated[Optional[float], typer.Option("--width", "-w", help="Column width in pixels.")] = None,
+    rename: Annotated[Optional[str], typer.Option("--rename", help="Rename column header.")] = None,
+    align: Annotated[Optional[str], typer.Option("--align", help="Column alignment: Left, Center, Right.")] = None,
+    font_color: Annotated[Optional[str], typer.Option("--font-color", help="Column font color (#hex).")] = None,
+    back_color: Annotated[Optional[str], typer.Option("--back-color", help="Column background color (#hex).")] = None,
+    display_units: Annotated[Optional[int], typer.Option("--display-units", help="Label display units (0=auto, 1=none, 1000=K, 1000000=M, etc.).")] = None,
+    precision: Annotated[Optional[int], typer.Option("--precision", help="Decimal places.")] = None,
+    clear_width: Annotated[bool, typer.Option("--clear-width", help="Remove column width override.")] = False,
+    clear_format: Annotated[bool, typer.Option("--clear-format", help="Remove per-column formatting.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List, resize, rename, or format table/matrix columns."""
+    from pbi.columns import (
+        get_columns, find_column,
+        set_column_width, rename_column, set_column_format,
+        clear_column_width, clear_column_format,
+    )
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # List mode — no column specified
+    if column is None:
+        columns = get_columns(vis)
+        if not columns:
+            console.print("[dim]No columns (is this a table/matrix visual?).[/dim]")
+            return
+        tbl = Table(title=f"Columns on {vis.visual_type}", box=box.SIMPLE)
+        tbl.add_column("#", style="dim", width=3)
+        tbl.add_column("Field", style="cyan")
+        tbl.add_column("Display Name")
+        tbl.add_column("Type", style="dim")
+        tbl.add_column("Width", justify="right")
+        tbl.add_column("Formatting", style="dim")
+        for i, col in enumerate(columns, 1):
+            display = col.display_name or col.prop
+            width_str = str(int(col.width)) if col.width else "-"
+            fmt_parts = []
+            if "alignment" in col.formatting:
+                fmt_parts.append(f"align:{col.formatting['alignment']}")
+            if "fontColor" in col.formatting:
+                fmt_parts.append(f"color:{col.formatting['fontColor']}")
+            fmt_str = ", ".join(fmt_parts) if fmt_parts else "-"
+            tbl.add_row(str(i), f"{col.entity}.{col.prop}", display, col.field_type, width_str, fmt_str)
+        console.print(tbl)
+        return
+
+    # Find the target column
+    try:
+        col = find_column(vis, column)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    changed = False
+
+    # Clear operations
+    if clear_width:
+        if clear_column_width(vis, col.query_ref):
+            console.print(f"Cleared width override on [cyan]{col.entity}.{col.prop}[/cyan].")
+            changed = True
+        else:
+            console.print("[dim]No width override to clear.[/dim]")
+
+    if clear_format:
+        if clear_column_format(vis, col.query_ref):
+            console.print(f"Cleared formatting on [cyan]{col.entity}.{col.prop}[/cyan].")
+            changed = True
+        else:
+            console.print("[dim]No column formatting to clear.[/dim]")
+
+    # Set operations
+    if width is not None:
+        set_column_width(vis, col.query_ref, width)
+        console.print(f"[dim]{col.entity}.{col.prop} width:[/dim] {int(width)}")
+        changed = True
+
+    if rename is not None:
+        old_name = col.display_name or col.prop
+        rename_column(vis, col.query_ref, rename)
+        console.print(f"[dim]{col.entity}.{col.prop}:[/dim] {old_name} [dim]→[/dim] {rename}")
+        changed = True
+
+    has_format = any(x is not None for x in [align, font_color, back_color, display_units, precision])
+    if has_format:
+        set_column_format(
+            vis, col.query_ref,
+            alignment=align, font_color=font_color, back_color=back_color,
+            display_units=display_units, precision=precision,
+        )
+        parts = []
+        if align: parts.append(f"align={align}")
+        if font_color: parts.append(f"fontColor={font_color}")
+        if back_color: parts.append(f"backColor={back_color}")
+        if display_units is not None: parts.append(f"displayUnits={display_units}")
+        if precision is not None: parts.append(f"precision={precision}")
+        console.print(f"[dim]{col.entity}.{col.prop} format:[/dim] {', '.join(parts)}")
+        changed = True
+
+    if changed:
+        vis.save()
+    elif not clear_width and not clear_format:
+        # No options given — show column details
+        display = col.display_name or col.prop
+        console.print(f"[bold]{col.entity}.{col.prop}[/bold]")
+        console.print(f"  Role: {col.role}")
+        console.print(f"  Type: {col.field_type}")
+        console.print(f"  Display name: {display}")
+        console.print(f"  Query ref: {col.query_ref}")
+        if col.width:
+            console.print(f"  Width: {int(col.width)}")
+        if col.formatting:
+            for k, v in col.formatting.items():
+                console.print(f"  {k}: {v}")
+
+
 @visual_app.command("props")
 def visual_props() -> None:
     """List available visual properties."""
