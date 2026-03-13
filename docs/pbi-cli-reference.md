@@ -506,7 +506,63 @@ pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=cente
 | `waterfall.decreaseColor` | color | Decrease color |
 | `waterfall.totalColor` | color | Total color |
 
+*New card visual (`cardVisual`):*
+
+| Property | Type | Description |
+|----------|------|-------------|
+| **Layout** | | |
+| `layout.style` | string | Card layout (`Cards` or `Callout`) |
+| `layout.columnCount` | long | Number of columns |
+| `layout.calloutSize` | number | Callout font size |
+| **Accent Bar** | | |
+| `accentBar.show` | boolean | Show accent bar |
+| `accentBar.color` | color | Accent bar color |
+| **Card Value** | | |
+| `cardValue.fontSize` | number | Value font size |
+| `cardValue.fontFamily` | string | Value font family |
+| `cardValue.bold` | boolean | Value bold |
+| `cardValue.italic` | boolean | Value italic |
+| `cardValue.color` | color | Value font color |
+| `cardValue.displayUnits` | string | Display units (`0`=Auto, `1000`=K, `1000000`=M) |
+| `cardValue.precision` | number | Decimal places |
+| **Card Label** | | |
+| `cardLabel.show` | boolean | Show label |
+| `cardLabel.color` | color | Label font color |
+| `cardLabel.fontSize` | number | Label font size |
+| `cardLabel.fontFamily` | string | Label font family |
+| `cardLabel.bold` | boolean | Label bold |
+| `cardLabel.italic` | boolean | Label italic |
+| **Card Shape** | | |
+| `cardShape.color` | color | Card background color |
+| `cardShape.radius` | number | Corner radius |
+| `cardShape.transparency` | number | Background transparency |
+| **Card Divider** | | |
+| `cardDivider.show` | boolean | Show divider between cards |
+| `cardDivider.color` | color | Divider color |
+| `cardDivider.width` | number | Divider width |
+| **Other** | | |
+| `cardOverflow.show` | boolean | Enable text overflow |
+| `cardPadding.top` | number | Internal top padding |
+| `cardPadding.bottom` | number | Internal bottom padding |
+| `cardPadding.left` | number | Internal left padding |
+| `cardPadding.right` | number | Internal right padding |
+
 Any property not listed above can be accessed via raw JSON dot-path (e.g. `visual.objects.legend`).
+
+**Per-measure formatting** (`--measure` / `-m`):
+
+Some properties (like `accentBar.color`) support per-measure selectors, allowing different formatting for each measure in a multi-measure visual. Pass `--measure` with the measure's queryRef:
+
+```bash
+# Default accent bar for all measures
+pbi visual set "Sales" card accentBar.show=true accentBar.color="#4CAF50"
+
+# Override for a specific measure
+pbi visual set "Sales" card accentBar.color="#E8A83E" --measure "Sum(Devices.StaleDevices30d)"
+pbi visual set "Sales" card cardValue.color="#D64554" -m "Non-Compliant"
+```
+
+**Examples:**
 
 ```bash
 pbi visual set "Sales" chart background.color="#FFFFFF"
@@ -524,6 +580,13 @@ pbi visual set "Sales" kpiCard kpi.showIcon=true kpi.direction=Positive kpi.good
 pbi visual set "Sales" gauge gauge.max=100 gauge.target=75 gauge.targetShow=true
 pbi visual set "Sales" slicer slicerHeader.show=true slicerHeader.bold=true slicer.singleSelect=false
 pbi visual set "Sales" waterfall waterfall.increaseColor="#00B050" waterfall.decreaseColor="#FF0000"
+
+# New card visual
+pbi visual set "Sales" card layout.style=Cards layout.columnCount=3
+pbi visual set "Sales" card accentBar.show=true accentBar.color="#4CAF50"
+pbi visual set "Sales" card cardValue.fontSize=24 cardValue.bold=true
+pbi visual set "Sales" card cardLabel.show=true cardLabel.fontSize=10
+pbi visual set "Sales" card cardShape.color="#FFFFFF" cardShape.radius=8
 ```
 
 ### pbi visual move

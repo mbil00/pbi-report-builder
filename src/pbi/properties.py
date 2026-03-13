@@ -790,6 +790,131 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         None, "boolean", "Enable word wrap (card)",
         container_key="wordWrap", container_prop="show", objects_path="objects",
     ),
+    # ── New card visual (cardVisual) ──────────────────────────
+    # Layout
+    "layout.style": PropertyDef(
+        None, "string", "Card layout style (Cards or Callout)",
+        container_key="layout", container_prop="style", objects_path="objects",
+    ),
+    "layout.columnCount": PropertyDef(
+        None, "long", "Number of columns in card layout",
+        container_key="layout", container_prop="columnCount", objects_path="objects",
+    ),
+    "layout.calloutSize": PropertyDef(
+        None, "number", "Callout font size",
+        container_key="layout", container_prop="calloutSize", objects_path="objects",
+    ),
+    # Accent bar
+    "accentBar.show": PropertyDef(
+        None, "boolean", "Show accent bar",
+        container_key="accentBar", container_prop="show", objects_path="objects",
+    ),
+    "accentBar.color": PropertyDef(
+        None, "color", "Accent bar color",
+        container_key="accentBar", container_prop="color", objects_path="objects",
+    ),
+    # Card value (callout)
+    "cardValue.fontSize": PropertyDef(
+        None, "number", "Card value font size",
+        container_key="value", container_prop="fontSize", objects_path="objects",
+    ),
+    "cardValue.fontFamily": PropertyDef(
+        None, "string", "Card value font family",
+        container_key="value", container_prop="fontFamily", objects_path="objects",
+    ),
+    "cardValue.bold": PropertyDef(
+        None, "boolean", "Card value bold",
+        container_key="value", container_prop="bold", objects_path="objects",
+    ),
+    "cardValue.italic": PropertyDef(
+        None, "boolean", "Card value italic",
+        container_key="value", container_prop="italic", objects_path="objects",
+    ),
+    "cardValue.color": PropertyDef(
+        None, "color", "Card value font color",
+        container_key="value", container_prop="fontColor", objects_path="objects",
+    ),
+    "cardValue.displayUnits": PropertyDef(
+        None, "string", "Card value display units (0=Auto, 1000=K, 1000000=M)",
+        container_key="value", container_prop="labelDisplayUnits", objects_path="objects",
+    ),
+    "cardValue.precision": PropertyDef(
+        None, "number", "Card value decimal places",
+        container_key="value", container_prop="labelPrecision", objects_path="objects",
+    ),
+    # Card label
+    "cardLabel.show": PropertyDef(
+        None, "boolean", "Show card label",
+        container_key="label", container_prop="show", objects_path="objects",
+    ),
+    "cardLabel.color": PropertyDef(
+        None, "color", "Card label font color",
+        container_key="label", container_prop="fontColor", objects_path="objects",
+    ),
+    "cardLabel.fontSize": PropertyDef(
+        None, "number", "Card label font size",
+        container_key="label", container_prop="fontSize", objects_path="objects",
+    ),
+    "cardLabel.fontFamily": PropertyDef(
+        None, "string", "Card label font family",
+        container_key="label", container_prop="fontFamily", objects_path="objects",
+    ),
+    "cardLabel.bold": PropertyDef(
+        None, "boolean", "Card label bold",
+        container_key="label", container_prop="bold", objects_path="objects",
+    ),
+    "cardLabel.italic": PropertyDef(
+        None, "boolean", "Card label italic",
+        container_key="label", container_prop="italic", objects_path="objects",
+    ),
+    # Card shape (background rectangle)
+    "cardShape.color": PropertyDef(
+        None, "color", "Card background color",
+        container_key="shapeCustomRectangle", container_prop="color", objects_path="objects",
+    ),
+    "cardShape.radius": PropertyDef(
+        None, "number", "Card corner radius",
+        container_key="shapeCustomRectangle", container_prop="radius", objects_path="objects",
+    ),
+    "cardShape.transparency": PropertyDef(
+        None, "number", "Card background transparency",
+        container_key="shapeCustomRectangle", container_prop="transparency", objects_path="objects",
+    ),
+    # Card overflow
+    "cardOverflow.show": PropertyDef(
+        None, "boolean", "Enable text overflow",
+        container_key="overFlow", container_prop="overflow", objects_path="objects",
+    ),
+    # Card internal padding
+    "cardPadding.top": PropertyDef(
+        None, "number", "Card internal top padding",
+        container_key="padding", container_prop="top", objects_path="objects",
+    ),
+    "cardPadding.bottom": PropertyDef(
+        None, "number", "Card internal bottom padding",
+        container_key="padding", container_prop="bottom", objects_path="objects",
+    ),
+    "cardPadding.left": PropertyDef(
+        None, "number", "Card internal left padding",
+        container_key="padding", container_prop="left", objects_path="objects",
+    ),
+    "cardPadding.right": PropertyDef(
+        None, "number", "Card internal right padding",
+        container_key="padding", container_prop="right", objects_path="objects",
+    ),
+    # Card divider (between cards)
+    "cardDivider.show": PropertyDef(
+        None, "boolean", "Show card divider",
+        container_key="divider", container_prop="show", objects_path="objects",
+    ),
+    "cardDivider.color": PropertyDef(
+        None, "color", "Card divider color",
+        container_key="divider", container_prop="color", objects_path="objects",
+    ),
+    "cardDivider.width": PropertyDef(
+        None, "number", "Card divider width",
+        container_key="divider", container_prop="width", objects_path="objects",
+    ),
     # ── Slicer visual ────────────────────────────────────────
     "slicerHeader.show": PropertyDef(
         None, "boolean", "Show slicer header",
@@ -1185,6 +1310,9 @@ def encode_pbi_value(value: str, value_type: str) -> Any:
     elif value_type == "number":
         num = float(value)
         return {"expr": {"Literal": {"Value": f"{num}D"}}}
+    elif value_type == "long":
+        num = int(float(value))
+        return {"expr": {"Literal": {"Value": f"{num}L"}}}
     elif value_type == "boolean":
         b = value.lower() in ("true", "1", "yes", "on")
         return {"expr": {"Literal": {"Value": str(b).lower()}}}
@@ -1236,12 +1364,19 @@ def _decode_literal(value: str) -> Any:
 
 # ── Property get/set operations ────────────────────────────────────
 
-def get_property(data: dict, prop_name: str, registry: dict[str, PropertyDef]) -> Any:
-    """Get a property value from a JSON structure."""
+def get_property(
+    data: dict, prop_name: str, registry: dict[str, PropertyDef],
+    *, measure_ref: str | None = None,
+) -> Any:
+    """Get a property value from a JSON structure.
+
+    If measure_ref is given, reads from the selector-bearing entry for that
+    measure instead of the default (index 0) entry.
+    """
     prop_def = registry.get(prop_name)
 
     if prop_def and prop_def.container_key:
-        return _get_container_prop(data, prop_def)
+        return _get_container_prop(data, prop_def, measure_ref=measure_ref)
     elif prop_def and prop_def.json_path:
         return _get_by_path(data, prop_def.json_path)
     else:
@@ -1249,8 +1384,16 @@ def get_property(data: dict, prop_name: str, registry: dict[str, PropertyDef]) -
         return _get_by_path(data, prop_name)
 
 
-def set_property(data: dict, prop_name: str, value: str, registry: dict[str, PropertyDef]) -> None:
-    """Set a property value in a JSON structure."""
+def set_property(
+    data: dict, prop_name: str, value: str, registry: dict[str, PropertyDef],
+    *, measure_ref: str | None = None,
+) -> None:
+    """Set a property value in a JSON structure.
+
+    If measure_ref is given, writes to a per-measure selector entry instead
+    of the default (index 0) entry. This enables per-measure formatting in
+    multi-measure visuals (e.g. cardVisual accent bars).
+    """
     prop_def = registry.get(prop_name)
 
     if prop_def and prop_def.enum_values:
@@ -1262,7 +1405,7 @@ def set_property(data: dict, prop_name: str, value: str, registry: dict[str, Pro
             )
 
     if prop_def and prop_def.container_key:
-        _set_container_prop(data, prop_def, value)
+        _set_container_prop(data, prop_def, value, measure_ref=measure_ref)
     elif prop_def and prop_def.json_path:
         coerced = _coerce_simple(value, prop_def.value_type)
         _set_by_path(data, prop_def.json_path, coerced)
@@ -1271,13 +1414,25 @@ def set_property(data: dict, prop_name: str, value: str, registry: dict[str, Pro
         _set_by_path(data, prop_name, _auto_coerce(value))
 
 
-def _get_container_prop(data: dict, prop_def: PropertyDef) -> Any:
+def _get_container_prop(
+    data: dict, prop_def: PropertyDef,
+    *, measure_ref: str | None = None,
+) -> Any:
     """Read from object collections (visual-level or page-level)."""
     root = data if prop_def.top_level else data.get("visual", {})
     objects = root.get(prop_def.objects_path, {})
     entries = objects.get(prop_def.container_key, [])
     if not entries:
         return None
+
+    if measure_ref:
+        # Find the entry with matching selector.id
+        for entry in entries:
+            if entry.get("selector", {}).get("id") == measure_ref:
+                raw = entry.get("properties", {}).get(prop_def.container_prop)
+                return decode_pbi_value(raw) if raw is not None else None
+        return None
+
     props = entries[0].get("properties", {})
     raw = props.get(prop_def.container_prop)
     if raw is None:
@@ -1285,15 +1440,48 @@ def _get_container_prop(data: dict, prop_def: PropertyDef) -> Any:
     return decode_pbi_value(raw)
 
 
-def _set_container_prop(data: dict, prop_def: PropertyDef, value: str) -> None:
-    """Write to object collections, creating structure as needed."""
+def _set_container_prop(
+    data: dict, prop_def: PropertyDef, value: str,
+    *, measure_ref: str | None = None,
+) -> None:
+    """Write to object collections, creating structure as needed.
+
+    When measure_ref is provided, writes to (or creates) an entry with a
+    per-measure selector: {"data": {"dataViewWildcard": {"matchingOption":
+    "InstancesAndTotals"}}, "id": "<measure_ref>"}.
+    """
     root = data if prop_def.top_level else data.setdefault("visual", {})
     objects = root.setdefault(prop_def.objects_path, {})
     entries = objects.setdefault(prop_def.container_key, [{}])
     if not entries:
         entries.append({})
-    props = entries[0].setdefault("properties", {})
-    props[prop_def.container_prop] = encode_pbi_value(value, prop_def.value_type)
+
+    encoded = encode_pbi_value(value, prop_def.value_type)
+
+    if measure_ref:
+        # Find or create per-measure entry
+        target = None
+        for entry in entries:
+            if entry.get("selector", {}).get("id") == measure_ref:
+                target = entry
+                break
+        if target is None:
+            target = {
+                "properties": {},
+                "selector": {
+                    "data": {
+                        "dataViewWildcard": {
+                            "matchingOption": "InstancesAndTotals",
+                        },
+                    },
+                    "id": measure_ref,
+                },
+            }
+            entries.append(target)
+        target.setdefault("properties", {})[prop_def.container_prop] = encoded
+    else:
+        props = entries[0].setdefault("properties", {})
+        props[prop_def.container_prop] = encoded
 
 
 def _get_by_path(data: dict, path: str) -> Any:

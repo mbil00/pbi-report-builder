@@ -395,8 +395,13 @@ def visual_set(
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
     assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value or prop value (single pair).")],
     project: ProjectOpt = None,
+    measure: Annotated[str | None, typer.Option("--measure", "-m", help="Target a specific measure (queryRef) for per-measure formatting.")] = None,
 ) -> None:
-    """Set visual properties. Supports batch: prop=value prop=value ..."""
+    """Set visual properties. Supports batch: prop=value prop=value ...
+
+    Use --measure to target per-measure formatting (e.g. accent bar color per measure
+    in cardVisual). The measure reference is the queryRef of the measure.
+    """
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -419,14 +424,15 @@ def visual_set(
             pairs.append((arg[:eq], arg[eq + 1:]))
 
     for prop, value in pairs:
-        old = get_property(vis.data, prop, VISUAL_PROPERTIES)
+        old = get_property(vis.data, prop, VISUAL_PROPERTIES, measure_ref=measure)
         try:
-            set_property(vis.data, prop, value, VISUAL_PROPERTIES)
+            set_property(vis.data, prop, value, VISUAL_PROPERTIES, measure_ref=measure)
         except ValueError as e:
             console.print(f"[red]Error:[/red] {prop}: {e}")
             raise typer.Exit(1)
-        new = get_property(vis.data, prop, VISUAL_PROPERTIES)
-        console.print(f"[dim]{prop}:[/dim] {old} [dim]→[/dim] {new}")
+        new = get_property(vis.data, prop, VISUAL_PROPERTIES, measure_ref=measure)
+        label = f"{prop} ({measure})" if measure else prop
+        console.print(f"[dim]{label}:[/dim] {old} [dim]→[/dim] {new}")
 
     vis.save()
 
