@@ -51,6 +51,24 @@ def _get_project(project: Path | None) -> Project:
 # ── Project info ───────────────────────────────────────────────────
 
 @app.command()
+def map(
+    output: Annotated[Optional[Path], typer.Option("-o", "--output", help="Output file (default: stdout). Use 'pbi-map.yaml' for a project index.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Generate a human-readable YAML map of the entire project."""
+    from pbi.mapper import generate_map
+    proj = _get_project(project)
+    content = generate_map(proj)
+
+    if output:
+        out_path = output if output.is_absolute() else proj.root / output
+        out_path.write_text(content, encoding="utf-8")
+        console.print(f"Map written to [cyan]{out_path}[/cyan]")
+    else:
+        console.print(content, highlight=False, end="")
+
+
+@app.command()
 def info(project: ProjectOpt = None) -> None:
     """Show project overview."""
     proj = _get_project(project)
