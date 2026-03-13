@@ -607,14 +607,9 @@ class Project:
         for role, config in query_state.items():
             for proj in config.get("projections", []):
                 field_data = proj.get("field", {})
-                if "Column" in field_data:
-                    entity = field_data["Column"]["Expression"]["SourceRef"]["Entity"]
-                    prop = field_data["Column"]["Property"]
-                    bindings.append((role, entity, prop, "column"))
-                elif "Measure" in field_data:
-                    entity = field_data["Measure"]["Expression"]["SourceRef"]["Entity"]
-                    prop = field_data["Measure"]["Property"]
-                    bindings.append((role, entity, prop, "measure"))
+                entity, prop, field_type = _resolve_projection_field(field_data)
+                if entity != "?":
+                    bindings.append((role, entity, prop, field_type))
         return bindings
 
     # ── Sort definitions ──────────────────────────────────────────
@@ -673,12 +668,33 @@ class Project:
         for entry in sort_def.get("sort", []):
             field_data = entry.get("field", {})
             direction = entry.get("direction", "Ascending")
-            for key, ftype in [("Column", "column"), ("Measure", "measure")]:
-                if key in field_data:
-                    entity = field_data[key]["Expression"]["SourceRef"]["Entity"]
-                    prop = field_data[key]["Property"]
-                    result.append((entity, prop, ftype, direction))
+            entity, prop, ftype = _resolve_projection_field(field_data)
+            if entity != "?":
+                result.append((entity, prop, ftype, direction))
         return result
+
+
+def _resolve_projection_field(field_data: dict) -> tuple[str, str, str]:
+    """Extract (entity, property, field_type) from a query projection field.
+
+    Handles Column, Measure, and Aggregation (Sum, Min, Count, etc.) field types.
+    Returns ("?", "?", "column") if the field type is unrecognized.
+    """
+    for key, ftype in [("Column", "column"), ("Measure", "measure")]:
+        if key in field_data:
+            entity = field_data[key]["Expression"]["SourceRef"]["Entity"]
+            prop = field_data[key]["Property"]
+            return entity, prop, ftype
+
+    if "Aggregation" in field_data:
+        inner = field_data["Aggregation"].get("Expression", {})
+        for key in ("Column", "Measure"):
+            if key in inner:
+                entity = inner[key]["Expression"]["SourceRef"]["Entity"]
+                prop = inner[key]["Property"]
+                return entity, prop, "aggregation"
+
+    return "?", "?", "column"
 
 
 def _read_json(path: Path) -> dict:

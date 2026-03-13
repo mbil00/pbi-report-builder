@@ -308,7 +308,7 @@ format. See the working KPI strips on the Device Estate and Security & Complianc
 
 ## BUG-005: `pbi visual column` shows `?.?` for Aggregation fields
 
-**Status:** Open
+**Status:** Fixed (2026-03-13)
 **Severity:** Cosmetic — renaming by index still works
 **Found:** 2026-03-13
 

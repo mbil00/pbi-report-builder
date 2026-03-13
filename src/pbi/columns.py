@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from pbi.project import Visual
+from pbi.project import Visual, _resolve_projection_field
 from pbi.properties import decode_pbi_value, encode_pbi_value
 
 
@@ -52,13 +52,10 @@ def get_columns(visual: Visual) -> list[ColumnInfo]:
             query_ref = proj.get("queryRef", "")
             display_name = proj.get("displayName")
 
-            entity, prop, field_type = "?", "?", "column"
-            for key, ftype in [("Column", "column"), ("Measure", "measure")]:
-                if key in field_data:
-                    entity = field_data[key]["Expression"]["SourceRef"]["Entity"]
-                    prop = field_data[key]["Property"]
-                    field_type = ftype
-                    break
+            entity, prop, field_type = _resolve_projection_field(field_data)
+            # For aggregation fields, use nativeQueryRef or queryRef as display name fallback
+            if field_type == "aggregation" and display_name is None:
+                display_name = proj.get("nativeQueryRef") or query_ref
 
             columns.append(ColumnInfo(
                 role=role,
