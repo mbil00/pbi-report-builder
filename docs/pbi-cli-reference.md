@@ -37,7 +37,7 @@ pbi info
 
 ### pbi map
 
-Generate a human-readable YAML index that resolves all hex IDs and shows the full hierarchy: Page → Group → Visual → Role → Field. Every entry includes a relative file path.
+Generate a human-readable YAML index that resolves all hex IDs and shows the full hierarchy: Page → Group → Visual → Role → Field. Includes filters at all levels, sort definitions, and key chart formatting. Every entry includes a relative file path.
 
 ```bash
 pbi map                     # stdout
@@ -162,10 +162,12 @@ Table of all visuals on a page with index, name, type, position, size, and z-ord
 ### pbi visual get
 
 ```bash
-pbi visual get <page> <visual>                  # overview with formatting and bindings
+pbi visual get <page> <visual>                  # overview: formatting, bindings, sort
 pbi visual get <page> <visual> <property>        # single property value
 pbi visual get <page> <visual> --raw             # full JSON
 ```
+
+Overview shows: position, container formatting, chart formatting, data bindings, and sort definition.
 
 ### pbi visual set
 
@@ -254,6 +256,7 @@ pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=cente
 | `yAxis.color` | color | Label color |
 | `yAxis.fontSize` | number | Label font size |
 | `yAxis.gridlines` | boolean | Show gridlines |
+| `yAxis.gridlineColor` | color | Gridline color |
 | `yAxis.start` | number | Axis range start |
 | `yAxis.end` | number | Axis range end |
 | `y2Axis.show` | boolean | Show secondary axis |
@@ -262,12 +265,15 @@ pbi visual set "Sales" chart title.text="Revenue Overview" title.alignment=cente
 | `labels.show` | boolean | Show data labels |
 | `labels.color` | color | Label color |
 | `labels.fontSize` | number | Label font size |
+| `labels.fontFamily` | string | Label font family |
 | `labels.position` | enum | `Auto`, `InsideEnd`, `OutsideEnd`, `InsideCenter`, `InsideBase` |
+| `labels.format` | string | Label display units |
 | `labels.precision` | number | Decimal places |
 | `plotArea.transparency` | number | Plot area transparency |
 | `plotArea.color` | color | Plot area background |
 | `dataColors.default` | color | Default data color |
 | `dataColors.showAll` | boolean | Show all data colors |
+| `line.show` | boolean | Show line markers |
 | `line.style` | enum | `solid`, `dashed`, `dotted` |
 | `line.width` | number | Line stroke width |
 | `shapes.showMarkers` | boolean | Show data point markers |
@@ -340,20 +346,22 @@ pbi visual delete <page> <visual> -f      # skip confirmation
 
 ### pbi visual sort
 
-Set, show, or clear the sort definition on a visual.
+Set, show, or clear the sort definition on a visual. Default direction is descending.
 
 ```bash
 pbi visual sort <page> <visual>                                # show current sort
 pbi visual sort <page> <visual> <Table.Field>                  # sort descending (default)
 pbi visual sort <page> <visual> <Table.Field> --asc            # sort ascending
-pbi visual sort <page> <visual> --clear                        # remove sort
+pbi visual sort <page> <visual> --clear                        # remove sort definition
 ```
 
-Field type is auto-detected from the semantic model. Use `--measure` / `-m` to override.
+Field type (column vs measure) is auto-detected from the semantic model. Use `--measure` / `-m` to override.
 
 ```bash
 pbi visual sort "Sales" chart "Sales.Sales Amount"             # sort by measure descending
 pbi visual sort "Sales" chart Product.Category --asc           # sort by column ascending
+pbi visual sort "Sales" chart                                  # show current sort
+pbi visual sort "Sales" chart --clear                          # remove sort
 ```
 
 ### pbi visual props
@@ -434,7 +442,7 @@ Table of all bindings: role, table, field, and type (column/measure).
 
 ## Filter Commands
 
-Filters operate at three levels: report (default), page (`--page`), or visual (`--page` + `--visual`).
+Filters operate at three levels: report (default), page (`--page`), or visual (`--page` + `--visual`). All filter commands accept `--page` and `--visual` options to target the right level.
 
 ### pbi filter list
 
@@ -444,30 +452,57 @@ pbi filter list --page "Sales"                         # page-level filters
 pbi filter list --page "Sales" --visual chart          # visual-level filters
 ```
 
+Shows field, filter type (Categorical or Advanced), values/conditions, and hidden/locked status.
+
 ### pbi filter add
 
-Categorical filter (exact values):
+Two filter types:
+
+**Categorical** — filter to specific values using `--values` / `-v`:
 
 ```bash
 pbi filter add Product.Color --values "Red,Blue,Black"
-pbi filter add Product.Category --values "Bikes" --page "Sales" --hidden
+pbi filter add Product.Category --values "Bikes" --page "Sales"
+pbi filter add Product.Category --values "Bikes" --page "Sales" --visual chart
 ```
 
-Range filter (min/max):
+**Range** — filter to a numeric/date range using `--min` and/or `--max`:
 
 ```bash
 pbi filter add "Sales.Sales Amount" --min 1000 --max 50000
+pbi filter add "Sales.Sales Amount" --min 1000                 # open-ended (>= 1000)
 pbi filter add Sales.OrderDate --min "2024-01-01" --page "Sales"
 ```
 
-Options: `--hidden` (hide in view mode), `--locked` (lock in view mode), `--measure` / `-m` (treat field as measure).
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--values`, `-v` | Comma-separated values for categorical filter |
+| `--min` | Minimum value for range filter |
+| `--max` | Maximum value for range filter |
+| `--hidden` | Hide filter from view mode (users can't see it) |
+| `--locked` | Lock filter in view mode (users can see but can't change it) |
+| `--measure`, `-m` | Treat field as a measure instead of column |
+| `--page` | Target page level (omit for report level) |
+| `--visual` | Target visual level (requires `--page`) |
+
+Field type is auto-detected from the semantic model. Use `--measure` / `-m` to override.
+
+```bash
+pbi filter add Product.Color --values "Red,Blue" --hidden --locked
+pbi filter add "Sales.Sales Amount" --min 1000 --hidden --page "Sales" --visual chart
+```
 
 ### pbi filter remove
+
+Remove by field reference (`Table.Field`) or internal filter name:
 
 ```bash
 pbi filter remove Product.Color                        # remove by field reference
 pbi filter remove Filter_4c73676c90f2d32d              # remove by filter name
 pbi filter remove Product.Color --page "Sales"         # from page level
+pbi filter remove Product.Color --page "Sales" --visual chart  # from visual level
 ```
 
 ---
