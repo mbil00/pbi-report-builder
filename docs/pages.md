@@ -33,6 +33,9 @@ pbi apply sales-overview.yaml --dry-run
 pbi apply sales-overview.yaml --overwrite
 ```
 
+`pbi page export` emits apply-compatible YAML for both page metadata and visuals,
+including tooltip/drillthrough page binding metadata when present.
+
 ## Templates
 
 ```bash

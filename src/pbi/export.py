@@ -12,8 +12,14 @@ from typing import Any
 import yaml
 
 from pbi.project import Project, Page, Visual
-from pbi.properties import decode_pbi_value
+from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
+from pbi.roundtrip import (
+    export_bindings,
+    export_object_properties,
+    export_page_roundtrip_fields,
+    prune_visual_pbir,
+)
 
 
 def export_page(project: Project, page: Page) -> dict:
@@ -28,11 +34,18 @@ def export_page(project: Project, page: Page) -> dict:
 
     if page.visibility != "AlwaysVisible":
         page_dict["visibility"] = page.visibility
+    page_dict.update(export_page_roundtrip_fields(page.data))
 
     # Page-level objects (background, outspace)
     page_objects = page.data.get("objects", {})
     if page_objects:
-        _export_page_objects(page_dict, page_objects)
+        page_dict.update(
+            export_object_properties(
+                page_objects,
+                PAGE_PROPERTIES,
+                objects_path="objects",
+            )
+        )
 
     # Page-level filters
     page_filters = _export_filters(page.data)
@@ -98,41 +111,54 @@ def _export_visual(project: Project, visual: Visual) -> dict:
 
     if visual.data.get("isHidden"):
         result["isHidden"] = True
+    drill_filter_other_visuals = get_property(
+        visual.data,
+        "drillFilterOtherVisuals",
+        VISUAL_PROPERTIES,
+    )
+    if drill_filter_other_visuals is not None:
+        result["drillFilterOtherVisuals"] = drill_filter_other_visuals
 
     # Container formatting (title, background, border, etc.)
     container_objs = visual.data.get("visual", {}).get("visualContainerObjects", {})
     if container_objs:
-        _export_object_properties(result, container_objs)
+        result.update(
+            export_object_properties(
+                container_objs,
+                VISUAL_PROPERTIES,
+                objects_path="visualContainerObjects",
+                root_aliases={
+                    "dropShadow": "shadow",
+                    "subTitle": "subtitle",
+                    "visualHeader": "header",
+                    "visualTooltip": "tooltip",
+                    "visualLink": "action",
+                },
+            )
+        )
 
     # Chart formatting (legend, axes, labels, etc.)
     chart_objs = visual.data.get("visual", {}).get("objects", {})
     if chart_objs:
-        _export_object_properties(result, chart_objs)
+        result.update(
+            export_object_properties(
+                chart_objs,
+                VISUAL_PROPERTIES,
+                objects_path="objects",
+                skip_objects={"columnWidth"},
+                root_aliases={
+                    "categoryAxis": "xAxis",
+                    "valueAxis": "yAxis",
+                    "lineStyles": "line",
+                    "dataPoint": "dataColors",
+                },
+            )
+        )
 
     # Data bindings
-    bindings = project.get_bindings(visual)
+    bindings = export_bindings(visual.data)
     if bindings:
-        bindings_dict: dict[str, Any] = {}
-        by_role: dict[str, list[tuple[str, str, str]]] = {}
-        for role, entity, prop, ftype in bindings:
-            by_role.setdefault(role, []).append((entity, prop, ftype))
-
-        for role, fields in by_role.items():
-            if len(fields) == 1:
-                entity, prop, ftype = fields[0]
-                ref = f"{entity}.{prop}"
-                if ftype == "measure":
-                    ref += " (measure)"
-                bindings_dict[role] = ref
-            else:
-                refs = []
-                for entity, prop, ftype in fields:
-                    ref = f"{entity}.{prop}"
-                    if ftype == "measure":
-                        ref += " (measure)"
-                    refs.append(ref)
-                bindings_dict[role] = refs
-        result["bindings"] = bindings_dict
+        result["bindings"] = bindings
 
     # Sort
     sorts = project.get_sort(visual)
@@ -148,74 +174,11 @@ def _export_visual(project: Project, visual: Visual) -> dict:
 
     # Preserve the exact PBIR payload so exported YAML can round-trip
     # complex visuals, selector-based properties, and unsupported shapes.
-    raw_visual = copy.deepcopy(visual.data)
-    raw_visual.pop("$schema", None)
-    raw_visual.pop("name", None)
-    raw_visual.pop("position", None)
+    raw_visual = prune_visual_pbir(visual.data, result)
     if raw_visual:
         result["pbir"] = raw_visual
 
     return result
-
-
-def _export_object_properties(target: dict, objects: dict) -> None:
-    """Export PBI object collections into nested YAML-friendly dicts.
-
-    Converts {"title": [{"properties": {"show": {...}, "text": {...}}}]}
-    into {"title": {"show": true, "text": "Hello"}}.
-    """
-    for obj_key, entries in objects.items():
-        if not isinstance(entries, list) or not entries:
-            continue
-
-        # Use known property names to find friendly CLI names
-        obj_dict: dict[str, Any] = {}
-        for entry in entries:
-            selector = entry.get("selector")
-            props = entry.get("properties", {})
-            for prop_name, raw_val in props.items():
-                decoded = decode_pbi_value(raw_val)
-                if selector:
-                    sel_id = selector.get("id", selector.get("metadata", "?"))
-                    key = f"{prop_name} [{sel_id}]"
-                else:
-                    key = prop_name
-                obj_dict[key] = decoded
-
-        if obj_dict:
-            # Find a friendly prefix if this matches a registered property group
-            friendly_key = _find_friendly_key(obj_key)
-            target[friendly_key] = obj_dict
-
-
-def _find_friendly_key(obj_key: str) -> str:
-    """Map PBI object keys to friendlier YAML keys."""
-    mapping = {
-        "visualContainerObjects": "container",
-        "dropShadow": "shadow",
-        "subTitle": "subtitle",
-        "visualHeader": "header",
-        "visualTooltip": "tooltip",
-        "visualLink": "action",
-        "categoryAxis": "xAxis",
-        "valueAxis": "yAxis",
-        "lineStyles": "line",
-        "dataPoint": "dataColors",
-    }
-    return mapping.get(obj_key, obj_key)
-
-
-def _export_page_objects(page_dict: dict, objects: dict) -> None:
-    """Export page-level objects (background, outspace)."""
-    for obj_key, entries in objects.items():
-        if not isinstance(entries, list) or not entries:
-            continue
-        props: dict[str, Any] = {}
-        for entry in entries:
-            for prop_name, raw_val in entry.get("properties", {}).items():
-                props[prop_name] = decode_pbi_value(raw_val)
-        if props:
-            page_dict[obj_key] = props
 
 
 def _export_filters(data: dict) -> list[dict]:

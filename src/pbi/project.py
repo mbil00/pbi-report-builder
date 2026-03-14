@@ -553,8 +553,10 @@ class Project:
                 }
             },
             "queryRef": f"{entity}.{prop}",
-            "nativeQueryRef": display_name or prop,
+            "nativeQueryRef": prop,
         }
+        if display_name:
+            projection["displayName"] = display_name
 
         query_state = (
             visual.data

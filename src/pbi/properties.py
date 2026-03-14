@@ -43,6 +43,11 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     # Core
     "visualType": PropertyDef("visual.visualType", "string", "Visual chart type"),
     "isHidden": PropertyDef("isHidden", "boolean", "Hidden in view mode"),
+    "drillFilterOtherVisuals": PropertyDef(
+        "visual.drillFilterOtherVisuals",
+        "boolean",
+        "Allow the visual to drill-filter other visuals",
+    ),
     # ── visualContainerObjects ─────────────────────────────────
     # Background
     "background.show": PropertyDef(
@@ -2089,26 +2094,52 @@ def _infer_value_type(value: str) -> str:
     return "enum"  # Default: treat as quoted string
 
 
-def _parse_chart_prefix(prop_name: str) -> tuple[str, str]:
-    """Parse 'chart:<objectKey>.<propName>' into (objectKey, propName)."""
+def _parse_chart_prefix(prop_name: str) -> tuple[str, str, str | None]:
+    """Parse 'chart:<objectKey>.<propName> [selector]' into parts."""
     rest = prop_name[len("chart:"):]
+    selector = None
+    if rest.endswith("]") and " [" in rest:
+        rest, selector_part = rest.rsplit(" [", 1)
+        selector = selector_part[:-1]
     dot = rest.find(".")
     if dot == -1:
         raise ValueError(
             f'Invalid chart property "{prop_name}". '
             f"Use chart:<object>.<prop> format (e.g. chart:legend.show)."
         )
-    return rest[:dot], rest[dot + 1:]
+    return rest[:dot], rest[dot + 1:], selector
+
+
+def _match_chart_selector(entry: dict, selector: str | None) -> bool:
+    """Return True when a chart object entry matches the selector token."""
+    entry_selector = entry.get("selector", {})
+    if selector is None:
+        return "selector" not in entry
+    if selector == "default":
+        return entry_selector.get("id") == "default"
+    return (
+        entry_selector.get("metadata") == selector
+        or entry_selector.get("id") == selector
+    )
 
 
 def _get_dynamic_chart_prop(data: dict, prop_name: str) -> Any:
     """Read a dynamic chart property from visual.objects."""
-    obj_key, prop_key = _parse_chart_prefix(prop_name)
+    obj_key, prop_key, selector = _parse_chart_prefix(prop_name)
     objects = data.get("visual", {}).get("objects", {})
     entries = objects.get(obj_key, [])
     if not entries or not isinstance(entries, list):
         return None
-    raw = entries[0].get("properties", {}).get(prop_key)
+    target = None
+    for entry in entries:
+        if _match_chart_selector(entry, selector):
+            target = entry
+            break
+    if target is None and selector is None:
+        target = entries[0]
+    if target is None:
+        return None
+    raw = target.get("properties", {}).get(prop_key)
     if raw is None:
         return None
     return decode_pbi_value(raw)
@@ -2116,15 +2147,25 @@ def _get_dynamic_chart_prop(data: dict, prop_name: str) -> Any:
 
 def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> None:
     """Write a dynamic chart property to visual.objects with auto-inferred encoding."""
-    obj_key, prop_key = _parse_chart_prefix(prop_name)
+    obj_key, prop_key, selector = _parse_chart_prefix(prop_name)
     value_type = _infer_value_type(value)
     encoded = encode_pbi_value(value, value_type)
 
     objects = data.setdefault("visual", {}).setdefault("objects", {})
     entries = objects.setdefault(obj_key, [])
-    if not entries:
-        entries.append({"properties": {}})
-    entries[0].setdefault("properties", {})[prop_key] = encoded
+    target = None
+    for entry in entries:
+        if _match_chart_selector(entry, selector):
+            target = entry
+            break
+    if target is None:
+        target = {"properties": {}}
+        if selector == "default":
+            target["selector"] = {"id": "default"}
+        elif selector is not None:
+            target["selector"] = {"metadata": selector}
+        entries.append(target)
+    target.setdefault("properties", {})[prop_key] = encoded
 
 
 def get_visual_objects(data: dict) -> dict[str, dict[str, Any]]:

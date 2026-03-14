@@ -21,6 +21,13 @@ from pbi.properties import (
 )
 from pbi.filters import add_categorical_filter
 from pbi.roles import normalize_visual_role
+from pbi.roundtrip import (
+    apply_page_roundtrip_fields,
+    build_projection,
+    iter_nested_property_assignments,
+    match_existing_projection,
+    parse_binding_items,
+)
 
 
 @dataclass
@@ -151,11 +158,17 @@ def _apply_page(
             else:
                 result.properties_set += 1
 
+    result.properties_set += apply_page_roundtrip_fields(
+        page.data,
+        page_spec,
+        dry_run=dry_run,
+    )
+
     # Apply page-level nested objects (background, outspace)
     _apply_nested_properties(
         page.data, page_spec,
         exclude_keys={"name", "width", "height", "displayOption", "visibility",
-                       "visuals", "filters", "type"},
+                       "visuals", "filters", "type", "pageBinding"},
         registry=PAGE_PROPERTIES,
         result=result,
         context=f"Page {page_name}",
@@ -326,41 +339,25 @@ def _apply_nested_properties(
     Example: {"title": {"show": true, "text": "Hello"}}
     becomes: title.show=true, title.text=Hello
     """
-    for key, value in spec.items():
-        if key in exclude_keys:
+    for prop_name, value in iter_nested_property_assignments(
+        spec,
+        exclude_keys=exclude_keys,
+        prefix=prefix,
+    ):
+        str_value = str(value)
+        if dry_run:
+            result.properties_set += 1
             continue
-
-        prop_name = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
-
-        if isinstance(value, dict):
-            # Recurse into nested dict
-            _apply_nested_properties(
-                data, value,
-                exclude_keys=set(),
-                registry=registry,
-                result=result,
-                context=context,
-                dry_run=dry_run,
-                prefix=prop_name,
-                ignore_selector_errors=ignore_selector_errors,
-                ignore_unknown_roots=ignore_unknown_roots,
-            )
-        else:
-            # Leaf value — apply as property
-            str_value = str(value)
-            if dry_run:
-                result.properties_set += 1
+        try:
+            set_property(data, prop_name, str_value, registry)
+            result.properties_set += 1
+        except ValueError as e:
+            if ignore_selector_errors and "[" in prop_name and "]" in prop_name:
                 continue
-            try:
-                set_property(data, prop_name, str_value, registry)
-                result.properties_set += 1
-            except ValueError as e:
-                if ignore_selector_errors and "[" in prop_name and "]" in prop_name:
-                    continue
-                root = prop_name.split(".", 1)[0]
-                if ignore_unknown_roots and root in ignore_unknown_roots:
-                    continue
-                result.errors.append(f"{context}: {prop_name}: {e}")
+            root = prop_name.split(".", 1)[0]
+            if ignore_unknown_roots and root in ignore_unknown_roots:
+                continue
+            result.errors.append(f"{context}: {prop_name}: {e}")
 
 
 def _raw_object_roots(raw_pbir: dict) -> set[str]:
@@ -390,48 +387,46 @@ def _apply_bindings(
     result: ApplyResult,
 ) -> None:
     """Apply data bindings from the YAML spec."""
+    from pbi.columns import set_column_width
+
+    query_state = (
+        visual.data
+        .setdefault("visual", {})
+        .setdefault("query", {})
+        .setdefault("queryState", {})
+    )
+
     for role, field_ref in bindings.items():
         canonical_role = normalize_visual_role(visual.visual_type, role)
-        project.remove_binding(visual, canonical_role)
-        if isinstance(field_ref, list):
-            # Multiple bindings for this role
-            for ref in field_ref:
-                _add_single_binding(project, visual, role, str(ref), result)
-        else:
-            _add_single_binding(project, visual, role, str(field_ref), result)
-
-
-def _add_single_binding(
-    project: Project,
-    visual: Visual,
-    role: str,
-    field_ref: str,
-    result: ApplyResult,
-) -> None:
-    """Add a single data binding."""
-    # Parse "Table.Field" or "Table.Field (measure)"
-    is_measure = field_ref.endswith("(measure)")
-    clean_ref = field_ref.replace("(measure)", "").strip()
-    dot = clean_ref.find(".")
-    if dot == -1:
-        result.errors.append(f"Invalid binding ref: {field_ref}")
-        return
-    entity = clean_ref[:dot]
-    prop = clean_ref[dot + 1:]
-    field_type = "measure" if is_measure else "column"
-
-    # Auto-detect from semantic model
-    if not is_measure:
+        existing_projections = copy.deepcopy(
+            query_state.get(canonical_role, {}).get("projections", [])
+        )
         try:
-            from pbi.model import SemanticModel
-            model = SemanticModel.load(project.root)
-            _, prop, field_type = model.resolve_field(clean_ref)
-        except (FileNotFoundError, ValueError, TypeError):
-            pass
+            parsed_items = parse_binding_items(project.root, field_ref)
+        except ValueError as e:
+            result.errors.append(f"Invalid binding: {e}")
+            continue
+        new_projections: list[dict[str, Any]] = []
 
-    canonical_role = normalize_visual_role(visual.visual_type, role)
-    project.add_binding(visual, canonical_role, entity, prop, field_type=field_type)
-    result.bindings_added += 1
+        for item in parsed_items:
+            projection = match_existing_projection(existing_projections, item)
+            if projection is None:
+                projection = build_projection(item)
+            else:
+                projection = copy.deepcopy(projection)
+            if item.display_name is not None:
+                projection["displayName"] = item.display_name
+            new_projections.append(projection)
+            result.bindings_added += 1
+
+            if item.width is not None:
+                query_ref = projection.get("queryRef", f"{item.entity}.{item.prop}")
+                set_column_width(visual, query_ref, item.width)
+
+        if new_projections:
+            query_state[canonical_role] = {"projections": new_projections}
+        else:
+            query_state.pop(canonical_role, None)
 
 
 def _apply_sort(
