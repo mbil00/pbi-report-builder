@@ -86,7 +86,7 @@ class YamlRoundTripTests(unittest.TestCase):
             self.assertEqual(len(filters), 1)
             self.assertEqual(filters[0]["type"], "TopN")
 
-    def test_round_trip_preserves_card_selector_objects_via_raw_visual_payload(self) -> None:
+    def test_round_trip_preserves_minimal_card_payload_via_raw_visual_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
@@ -102,12 +102,8 @@ class YamlRoundTripTests(unittest.TestCase):
             self.assertEqual(result.errors, [])
             page = target.find_page("Demo")
             visual = target.find_visual(page, "card1")
-            layout_entries = visual.data["visual"]["objects"]["layout"]
-            self.assertEqual(layout_entries[1]["selector"]["id"], "default")
-            self.assertEqual(
-                layout_entries[1]["properties"]["paddingUniform"]["expr"]["Literal"]["Value"],
-                "6L",
-            )
+            self.assertEqual(visual.data["visual"]["objects"], {})
+            self.assertNotIn("visualContainerObjects", visual.data["visual"])
 
     def test_apply_include_filter_keeps_include_type(self) -> None:
         spec = """\

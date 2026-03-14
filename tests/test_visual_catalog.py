@@ -133,6 +133,54 @@ class VisualCatalogCliTests(unittest.TestCase):
         self.assertEqual(len(visuals), 1)
         self.assertEqual(visuals[0].visual_type, "qnaVisual")
 
+    def test_visual_create_card_uses_minimal_theme_backed_payload(self) -> None:
+        result = self.runner.invoke(
+            app,
+            ["visual", "create", "Sales", "card", "--project", str(self.pbip_path)],
+        )
+
+        self.assertEqual(result.exit_code, 0, result.stdout)
+
+        project = Project.find(self.pbip_path)
+        page = project.find_page("Sales")
+        visual = project.find_visual(page, "cardVisual")
+        self.assertEqual(visual.data["visual"]["objects"], {})
+        self.assertNotIn("visualContainerObjects", visual.data["visual"])
+
+    def test_visual_column_rename_supports_projection_backed_multi_row_cards(self) -> None:
+        create_result = self.runner.invoke(
+            app,
+            ["visual", "create", "Sales", "multiRowCard", "--project", str(self.pbip_path)],
+        )
+        self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+        project = Project.find(self.pbip_path)
+        page = project.find_page("Sales")
+        visual = project.find_visual(page, "multiRowCard")
+        visual.data["name"] = "headerDevice"
+        visual.save()
+        Project.add_binding(visual, "Values", "Devices", "DeviceName")
+
+        rename_result = self.runner.invoke(
+            app,
+            [
+                "visual",
+                "column",
+                "Sales",
+                "headerDevice",
+                "Devices.DeviceName",
+                "--rename",
+                "Device Name",
+                "--project",
+                str(self.pbip_path),
+            ],
+        )
+
+        self.assertEqual(rename_result.exit_code, 0, rename_result.stdout)
+        updated = Project.find(self.pbip_path).find_visual(Project.find(self.pbip_path).find_page("Sales"), "headerDevice")
+        projection = updated.data["visual"]["query"]["queryState"]["Values"]["projections"][0]
+        self.assertEqual(projection["displayName"], "Device Name")
+
     def test_visual_bind_normalizes_card_role_alias_to_data(self) -> None:
         create_result = self.runner.invoke(
             app,

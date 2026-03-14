@@ -34,6 +34,10 @@ For deterministic automation, use exact page names and exact visual names. Frien
 pbi report get layoutOptimization settings.pagesPosition
 pbi page get "Sales Overview" width displayOption
 pbi visual get "Sales Overview" revenueChart title.show background.color
+pbi visual get "Sales Overview" revenueChart title.show tooltip.show --defaults
+pbi visual get "Sales Overview" revenueChart --all-props
+pbi visual get-page "Sales Overview" --visual-type cardVisual
+pbi visual diff "Sales Overview" revenueChart "Executive Summary" revenueChartCopy
 
 # Property writes
 pbi report set settings.useEnhancedTooltips=true settings.pagesPosition=Bottom

@@ -6,10 +6,25 @@
 pbi visual list "Sales Overview"
 pbi visual get "Sales Overview" revenueChart
 pbi visual get "Sales Overview" revenueChart title.show background.color
+pbi visual get "Sales Overview" revenueChart --all-props
+pbi visual get "Sales Overview" revenueChart title.show tooltip.show --defaults
+pbi visual get-page "Sales Overview"
+pbi visual get-page "Sales Overview" --visual-type cardVisual --all-props
+pbi visual diff "Sales Overview" revenueChart "Executive Summary" revenueChartCopy
 pbi visual get "Sales Overview" revenueChart --raw
 pbi visual properties
 pbi visual properties --visual-type clusteredColumnChart
+pbi visual properties --match dropShadow --show-aliases
 ```
+
+`pbi visual get-page` lists explicit properties across every visual on a page.
+Use `--all-props` when you also want core state such as geometry and hidden
+flags. `pbi visual diff` compares two visuals and reports only the differing
+explicit properties.
+
+`pbi visual get --defaults` resolves effective values using explicit settings
+plus the CLI's known defaults for common properties, and marks each row as
+`explicit` or `default`.
 
 ## Set Properties
 
@@ -33,9 +48,19 @@ pbi visual set-all "Sales Overview" background.show=true --dry-run
 
 ```bash
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart --width 600 --height 400
+pbi visual move "Sales Overview" revenueChart --x 40 --y 80
+pbi visual resize "Sales Overview" revenueChart --width 720 --height 420
 pbi visual copy "Sales Overview" revenueChart --to-page "Executive Summary" --name revenueChartCopy
 pbi visual rename "Sales Overview" revenueChart revenueByCategory
 pbi visual delete "Sales Overview" revenueChart --force
+```
+
+## Layout Helpers
+
+```bash
+pbi visual arrange row "Sales Overview" card1 card2 card3 --x 40 --y 80 --gap 16
+pbi visual arrange column "Sales Overview" slicer1 slicer2 slicer3 --x 24 --y 120 --gap 12
+pbi visual arrange grid "Sales Overview" card1 card2 card3 card4 --columns 2 --x 40 --y 80 --column-gap 16 --row-gap 24
 ```
 
 ## Grouping
@@ -51,6 +76,7 @@ pbi visual ungroup "Sales Overview" "Revenue Charts"
 pbi visual paste-style "Sales Overview" revenueChart profitChart
 pbi visual paste-style "Sales Overview" revenueChart profitChart --scope container
 pbi visual paste-style "Sales Overview" revenueChart targetChart --to-page "Executive Summary" --scope chart
+pbi visual paste-style "Sales Overview" revenueChart --to-page "Executive Summary" --visual-type cardVisual
 ```
 
 ## Sorting
@@ -90,3 +116,14 @@ pbi visual bindings "Sales Overview" revenueChart
 pbi visual types
 pbi visual types clusteredColumnChart
 ```
+
+## Field Labels
+
+```bash
+pbi visual column "Sales Overview" detailTable Product.Category --rename "Category"
+pbi visual column "Sales Overview" executiveCard Sales.TotalRevenue --rename "Revenue"
+```
+
+`pbi visual column --rename` works on projection-backed visuals, not just
+table-style visuals. Width and per-field formatting options are still mainly
+useful on table and matrix visuals.

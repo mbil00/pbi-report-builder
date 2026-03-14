@@ -1,8 +1,8 @@
-"""Table/matrix visual column operations — width, rename, per-column formatting.
+"""Projection-backed visual field operations.
 
-Operates on tableEx and pivotTable visuals. Column widths and formatting
-use metadata selectors keyed by queryRef. Renaming sets displayName on
-query projections.
+Renaming works on any visual that stores query projections, while width and
+formatting metadata are mainly applicable to table-like visuals that persist
+column selectors keyed by queryRef.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ class ColumnInfo:
 # ── Read operations ───────────────────────────────────────────────
 
 def get_columns(visual: Visual) -> list[ColumnInfo]:
-    """Get all columns from a table/matrix visual with their config."""
+    """Get projection-backed fields from a visual with any stored config."""
     query_state = (
         visual.data
         .get("visual", {})
@@ -78,7 +78,7 @@ def find_column(visual: Visual, identifier: str) -> ColumnInfo:
     """
     columns = get_columns(visual)
     if not columns:
-        raise ValueError("Visual has no columns (is it a table/matrix?)")
+        raise ValueError("Visual has no projection-backed fields")
 
     # Try numeric index (1-based)
     try:

@@ -26,7 +26,7 @@ class PropertyDef:
     # Rich metadata for discovery and validation
     group: str | None = None  # "position", "core", "container", "chart"
     visual_types: tuple[str, ...] | None = None  # None = all types; tuple = specific types
-    default: str | None = None  # Default value as display string
+    default: Any = None  # Known default value used for effective-value reads
 
 
 # ── Visual properties ──────────────────────────────────────────────
@@ -1545,6 +1545,35 @@ for _n in ("_prop_name", "_prop_def", "_prefix", "_types"):
     globals().pop(_n, None)
 globals().pop("_n", None)
 
+_VISUAL_DEFAULTS: dict[str, Any] = {
+    "isHidden": False,
+    "background.show": False,
+    "background.transparency": 0,
+    "border.show": False,
+    "title.show": False,
+    "subtitle.show": False,
+    "divider.show": False,
+    "shadow.show": False,
+    "header.show": False,
+    "tooltip.show": True,
+    "tooltip.transparency": 0,
+    "lockAspect": False,
+    "layout.cellPadding": 12,
+    "layout.padding": 12,
+    "layout.backgroundShow": True,
+    "cardShape.radius": 4,
+    "cardPadding.uniform": 12,
+    "cardBorder.show": False,
+    "cardShadow.show": False,
+}
+
+for _prop_name, _default in _VISUAL_DEFAULTS.items():
+    if _prop_name in VISUAL_PROPERTIES:
+        VISUAL_PROPERTIES[_prop_name].default = _default
+
+for _n in ("_prop_name", "_default"):
+    globals().pop(_n, None)
+
 
 # ── Report properties ──────────────────────────────────────────────
 
@@ -1826,7 +1855,15 @@ def set_property(
         _set_by_path(data, prop_def.json_path, coerced)
     elif prop_def is None:
         suggestions = suggest_property_names(original_name, registry)
-        hint = f' Did you mean {", ".join(f"""\"{name}\"""" for name in suggestions)}?' if suggestions else ""
+        hint_parts = []
+        if suggestions:
+            hint_parts.append(
+                f'Did you mean {", ".join(f"""\"{name}\"""" for name in suggestions)}?'
+            )
+        chart_hint = chart_property_hint(original_name)
+        if chart_hint:
+            hint_parts.append(f'For a raw chart object property, try "{chart_hint}".')
+        hint = f" {' '.join(hint_parts)}" if hint_parts else ""
         raise ValueError(
             f'Unknown property "{original_name}".{hint} '
             f"Use 'pbi visual props' or 'pbi page props' to see available properties, "
@@ -1858,11 +1895,30 @@ def suggest_property_names(
     for match in difflib.get_close_matches(prop_name, choices, n=limit, cutoff=0.55):
         if match not in suggestions:
             suggestions.append(match)
-    if "." in prop_name and not prop_name.startswith("chart:"):
-        chart_prop = f"chart:{prop_name}"
+    chart_prop = chart_property_hint(prop_name)
+    if chart_prop:
         if chart_prop not in suggestions:
             suggestions.append(chart_prop)
+        if len(suggestions) > limit:
+            suggestions = suggestions[: limit - 1] + [chart_prop]
     return suggestions[:limit]
+
+
+def chart_property_hint(prop_name: str) -> str | None:
+    """Return the raw chart-property form for a dotted token when applicable."""
+    if "." not in prop_name or prop_name.startswith("chart:"):
+        return None
+    return f"chart:{prop_name}"
+
+
+def property_aliases_for(
+    prop_name: str,
+    registry: dict[str, PropertyDef],
+) -> list[str]:
+    """Return accepted non-canonical aliases for a property."""
+    alias_map = _property_alias_map(registry)
+    aliases = sorted(alias for alias, canonical in alias_map.items() if canonical == prop_name)
+    return [alias for alias in aliases if alias != prop_name]
 
 
 def canonical_object_property_name(
@@ -2159,6 +2215,22 @@ def list_properties(
             p.enum_values,
         ))
     return result
+
+
+def get_known_default(
+    prop_name: str,
+    registry: dict[str, PropertyDef],
+    *,
+    visual_type: str | None = None,
+) -> Any:
+    """Return a known default value for a property when one is registered."""
+    prop_name = normalize_property_name(prop_name, registry)
+    prop_def = registry.get(prop_name)
+    if prop_def is None:
+        return None
+    if visual_type and prop_def.visual_types and visual_type not in prop_def.visual_types:
+        return None
+    return prop_def.default
 
 
 def _derive_group(name: str, prop: PropertyDef) -> str:

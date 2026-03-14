@@ -18,6 +18,8 @@ from pbi.properties import (
     PAGE_PROPERTIES,
     canonical_object_property_name,
     get_property,
+    get_known_default,
+    property_aliases_for,
     set_property,
     list_properties,
     get_visual_objects,
@@ -33,6 +35,7 @@ page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
 page_drillthrough_app = typer.Typer(help="Page drillthrough operations.", no_args_is_help=True)
 page_tooltip_app = typer.Typer(help="Page tooltip operations.", no_args_is_help=True)
 visual_app = typer.Typer(help="Visual operations.", no_args_is_help=True)
+visual_arrange_app = typer.Typer(help="Visual layout operations.", no_args_is_help=True)
 visual_sort_app = typer.Typer(help="Visual sort operations.", no_args_is_help=True)
 visual_format_app = typer.Typer(help="Visual conditional formatting operations.", no_args_is_help=True)
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
@@ -53,6 +56,7 @@ page_app.add_typer(page_drillthrough_app, name="drillthrough")
 page_app.add_typer(page_tooltip_app, name="tooltip")
 visual_app.add_typer(visual_sort_app, name="sort")
 visual_app.add_typer(visual_format_app, name="format")
+visual_app.add_typer(visual_arrange_app, name="arrange")
 
 console = Console()
 
@@ -963,6 +967,8 @@ def visual_get(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
     props: Annotated[list[str] | None, typer.Argument(help="Property or properties to read (omit for overview).")] = None,
+    all_props: Annotated[bool, typer.Option("--all-props", help="Show all explicit registered and object properties.")] = False,
+    defaults: Annotated[bool, typer.Option("--defaults", help="Show effective values using explicit values plus known defaults.")] = False,
     raw: Annotated[bool, typer.Option("--raw", "-r", help="Show raw JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -978,14 +984,42 @@ def visual_get(
     if raw and props:
         console.print("[red]Error:[/red] --raw cannot be combined with explicit properties.")
         raise typer.Exit(1)
+    if raw and all_props:
+        console.print("[red]Error:[/red] --raw cannot be combined with --all-props.")
+        raise typer.Exit(1)
+    if raw and defaults:
+        console.print("[red]Error:[/red] --raw cannot be combined with --defaults.")
+        raise typer.Exit(1)
+    if props and all_props:
+        console.print("[red]Error:[/red] Explicit properties cannot be combined with --all-props.")
+        raise typer.Exit(1)
 
     if raw:
         import json
         console.print_json(json.dumps(vis.data, indent=2))
         return
 
+    if all_props or defaults:
+        rows = _collect_effective_visual_property_rows(
+            vis.data,
+            include_core=all_props,
+            include_defaults=defaults,
+        )
+        table = Table(title=f"{vis.name}", box=box.SIMPLE)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value")
+        if defaults:
+            table.add_column("Source", style="dim")
+        for prop_name, value, source in rows:
+            if defaults:
+                table.add_row(prop_name, value, source)
+            else:
+                table.add_row(prop_name, value)
+        console.print(table)
+        return
+
     if props:
-        if len(props) == 1:
+        if len(props) == 1 and not defaults:
             value = get_property(vis.data, props[0], VISUAL_PROPERTIES)
             console.print(value)
             return
@@ -993,9 +1027,14 @@ def visual_get(
         table = Table(title=f"{vis.name}", box=box.SIMPLE)
         table.add_column("Property", style="cyan")
         table.add_column("Value")
+        if defaults:
+            table.add_column("Source", style="dim")
         for prop in props:
-            value = get_property(vis.data, prop, VISUAL_PROPERTIES)
-            table.add_row(prop, "" if value is None else str(value))
+            value, source = _resolve_visual_property_value(vis.data, prop, include_defaults=defaults)
+            if defaults:
+                table.add_row(prop, "" if value is None else str(value), source)
+            else:
+                table.add_row(prop, "" if value is None else str(value))
         console.print(table)
         return
 
@@ -1014,28 +1053,11 @@ def visual_get(
     table.add_row("Hidden", str(vis.data.get("isHidden", False)))
 
     # Show container formatting if present
-    from pbi.properties import decode_pbi_value
-    for section, _ in [("visualContainerObjects", "Container"), ("objects", "Chart")]:
-        section_data = vis.data.get("visual", {}).get(section, {})
-        if section_data:
-            table.add_section()
-            for obj_name, entries in section_data.items():
-                if entries and isinstance(entries, list) and entries[0].get("properties"):
-                    selector = entries[0].get("selector", {})
-                    selector_name = selector.get("id") or selector.get("metadata")
-                    for pname, pval in entries[0]["properties"].items():
-                        decoded = decode_pbi_value(pval)
-                        canonical = canonical_object_property_name(
-                            obj_name,
-                            pname,
-                            VISUAL_PROPERTIES,
-                            objects_path=section,
-                            selector=selector.get("id"),
-                        )
-                        label = canonical
-                        if selector_name and selector_name != "default":
-                            label = f"{label} [{selector_name}]"
-                        table.add_row(label, str(decoded))
+    object_rows = _collect_visual_property_rows(vis.data, include_core=False)
+    if object_rows:
+        table.add_section()
+        for prop_name, value in object_rows:
+            table.add_row(prop_name, value)
 
     # Show data bindings summary
     query = vis.data.get("visual", {}).get("query", {}).get("queryState", {})
@@ -1057,6 +1079,215 @@ def visual_get(
             kind = " (measure)" if ftype == "measure" else ""
             table.add_row("[dim]Sort:[/dim]", f"{entity}.{sort_prop}{kind} {direction}")
 
+    console.print(table)
+
+
+def _collect_visual_property_rows(
+    visual_data: dict,
+    *,
+    include_core: bool = True,
+) -> list[tuple[str, str]]:
+    """Collect explicit visual properties for inspection views."""
+    rows: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    if include_core:
+        for prop_name, prop_def in VISUAL_PROPERTIES.items():
+            if not prop_def.json_path:
+                continue
+            value = get_property(visual_data, prop_name, VISUAL_PROPERTIES)
+            if value is None:
+                continue
+            key = (prop_name, str(value))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((prop_name, str(value)))
+
+    from pbi.properties import decode_pbi_value
+
+    for section in ("visualContainerObjects", "objects"):
+        section_data = visual_data.get("visual", {}).get(section, {})
+        if not isinstance(section_data, dict):
+            continue
+        for obj_name, entries in section_data.items():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                selector = entry.get("selector", {})
+                selector_name = selector.get("metadata") or selector.get("id")
+                for prop_name, raw_value in entry.get("properties", {}).items():
+                    decoded = decode_pbi_value(raw_value)
+                    canonical = canonical_object_property_name(
+                        obj_name,
+                        prop_name,
+                        VISUAL_PROPERTIES,
+                        objects_path=section,
+                        selector=selector.get("id"),
+                    )
+                    label = canonical
+                    if selector_name:
+                        label = f"{label} [{selector_name}]"
+                    key = (label, str(decoded))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    rows.append((label, str(decoded)))
+
+    return rows
+
+
+def _resolve_visual_property_value(
+    visual_data: dict,
+    prop_name: str,
+    *,
+    include_defaults: bool = False,
+) -> tuple[object | None, str]:
+    """Resolve an explicit or known-default value for a single visual property."""
+    value = get_property(visual_data, prop_name, VISUAL_PROPERTIES)
+    if value is not None:
+        return value, "explicit"
+    if include_defaults:
+        visual_type = visual_data.get("visual", {}).get("visualType")
+        default = get_known_default(prop_name, VISUAL_PROPERTIES, visual_type=visual_type)
+        if default is not None:
+            return default, "default"
+    return None, ""
+
+
+def _collect_effective_visual_property_rows(
+    visual_data: dict,
+    *,
+    include_core: bool,
+    include_defaults: bool,
+) -> list[tuple[str, str, str]]:
+    """Collect effective visual properties with their source."""
+    rows: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    visual_type = visual_data.get("visual", {}).get("visualType")
+
+    explicit_rows = _collect_visual_property_rows(visual_data, include_core=include_core)
+    for prop_name, value in explicit_rows:
+        rows.append((prop_name, value, "explicit"))
+        seen.add(prop_name)
+
+    if not include_defaults:
+        return rows
+
+    for prop_name, prop_def in sorted(VISUAL_PROPERTIES.items()):
+        group = "core" if prop_def.json_path else "container"
+        if not include_core and group == "core":
+            continue
+        if prop_def.visual_types and visual_type not in prop_def.visual_types:
+            continue
+        if prop_name in seen:
+            continue
+        default = get_known_default(prop_name, VISUAL_PROPERTIES, visual_type=visual_type)
+        if default is None:
+            continue
+        rows.append((prop_name, str(default), "default"))
+
+    return rows
+
+
+def _collect_visual_property_map(
+    visual_data: dict,
+    *,
+    include_core: bool = True,
+) -> dict[str, str]:
+    """Collect explicit visual properties as a label->value mapping."""
+    return dict(_collect_visual_property_rows(visual_data, include_core=include_core))
+
+
+@visual_app.command("get-page")
+def visual_get_page(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual_type: Annotated[str | None, typer.Option("--visual-type", help="Only include visuals of this type.")] = None,
+    all_props: Annotated[bool, typer.Option("--all-props", help="Include core properties like position and hidden state.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show explicit properties for every visual on a page."""
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    visuals = proj.get_visuals(pg)
+    if visual_type:
+        visuals = [v for v in visuals if v.visual_type == visual_type]
+
+    table = Table(title=f'Visual Properties on "{pg.display_name}"', box=box.SIMPLE)
+    table.add_column("Visual", style="cyan")
+    table.add_column("Type", style="dim")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+
+    row_count = 0
+    for vis in visuals:
+        for prop_name, value in _collect_visual_property_rows(vis.data, include_core=all_props):
+            table.add_row(vis.name, vis.visual_type, prop_name, value)
+            row_count += 1
+
+    if row_count == 0:
+        console.print("[dim]No explicit visual properties matched the current filters.[/dim]")
+        return
+
+    console.print(table)
+
+
+@visual_app.command("diff")
+def visual_diff(
+    left_page: Annotated[str, typer.Argument(help="Source page name, display name, or index.")],
+    left_visual: Annotated[str, typer.Argument(help="Source visual name, type, or index.")],
+    right_page: Annotated[str, typer.Argument(help="Comparison page name, display name, or index.")],
+    right_visual: Annotated[str, typer.Argument(help="Comparison visual name, type, or index.")],
+    all_props: Annotated[bool, typer.Option("--all-props", help="Include core properties like position and hidden state.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Compare explicit properties between two visuals."""
+    proj = _get_project(project)
+    try:
+        left_pg = proj.find_page(left_page)
+        left_vis = proj.find_visual(left_pg, left_visual)
+        right_pg = proj.find_page(right_page)
+        right_vis = proj.find_visual(right_pg, right_visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    left_props = _collect_visual_property_map(left_vis.data, include_core=all_props)
+    right_props = _collect_visual_property_map(right_vis.data, include_core=all_props)
+
+    ordered_keys: list[str] = []
+    for prop_name in [*left_props.keys(), *right_props.keys()]:
+        if prop_name not in ordered_keys:
+            ordered_keys.append(prop_name)
+
+    rows = []
+    for prop_name in ordered_keys:
+        left_value = left_props.get(prop_name, "")
+        right_value = right_props.get(prop_name, "")
+        if left_value == right_value:
+            continue
+        rows.append((prop_name, left_value, right_value))
+
+    if not rows:
+        console.print("[dim]No property differences found.[/dim]")
+        return
+
+    table = Table(
+        title=f"{left_vis.name} vs {right_vis.name}",
+        box=box.SIMPLE,
+    )
+    table.add_column("Property", style="cyan")
+    table.add_column(f"{left_pg.display_name}/{left_vis.name}")
+    table.add_column(f"{right_pg.display_name}/{right_vis.name}")
+    for prop_name, left_value, right_value in rows:
+        table.add_row(prop_name, left_value, right_value)
     console.print(table)
 
 
@@ -1193,8 +1424,8 @@ def visual_set_all(
 def visual_move(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    x: Annotated[int, typer.Argument(help="X coordinate.")],
-    y: Annotated[int, typer.Argument(help="Y coordinate.")],
+    x: Annotated[int, typer.Option("--x", help="X position.")],
+    y: Annotated[int, typer.Option("--y", help="Y position.")],
     project: ProjectOpt = None,
 ) -> None:
     """Move a visual to a new position."""
@@ -1218,8 +1449,8 @@ def visual_move(
 def visual_resize(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    width: Annotated[int, typer.Argument(help="Width.")],
-    height: Annotated[int, typer.Argument(help="Height.")],
+    width: Annotated[int, typer.Option("-W", "--width", help="Width.")],
+    height: Annotated[int, typer.Option("-H", "--height", help="Height.")],
     project: ProjectOpt = None,
 ) -> None:
     """Resize a visual."""
@@ -1290,6 +1521,131 @@ def visual_create(
     )
 
 
+@visual_arrange_app.command("row")
+def visual_arrange_row(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visuals: Annotated[list[str], typer.Argument(help="Visuals to arrange left-to-right.")],
+    x: Annotated[int, typer.Option("--x", help="Starting X position.")] = 0,
+    y: Annotated[int, typer.Option("--y", help="Shared Y position.")] = 0,
+    gap: Annotated[int, typer.Option("--gap", help="Horizontal gap between visuals.")] = 16,
+    project: ProjectOpt = None,
+) -> None:
+    """Arrange visuals in a horizontal row using their current widths."""
+    if len(visuals) < 2:
+        console.print("[red]Error:[/red] Provide at least two visuals to arrange.")
+        raise typer.Exit(1)
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        ordered_visuals = [proj.find_visual(pg, visual) for visual in visuals]
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    cursor_x = x
+    for vis in ordered_visuals:
+        width = int(vis.position.get("width", 0))
+        vis.data.setdefault("position", {})["x"] = cursor_x
+        vis.data["position"]["y"] = y
+        vis.save()
+        cursor_x += width + gap
+
+    console.print(
+        f'Arranged [cyan]{len(ordered_visuals)}[/cyan] visuals in a row on "{pg.display_name}" '
+        f"starting at {x},{y} with gap {gap}"
+    )
+
+
+@visual_arrange_app.command("grid")
+def visual_arrange_grid(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visuals: Annotated[list[str], typer.Argument(help="Visuals to arrange in reading order.")],
+    columns: Annotated[int, typer.Option("--columns", help="Number of visuals per row.")] = 2,
+    x: Annotated[int, typer.Option("--x", help="Starting X position.")] = 0,
+    y: Annotated[int, typer.Option("--y", help="Starting Y position.")] = 0,
+    column_gap: Annotated[int, typer.Option("--column-gap", help="Horizontal gap between visuals.")] = 16,
+    row_gap: Annotated[int, typer.Option("--row-gap", help="Vertical gap between rows.")] = 16,
+    project: ProjectOpt = None,
+) -> None:
+    """Arrange visuals in a wrapped grid using their current sizes."""
+    if len(visuals) < 2:
+        console.print("[red]Error:[/red] Provide at least two visuals to arrange.")
+        raise typer.Exit(1)
+    if columns < 1:
+        console.print("[red]Error:[/red] --columns must be at least 1.")
+        raise typer.Exit(1)
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        ordered_visuals = [proj.find_visual(pg, visual) for visual in visuals]
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    cursor_x = x
+    cursor_y = y
+    row_height = 0
+
+    for index, vis in enumerate(ordered_visuals):
+        width = int(vis.position.get("width", 0))
+        height = int(vis.position.get("height", 0))
+        vis.data.setdefault("position", {})["x"] = cursor_x
+        vis.data["position"]["y"] = cursor_y
+        vis.save()
+
+        row_height = max(row_height, height)
+        is_last_in_row = (index + 1) % columns == 0
+        if is_last_in_row:
+            cursor_x = x
+            cursor_y += row_height + row_gap
+            row_height = 0
+        else:
+            cursor_x += width + column_gap
+
+    console.print(
+        f'Arranged [cyan]{len(ordered_visuals)}[/cyan] visuals in a [cyan]{columns}[/cyan]-column grid '
+        f'on "{pg.display_name}" starting at {x},{y}'
+    )
+
+
+@visual_arrange_app.command("column")
+def visual_arrange_column(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visuals: Annotated[list[str], typer.Argument(help="Visuals to arrange top-to-bottom.")],
+    x: Annotated[int, typer.Option("--x", help="Shared X position.")] = 0,
+    y: Annotated[int, typer.Option("--y", help="Starting Y position.")] = 0,
+    gap: Annotated[int, typer.Option("--gap", help="Vertical gap between visuals.")] = 16,
+    project: ProjectOpt = None,
+) -> None:
+    """Arrange visuals in a vertical column using their current heights."""
+    if len(visuals) < 2:
+        console.print("[red]Error:[/red] Provide at least two visuals to arrange.")
+        raise typer.Exit(1)
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        ordered_visuals = [proj.find_visual(pg, visual) for visual in visuals]
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    cursor_y = y
+    for vis in ordered_visuals:
+        height = int(vis.position.get("height", 0))
+        vis.data.setdefault("position", {})["x"] = x
+        vis.data["position"]["y"] = cursor_y
+        vis.save()
+        cursor_y += height + gap
+
+    console.print(
+        f'Arranged [cyan]{len(ordered_visuals)}[/cyan] visuals in a column on "{pg.display_name}" '
+        f"starting at {x},{y} with gap {gap}"
+    )
+
+
 @visual_app.command("copy")
 def visual_copy(
     page: Annotated[str, typer.Argument(help="Source page name, display name, or index.")],
@@ -1319,8 +1675,9 @@ def visual_copy(
 def visual_paste_style(
     page: Annotated[str, typer.Argument(help="Source page name, display name, or index.")],
     source: Annotated[str, typer.Argument(help="Source visual (copy style FROM).")],
-    target: Annotated[str, typer.Argument(help="Target visual (paste style TO).")],
+    target: Annotated[Optional[str], typer.Argument(help="Target visual (paste style TO). Omit with --visual-type to style multiple visuals.")] = None,
     to_page: Annotated[Optional[str], typer.Option("--to-page", help="Target page if different from source.")] = None,
+    visual_type: Annotated[str | None, typer.Option("--visual-type", help="Apply to all target-page visuals of this type.")] = None,
     scope: Annotated[str, typer.Option("--scope", help="Copy scope: all, container, or chart.")] = "all",
     project: ProjectOpt = None,
 ) -> None:
@@ -1334,51 +1691,93 @@ def visual_paste_style(
     if scope not in {"all", "container", "chart"}:
         console.print("[red]Error:[/red] --scope must be 'all', 'container', or 'chart'.")
         raise typer.Exit(1)
+    if target and visual_type:
+        console.print("[red]Error:[/red] Use either an explicit target or --visual-type, not both.")
+        raise typer.Exit(1)
+    if not target and not visual_type:
+        console.print("[red]Error:[/red] Provide a target visual or use --visual-type for batch style copy.")
+        raise typer.Exit(1)
 
     proj = _get_project(project)
     try:
         src_page = proj.find_page(page)
         src_vis = proj.find_visual(src_page, source)
         tgt_page = proj.find_page(to_page) if to_page else src_page
-        tgt_vis = proj.find_visual(tgt_page, target)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    try:
+        if target:
+            target_visuals = [proj.find_visual(tgt_page, target)]
+        else:
+            target_visuals = [
+                vis for vis in proj.get_visuals(tgt_page)
+                if vis.visual_type == visual_type and "visualGroup" not in vis.data
+            ]
+            if tgt_page.folder == src_page.folder:
+                target_visuals = [vis for vis in target_visuals if vis.folder != src_vis.folder]
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not target_visuals:
+        if visual_type:
+            console.print(
+                f'[yellow]No target visuals of type "{visual_type}" on page "{tgt_page.display_name}".[/yellow]'
+            )
+            raise typer.Exit(0)
+        console.print(f'[yellow]Target visual "{target}" not found.[/yellow]')
+        raise typer.Exit(0)
+
     copied = []
     src_visual = src_vis.data.get("visual", {})
+    container = None
+    objects = None
 
     # Container formatting (visualContainerObjects)
     if scope in {"all", "container"}:
         container = src_visual.get("visualContainerObjects")
         if container:
-            tgt_vis.data.setdefault("visual", {})["visualContainerObjects"] = copy.deepcopy(container)
             copied.append("container")
-        else:
-            # Remove from target if source has none
-            tgt_vis.data.get("visual", {}).pop("visualContainerObjects", None)
 
     # Chart formatting (objects)
     if scope in {"all", "chart"}:
         objects = src_visual.get("objects")
         if objects:
-            tgt_vis.data.setdefault("visual", {})["objects"] = copy.deepcopy(objects)
             copied.append("chart")
-        else:
-            tgt_vis.data.get("visual", {}).pop("objects", None)
 
     if not copied:
         console.print("[yellow]Source visual has no formatting to copy.[/yellow]")
         raise typer.Exit(0)
 
-    tgt_vis.save()
+    for tgt_vis in target_visuals:
+        if scope in {"all", "container"}:
+            if container:
+                tgt_vis.data.setdefault("visual", {})["visualContainerObjects"] = copy.deepcopy(container)
+            else:
+                tgt_vis.data.get("visual", {}).pop("visualContainerObjects", None)
+        if scope in {"all", "chart"}:
+            if objects:
+                tgt_vis.data.setdefault("visual", {})["objects"] = copy.deepcopy(objects)
+            else:
+                tgt_vis.data.get("visual", {}).pop("objects", None)
+        tgt_vis.save()
+
     scope = " + ".join(copied)
-    tgt_label = f'"{tgt_vis.name}"'
-    if to_page:
-        tgt_label += f' on "{tgt_page.display_name}"'
+    if target:
+        tgt_label = f'"{target_visuals[0].name}"'
+        if to_page:
+            tgt_label += f' on "{tgt_page.display_name}"'
+        console.print(
+            f'Copied [cyan]{scope}[/cyan] formatting: '
+            f'"{src_vis.name}" → {tgt_label}'
+        )
+        return
+
     console.print(
-        f'Copied [cyan]{scope}[/cyan] formatting: '
-        f'"{src_vis.name}" → {tgt_label}'
+        f'Copied [cyan]{scope}[/cyan] formatting from "{src_vis.name}" to '
+        f'[cyan]{len(target_visuals)}[/cyan] "{visual_type}" visual(s) on "{tgt_page.display_name}"'
     )
 
 
@@ -1868,7 +2267,7 @@ def visual_format_clear(
 def visual_column(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    column: Annotated[Optional[str], typer.Argument(help="Column: Table.Field, display name, or index. Omit to list all.")] = None,
+    column: Annotated[Optional[str], typer.Argument(help="Field: Table.Field, display name, or index. Omit to list all projection-backed fields.")] = None,
     width: Annotated[Optional[float], typer.Option("--width", "-w", help="Column width in pixels.")] = None,
     rename: Annotated[Optional[str], typer.Option("--rename", help="Rename column header.")] = None,
     align: Annotated[Optional[str], typer.Option("--align", help="Column alignment: Left, Center, Right.")] = None,
@@ -1880,7 +2279,7 @@ def visual_column(
     clear_format: Annotated[bool, typer.Option("--clear-format", help="Remove per-column formatting.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """List, resize, rename, or format table/matrix columns."""
+    """List, resize, rename, or format projection-backed visual fields."""
     from pbi.columns import (
         get_columns, find_column,
         set_column_width, rename_column, set_column_format,
@@ -1899,7 +2298,7 @@ def visual_column(
     if column is None:
         columns = get_columns(vis)
         if not columns:
-            console.print("[dim]No columns (is this a table/matrix visual?).[/dim]")
+            console.print("[dim]No projection-backed fields on this visual.[/dim]")
             return
         tbl = Table(title=f"Columns on {vis.visual_type}", box=box.SIMPLE)
         tbl.add_column("#", style="dim", width=3)
@@ -1994,6 +2393,8 @@ def visual_column(
 def visual_props(
     visual_type: Annotated[Optional[str], typer.Option("--visual-type", help="Show only properties for this visual type.")] = None,
     group: Annotated[Optional[str], typer.Option("--group", "-g", help="Filter by group: position, core, container, chart.")] = None,
+    match: Annotated[Optional[str], typer.Option("--match", help="Filter properties by name, alias, or description text.")] = None,
+    show_aliases: Annotated[bool, typer.Option("--show-aliases", help="Show accepted raw/alias input forms for each property.")] = False,
 ) -> None:
     """List available visual properties.
 
@@ -2001,6 +2402,18 @@ def visual_props(
     Use --group to filter by property group (position, core, container, chart).
     """
     props = list_properties(VISUAL_PROPERTIES, group=group, visual_type=visual_type)
+    if match:
+        needle = match.lower()
+        filtered = []
+        for name, vtype, desc, prop_group, enum_values in props:
+            aliases = property_aliases_for(name, VISUAL_PROPERTIES)
+            if (
+                needle in name.lower()
+                or needle in desc.lower()
+                or any(needle in alias.lower() for alias in aliases)
+            ):
+                filtered.append((name, vtype, desc, prop_group, enum_values))
+        props = filtered
 
     if not props:
         filters = []
@@ -2008,6 +2421,8 @@ def visual_props(
             filters.append(f'type="{visual_type}"')
         if group:
             filters.append(f'group="{group}"')
+        if match:
+            filters.append(f'match="{match}"')
         console.print(f'[yellow]No properties match filters: {", ".join(filters)}[/yellow]')
         return
 
@@ -2023,6 +2438,8 @@ def visual_props(
     table.add_column("Group", style="dim")
     table.add_column("Description")
     table.add_column("Values", style="dim")
+    if show_aliases:
+        table.add_column("Accepted Input", style="dim", overflow="fold")
 
     current_group = None
     for name, vtype, desc, prop_group, enum_values in props:
@@ -2031,7 +2448,11 @@ def visual_props(
                 table.add_section()
             current_group = prop_group
         vals = ", ".join(enum_values) if enum_values else ""
-        table.add_row(name, vtype, prop_group or "", desc, vals)
+        row = [name, vtype, prop_group or "", desc, vals]
+        if show_aliases:
+            aliases = property_aliases_for(name, VISUAL_PROPERTIES)
+            row.append(", ".join(aliases))
+        table.add_row(*row)
 
     console.print(table)
     console.print(
