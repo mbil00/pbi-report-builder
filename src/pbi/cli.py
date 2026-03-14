@@ -555,7 +555,7 @@ def page_export(
         out_path.write_text(content, encoding="utf-8")
         console.print(f"Exported to [cyan]{out_path}[/cyan]")
     else:
-        console.print(content, highlight=False, end="")
+        typer.echo(content, nl=False)
 
 
 @page_app.command("save-template")

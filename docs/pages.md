@@ -73,6 +73,23 @@ pbi page delete <page> -f      # skip confirmation
 
 List all settable page properties with types.
 
+## pbi page export
+
+Export one page or the whole report as YAML for `pbi apply`.
+
+```bash
+pbi page export
+pbi page export "Sales Overview"
+pbi page export "Sales Overview" -o sales-overview.yaml
+```
+
+The exported YAML now includes:
+
+- stable visual `id` values so re-applying the same spec updates existing visuals instead of duplicating unnamed ones
+- exact `pbir` payloads for visuals and raw filter payloads for full-fidelity round-trips
+
+Use `-o` when saving to a file.
+
 ## Page Templates
 
 ### pbi page save-template

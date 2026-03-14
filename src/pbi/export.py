@@ -6,6 +6,7 @@ fed back into pbi apply to reproduce or update the report state.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import yaml
@@ -84,6 +85,7 @@ def _export_visual(project: Project, visual: Visual) -> dict:
     """Export a single visual as a dict."""
     pos = visual.position
     result: dict[str, Any] = {}
+    result["id"] = visual.folder.name
 
     # Name — use friendly name, skip hex IDs
     is_hex = all(c in "0123456789abcdef" for c in visual.name) and len(visual.name) >= 16
@@ -143,6 +145,15 @@ def _export_visual(project: Project, visual: Visual) -> dict:
     vis_filters = _export_filters(visual.data)
     if vis_filters:
         result["filters"] = vis_filters
+
+    # Preserve the exact PBIR payload so exported YAML can round-trip
+    # complex visuals, selector-based properties, and unsupported shapes.
+    raw_visual = copy.deepcopy(visual.data)
+    raw_visual.pop("$schema", None)
+    raw_visual.pop("name", None)
+    raw_visual.pop("position", None)
+    if raw_visual:
+        result["pbir"] = raw_visual
 
     return result
 
@@ -219,6 +230,7 @@ def _export_filters(data: dict) -> list[dict]:
         entry: dict[str, Any] = {
             "field": f"{info.field_entity}.{info.field_prop}",
             "type": info.filter_type,
+            "raw": copy.deepcopy(f),
         }
         if info.values:
             entry["values"] = info.values

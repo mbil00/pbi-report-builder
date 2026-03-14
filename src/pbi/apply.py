@@ -6,6 +6,7 @@ updating pages and visuals as needed.
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,6 +20,7 @@ from pbi.properties import (
     set_property,
 )
 from pbi.filters import add_categorical_filter
+from pbi.roles import normalize_visual_role
 
 
 @dataclass
@@ -188,6 +190,7 @@ def _apply_visual(
     """Apply a single visual specification."""
     page_name = page.display_name
     vis_name = vis_spec.get("name")
+    vis_id = vis_spec.get("id")
     vis_type = vis_spec.get("type")
 
     if not vis_name and not vis_type:
@@ -196,9 +199,14 @@ def _apply_visual(
 
     # Find existing visual
     visual: Visual | None = None
+    if vis_id:
+        for candidate in project.get_visuals(page):
+            if candidate.folder.name == vis_id:
+                visual = candidate
+                break
     if vis_name:
         try:
-            visual = project.find_visual(page, vis_name)
+            visual = visual or project.find_visual(page, vis_name)
         except ValueError:
             pass
 
@@ -228,6 +236,10 @@ def _apply_visual(
         _count_dry_run_changes(vis_spec, result)
         return
 
+    raw_pbir = vis_spec.get("pbir")
+    if isinstance(raw_pbir, dict):
+        _apply_raw_visual_payload(visual, raw_pbir)
+
     # Apply position/size if specified
     if "position" in vis_spec:
         x, y = _parse_position(vis_spec["position"])
@@ -241,36 +253,37 @@ def _apply_visual(
         visual.data["position"]["height"] = h
         result.properties_set += 2
 
-    # Apply visual properties (nested objects become dot-separated props)
-    exclude_keys = {"name", "type", "position", "size", "bindings", "sort",
-                     "filters", "isHidden"}
-    _apply_nested_properties(
-        visual.data, vis_spec,
-        exclude_keys=exclude_keys,
-        registry=VISUAL_PROPERTIES,
-        result=result,
-        context=f"{page_name}/{vis_name or visual.name}",
-        dry_run=dry_run,
-    )
+    if not isinstance(raw_pbir, dict):
+        # Apply visual properties (nested objects become dot-separated props)
+        exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
+                         "filters", "isHidden", "pbir"}
+        _apply_nested_properties(
+            visual.data, vis_spec,
+            exclude_keys=exclude_keys,
+            registry=VISUAL_PROPERTIES,
+            result=result,
+            context=f"{page_name}/{vis_name or visual.name}",
+            dry_run=dry_run,
+        )
 
-    # isHidden
-    if "isHidden" in vis_spec:
-        visual.data["isHidden"] = bool(vis_spec["isHidden"])
-        result.properties_set += 1
+        # isHidden
+        if "isHidden" in vis_spec:
+            visual.data["isHidden"] = bool(vis_spec["isHidden"])
+            result.properties_set += 1
 
-    # Bindings
-    if "bindings" in vis_spec:
-        _apply_bindings(project, visual, vis_spec["bindings"], result)
+        # Bindings
+        if "bindings" in vis_spec:
+            _apply_bindings(project, visual, vis_spec["bindings"], result)
 
-    # Sort
-    if "sort" in vis_spec:
-        _apply_sort(project, visual, vis_spec["sort"], result)
+        # Sort
+        if "sort" in vis_spec:
+            _apply_sort(project, visual, vis_spec["sort"], result)
 
-    # Filters
-    if "filters" in vis_spec:
-        _apply_filters(visual.data, vis_spec["filters"], result,
-                       context=f"{page_name}/{vis_name or visual.name}",
-                       dry_run=dry_run)
+        # Filters
+        if "filters" in vis_spec:
+            _apply_filters(visual.data, vis_spec["filters"], result,
+                           context=f"{page_name}/{vis_name or visual.name}",
+                           dry_run=dry_run)
 
     visual.save()
 
@@ -329,6 +342,8 @@ def _apply_bindings(
 ) -> None:
     """Apply data bindings from the YAML spec."""
     for role, field_ref in bindings.items():
+        canonical_role = normalize_visual_role(visual.visual_type, role)
+        project.remove_binding(visual, canonical_role)
         if isinstance(field_ref, list):
             # Multiple bindings for this role
             for ref in field_ref:
@@ -365,7 +380,8 @@ def _add_single_binding(
         except (FileNotFoundError, ValueError, TypeError):
             pass
 
-    project.add_binding(visual, role, entity, prop, field_type=field_type)
+    canonical_role = normalize_visual_role(visual.visual_type, role)
+    project.add_binding(visual, canonical_role, entity, prop, field_type=field_type)
     result.bindings_added += 1
 
 
@@ -417,6 +433,10 @@ def _apply_filters(
     dry_run: bool,
 ) -> None:
     """Apply filters from the YAML spec."""
+    if filters_spec and not dry_run:
+        config = data.setdefault("filterConfig", {})
+        config["filters"] = []
+
     for f_spec in filters_spec:
         if not isinstance(f_spec, dict):
             result.errors.append(f"{context}: filter must be a mapping.")
@@ -440,14 +460,36 @@ def _apply_filters(
             result.filters_added += 1
             continue
 
-        if filter_type.lower() in ("categorical", "include", "exclude"):
+        raw_filter = f_spec.get("raw")
+        if isinstance(raw_filter, dict):
+            config = data.setdefault("filterConfig", {})
+            config.setdefault("filters", []).append(copy.deepcopy(raw_filter))
+            result.filters_added += 1
+        elif filter_type.lower() in ("categorical", "include", "exclude"):
             str_values = [str(v) for v in values] if values else []
             if str_values:
-                add_categorical_filter(
-                    data, entity, prop, str_values,
-                    is_hidden=is_hidden,
-                    is_locked=is_locked,
-                )
+                if filter_type.lower() == "include":
+                    from pbi.filters import add_include_filter
+
+                    add_include_filter(
+                        data, entity, prop, str_values,
+                        is_hidden=is_hidden,
+                        is_locked=is_locked,
+                    )
+                elif filter_type.lower() == "exclude":
+                    from pbi.filters import add_exclude_filter
+
+                    add_exclude_filter(
+                        data, entity, prop, str_values,
+                        is_hidden=is_hidden,
+                        is_locked=is_locked,
+                    )
+                else:
+                    add_categorical_filter(
+                        data, entity, prop, str_values,
+                        is_hidden=is_hidden,
+                        is_locked=is_locked,
+                    )
                 result.filters_added += 1
         else:
             result.warnings.append(
@@ -455,32 +497,48 @@ def _apply_filters(
             )
 
 
-def _parse_position(value: Any) -> tuple[int, int]:
+def _parse_number(value: Any) -> int | float:
+    """Parse a JSON/YAML scalar into an int or float."""
+    if isinstance(value, (int, float)):
+        return int(value) if float(value).is_integer() else float(value)
+
+    text = str(value).strip()
+    number = float(text)
+    return int(number) if number.is_integer() else number
+
+
+def _parse_position(value: Any) -> tuple[int | float, int | float]:
     """Parse position from '50, 80' or a dict {'x': 50, 'y': 80}."""
     if isinstance(value, dict):
-        return int(value.get("x", 0)), int(value.get("y", 0))
+        return _parse_number(value.get("x", 0)), _parse_number(value.get("y", 0))
     parts = str(value).split(",")
     if len(parts) == 2:
-        return int(parts[0].strip()), int(parts[1].strip())
+        return _parse_number(parts[0]), _parse_number(parts[1])
     return 0, 0
 
 
-def _parse_size(value: Any) -> tuple[int, int]:
+def _parse_size(value: Any) -> tuple[int | float, int | float]:
     """Parse size from '600 x 400' or a dict {'width': 600, 'height': 400}."""
     if isinstance(value, dict):
-        return int(value.get("width", 300)), int(value.get("height", 200))
+        return _parse_number(value.get("width", 300)), _parse_number(value.get("height", 200))
     text = str(value)
-    # Try "600 x 400" or "600x400"
-    match = re.match(r"(\d+)\s*x\s*(\d+)", text, re.IGNORECASE)
+    # Try "600 x 400" or "600x400", including PBIR float dimensions.
+    match = re.match(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)", text, re.IGNORECASE)
     if match:
-        return int(match.group(1)), int(match.group(2))
+        return _parse_number(match.group(1)), _parse_number(match.group(2))
     return 300, 200
+
+
+def _apply_raw_visual_payload(visual: Visual, raw_pbir: dict) -> None:
+    """Restore the exact exported PBIR payload for a visual."""
+    for key, value in raw_pbir.items():
+        visual.data[key] = copy.deepcopy(value)
 
 
 def _count_dry_run_changes(vis_spec: dict, result: ApplyResult) -> None:
     """Count property changes for dry-run reporting."""
-    exclude = {"name", "type", "position", "size", "bindings", "sort",
-                "filters", "isHidden"}
+    exclude = {"id", "name", "type", "position", "size", "bindings", "sort",
+                "filters", "isHidden", "pbir"}
     for key, value in vis_spec.items():
         if key in exclude:
             continue
