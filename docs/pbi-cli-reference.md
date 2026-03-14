@@ -1,131 +1,77 @@
 # PBI CLI Reference
 
-Complete reference for the `pbi` command-line tool. All commands operate on Power BI PBIP projects using the PBIR (Enhanced Report Format).
+Canonical reference for the `pbi` command-line tool.
+
+## Core Rules
+
+The CLI now follows one grammar:
+
+1. Targets are positional and come before options.
+2. Generic setters use `key=value` only.
+3. Stateful features use `get`, `set`, and `clear`.
+4. Mutually exclusive behavior uses `--mode`.
+5. Repeated values use repeatable flags such as `--value` and `--row`.
+6. Field typing uses `--field-type auto|column|measure`.
 
 ## Project Discovery
 
-Every command accepts `-p <path>` to specify the project. Without it, `pbi` walks up from the current directory to find a `.pbip` file.
-
-```bash
-pbi info                          # auto-detect from cwd
-pbi info -p /path/to/project      # explicit path
-pbi info -p ./MyReport.pbip       # point to .pbip file directly
-```
-
-## Referencing Pages and Visuals
-
-Pages and visuals are resolved in this order:
-
-| Method | Example | Notes |
-|--------|---------|-------|
-| Display name | `"Sales Overview"` | Case-insensitive |
-| Partial name | `"Sales"` | Must be unambiguous |
-| Folder/ID | `page1`, `a1b2c3d4e5...` | Internal hex ID |
-| Index | `1`, `2`, `3`, `#7` | 1-based, from list order |
-| Visual type | `card`, `slicer` | Only if unique on the page |
-| Friendly name | `revenueChart` | Set via `visual create --name` or `visual rename` |
-
-## Commands
-
-### pbi info
-
-Tree view of the entire project — pages, visuals, positions, sizes.
+Every command accepts `-p <path>` or `--project <path>`. Without it, `pbi` walks up from the current directory to find a `.pbip` file.
 
 ```bash
 pbi info
+pbi info --project /path/to/project
+pbi info --project ./MyReport.pbip
 ```
 
-### pbi map
+## Recommended Targeting
 
-Generate a human-readable YAML index that resolves all hex IDs and shows the full hierarchy: Page -> Group -> Visual -> Role -> Field. Includes filters at all levels, sort definitions, key chart formatting, and conditional formatting. Every entry includes a relative file path.
+For deterministic automation, use exact page names and exact visual names. Friendly visual names created with `pbi visual create --name ...` or `pbi visual rename ...` are the recommended references for write commands.
+
+## Common Patterns
 
 ```bash
-pbi map                     # stdout
-pbi map -o pbi-map.yaml     # write to file
-```
+# Property reads
+pbi report get layoutOptimization settings.pagesPosition
+pbi page get "Sales Overview" width displayOption
+pbi visual get "Sales Overview" revenueChart title.show background.color
 
-Output structure:
-
-```yaml
-model:
-  Product:
-    columns: [Category, Sub Category, Color]
-    hidden:  [Product Key]
-    measures: [Product Count]
-  Sales:
-    columns: [Quantity, Net Price, Order Date]
-    measures: [Sales Amount, Total Orders]
-
-filters:                                              # report-level filters
-  - Product.Color Categorical: Red, Blue (hidden)
-
-pages:
-  - name: Sales Overview  # active
-    id: page1
-    path: Report.Report/definition/pages/page1
-    size: 1920 x 1080
-    filters:                                          # page-level filters
-      - Product.Category Categorical: Bikes
-    visuals:
-      - name: revenueChart
-        type: clusteredColumnChart
-        path: Report.Report/definition/pages/page1/visuals/a1b2c3
-        position: 50, 100
-        size: 600 x 400
-        title: Revenue by Category
-        bindings:
-          Category: Product.Category
-          Y: Sales.Sales Amount (measure)
-        sort: Sales.Sales Amount (measure) Descending  # sort definition
-        formatting: {legend: true (Top), labels: false} # key chart formatting
-        conditionalFormatting:                           # conditional formatting
-          - dataPoint.fill: #FF0000 @ 0 -> #FFFF00 @ 50 -> #00FF00 @ 100
-        filters:                                        # visual-level filters
-          - Sales.Sales Amount Advanced: >= 1000
-```
-
-### pbi apply
-
-Apply a YAML spec back into the report. This is the inverse of `pbi page export`.
-
-```bash
-pbi apply report.yaml
-pbi apply report.yaml --page "Sales Overview"
-pbi apply report.yaml --dry-run
-pbi apply report.yaml --overwrite
-```
-
-Behavior:
-
-- default mode is additive: only fields present in the YAML are touched
-- `--overwrite` reconciles a page to the YAML and removes visuals not present in the spec
-- `--overwrite` now creates per-page backup YAML files and rolls back the PBIR definition if apply fails
-- exported YAML may include a raw `pbir` block for full-fidelity round-trips; high-level edits like `bindings`, `sort`, `filters`, `isHidden`, `position`, and `size` still apply on top of that payload
-
-### pbi validate
-
-Check project files for structural errors. See [Validation](validation.md).
-
-### pbi capabilities
-
-Show a capability matrix for the current CLI surface: what is already covered, what is partial, and what is still missing for a fuller PBIR editor.
-
-```bash
-pbi capabilities
-pbi capabilities --status blocked
-pbi capabilities --json
-```
-
-### pbi report
-
-Show or edit schema-backed report metadata in `definition/report.json`.
-
-```bash
-pbi report get
-pbi report get layoutOptimization
-pbi report set layoutOptimization=PhonePortrait
+# Property writes
 pbi report set settings.useEnhancedTooltips=true settings.pagesPosition=Bottom
-pbi report props
+pbi page set "Sales Overview" width=1440 displayOption=FitToWidth
+pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue"
+
+# Stateful operations
+pbi visual sort get "Sales Overview" revenueChart
+pbi visual sort set "Sales Overview" revenueChart Sales.Revenue --direction desc
+pbi visual sort clear "Sales Overview" revenueChart
+
+pbi visual format get "Sales Overview" revenueChart
+pbi visual format set "Sales Overview" revenueChart dataPoint.fill --mode measure --source Sales.ColorMeasure
+pbi visual format clear "Sales Overview" revenueChart dataPoint.fill
+```
+
+## Filters
+
+Filters use positional scope:
+
+```bash
+pbi filter list report
+pbi filter list page "Sales Overview"
+pbi filter list visual "Sales Overview" revenueChart
+```
+
+```bash
+pbi filter add report Product.Category --mode include --value Bikes --value Accessories
+pbi filter add page "Sales Overview" Sales.Revenue --mode range --min 1000 --max 50000
+pbi filter add visual "Sales Overview" revenueChart Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction top
+pbi filter add report Date.Date --mode relative --operator InLast --count 7 --unit Days
+pbi filter add page "Sales Overview" --mode tuple --row "Product.Color=Red,Product.Size=Large"
+```
+
+```bash
+pbi filter remove report Product.Category
+pbi filter remove page "Sales Overview" Sales.Revenue
+pbi filter remove visual "Sales Overview" revenueChart Customers.Region
 ```
 
 ## Detailed References
@@ -133,14 +79,10 @@ pbi report props
 | Topic | File |
 |-------|------|
 | [Report Commands](report.md) | Report metadata and settings |
-| [Page Commands](pages.md) | Create, configure, template, drillthrough, tooltip pages |
-| [Visual Commands](visuals.md) | Create, style, move, group, sort, format visuals |
-| [Properties Reference](properties.md) | All visual and container properties |
+| [Page Commands](pages.md) | Page CRUD, templates, drillthrough, tooltip |
+| [Visual Commands](visuals.md) | Visual CRUD, styling, grouping, sorting, formatting |
 | [Data & Filters](data.md) | Data binding, filters, semantic model |
-| [Interactions & Navigation](interactions.md) | Visual interactions, button actions |
+| [Interactions & Navigation](interactions.md) | Visual interactions and button actions |
 | [Bookmarks](bookmarks.md) | Bookmark management |
-| [Agent Workflows](agent-workflows.md) | Recommended export/apply, naming, template, and validation workflows for agents |
-| [Themes](themes.md) | Theme apply, export, remove |
-| [Capabilities & Roadmap](capabilities.md) | Current coverage and next expansion areas |
-| [Implementation Roadmap](roadmap.md) | Schema-first expansion priorities |
-| [Validation & Structure](validation.md) | Schema validation, PBIR file structure |
+| [Properties Reference](properties.md) | Visual property catalog |
+| [Agent Workflows](agent-workflows.md) | Recommended agent workflows |

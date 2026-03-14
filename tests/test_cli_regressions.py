@@ -17,6 +17,7 @@ from pbi.filters import (
     _format_literal,
     add_range_filter,
     add_tuple_filter,
+    get_filters,
     parse_filter,
     remove_filter,
 )
@@ -221,6 +222,53 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
             set_interaction(page, source.name, target.name, "Default")
             self.assertEqual(get_interactions(page), [])
 
+    def test_interaction_cli_uses_set_and_clear_commands(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            source = project.create_visual(page, "barChart")
+            target = project.create_visual(page, "cardVisual")
+            source.data["name"] = "source1"
+            target.data["name"] = "target1"
+            source.save()
+            target.save()
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "interaction",
+                    "set",
+                    "Demo",
+                    "source1",
+                    "target1",
+                    "--mode",
+                    "DataFilter",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+            page = Project.find(root / "Sample.pbip").find_page("Demo")
+            self.assertEqual(len(get_interactions(page)), 1)
+
+            clear_result = runner.invoke(
+                app,
+                [
+                    "interaction",
+                    "clear",
+                    "Demo",
+                    "source1",
+                    "target1",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+            page = Project.find(root / "Sample.pbip").find_page("Demo")
+            self.assertEqual(get_interactions(page), [])
+
 
 class VisualGetRegressionTests(unittest.TestCase):
     def test_visual_index_references_work_with_bare_and_prefixed_numbers(self) -> None:
@@ -407,6 +455,38 @@ class FilterModelRegressionTests(unittest.TestCase):
     def test_parse_tmdl_name_handles_escaped_apostrophes(self) -> None:
         self.assertEqual(_parse_tmdl_name("'Bob''s Revenue' ="), "Bob's Revenue")
 
+    def test_filter_add_uses_positional_scope_and_repeatable_values(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            result = runner.invoke(
+                app,
+                [
+                    "filter",
+                    "add",
+                    "report",
+                    "Product.Category",
+                    "--mode",
+                    "include",
+                    "--value",
+                    "Bikes",
+                    "--value",
+                    "Accessories",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            report_data = Project.find(root / "Sample.pbip").get_report_meta()
+            filters = get_filters(report_data)
+            self.assertEqual(len(filters), 1)
+            info = parse_filter(filters[0], "report")
+            self.assertEqual(info.filter_type, "Include")
+
 
 class DrillthroughRegressionTests(unittest.TestCase):
     def test_cli_uses_canonical_table_name_for_drillthrough_fields(self) -> None:
@@ -420,7 +500,8 @@ class DrillthroughRegressionTests(unittest.TestCase):
                 app,
                 [
                     "page",
-                    "set-drillthrough",
+                    "drillthrough",
+                    "set",
                     "Demo",
                     "cust.Region",
                     "--project",
@@ -551,6 +632,64 @@ class VisualSetRegressionTests(unittest.TestCase):
             page = restored.find_page("Demo")
             for visual in restored.get_visuals(page):
                 self.assertIsNone(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
+
+    def test_visual_sort_cli_uses_get_set_clear_subcommands(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "barChart")
+            visual.data["name"] = "chart1"
+            visual.save()
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "sort",
+                    "set",
+                    "Demo",
+                    "chart1",
+                    "Sales.Total Revenue",
+                    "--direction",
+                    "asc",
+                    "--field-type",
+                    "measure",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            get_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "sort",
+                    "get",
+                    "Demo",
+                    "chart1",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("Ascending", get_result.stdout)
+
+            clear_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "sort",
+                    "clear",
+                    "Demo",
+                    "chart1",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
 
 
 if __name__ == "__main__":

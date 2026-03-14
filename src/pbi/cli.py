@@ -30,7 +30,11 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
+page_drillthrough_app = typer.Typer(help="Page drillthrough operations.", no_args_is_help=True)
+page_tooltip_app = typer.Typer(help="Page tooltip operations.", no_args_is_help=True)
 visual_app = typer.Typer(help="Visual operations.", no_args_is_help=True)
+visual_sort_app = typer.Typer(help="Visual sort operations.", no_args_is_help=True)
+visual_format_app = typer.Typer(help="Visual conditional formatting operations.", no_args_is_help=True)
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
@@ -45,6 +49,10 @@ app.add_typer(filter_app, name="filter")
 app.add_typer(theme_app, name="theme")
 app.add_typer(bookmark_app, name="bookmark")
 app.add_typer(interaction_app, name="interaction")
+page_app.add_typer(page_drillthrough_app, name="drillthrough")
+page_app.add_typer(page_tooltip_app, name="tooltip")
+visual_app.add_typer(visual_sort_app, name="sort")
+visual_app.add_typer(visual_format_app, name="format")
 
 console = Console()
 
@@ -58,6 +66,88 @@ def _get_project(project: Path | None) -> Project:
     try:
         return Project.find(project)
     except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+def _parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:
+    """Parse canonical prop=value pairs."""
+    pairs: list[tuple[str, str]] = []
+    for arg in assignments:
+        eq = arg.find("=")
+        if eq == -1:
+            raise ValueError(f"Invalid assignment '{arg}'. Use prop=value format.")
+        pairs.append((arg[:eq], arg[eq + 1:]))
+    return pairs
+
+
+def _normalize_field_type(field_type: str) -> str:
+    valid = {"auto", "column", "measure"}
+    if field_type not in valid:
+        raise ValueError(f"Invalid field type '{field_type}'. Use one of: auto, column, measure.")
+    return field_type
+
+
+def _resolve_field_type(
+    proj: Project,
+    field: str,
+    field_type: str,
+) -> tuple[str, str, str]:
+    dot = field.find(".")
+    if dot == -1:
+        raise ValueError("Field must be Table.Field format.")
+    entity, prop = field[:dot], field[dot + 1:]
+    mode = _normalize_field_type(field_type)
+    if mode != "auto":
+        return entity, prop, mode
+    try:
+        from pbi.model import SemanticModel
+
+        model = SemanticModel.load(proj.root)
+        entity, prop, mode = model.resolve_field(field)
+    except (FileNotFoundError, ValueError):
+        mode = "column"
+    return entity, prop, mode
+
+
+def _resolve_filter_scope(
+    proj: Project,
+    scope: str,
+    page: str | None,
+    visual: str | None,
+):
+    from pbi.filters import load_level_data
+
+    valid_scopes = {"report", "page", "visual"}
+    if scope not in valid_scopes:
+        console.print(
+            f"[red]Error:[/red] Invalid scope '{scope}'. "
+            f"Use one of: {', '.join(sorted(valid_scopes))}."
+        )
+        raise typer.Exit(1)
+
+    if scope == "report":
+        page_ref = None
+        visual_ref = None
+    elif scope == "page":
+        if page is None:
+            console.print("[red]Error:[/red] Page scope requires <page>.")
+            raise typer.Exit(1)
+        if visual is not None:
+            console.print("[red]Error:[/red] Page scope does not accept a visual target.")
+            raise typer.Exit(1)
+        page_ref = page
+        visual_ref = None
+    else:
+        if page is None or visual is None:
+            console.print("[red]Error:[/red] Visual scope requires <page> and <visual>.")
+            raise typer.Exit(1)
+        page_ref = page
+        visual_ref = visual
+
+    try:
+        return load_level_data(proj, page_ref, visual_ref)
+    except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
@@ -338,13 +428,11 @@ def report_set(
     data.setdefault("layoutOptimization", "None")
     data.setdefault("themeCollection", {})
 
-    pairs: list[tuple[str, str]] = []
-    for arg in assignments:
-        eq = arg.find("=")
-        if eq == -1:
-            console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
-            raise typer.Exit(1)
-        pairs.append((arg[:eq], arg[eq + 1:]))
+    try:
+        pairs = _parse_property_assignments(assignments)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     for prop, value in pairs:
         old = get_property(data, prop, REPORT_PROPERTIES)
@@ -359,7 +447,7 @@ def report_set(
     _write_json(proj.definition_folder / "report.json", data)
 
 
-@report_app.command("props")
+@report_app.command("properties")
 def report_props() -> None:
     """List available report metadata properties."""
     table = Table(title="Report Properties", box=box.SIMPLE)
@@ -453,10 +541,10 @@ def page_get(
 @page_app.command("set")
 def page_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...] or prop value (single pair).")],
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...].")],
     project: ProjectOpt = None,
 ) -> None:
-    """Set page properties. Supports batch: prop=value prop=value ..."""
+    """Set page properties."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -464,17 +552,11 @@ def page_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Parse assignments — support both "prop=value" and legacy "prop value" (2 args)
-    pairs: list[tuple[str, str]] = []
-    if len(assignments) == 2 and "=" not in assignments[0] and "=" not in assignments[1]:
-        pairs.append((assignments[0], assignments[1]))
-    else:
-        for arg in assignments:
-            eq = arg.find("=")
-            if eq == -1:
-                console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
-                raise typer.Exit(1)
-            pairs.append((arg[:eq], arg[eq + 1:]))
+    try:
+        pairs = _parse_property_assignments(assignments)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     for prop, value in pairs:
         old = get_property(pg.data, prop, PAGE_PROPERTIES)
@@ -489,7 +571,7 @@ def page_set(
     pg.save()
 
 
-@page_app.command("props")
+@page_app.command("properties")
 def page_props() -> None:
     """List available page properties."""
     table = Table(title="Page Properties", box=box.SIMPLE)
@@ -508,7 +590,7 @@ def page_create(
     name: Annotated[str, typer.Argument(help="Display name for the new page.")],
     width: Annotated[int, typer.Option(help="Page width in pixels.")] = 1280,
     height: Annotated[int, typer.Option(help="Page height in pixels.")] = 720,
-    display_option: Annotated[str, typer.Option("--display", help="FitToPage, FitToWidth, or ActualSize.")] = "FitToPage",
+    display_option: Annotated[str, typer.Option("--display-option", help="FitToPage, FitToWidth, or ActualSize.")] = "FitToPage",
     project: ProjectOpt = None,
 ) -> None:
     """Create a new page."""
@@ -697,7 +779,7 @@ def page_delete_template(
         console.print(f'[yellow]Template "{template_name}" not found.[/yellow]')
 
 
-@page_app.command("set-drillthrough")
+@page_drillthrough_app.command("set")
 def page_set_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     fields: Annotated[list[str], typer.Argument(help="Drillthrough fields as Table.Field (e.g. Product.Category).")],
@@ -744,7 +826,7 @@ def page_set_drillthrough(
     )
 
 
-@page_app.command("clear-drillthrough")
+@page_drillthrough_app.command("clear")
 def page_clear_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     project: ProjectOpt = None,
@@ -766,7 +848,7 @@ def page_clear_drillthrough(
         console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
 
 
-@page_app.command("set-tooltip")
+@page_tooltip_app.command("set")
 def page_set_tooltip(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     fields: Annotated[Optional[list[str]], typer.Argument(help="Auto-match fields as Table.Field (optional).")] = None,
@@ -814,7 +896,7 @@ def page_set_tooltip(
     )
 
 
-@page_app.command("clear-tooltip")
+@page_tooltip_app.command("clear")
 def page_clear_tooltip(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     project: ProjectOpt = None,
@@ -978,20 +1060,6 @@ def visual_get(
     console.print(table)
 
 
-def _parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:
-    """Parse prop=value pairs, preserving the legacy two-argument form."""
-    pairs: list[tuple[str, str]] = []
-    if len(assignments) == 2 and "=" not in assignments[0] and "=" not in assignments[1]:
-        pairs.append((assignments[0], assignments[1]))
-        return pairs
-    for arg in assignments:
-        eq = arg.find("=")
-        if eq == -1:
-            raise ValueError(f"Invalid assignment '{arg}'. Use prop=value format.")
-        pairs.append((arg[:eq], arg[eq + 1:]))
-    return pairs
-
-
 def _prepare_visual_property_updates(
     data: dict,
     pairs: list[tuple[str, str]],
@@ -1018,16 +1086,12 @@ def _prepare_visual_property_updates(
 def visual_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value or prop value (single pair).")],
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...].")],
     project: ProjectOpt = None,
-    measure: Annotated[str | None, typer.Option("--measure", "-m", help="Target a specific measure (queryRef) for per-measure formatting.")] = None,
+    for_measure: Annotated[str | None, typer.Option("--for-measure", help="Target a specific measure queryRef for per-measure formatting.")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
 ) -> None:
-    """Set visual properties. Supports batch: prop=value prop=value ...
-
-    Use --measure to target per-measure formatting (e.g. accent bar color per measure
-    in cardVisual). The measure reference is the queryRef of the measure.
-    """
+    """Set visual properties."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -1038,13 +1102,13 @@ def visual_set(
 
     try:
         pairs = _parse_property_assignments(assignments)
-        updated, changes = _prepare_visual_property_updates(vis.data, pairs, measure_ref=measure)
+        updated, changes = _prepare_visual_property_updates(vis.data, pairs, measure_ref=for_measure)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
     for prop, old, new in changes:
-        label = f"{prop} ({measure})" if measure else prop
+        label = f"{prop} ({for_measure})" if for_measure else prop
         if dry_run:
             console.print(f"Would set {label}: {old} [dim]→[/dim] {new}")
         else:
@@ -1061,14 +1125,14 @@ def visual_set(
 def visual_set_all(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value ...")],
-    type_filter: Annotated[str | None, typer.Option("--type", "-t", help="Only apply to visuals of this type (e.g. slicer, card, tableEx).")] = None,
+    visual_type: Annotated[str | None, typer.Option("--visual-type", help="Only apply to visuals of this type (e.g. slicer, cardVisual, tableEx).")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Set properties on multiple visuals at once.
 
     Applies the same property assignments to all visuals on a page, or only
-    to visuals of a specific type with --type.
+    to visuals of a specific type with --visual-type.
     """
     proj = _get_project(project)
     try:
@@ -1078,10 +1142,10 @@ def visual_set_all(
         raise typer.Exit(1)
 
     visuals = proj.get_visuals(pg)
-    if type_filter:
-        visuals = [v for v in visuals if v.visual_type == type_filter]
+    if visual_type:
+        visuals = [v for v in visuals if v.visual_type == visual_type]
         if not visuals:
-            console.print(f'[yellow]No visuals of type "{type_filter}" on page "{pg.display_name}".[/yellow]')
+            console.print(f'[yellow]No visuals of type "{visual_type}" on page "{pg.display_name}".[/yellow]')
             raise typer.Exit(0)
 
     # Skip group containers
@@ -1120,7 +1184,7 @@ def visual_set_all(
         vis.save()
         count += 1
 
-    scope = f'type={type_filter}' if type_filter else "all"
+    scope = f'visual-type={visual_type}' if visual_type else "all"
     props_str = " ".join(f"{p}={v}" for p, v in pairs)
     console.print(f'Applied {props_str} to [cyan]{count}[/cyan] visuals ({scope})')
 
@@ -1257,20 +1321,18 @@ def visual_paste_style(
     source: Annotated[str, typer.Argument(help="Source visual (copy style FROM).")],
     target: Annotated[str, typer.Argument(help="Target visual (paste style TO).")],
     to_page: Annotated[Optional[str], typer.Option("--to-page", help="Target page if different from source.")] = None,
-    container_only: Annotated[bool, typer.Option("--container-only", help="Copy only container formatting (title, border, background, shadow, etc.).")] = False,
-    chart_only: Annotated[bool, typer.Option("--chart-only", help="Copy only chart formatting (legend, axes, labels, etc.).")] = False,
+    scope: Annotated[str, typer.Option("--scope", help="Copy scope: all, container, or chart.")] = "all",
     project: ProjectOpt = None,
 ) -> None:
     """Copy formatting from one visual to another (format painter).
 
     Copies visual styling without affecting data bindings, filters, sort, or position.
-    By default copies both container and chart formatting. Use --container-only or
-    --chart-only to limit scope.
+    By default copies both container and chart formatting. Use --scope to limit it.
     """
     import copy
 
-    if container_only and chart_only:
-        console.print("[red]Error:[/red] --container-only and --chart-only are mutually exclusive.")
+    if scope not in {"all", "container", "chart"}:
+        console.print("[red]Error:[/red] --scope must be 'all', 'container', or 'chart'.")
         raise typer.Exit(1)
 
     proj = _get_project(project)
@@ -1287,7 +1349,7 @@ def visual_paste_style(
     src_visual = src_vis.data.get("visual", {})
 
     # Container formatting (visualContainerObjects)
-    if not chart_only:
+    if scope in {"all", "container"}:
         container = src_visual.get("visualContainerObjects")
         if container:
             tgt_vis.data.setdefault("visual", {})["visualContainerObjects"] = copy.deepcopy(container)
@@ -1297,7 +1359,7 @@ def visual_paste_style(
             tgt_vis.data.get("visual", {}).pop("visualContainerObjects", None)
 
     # Chart formatting (objects)
-    if not container_only:
+    if scope in {"all", "chart"}:
         objects = src_visual.get("objects")
         if objects:
             tgt_vis.data.setdefault("visual", {})["objects"] = copy.deepcopy(objects)
@@ -1424,7 +1486,7 @@ def visual_bind(
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
     role: Annotated[str, typer.Argument(help="Data role (e.g. Category, Y, Values, Rows, Series).")],
     field: Annotated[str, typer.Argument(help="Field reference as Table.Field (e.g. Product.Category).")],
-    measure: Annotated[bool, typer.Option("--measure", "-m", help="Treat field as a measure (fact) instead of column (dimension).")] = False,
+    field_type: Annotated[str, typer.Option("--field-type", help="Field type: auto, column, or measure.")] = "auto",
     project: ProjectOpt = None,
 ) -> None:
     """Bind a column (dimension) or measure (fact) to a visual's data role."""
@@ -1438,24 +1500,11 @@ def visual_bind(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Parse Table.Field
-    dot = field.find(".")
-    if dot == -1:
-        console.print("[red]Error:[/red] Field must be in Table.Field format (e.g. Product.Category)")
+    try:
+        entity, prop, resolved_field_type = _resolve_field_type(proj, field, field_type)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
-    entity, prop = field[:dot], field[dot + 1:]
-
-    # Auto-detect field type from semantic model if not forced
-    field_type = "measure" if measure else "column"
-    if not measure:
-        try:
-            from pbi.model import SemanticModel
-            model = SemanticModel.load(proj.root)
-            _, resolved_prop, resolved_type = model.resolve_field(field)
-            field_type = resolved_type
-            prop = resolved_prop  # Use canonical name from model
-        except (FileNotFoundError, ValueError):
-            pass  # No model available, use user's specification
 
     canonical_role = normalize_visual_role(vis.visual_type, role)
     if canonical_role != role:
@@ -1473,8 +1522,8 @@ def visual_bind(
                 f'{vis.visual_type}. Supported roles: {", ".join(sorted(supported_roles))}'
             )
 
-    proj.add_binding(vis, canonical_role, entity, prop, field_type=field_type)
-    kind = "measure" if field_type == "measure" else "column"
+    proj.add_binding(vis, canonical_role, entity, prop, field_type=resolved_field_type)
+    kind = "measure" if resolved_field_type == "measure" else "column"
     console.print(
         f'Bound [cyan]{entity}.{prop}[/cyan] ({kind}) → '
         f'{vis.visual_type} role "[bold]{canonical_role}[/bold]"'
@@ -1585,17 +1634,13 @@ def visual_types(
     console.print("[dim]Use 'pbi visual types <type>' for detailed role info.[/dim]")
 
 
-@visual_app.command("sort")
-def visual_sort(
+@visual_sort_app.command("get")
+def visual_sort_get(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    field: Annotated[Optional[str], typer.Argument(help="Sort field as Table.Field (omit to show current sort).")] = None,
-    asc: Annotated[bool, typer.Option("--asc", help="Sort ascending (default is descending).")] = False,
-    clear: Annotated[bool, typer.Option("--clear", help="Remove sort definition.")] = False,
-    measure: Annotated[bool, typer.Option("--measure", "-m", help="Treat field as a measure.")] = False,
+    visual: Annotated[str, typer.Argument(help="Visual name or index.")],
     project: ProjectOpt = None,
 ) -> None:
-    """Set, show, or clear a visual's sort definition."""
+    """Show a visual's sort definition."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -1604,71 +1649,121 @@ def visual_sort(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if clear:
-        if proj.clear_sort(vis):
-            console.print("Sort definition removed.")
-        else:
-            console.print("[dim]No sort definition to remove.[/dim]")
+    sorts = proj.get_sort(vis)
+    if not sorts:
+        console.print("[dim]No sort definition.[/dim]")
         return
-
-    if field is None:
-        # Show current sort
-        sorts = proj.get_sort(vis)
-        if not sorts:
-            console.print("[dim]No sort definition.[/dim]")
-            return
-        for entity, prop, ftype, direction in sorts:
-            kind = " (measure)" if ftype == "measure" else ""
-            console.print(f"[cyan]{entity}.{prop}[/cyan]{kind} {direction}")
-        return
-
-    # Parse Table.Field
-    dot = field.find(".")
-    if dot == -1:
-        console.print("[red]Error:[/red] Field must be Table.Field format.")
-        raise typer.Exit(1)
-    entity, prop = field[:dot], field[dot + 1:]
-
-    # Auto-detect field type from semantic model
-    field_type = "measure" if measure else "column"
-    if not measure:
-        try:
-            from pbi.model import SemanticModel
-            model = SemanticModel.load(proj.root)
-            _, prop, field_type = model.resolve_field(field)
-        except (FileNotFoundError, ValueError):
-            pass
-
-    descending = not asc  # --asc overrides default --desc
-    proj.set_sort(vis, entity, prop, field_type=field_type, descending=descending)
-    direction = "Descending" if descending else "Ascending"
-    console.print(
-        f'Sort set: [cyan]{entity}.{prop}[/cyan] {direction}'
-    )
+    for entity, prop, ftype, direction in sorts:
+        kind = " (measure)" if ftype == "measure" else ""
+        console.print(f"[cyan]{entity}.{prop}[/cyan]{kind} {direction}")
 
 
-@visual_app.command("format")
-def visual_format(
+@visual_sort_app.command("set")
+def visual_sort_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    prop: Annotated[Optional[str], typer.Argument(help="Property as object.prop (e.g. dataPoint.fill). Omit to show all.")] = None,
-    measure: Annotated[Optional[str], typer.Option("--measure", help="Measure ref (Table.Measure) for color-by-measure.")] = None,
-    gradient: Annotated[bool, typer.Option("--gradient", help="Use gradient (color scale) mode.")] = False,
-    input_field: Annotated[Optional[str], typer.Option("--input", help="Input field for gradient (Table.Field).")] = None,
+    visual: Annotated[str, typer.Argument(help="Visual name or index.")],
+    field: Annotated[str, typer.Argument(help="Sort field as Table.Field.")],
+    direction: Annotated[str, typer.Option("--direction", help="Sort direction: asc or desc.")] = "desc",
+    field_type: Annotated[str, typer.Option("--field-type", help="Field type: auto, column, or measure.")] = "auto",
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual's sort definition."""
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if direction not in {"asc", "desc"}:
+        console.print("[red]Error:[/red] --direction must be 'asc' or 'desc'.")
+        raise typer.Exit(1)
+
+    try:
+        entity, prop, resolved_field_type = _resolve_field_type(proj, field, field_type)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    descending = direction == "desc"
+    proj.set_sort(vis, entity, prop, field_type=resolved_field_type, descending=descending)
+    console.print(f'Sort set: [cyan]{entity}.{prop}[/cyan] {"Descending" if descending else "Ascending"}')
+
+
+@visual_sort_app.command("clear")
+def visual_sort_clear(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Clear a visual's sort definition."""
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if proj.clear_sort(vis):
+        console.print("Sort definition removed.")
+    else:
+        console.print("[dim]No sort definition to remove.[/dim]")
+
+
+@visual_format_app.command("get")
+def visual_format_get(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Show conditional formatting on a visual."""
+    from pbi.formatting import get_conditional_formats
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    formats = get_conditional_formats(vis.data)
+    if not formats:
+        console.print("[dim]No conditional formatting on this visual.[/dim]")
+        return
+    tbl = Table(title="Conditional Formatting", box=box.SIMPLE)
+    tbl.add_column("Property", style="cyan")
+    tbl.add_column("Mode")
+    tbl.add_column("Source", style="bold")
+    tbl.add_column("Details", style="dim")
+    for f in formats:
+        tbl.add_row(f"{f.object_name}.{f.property_name}", f.format_type, f.field_ref, f.details)
+    console.print(tbl)
+
+
+@visual_format_app.command("set")
+def visual_format_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name or index.")],
+    prop: Annotated[str, typer.Argument(help="Property as object.prop (e.g. dataPoint.fill).")],
+    mode: Annotated[str, typer.Option("--mode", help="Formatting mode: measure or gradient.")],
+    source: Annotated[str, typer.Option("--source", help="Source field: Table.Measure for measure mode, Table.Field for gradient mode.")],
     min_color: Annotated[Optional[str], typer.Option("--min-color", help="Gradient minimum color (#hex).")] = None,
     min_value: Annotated[Optional[float], typer.Option("--min-value", help="Gradient minimum value.")] = None,
-    mid_color: Annotated[Optional[str], typer.Option("--mid-color", help="Gradient midpoint color (#hex). Makes 3-stop.")] = None,
+    mid_color: Annotated[Optional[str], typer.Option("--mid-color", help="Gradient midpoint color (#hex).")] = None,
     mid_value: Annotated[Optional[float], typer.Option("--mid-value", help="Gradient midpoint value.")] = None,
     max_color: Annotated[Optional[str], typer.Option("--max-color", help="Gradient maximum color (#hex).")] = None,
     max_value: Annotated[Optional[float], typer.Option("--max-value", help="Gradient maximum value.")] = None,
-    clear: Annotated[bool, typer.Option("--clear", help="Remove conditional formatting from this property.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set, show, or clear conditional formatting on a visual property."""
+    """Set conditional formatting on a visual property."""
     from pbi.formatting import (
-        get_conditional_formats,
-        build_measure_format, build_gradient_format, GradientStop,
-        set_conditional_format, clear_conditional_format,
+        GradientStop,
+        build_gradient_format,
+        build_measure_format,
+        set_conditional_format,
     )
 
     proj = _get_project(project)
@@ -1679,88 +1774,51 @@ def visual_format(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Show mode — no property specified
-    if prop is None:
-        formats = get_conditional_formats(vis.data)
-        if not formats:
-            console.print("[dim]No conditional formatting on this visual.[/dim]")
-            return
-        tbl = Table(title="Conditional Formatting", box=box.SIMPLE)
-        tbl.add_column("Property", style="cyan")
-        tbl.add_column("Type")
-        tbl.add_column("Field", style="bold")
-        tbl.add_column("Details", style="dim")
-        for f in formats:
-            tbl.add_row(f"{f.object_name}.{f.property_name}", f.format_type, f.field_ref, f.details)
-        console.print(tbl)
-        return
-
-    # Parse object.property
     dot = prop.find(".")
     if dot == -1:
         console.print("[red]Error:[/red] Property must be object.prop format (e.g. dataPoint.fill).")
         raise typer.Exit(1)
     obj_name, prop_name = prop[:dot], prop[dot + 1:]
 
-    # Clear mode
-    if clear:
-        if clear_conditional_format(vis.data, obj_name, prop_name):
-            vis.save()
-            console.print(f"Cleared conditional formatting from [cyan]{prop}[/cyan].")
-        else:
-            console.print(f"[dim]No conditional formatting on {prop}.[/dim]")
-        return
-
-    # Validate: exactly one of --measure or --gradient
-    if measure and gradient:
-        console.print("[red]Error:[/red] Use either --measure or --gradient, not both.")
-        raise typer.Exit(1)
-    if not measure and not gradient:
-        console.print("[red]Error:[/red] Specify --measure or --gradient.")
+    if mode not in {"measure", "gradient"}:
+        console.print("[red]Error:[/red] --mode must be 'measure' or 'gradient'.")
         raise typer.Exit(1)
 
-    # Measure mode
-    if measure:
-        m_dot = measure.find(".")
-        if m_dot == -1:
-            console.print("[red]Error:[/red] --measure must be Table.Measure format.")
+    if mode == "measure":
+        src_dot = source.find(".")
+        if src_dot == -1:
+            console.print("[red]Error:[/red] --source must be Table.Measure format for --mode measure.")
             raise typer.Exit(1)
-        m_entity, m_prop = measure[:m_dot], measure[m_dot + 1:]
-        value = build_measure_format(m_entity, m_prop)
+        src_entity, src_prop = source[:src_dot], source[src_dot + 1:]
+        value = build_measure_format(src_entity, src_prop)
         set_conditional_format(vis.data, obj_name, prop_name, value)
         vis.save()
-        console.print(
-            f"Set [cyan]{prop}[/cyan] = measure [bold]{m_entity}.{m_prop}[/bold]"
-        )
+        console.print(f"Set [cyan]{prop}[/cyan] = measure [bold]{src_entity}.{src_prop}[/bold]")
         return
 
-    # Gradient mode
-    if not input_field:
-        console.print("[red]Error:[/red] --gradient requires --input (Table.Field).")
-        raise typer.Exit(1)
     if min_color is None or min_value is None or max_color is None or max_value is None:
-        console.print("[red]Error:[/red] --gradient requires --min-color, --min-value, --max-color, --max-value.")
+        console.print("[red]Error:[/red] Gradient mode requires --min-color, --min-value, --max-color, and --max-value.")
         raise typer.Exit(1)
 
-    i_dot = input_field.find(".")
-    if i_dot == -1:
-        console.print("[red]Error:[/red] --input must be Table.Field format.")
+    src_dot = source.find(".")
+    if src_dot == -1:
+        console.print("[red]Error:[/red] --source must be Table.Field format for --mode gradient.")
         raise typer.Exit(1)
-    i_entity, i_prop = input_field[:i_dot], input_field[i_dot + 1:]
+    src_entity, src_prop = source[:src_dot], source[src_dot + 1:]
 
     min_c = min_color if min_color.startswith("#") else f"#{min_color}"
     max_c = max_color if max_color.startswith("#") else f"#{max_color}"
-
     mid_stop = None
     if mid_color is not None and mid_value is not None:
         mid_c = mid_color if mid_color.startswith("#") else f"#{mid_color}"
         mid_stop = GradientStop(mid_c, mid_value)
     elif mid_color is not None or mid_value is not None:
-        console.print("[red]Error:[/red] Both --mid-color and --mid-value are required for 3-stop gradient.")
+        console.print("[red]Error:[/red] Both --mid-color and --mid-value are required for a 3-stop gradient.")
         raise typer.Exit(1)
 
     value = build_gradient_format(
-        i_entity, i_prop,
+        src_entity,
+        src_prop,
         min_stop=GradientStop(min_c, min_value),
         max_stop=GradientStop(max_c, max_value),
         mid_stop=mid_stop,
@@ -1772,9 +1830,38 @@ def visual_format(
     if mid_stop:
         stops += f" -> {mid_stop.color}@{mid_stop.value}"
     stops += f" -> {max_c}@{max_value}"
-    console.print(
-        f"Set [cyan]{prop}[/cyan] = gradient by [bold]{i_entity}.{i_prop}[/bold] [{stops}]"
-    )
+    console.print(f"Set [cyan]{prop}[/cyan] = gradient by [bold]{src_entity}.{src_prop}[/bold] [{stops}]")
+
+
+@visual_format_app.command("clear")
+def visual_format_clear(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name or index.")],
+    prop: Annotated[str, typer.Argument(help="Property as object.prop (e.g. dataPoint.fill).")],
+    project: ProjectOpt = None,
+) -> None:
+    """Clear conditional formatting from a visual property."""
+    from pbi.formatting import clear_conditional_format
+
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    dot = prop.find(".")
+    if dot == -1:
+        console.print("[red]Error:[/red] Property must be object.prop format (e.g. dataPoint.fill).")
+        raise typer.Exit(1)
+    obj_name, prop_name = prop[:dot], prop[dot + 1:]
+
+    if clear_conditional_format(vis.data, obj_name, prop_name):
+        vis.save()
+        console.print(f"Cleared conditional formatting from [cyan]{prop}[/cyan].")
+    else:
+        console.print(f"[dim]No conditional formatting on {prop}.[/dim]")
 
 
 @visual_app.command("column")
@@ -1903,14 +1990,14 @@ def visual_column(
                 console.print(f"  {k}: {v}")
 
 
-@visual_app.command("props")
+@visual_app.command("properties")
 def visual_props(
-    visual_type: Annotated[Optional[str], typer.Option("--type", "-t", help="Show only properties for this visual type.")] = None,
+    visual_type: Annotated[Optional[str], typer.Option("--visual-type", help="Show only properties for this visual type.")] = None,
     group: Annotated[Optional[str], typer.Option("--group", "-g", help="Filter by group: position, core, container, chart.")] = None,
 ) -> None:
     """List available visual properties.
 
-    Use --type to show properties for a specific visual type (e.g. --type clusteredColumnChart).
+    Use --visual-type to show properties for a specific visual type (e.g. --visual-type clusteredColumnChart).
     Use --group to filter by property group (position, core, container, chart).
     """
     props = list_properties(VISUAL_PROPERTIES, group=group, visual_type=visual_type)
@@ -1949,7 +2036,7 @@ def visual_props(
     console.print(table)
     console.print(
         "\n[dim]Use 'chart:<object>.<prop>' for unregistered chart properties. "
-        "Use --type <visualType> to filter by chart type.[/dim]"
+        "Use --visual-type <visualType> to filter by chart type.[/dim]"
     )
 
 
@@ -2136,7 +2223,7 @@ def _load_filter_model(project: Path | None):
 def _resolve_filter_field(
     field: str,
     *,
-    measure: bool,
+    field_type: str,
     model,
 ) -> tuple[str, str, str, str | None]:
     """Resolve a filter field into entity, prop, field_type, data_type."""
@@ -2145,31 +2232,55 @@ def _resolve_filter_field(
         raise ValueError("Field must be Table.Field format.")
 
     entity, prop = field[:dot], field[dot + 1:]
-    if measure or model is None:
-        return entity, prop, ("measure" if measure else "column"), None
+    mode = _normalize_field_type(field_type)
+    if mode == "measure":
+        return entity, prop, "measure", None
+    if mode == "column" or model is None:
+        return entity, prop, "column", None
 
-    resolved_entity, resolved_prop, field_type = model.resolve_field(field)
+    resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(field)
     data_type = None
-    if field_type == "column":
+    if resolved_field_type == "column":
         table = model.find_table(resolved_entity)
         for col in table.columns:
             if col.name == resolved_prop:
                 data_type = col.data_type
                 break
-    return resolved_entity, resolved_prop, field_type, data_type
+    return resolved_entity, resolved_prop, resolved_field_type, data_type
 
 @filter_app.command("list")
 def filter_list(
-    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
-    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
+    scope: Annotated[str, typer.Argument(help="Target scope: report, page, or visual.")],
+    targets: Annotated[list[str], typer.Argument(help="Scope targets: none for report, <page> for page, <page> <visual> for visual.")] = [],
     project: ProjectOpt = None,
 ) -> None:
     """List filters at report, page, or visual level."""
     from pbi.filters import filter_field_refs, load_level_data, get_filters, parse_filter
 
     proj = _get_project(project)
+    if scope == "report":
+        if targets:
+            console.print("[red]Error:[/red] Report scope does not accept page or visual targets.")
+            raise typer.Exit(1)
+        page_ref = None
+        visual_ref = None
+    elif scope == "page":
+        if len(targets) != 1:
+            console.print("[red]Error:[/red] Page scope requires exactly <page>.")
+            raise typer.Exit(1)
+        page_ref = targets[0]
+        visual_ref = None
+    elif scope == "visual":
+        if len(targets) != 2:
+            console.print("[red]Error:[/red] Visual scope requires exactly <page> <visual>.")
+            raise typer.Exit(1)
+        page_ref, visual_ref = targets
+    else:
+        console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
+        raise typer.Exit(1)
+
     try:
-        data, level, _ = load_level_data(proj, page, visual)
+        data, level, _ = load_level_data(proj, page_ref, visual_ref)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -2205,27 +2316,29 @@ def filter_list(
 
 @filter_app.command("add")
 def filter_add(
-    field: Annotated[str, typer.Argument(help="Field as Table.Field (e.g. Product.Category).")],
-    values: Annotated[Optional[str], typer.Option("--values", "-v", help="Comma-separated values for categorical filter.")] = None,
+    scope: Annotated[str, typer.Argument(help="Target scope: report, page, or visual.")],
+    targets: Annotated[list[str], typer.Argument(help="Target arguments followed by the filter field. For non-tuple modes: report <field>, page <page> <field>, visual <page> <visual> <field>. For tuple mode: omit the field and use --row.")] = [],
+    value: Annotated[Optional[list[str]], typer.Option("--value", help="Value for categorical/include/exclude filters. Repeatable.")] = None,
     mode: Annotated[
         str,
         typer.Option(
             "--mode",
-            help="Value filter mode when using --values: categorical, include, or exclude.",
+            help="Filter mode: categorical, include, exclude, range, topn, relative, or tuple.",
         ),
     ] = "categorical",
     min_val: Annotated[Optional[str], typer.Option("--min", help="Minimum value for range filter.")] = None,
     max_val: Annotated[Optional[str], typer.Option("--max", help="Maximum value for range filter.")] = None,
     topn: Annotated[Optional[int], typer.Option("--topn", help="Top N items count.")] = None,
     topn_by: Annotated[Optional[str], typer.Option("--topn-by", help="Order-by field for Top N (Table.Field).")] = None,
-    bottom: Annotated[bool, typer.Option("--bottom", help="Use Bottom N instead of Top N.")] = False,
-    relative: Annotated[Optional[str], typer.Option("--relative", help="Relative filter: 'InLast 7 Days', 'InThis 1 Months', 'InNext 15 Minutes'.")] = None,
+    direction: Annotated[str, typer.Option("--direction", help="Top N direction: top or bottom.")] = "top",
+    operator: Annotated[Optional[str], typer.Option("--operator", help="Relative operator: InLast, InThis, or InNext.")] = None,
+    count: Annotated[Optional[int], typer.Option("--count", help="Relative time unit count.")] = None,
+    unit: Annotated[Optional[str], typer.Option("--unit", help="Relative unit: Minutes, Hours, Days, Weeks, Months, Quarters, or Years.")] = None,
     include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Include today for relative date filters when supported.")] = True,
-    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
-    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
     hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
     locked: Annotated[bool, typer.Option("--locked", help="Lock filter in view mode.")] = False,
-    measure: Annotated[bool, typer.Option("--measure", "-m", help="Field is a measure.")] = False,
+    field_type: Annotated[str, typer.Option("--field-type", help="Field type: auto, column, or measure.")] = "auto",
+    row: Annotated[Optional[list[str]], typer.Option("--row", help="Tuple row as comma-separated Field=Value pairs. Repeatable.")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Add a filter.
@@ -2241,7 +2354,7 @@ def filter_add(
         add_relative_date_filter, add_relative_time_filter, add_topn_filter,
     )
 
-    valid_modes = {"categorical", "include", "exclude"}
+    valid_modes = {"categorical", "include", "exclude", "range", "topn", "relative", "tuple"}
     if mode not in valid_modes:
         console.print(
             f"[red]Error:[/red] Invalid --mode '{mode}'. "
@@ -2249,39 +2362,79 @@ def filter_add(
         )
         raise typer.Exit(1)
 
-    has_categorical = values is not None
-    has_range = min_val is not None or max_val is not None
-    has_topn = topn is not None
-    has_relative = relative is not None
-    filter_count = sum([has_categorical, has_range, has_topn, has_relative])
-
-    if filter_count == 0:
-        console.print("[red]Error:[/red] Specify --values, --min/--max, --topn, or --relative.")
-        raise typer.Exit(1)
-    if filter_count > 1:
-        console.print("[red]Error:[/red] Use only one filter type per command.")
+    if direction not in {"top", "bottom"}:
+        console.print("[red]Error:[/red] --direction must be 'top' or 'bottom'.")
         raise typer.Exit(1)
 
     model = _load_filter_model(project)
-    try:
-        entity, prop, field_type, data_type = _resolve_filter_field(
-            field,
-            measure=measure,
-            model=model,
-        )
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
 
     proj = _get_project(project)
+    if mode == "tuple":
+        if scope == "report":
+            if targets:
+                console.print("[red]Error:[/red] Tuple filters at report scope do not accept target arguments.")
+                raise typer.Exit(1)
+            page_ref = None
+            visual_ref = None
+        elif scope == "page":
+            if len(targets) != 1:
+                console.print("[red]Error:[/red] Tuple filters at page scope require exactly <page>.")
+                raise typer.Exit(1)
+            page_ref = targets[0]
+            visual_ref = None
+        elif scope == "visual":
+            if len(targets) != 2:
+                console.print("[red]Error:[/red] Tuple filters at visual scope require exactly <page> <visual>.")
+                raise typer.Exit(1)
+            page_ref, visual_ref = targets
+        else:
+            console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
+            raise typer.Exit(1)
+    else:
+        if scope == "report":
+            if len(targets) != 1:
+                console.print("[red]Error:[/red] Report scope requires exactly <field>.")
+                raise typer.Exit(1)
+            page_ref = None
+            visual_ref = None
+            field = targets[0]
+        elif scope == "page":
+            if len(targets) != 2:
+                console.print("[red]Error:[/red] Page scope requires exactly <page> <field>.")
+                raise typer.Exit(1)
+            page_ref = targets[0]
+            visual_ref = None
+            field = targets[1]
+        elif scope == "visual":
+            if len(targets) != 3:
+                console.print("[red]Error:[/red] Visual scope requires exactly <page> <visual> <field>.")
+                raise typer.Exit(1)
+            page_ref, visual_ref, field = targets
+        else:
+            console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
+            raise typer.Exit(1)
+
+        try:
+            entity, prop, resolved_field_type, data_type = _resolve_filter_field(
+                field,
+                field_type=field_type,
+                model=model,
+            )
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
     try:
-        data, level, target = load_level_data(proj, page, visual)
+        data, level, target = load_level_data(proj, page_ref, visual_ref)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if has_categorical:
-        val_list = [v.strip() for v in values.split(",")]
+    if mode in {"categorical", "include", "exclude"}:
+        val_list = value or []
+        if not val_list:
+            console.print("[red]Error:[/red] Categorical/include/exclude filters require at least one --value.")
+            raise typer.Exit(1)
         add_fn = {
             "categorical": add_categorical_filter,
             "include": add_include_filter,
@@ -2292,7 +2445,7 @@ def filter_add(
             entity,
             prop,
             val_list,
-            field_type=field_type,
+            field_type=resolved_field_type,
             is_hidden=hidden,
             is_locked=locked,
             data_type=data_type,
@@ -2303,10 +2456,13 @@ def filter_add(
             f'Added {label} filter on [cyan]{entity}.{prop}[/cyan] '
             f'= [{", ".join(val_list)}] at {level} level'
         )
-    elif has_range:
+    elif mode == "range":
+        if min_val is None and max_val is None:
+            console.print("[red]Error:[/red] Range filters require --min, --max, or both.")
+            raise typer.Exit(1)
         add_range_filter(
             data, entity, prop, min_val=min_val, max_val=max_val,
-            field_type=field_type, is_hidden=hidden, is_locked=locked, data_type=data_type,
+            field_type=resolved_field_type, is_hidden=hidden, is_locked=locked, data_type=data_type,
         )
         save_level_data(data, target)
         bounds = []
@@ -2318,47 +2474,48 @@ def filter_add(
             f'Added range filter on [cyan]{entity}.{prop}[/cyan] '
             f'{" and ".join(bounds)} at {level} level'
         )
-    elif has_topn:
+    elif mode == "topn":
+        if topn is None:
+            console.print("[red]Error:[/red] Top N filters require --topn.")
+            raise typer.Exit(1)
         if not topn_by:
             console.print("[red]Error:[/red] --topn requires --topn-by (Table.Field) to specify the order-by field.")
             raise typer.Exit(1)
-        if field_type != "column":
+        if resolved_field_type != "column":
             console.print("[red]Error:[/red] Top N filters require a column target field.")
             raise typer.Exit(1)
         try:
             order_entity, order_prop, order_field_type, _ = _resolve_filter_field(
                 topn_by,
-                measure=(model is None),
+                field_type="auto",
                 model=model,
             )
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
-        direction = "Bottom" if bottom else "Top"
+        direction_label = "Bottom" if direction == "bottom" else "Top"
         try:
             add_topn_filter(
                 data, entity, prop, n=topn,
                 order_entity=order_entity, order_prop=order_prop,
-                order_field_type=order_field_type, direction=direction,
-                field_type=field_type, is_hidden=hidden, is_locked=locked,
+                order_field_type=order_field_type, direction=direction_label,
+                field_type=resolved_field_type, is_hidden=hidden, is_locked=locked,
             )
         except (NotImplementedError, ValueError) as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
         save_level_data(data, target)
         console.print(
-            f'Added {direction} {topn} filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Added {direction_label} {topn} filter on [cyan]{entity}.{prop}[/cyan] '
             f'by {order_entity}.{order_prop} at {level} level'
         )
-    elif has_relative:
-        # Parse "InLast 7 Days" format
-        parts = relative.split()
-        if len(parts) != 3:
-            console.print("[red]Error:[/red] --relative must be 'Operator Count Unit' (e.g. 'InLast 7 Days').")
-            console.print("[dim]Operators: InLast, InThis, InNext[/dim]")
-            console.print("[dim]Units: Minutes, Hours, Days, Weeks, Months, Quarters, Years[/dim]")
+    elif mode == "relative":
+        if operator is None or count is None or unit is None:
+            console.print("[red]Error:[/red] Relative filters require --operator, --count, and --unit.")
             raise typer.Exit(1)
-        rel_op, rel_count_str, rel_unit = parts
+        rel_op = operator
+        rel_count = count
+        rel_unit = unit
         valid_ops = ("InLast", "InThis", "InNext")
         valid_units = ("Minutes", "Hours", "Days", "Weeks", "Months", "Quarters", "Years")
         if rel_op not in valid_ops:
@@ -2366,11 +2523,6 @@ def filter_add(
             raise typer.Exit(1)
         if rel_unit not in valid_units:
             console.print(f"[red]Error:[/red] Unit must be one of: {', '.join(valid_units)}")
-            raise typer.Exit(1)
-        try:
-            rel_count = int(rel_count_str)
-        except ValueError:
-            console.print(f"[red]Error:[/red] Count must be an integer, got '{rel_count_str}'.")
             raise typer.Exit(1)
         try:
             if rel_unit in ("Minutes", "Hours"):
@@ -2381,7 +2533,7 @@ def filter_add(
                     operator=rel_op,
                     time_units_count=rel_count,
                     time_unit_type=rel_unit,
-                    field_type=field_type,
+                    field_type=resolved_field_type,
                     is_hidden=hidden,
                     is_locked=locked,
                 )
@@ -2394,7 +2546,7 @@ def filter_add(
                     time_units_count=rel_count,
                     time_unit_type=rel_unit,
                     include_today=include_today,
-                    field_type=field_type,
+                    field_type=resolved_field_type,
                     is_hidden=hidden,
                     is_locked=locked,
                 )
@@ -2406,105 +2558,89 @@ def filter_add(
             f'Added relative filter on [cyan]{entity}.{prop}[/cyan] '
             f'{rel_op.lower()} {rel_count} {rel_unit.lower()} at {level} level'
         )
+    else:
+        if not row:
+            console.print("[red]Error:[/red] Tuple filters require at least one --row.")
+            raise typer.Exit(1)
+        from pbi.filters import TupleField, add_tuple_filter
 
-
-@filter_app.command("tuple")
-def filter_tuple(
-    rows: Annotated[
-        list[str],
-        typer.Argument(
-            help=(
-                "Tuple rows as comma-separated Field=Value pairs. "
-                'Example: "Product.Color=Red,Product.Size=Large"'
-            )
-        ),
-    ],
-    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
-    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
-    hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
-    locked: Annotated[bool, typer.Option("--locked", help="Lock filter in view mode.")] = False,
-    project: ProjectOpt = None,
-) -> None:
-    """Add a Tuple filter from one or more row tuples."""
-    from pbi.filters import TupleField, add_tuple_filter, load_level_data, save_level_data
-
-    if not rows:
-        console.print("[red]Error:[/red] Provide at least one tuple row.")
-        raise typer.Exit(1)
-
-    model = _load_filter_model(project)
-    parsed_rows: list[list[TupleField]] = []
-
-    for row in rows:
-        parsed_fields: list[TupleField] = []
-        for part in row.split(","):
-            assignment = part.strip()
-            eq = assignment.find("=")
-            if eq == -1:
-                console.print(
-                    f"[red]Error:[/red] Invalid tuple assignment '{assignment}'. "
-                    "Use Field=Value."
+        parsed_rows: list[list[TupleField]] = []
+        for row_spec in row:
+            parsed_fields: list[TupleField] = []
+            for part in row_spec.split(","):
+                assignment = part.strip()
+                eq = assignment.find("=")
+                if eq == -1:
+                    console.print(
+                        f"[red]Error:[/red] Invalid tuple assignment '{assignment}'. Use Field=Value."
+                    )
+                    raise typer.Exit(1)
+                field_ref = assignment[:eq].strip()
+                literal = assignment[eq + 1:].strip()
+                try:
+                    row_entity, row_prop, row_field_type, row_data_type = _resolve_filter_field(
+                        field_ref,
+                        field_type="auto",
+                        model=model,
+                    )
+                except ValueError as e:
+                    console.print(f"[red]Error:[/red] {e}")
+                    raise typer.Exit(1)
+                parsed_fields.append(
+                    TupleField(
+                        entity=row_entity,
+                        prop=row_prop,
+                        value=literal,
+                        field_type=row_field_type,
+                        data_type=row_data_type,
+                    )
                 )
-                raise typer.Exit(1)
-            field_ref = assignment[:eq].strip()
-            value = assignment[eq + 1:].strip()
-            try:
-                entity, prop, field_type, data_type = _resolve_filter_field(
-                    field_ref,
-                    measure=False,
-                    model=model,
-                )
-            except ValueError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                raise typer.Exit(1)
-            parsed_fields.append(
-                TupleField(
-                    entity=entity,
-                    prop=prop,
-                    value=value,
-                    field_type=field_type,
-                    data_type=data_type,
-                )
-            )
-        parsed_rows.append(parsed_fields)
+            parsed_rows.append(parsed_fields)
 
-    proj = _get_project(project)
-    try:
-        data, level, target = load_level_data(proj, page, visual)
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    try:
-        add_tuple_filter(
-            data,
-            parsed_rows,
-            is_hidden=hidden,
-            is_locked=locked,
-        )
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    save_level_data(data, target)
-    console.print(
-        f'Added tuple filter with [cyan]{len(parsed_rows)}[/cyan] row(s) at {level} level'
-    )
+        try:
+            add_tuple_filter(data, parsed_rows, is_hidden=hidden, is_locked=locked)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+        save_level_data(data, target)
+        console.print(f'Added tuple filter with [cyan]{len(parsed_rows)}[/cyan] row(s) at {level} level')
 
 
 @filter_app.command("remove")
 def filter_remove(
-    field: Annotated[str, typer.Argument(help="Filter field (Table.Field) or filter name to remove.")],
-    page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
-    visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
+    scope: Annotated[str, typer.Argument(help="Target scope: report, page, or visual.")],
+    targets: Annotated[list[str], typer.Argument(help="Target arguments followed by the filter name or field to remove. report <filter>, page <page> <filter>, visual <page> <visual> <filter>.")],
     project: ProjectOpt = None,
 ) -> None:
     """Remove a filter by field reference or filter name."""
     from pbi.filters import load_level_data, save_level_data, remove_filter
 
     proj = _get_project(project)
+    if scope == "report":
+        if len(targets) != 1:
+            console.print("[red]Error:[/red] Report scope requires exactly <filter>.")
+            raise typer.Exit(1)
+        page_ref = None
+        visual_ref = None
+        field = targets[0]
+    elif scope == "page":
+        if len(targets) != 2:
+            console.print("[red]Error:[/red] Page scope requires exactly <page> <filter>.")
+            raise typer.Exit(1)
+        page_ref = targets[0]
+        visual_ref = None
+        field = targets[1]
+    elif scope == "visual":
+        if len(targets) != 3:
+            console.print("[red]Error:[/red] Visual scope requires exactly <page> <visual> <filter>.")
+            raise typer.Exit(1)
+        page_ref, visual_ref, field = targets
+    else:
+        console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
+        raise typer.Exit(1)
+
     try:
-        data, level, target = load_level_data(proj, page, visual)
+        data, level, target = load_level_data(proj, page_ref, visual_ref)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -2641,17 +2777,10 @@ def interaction_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     source: Annotated[str, typer.Argument(help="Source visual name or index.")],
     target: Annotated[str, typer.Argument(help="Target visual name or index.")],
-    interaction_type: Annotated[str, typer.Argument(help="Interaction type: DataFilter, HighlightFilter, NoFilter, Default.")],
+    mode: Annotated[str, typer.Option("--mode", help="Interaction mode: DataFilter, HighlightFilter, or NoFilter.")],
     project: ProjectOpt = None,
 ) -> None:
-    """Set interaction between two visuals.
-
-    Controls what happens to the target when the user selects data in the source:
-      DataFilter       — selection filters the target
-      HighlightFilter  — selection highlights in the target
-      NoFilter         — target ignores the selection
-      Default          — use default behavior for the target type
-    """
+    """Set interaction between two visuals."""
     from pbi.interactions import set_interaction
 
     proj = _get_project(project)
@@ -2663,27 +2792,25 @@ def interaction_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    if mode not in {"DataFilter", "HighlightFilter", "NoFilter"}:
+        console.print("[red]Error:[/red] --mode must be DataFilter, HighlightFilter, or NoFilter.")
+        raise typer.Exit(1)
+
     try:
-        set_interaction(pg, src_vis.name, tgt_vis.name, interaction_type)
+        set_interaction(pg, src_vis.name, tgt_vis.name, mode)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
     pg.save()
-    if interaction_type == "Default":
-        console.print(
-            f'Reset interaction: [cyan]{src_vis.name}[/cyan] → '
-            f'[cyan]{tgt_vis.name}[/cyan] to [bold]Default[/bold]'
-        )
-    else:
-        console.print(
-            f'Set interaction: [cyan]{src_vis.name}[/cyan] → '
-            f'[cyan]{tgt_vis.name}[/cyan] = [bold]{interaction_type}[/bold]'
-        )
+    console.print(
+        f'Set interaction: [cyan]{src_vis.name}[/cyan] → '
+        f'[cyan]{tgt_vis.name}[/cyan] = [bold]{mode}[/bold]'
+    )
 
 
-@interaction_app.command("remove")
-def interaction_remove(
+@interaction_app.command("clear")
+def interaction_clear(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     source: Annotated[str, typer.Argument(help="Source visual name or index.")],
     target: Annotated[Optional[str], typer.Argument(help="Target visual (omit to remove all from source).")] = None,
@@ -2788,8 +2915,8 @@ def bookmark_list(
     console.print(table)
 
 
-@bookmark_app.command("show")
-def bookmark_show(
+@bookmark_app.command("get")
+def bookmark_get(
     bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
     raw: Annotated[bool, typer.Option("--raw", "-r", help="Show raw JSON.")] = False,
     project: ProjectOpt = None,
@@ -2854,9 +2981,9 @@ def bookmark_create(
     page: Annotated[str, typer.Argument(help="Page to bookmark (name, display name, or index).")],
     hide: Annotated[Optional[list[str]], typer.Option("--hide", help="Visual names to hide in this bookmark.")] = None,
     target: Annotated[Optional[list[str]], typer.Option("--target", help="Only apply bookmark to these visuals.")] = None,
-    suppress_data: Annotated[bool, typer.Option("--no-data", help="Don't capture data/filter state.")] = False,
-    suppress_display: Annotated[bool, typer.Option("--no-display", help="Don't capture display state.")] = False,
-    suppress_page: Annotated[bool, typer.Option("--no-page", help="Don't switch page when applying.")] = False,
+    capture_data: Annotated[bool, typer.Option("--capture-data/--no-capture-data", help="Capture data and filter state.")] = True,
+    capture_display: Annotated[bool, typer.Option("--capture-display/--no-capture-display", help="Capture display state.")] = True,
+    capture_page: Annotated[bool, typer.Option("--capture-page/--no-capture-page", help="Capture the active page.")] = True,
     project: ProjectOpt = None,
 ) -> None:
     """Create a bookmark capturing page state.
@@ -2881,9 +3008,9 @@ def bookmark_create(
         visuals=visuals,
         hidden_visuals=hide,
         target_visuals=target,
-        suppress_data=suppress_data,
-        suppress_display=suppress_display,
-        suppress_active_section=suppress_page,
+        suppress_data=not capture_data,
+        suppress_display=not capture_display,
+        suppress_active_section=not capture_page,
     )
 
     hidden_count = len(hide) if hide else 0
@@ -2893,8 +3020,8 @@ def bookmark_create(
     )
 
 
-@bookmark_app.command("update")
-def bookmark_update(
+@bookmark_app.command("set")
+def bookmark_set(
     bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
     hide: Annotated[Optional[list[str]], typer.Option("--hide", help="Visual names to set as hidden.")] = None,
     show: Annotated[Optional[list[str]], typer.Option("--show", help="Visual names to set as visible.")] = None,

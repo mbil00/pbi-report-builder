@@ -1,6 +1,6 @@
 # Properties Reference
 
-All properties usable with `pbi visual set` and `pbi visual get`. Use `pbi visual props` for a quick listing.
+All properties usable with `pbi visual set` and `pbi visual get`. Use `pbi visual properties` for a quick listing.
 
 ## Position Properties
 

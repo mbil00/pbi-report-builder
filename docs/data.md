@@ -1,205 +1,82 @@
 # Data & Filters
 
-## Data Binding Commands
-
-### pbi visual bind
-
-Bind a column (dimension) or measure (fact) to a visual's data role.
+## Data Binding
 
 ```bash
-pbi visual bind <page> <visual> <role> <Table.Field>
-pbi visual bind <page> <visual> <role> <Table.Field> --measure    # force measure type
+pbi visual bind "Sales Overview" revenueChart Category Product.Category --field-type auto
+pbi visual bind "Sales Overview" revenueChart Y Sales.TotalRevenue --field-type measure
+pbi visual unbind "Sales Overview" revenueChart Category
+pbi visual unbind "Sales Overview" revenueChart Y Sales.TotalRevenue
+pbi visual bindings "Sales Overview" revenueChart
 ```
 
-Field type (column vs measure) is auto-detected from the semantic model. Use `--measure` / `-m` to override.
-For visuals with newer Desktop role names, the CLI normalizes a few legacy aliases automatically.
-For example, `cardVisual` accepts `Values`, but writes the correct exported PBIR role `Data`.
+`--field-type` is the canonical field typing flag across binding, sorting, and filters.
 
-```bash
-pbi visual bind "Sales" chart Category Product.Category
-pbi visual bind "Sales" chart Y Sales.Revenue
-pbi visual bind "Sales" chart Y Sales.TotalOrders --measure
-pbi visual bind "Sales" table Values Product.Name
-pbi visual bind "Sales" scatter X Sales.Revenue Y Sales.Profit
-```
-
-### pbi visual unbind
-
-Remove data bindings from a visual. Omit the field to remove the entire role.
-
-```bash
-pbi visual unbind <page> <visual> <role>                    # remove entire role
-pbi visual unbind <page> <visual> <role> <Table.Field>      # remove specific field
-```
-
-```bash
-pbi visual unbind "Sales" chart Series
-pbi visual unbind "Sales" chart Y Sales.TotalOrders
-```
-
-### pbi visual bindings
-
-List all data bindings on a visual.
-
-```bash
-pbi visual bindings <page> <visual>
-```
-
-## Semantic Model Commands
-
-### pbi model tables
-
-List tables in the semantic model.
+## Semantic Model
 
 ```bash
 pbi model tables
+pbi model columns Sales
+pbi model columns Sales --hidden
+pbi model measures Sales
+pbi model fields Sales
 ```
 
-### pbi model columns
+## Filter Scope
 
-List columns (dimensions) in a table.
+Filters use positional scope:
 
 ```bash
-pbi model columns <table>
-pbi model columns <table> --hidden      # include hidden columns
+pbi filter list report
+pbi filter list page "Sales Overview"
+pbi filter list visual "Sales Overview" revenueChart
 ```
 
-### pbi model measures
+## Add Filters
 
-List measures (facts) in a table.
+### Categorical / Include / Exclude
 
 ```bash
-pbi model measures <table>
+pbi filter add report Product.Category --mode categorical --value Bikes
+pbi filter add report Product.Category --mode include --value Bikes --value Accessories
+pbi filter add page "Sales Overview" Product.Category --mode exclude --value Obsolete
 ```
 
-### pbi model fields
-
-List all fields (columns + measures) for use with `visual bind`.
+### Range
 
 ```bash
-pbi model fields <table>
+pbi filter add report Sales.Revenue --mode range --min 1000 --max 50000
+pbi filter add page "Sales Overview" Sales.OrderDate --mode range --min "2024-01-01" --max "2024-12-31"
 ```
 
-## Filter Commands
-
-Filters can be applied at three levels:
-- **Report-level** (default): omit `--page` and `--visual`
-- **Page-level**: pass `--page`
-- **Visual-level**: pass `--page` and `--visual`
-
-### pbi filter list
+### Top N
 
 ```bash
-pbi filter list                                    # report-level
-pbi filter list --page "Sales"                     # page-level
-pbi filter list --page "Sales" --visual chart      # visual-level
+pbi filter add report Customers.Region --mode topn --topn 7 --topn-by Sales.TotalRevenue --direction top
+pbi filter add report Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction bottom
 ```
 
-The listing shows:
-
-- filter `Name`
-- one or more resolved `Field` references
-- filter `Type`
-- summary values/conditions
-- hidden / locked flags
-
-This is especially useful for tuple filters and other generated filters that are easier to remove by name than by structure.
-
-### pbi filter add
-
-Add a filter. Exactly one filter type per command.
-
-**Categorical filter** — match specific values:
+### Relative Date / Time
 
 ```bash
-pbi filter add Product.Category --values "Bikes,Accessories"
-pbi filter add Product.Category --values "Bikes" --page "Sales"
-pbi filter add Product.Category --values "Bikes" --page "Sales" --visual chart
+pbi filter add report Date.Date --mode relative --operator InLast --count 7 --unit Days
+pbi filter add report Date.Date --mode relative --operator InNext --count 1 --unit Quarters --no-include-today
+pbi filter add report Date.DateTime --mode relative --operator InLast --count 15 --unit Minutes
 ```
 
-**Include / Exclude filters** — schema-backed variants of value matching:
+### Tuple
 
 ```bash
-pbi filter add Product.Category --values "Bikes,Accessories" --mode include
-pbi filter add Product.Category --values "Obsolete" --mode exclude
+pbi filter add report --mode tuple --row "Product.Color=Red,Product.Size=Large"
+pbi filter add page "Sales Overview" --mode tuple \
+  --row "Product.Color=Red,Product.Size=Large" \
+  --row "Product.Color=Blue,Product.Size=Medium"
 ```
 
-**Range filter** — numeric or date range:
+## Remove Filters
 
 ```bash
-pbi filter add Sales.Revenue --min 1000 --max 50000
-pbi filter add Sales.Revenue --min 1000
-pbi filter add Sales.OrderDate --min "2024-01-01" --max "2024-12-31"
+pbi filter remove report Product.Category
+pbi filter remove page "Sales Overview" Sales.Revenue
+pbi filter remove visual "Sales Overview" revenueChart Customers.Region
 ```
-
-`--locked` now applies to range filters too.
-
-**Top N filter** — keep top or bottom N values by another field:
-
-```bash
-pbi filter add Customers.Region --topn 7 --topn-by Order_Details.Revenue
-pbi filter add Customers.Region --topn 5 --topn-by Order_Details.Revenue --bottom
-```
-
-**Relative date / time filter** — dynamic windows from the current time:
-
-```bash
-pbi filter add Date.Date --relative "InLast 7 Days"
-pbi filter add Date.Date --relative "InThis 1 Months"
-pbi filter add Date.Date --relative "InNext 1 Quarters" --no-include-today
-pbi filter add Date.DateTime --relative "InLast 15 Minutes"
-pbi filter add Date.DateTime --relative "InNext 1 Hours"
-```
-
-### pbi filter tuple
-
-Add a tuple filter from one or more row tuples:
-
-```bash
-pbi filter tuple "Product.Color=Red,Product.Size=Large"
-pbi filter tuple \
-  "Product.Color=Red,Product.Size=Large" \
-  "Product.Color=Blue,Product.Size=Medium"
-```
-
-**Passthrough** filters are still blocked by the CLI.
-We still do not have a canonical exported PBIR example for that filter type.
-
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `--values`, `-v` | Comma-separated values for categorical filter |
-| `--mode` | Value filter mode: `categorical`, `include`, or `exclude` |
-| `--min` | Minimum value for range filter |
-| `--max` | Maximum value for range filter |
-| `--topn` | Top N items count |
-| `--topn-by` | Order-by field for Top N (`Table.Field`) |
-| `--bottom` | Use Bottom N instead of Top N |
-| `--relative` | Relative filter as `Operator Count Unit` |
-| `--include-today` / `--no-include-today` | Include today for relative date filters when supported |
-| `--page` | Apply at page level |
-| `--visual` | Apply at visual level (requires `--page`) |
-| `--hidden` | Hide filter in view mode |
-| `--locked` | Lock filter in view mode |
-| `--measure`, `-m` | Treat field as a measure |
-
-### pbi filter remove
-
-```bash
-pbi filter remove <Table.Field>                                    # report-level
-pbi filter remove <filter-name>                                    # report-level by generated filter name
-pbi filter remove <Table.Field> --page "Sales"                     # page-level
-pbi filter remove <Table.Field> --page "Sales" --visual chart      # visual-level
-```
-
-```bash
-pbi filter remove Product.Category
-pbi filter remove Filter_a1b2c3d4
-pbi filter remove Sales.Revenue --page "Sales"
-```
-
-Notes:
-
-- tuple filters can now be removed by one of their component field references, for example `Product.Color`
-- if the semantic model is unavailable, literal values are treated conservatively as strings rather than guessed as dates or numbers
