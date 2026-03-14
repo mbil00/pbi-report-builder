@@ -21,7 +21,7 @@ Pages and visuals are resolved in this order:
 | Display name | `"Sales Overview"` | Case-insensitive |
 | Partial name | `"Sales"` | Must be unambiguous |
 | Folder/ID | `page1`, `a1b2c3d4e5...` | Internal hex ID |
-| Index | `1`, `2`, `3` | 1-based, from list order |
+| Index | `1`, `2`, `3`, `#7` | 1-based, from list order |
 | Visual type | `card`, `slicer` | Only if unique on the page |
 | Friendly name | `revenueChart` | Set via `visual create --name` or `visual rename` |
 

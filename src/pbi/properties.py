@@ -6,6 +6,7 @@ and the actual PBI JSON structure (nested visualContainerObjects with expr liter
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass
 from typing import Any
 
@@ -1770,6 +1771,8 @@ def get_property(
     Supports 'chart:<object>.<prop>' prefix for reading unregistered
     visual.objects properties dynamically.
     """
+    prop_name = normalize_property_name(prop_name, registry)
+
     # Dynamic chart property: chart:<objectKey>.<propName>
     if prop_name.startswith("chart:"):
         return _get_dynamic_chart_prop(data, prop_name)
@@ -1798,6 +1801,9 @@ def set_property(
     Supports 'chart:<object>.<prop>' prefix for writing unregistered
     visual.objects properties dynamically with auto-inferred value types.
     """
+    original_name = prop_name
+    prop_name = normalize_property_name(prop_name, registry)
+
     # Dynamic chart property: chart:<objectKey>.<propName>
     if prop_name.startswith("chart:"):
         _set_dynamic_chart_prop(data, prop_name, value)
@@ -1819,11 +1825,101 @@ def set_property(
         coerced = _coerce_simple(value, prop_def.value_type)
         _set_by_path(data, prop_def.json_path, coerced)
     elif prop_def is None:
+        suggestions = suggest_property_names(original_name, registry)
+        hint = f' Did you mean {", ".join(f"""\"{name}\"""" for name in suggestions)}?' if suggestions else ""
         raise ValueError(
-            f'Unknown property "{prop_name}". '
+            f'Unknown property "{original_name}".{hint} '
             f"Use 'pbi visual props' or 'pbi page props' to see available properties, "
             f"or use 'chart:<object>.<prop>' for unregistered chart properties."
         )
+
+
+def normalize_property_name(
+    prop_name: str,
+    registry: dict[str, PropertyDef],
+) -> str:
+    """Normalize aliases and raw PBIR object paths to canonical property names."""
+    if prop_name.startswith("chart:") or prop_name in registry:
+        return prop_name
+    alias_map = _property_alias_map(registry)
+    return alias_map.get(prop_name, prop_name)
+
+
+def suggest_property_names(
+    prop_name: str,
+    registry: dict[str, PropertyDef],
+    *,
+    limit: int = 3,
+) -> list[str]:
+    """Suggest nearby canonical property names for an invalid property token."""
+    alias_map = _property_alias_map(registry)
+    choices = sorted(set(registry) | set(alias_map))
+    suggestions: list[str] = []
+    for match in difflib.get_close_matches(prop_name, choices, n=limit, cutoff=0.55):
+        if match not in suggestions:
+            suggestions.append(match)
+    if "." in prop_name and not prop_name.startswith("chart:"):
+        chart_prop = f"chart:{prop_name}"
+        if chart_prop not in suggestions:
+            suggestions.append(chart_prop)
+    return suggestions[:limit]
+
+
+def canonical_object_property_name(
+    container_key: str,
+    prop_name: str,
+    registry: dict[str, PropertyDef],
+    *,
+    objects_path: str = "visualContainerObjects",
+    selector: str | None = None,
+) -> str:
+    """Return the canonical CLI property name for a raw object property."""
+    reverse_map = _object_property_reverse_map(registry)
+    key = (objects_path, container_key, prop_name, selector)
+    canonical = reverse_map.get(key)
+    if canonical:
+        return canonical
+    fallback = reverse_map.get((objects_path, container_key, prop_name, None))
+    if fallback:
+        return fallback
+    if objects_path == "objects":
+        return f"chart:{container_key}.{prop_name}"
+    return f"{container_key}.{prop_name}"
+
+
+def _property_alias_map(registry: dict[str, PropertyDef]) -> dict[str, str]:
+    """Build a map of accepted aliases to canonical registry keys."""
+    aliases: dict[str, str] = {}
+    for canonical, prop_def in registry.items():
+        if prop_def.container_key and prop_def.container_prop:
+            raw_name = f"{prop_def.container_key}.{prop_def.container_prop}"
+            aliases.setdefault(raw_name, canonical)
+    for source_prefix, target_prefix in (
+        ("dataLabels.", "labels."),
+        ("dropShadow.", "shadow."),
+    ):
+        for canonical in registry:
+            if canonical.startswith(target_prefix):
+                aliases.setdefault(source_prefix + canonical[len(target_prefix):], canonical)
+    return aliases
+
+
+def _object_property_reverse_map(
+    registry: dict[str, PropertyDef],
+) -> dict[tuple[str, str, str, str | None], str]:
+    """Map raw object properties back to canonical CLI property names."""
+    reverse: dict[tuple[str, str, str, str | None], str] = {}
+    for canonical, prop_def in registry.items():
+        if not (prop_def.container_key and prop_def.container_prop):
+            continue
+        key = (
+            prop_def.objects_path,
+            prop_def.container_key,
+            prop_def.container_prop,
+            prop_def.selector,
+        )
+        reverse.setdefault(key, canonical)
+    return reverse
 
 
 def _find_entry(entries: list[dict], selector: str | None) -> dict | None:

@@ -16,6 +16,7 @@ from pbi.properties import (
     VISUAL_PROPERTIES,
     REPORT_PROPERTIES,
     PAGE_PROPERTIES,
+    canonical_object_property_name,
     get_property,
     set_property,
     list_properties,
@@ -281,16 +282,26 @@ def capabilities(
 
 @report_app.command("get")
 def report_get(
-    prop: Annotated[Optional[str], typer.Argument(help="Property to read (omit for overview).")] = None,
+    props: Annotated[list[str] | None, typer.Argument(help="Property or properties to read (omit for overview).")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Show report metadata or a specific report property."""
+    """Show report metadata or one or more report properties."""
     proj = _get_project(project)
     data = proj.get_report_meta()
 
-    if prop:
-        value = get_property(data, prop, REPORT_PROPERTIES)
-        console.print(value)
+    if props:
+        if len(props) == 1:
+            value = get_property(data, props[0], REPORT_PROPERTIES)
+            console.print(value)
+            return
+
+        table = Table(title="Report Properties", box=box.SIMPLE)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value")
+        for prop in props:
+            value = get_property(data, prop, REPORT_PROPERTIES)
+            table.add_row(prop, "" if value is None else str(value))
+        console.print(table)
         return
 
     table = Table(title="Report", box=box.SIMPLE)
@@ -396,10 +407,10 @@ def page_list(project: ProjectOpt = None) -> None:
 @page_app.command("get")
 def page_get(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    prop: Annotated[Optional[str], typer.Argument(help="Property to read (omit for all).")] = None,
+    props: Annotated[list[str] | None, typer.Argument(help="Property or properties to read (omit for overview).")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Show page details or a specific property."""
+    """Show page details or one or more specific properties."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -407,9 +418,19 @@ def page_get(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if prop:
-        value = get_property(pg.data, prop, PAGE_PROPERTIES)
-        console.print(value)
+    if props:
+        if len(props) == 1:
+            value = get_property(pg.data, props[0], PAGE_PROPERTIES)
+            console.print(value)
+            return
+
+        table = Table(title=pg.display_name, box=box.SIMPLE)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value")
+        for prop in props:
+            value = get_property(pg.data, prop, PAGE_PROPERTIES)
+            table.add_row(prop, "" if value is None else str(value))
+        console.print(table)
         return
 
     table = Table(title=pg.display_name, box=box.SIMPLE)
@@ -859,11 +880,11 @@ def visual_list(
 def visual_get(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    prop: Annotated[Optional[str], typer.Argument(help="Property to read (omit for overview).")] = None,
+    props: Annotated[list[str] | None, typer.Argument(help="Property or properties to read (omit for overview).")] = None,
     raw: Annotated[bool, typer.Option("--raw", "-r", help="Show raw JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Show visual details or a specific property."""
+    """Show visual details or one or more specific properties."""
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -872,14 +893,28 @@ def visual_get(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    if raw and props:
+        console.print("[red]Error:[/red] --raw cannot be combined with explicit properties.")
+        raise typer.Exit(1)
+
     if raw:
         import json
         console.print_json(json.dumps(vis.data, indent=2))
         return
 
-    if prop:
-        value = get_property(vis.data, prop, VISUAL_PROPERTIES)
-        console.print(value)
+    if props:
+        if len(props) == 1:
+            value = get_property(vis.data, props[0], VISUAL_PROPERTIES)
+            console.print(value)
+            return
+
+        table = Table(title=f"{vis.name}", box=box.SIMPLE)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value")
+        for prop in props:
+            value = get_property(vis.data, prop, VISUAL_PROPERTIES)
+            table.add_row(prop, "" if value is None else str(value))
+        console.print(table)
         return
 
     # Overview
@@ -904,9 +939,21 @@ def visual_get(
             table.add_section()
             for obj_name, entries in section_data.items():
                 if entries and isinstance(entries, list) and entries[0].get("properties"):
+                    selector = entries[0].get("selector", {})
+                    selector_name = selector.get("id") or selector.get("metadata")
                     for pname, pval in entries[0]["properties"].items():
                         decoded = decode_pbi_value(pval)
-                        table.add_row(f"{obj_name}.{pname}", str(decoded))
+                        canonical = canonical_object_property_name(
+                            obj_name,
+                            pname,
+                            VISUAL_PROPERTIES,
+                            objects_path=section,
+                            selector=selector.get("id"),
+                        )
+                        label = canonical
+                        if selector_name and selector_name != "default":
+                            label = f"{label} [{selector_name}]"
+                        table.add_row(label, str(decoded))
 
     # Show data bindings summary
     query = vis.data.get("visual", {}).get("query", {}).get("queryState", {})
@@ -931,6 +978,42 @@ def visual_get(
     console.print(table)
 
 
+def _parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:
+    """Parse prop=value pairs, preserving the legacy two-argument form."""
+    pairs: list[tuple[str, str]] = []
+    if len(assignments) == 2 and "=" not in assignments[0] and "=" not in assignments[1]:
+        pairs.append((assignments[0], assignments[1]))
+        return pairs
+    for arg in assignments:
+        eq = arg.find("=")
+        if eq == -1:
+            raise ValueError(f"Invalid assignment '{arg}'. Use prop=value format.")
+        pairs.append((arg[:eq], arg[eq + 1:]))
+    return pairs
+
+
+def _prepare_visual_property_updates(
+    data: dict,
+    pairs: list[tuple[str, str]],
+    *,
+    measure_ref: str | None = None,
+) -> tuple[dict, list[tuple[str, object, object]]]:
+    """Apply a property batch to a copy of the visual for validation."""
+    import copy
+
+    updated = copy.deepcopy(data)
+    changes: list[tuple[str, object, object]] = []
+    for prop, value in pairs:
+        old = get_property(updated, prop, VISUAL_PROPERTIES, measure_ref=measure_ref)
+        try:
+            set_property(updated, prop, value, VISUAL_PROPERTIES, measure_ref=measure_ref)
+        except ValueError as e:
+            raise ValueError(f"{prop}: {e}") from e
+        new = get_property(updated, prop, VISUAL_PROPERTIES, measure_ref=measure_ref)
+        changes.append((prop, old, new))
+    return updated, changes
+
+
 @visual_app.command("set")
 def visual_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
@@ -938,6 +1021,7 @@ def visual_set(
     assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value or prop value (single pair).")],
     project: ProjectOpt = None,
     measure: Annotated[str | None, typer.Option("--measure", "-m", help="Target a specific measure (queryRef) for per-measure formatting.")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
 ) -> None:
     """Set visual properties. Supports batch: prop=value prop=value ...
 
@@ -952,30 +1036,24 @@ def visual_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Parse assignments — support both "prop=value" and legacy "prop value" (2 args)
-    pairs: list[tuple[str, str]] = []
-    if len(assignments) == 2 and "=" not in assignments[0] and "=" not in assignments[1]:
-        # Legacy: pbi visual set page visual prop value
-        pairs.append((assignments[0], assignments[1]))
-    else:
-        for arg in assignments:
-            eq = arg.find("=")
-            if eq == -1:
-                console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
-                raise typer.Exit(1)
-            pairs.append((arg[:eq], arg[eq + 1:]))
+    try:
+        pairs = _parse_property_assignments(assignments)
+        updated, changes = _prepare_visual_property_updates(vis.data, pairs, measure_ref=measure)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    for prop, value in pairs:
-        old = get_property(vis.data, prop, VISUAL_PROPERTIES, measure_ref=measure)
-        try:
-            set_property(vis.data, prop, value, VISUAL_PROPERTIES, measure_ref=measure)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {prop}: {e}")
-            raise typer.Exit(1)
-        new = get_property(vis.data, prop, VISUAL_PROPERTIES, measure_ref=measure)
+    for prop, old, new in changes:
         label = f"{prop} ({measure})" if measure else prop
-        console.print(f"[dim]{label}:[/dim] {old} [dim]→[/dim] {new}")
+        if dry_run:
+            console.print(f"Would set {label}: {old} [dim]→[/dim] {new}")
+        else:
+            console.print(f"[dim]{label}:[/dim] {old} [dim]→[/dim] {new}")
 
+    if dry_run:
+        return
+
+    vis.data = updated
     vis.save()
 
 
@@ -984,6 +1062,7 @@ def visual_set_all(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value ...")],
     type_filter: Annotated[str | None, typer.Option("--type", "-t", help="Only apply to visuals of this type (e.g. slicer, card, tableEx).")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Set properties on multiple visuals at once.
@@ -1008,23 +1087,36 @@ def visual_set_all(
     # Skip group containers
     visuals = [v for v in visuals if "visualGroup" not in v.data]
 
-    # Parse assignments
-    pairs: list[tuple[str, str]] = []
-    for arg in assignments:
-        eq = arg.find("=")
-        if eq == -1:
-            console.print(f"[red]Error:[/red] Invalid assignment '{arg}'. Use prop=value format.")
+    try:
+        pairs = _parse_property_assignments(assignments)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    prepared: list[tuple[object, dict, list[tuple[str, object, object]]]] = []
+    for vis in visuals:
+        try:
+            updated, changes = _prepare_visual_property_updates(vis.data, pairs)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {vis.name}: {e}")
             raise typer.Exit(1)
-        pairs.append((arg[:eq], arg[eq + 1:]))
+        prepared.append((vis, updated, changes))
+
+    if dry_run:
+        totals: dict[str, int] = {}
+        for _vis, _updated, changes in prepared:
+            for prop, old, new in changes:
+                if old != new:
+                    totals[prop] = totals.get(prop, 0) + 1
+        if not totals:
+            console.print("[dim]No changes would be applied.[/dim]")
+            return
+        for prop, count in totals.items():
+            console.print(f"Would set {prop} on [cyan]{count}[/cyan] visual(s)")
+        return
 
     count = 0
-    for vis in visuals:
-        for prop, value in pairs:
-            try:
-                set_property(vis.data, prop, value, VISUAL_PROPERTIES)
-            except ValueError as e:
-                console.print(f"[red]Error:[/red] {vis.name}: {prop}: {e}")
-                continue
+    for vis, updated, _changes in prepared:
+        vis.data = updated
         vis.save()
         count += 1
 

@@ -246,6 +246,9 @@ class Project:
     def find_visual(self, page: Page, identifier: str) -> Visual:
         """Find a visual by name, type, folder name, or index."""
         visuals = self.get_visuals(page)
+        raw_identifier = identifier
+        if identifier.startswith(("#", "@")):
+            identifier = identifier[1:]
 
         # Exact folder name
         for v in visuals:
@@ -256,6 +259,15 @@ class Project:
         for v in visuals:
             if v.name == identifier:
                 return v
+
+        # Index-based (1-based). Prefer explicit numeric references before
+        # partial matching so the indices shown by `visual list` are usable.
+        try:
+            idx = int(identifier) - 1
+            if 0 <= idx < len(visuals):
+                return visuals[idx]
+        except ValueError:
+            pass
 
         id_lower = identifier.lower()
 
@@ -274,20 +286,12 @@ class Project:
                 f'Ambiguous visual "{identifier}". Matches: {names}'
             )
 
-        # Index-based (1-based)
-        try:
-            idx = int(identifier) - 1
-            if 0 <= idx < len(visuals):
-                return visuals[idx]
-        except ValueError:
-            pass
-
         available = ", ".join(
             f'{i+1}: {v.name} ({v.visual_type})'
             for i, v in enumerate(visuals)
         )
         raise ValueError(
-            f'Visual "{identifier}" not found on "{page.display_name}". '
+            f'Visual "{raw_identifier}" not found on "{page.display_name}". '
             f"Available: {available}"
         )
 

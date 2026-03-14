@@ -23,6 +23,7 @@ from pbi.filters import (
 from pbi.interactions import get_interactions, set_interaction
 from pbi.model import _parse_tmdl_name
 from pbi.project import Project, _read_json, _write_json
+from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.templates import apply_template, save_template
 
@@ -221,6 +222,147 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
             self.assertEqual(get_interactions(page), [])
 
 
+class VisualGetRegressionTests(unittest.TestCase):
+    def test_visual_index_references_work_with_bare_and_prefixed_numbers(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            first = project.create_visual(page, "textSlicer", x=0, y=0)
+            second = project.create_visual(page, "cardVisual", x=100, y=0)
+            first.data["name"] = "7ac9f370abc"
+            second.data["name"] = "26d0c6f4bee8"
+            first.save()
+            second.save()
+
+            result_bare = runner.invoke(
+                app,
+                ["visual", "get", "Demo", "2", "visualType", "--project", str(root / "Sample.pbip")],
+            )
+            result_prefixed = runner.invoke(
+                app,
+                ["visual", "get", "Demo", "#2", "visualType", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result_bare.exit_code, 0, result_bare.stdout)
+            self.assertIn("cardVisual", result_bare.stdout)
+            self.assertEqual(result_prefixed.exit_code, 0, result_prefixed.stdout)
+            self.assertIn("cardVisual", result_prefixed.stdout)
+
+    def test_visual_get_accepts_multiple_properties(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual")
+            visual.data["name"] = "card1"
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "background.color", "#123456", VISUAL_PROPERTIES)
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "get",
+                    "Demo",
+                    "card1",
+                    "title.show",
+                    "background.color",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("title.show", result.stdout)
+            self.assertIn("background.color", result.stdout)
+            self.assertIn("True", result.stdout)
+            self.assertIn("#123456", result.stdout)
+
+    def test_visual_get_overview_uses_canonical_property_names(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual")
+            visual.data["name"] = "card1"
+            set_property(visual.data, "shadow.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "cardShape.radius", "5", VISUAL_PROPERTIES)
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["visual", "get", "Demo", "card1", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("shadow.show", result.stdout)
+            self.assertIn("cardShape.radius", result.stdout)
+            self.assertNotIn("dropShadow.show", result.stdout)
+            self.assertNotIn("shapeCustomRectangle.rectangleRoundedCurve", result.stdout)
+
+    def test_page_get_accepts_multiple_properties(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo", width=1440, height=900, display_option="FitToWidth")
+
+            result = runner.invoke(
+                app,
+                [
+                    "page",
+                    "get",
+                    "Demo",
+                    "width",
+                    "displayOption",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("width", result.stdout)
+            self.assertIn("1440", result.stdout)
+            self.assertIn("displayOption", result.stdout)
+            self.assertIn("FitToWidth", result.stdout)
+
+    def test_report_get_accepts_multiple_properties(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            report_path = project.definition_folder / "report.json"
+            data = _read_json(report_path)
+            data["settings"] = {
+                "pagesPosition": "Bottom",
+                "useEnhancedTooltips": True,
+            }
+            _write_json(report_path, data)
+
+            result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "get",
+                    "layoutOptimization",
+                    "settings.pagesPosition",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("layoutOptimization", result.stdout)
+            self.assertIn("None", result.stdout)
+            self.assertIn("settings.pagesPosition", result.stdout)
+            self.assertIn("Bottom", result.stdout)
+
+
 class FilterModelRegressionTests(unittest.TestCase):
     def test_tuple_filter_can_be_removed_by_component_field(self) -> None:
         data: dict = {}
@@ -290,6 +432,125 @@ class DrillthroughRegressionTests(unittest.TestCase):
             page = Project.find(root / "Sample.pbip").find_page("Demo")
             entity = page.data["pageBinding"]["parameters"][0]["fieldExpr"]["Column"]["Expression"]["SourceRef"]["Entity"]
             self.assertEqual(entity, "Customers")
+
+
+class VisualSetRegressionTests(unittest.TestCase):
+    def test_visual_set_accepts_raw_property_aliases(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual")
+            visual.data["name"] = "card1"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    "Demo",
+                    "card1",
+                    "dropShadow.show=true",
+                    "label.show=true",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            visual = Project.find(root / "Sample.pbip").find_visual(Project.find(root / "Sample.pbip").find_page("Demo"), "card1")
+            self.assertTrue(get_property(visual.data, "shadow.show", VISUAL_PROPERTIES))
+            self.assertTrue(get_property(visual.data, "cardLabel.show", VISUAL_PROPERTIES))
+
+    def test_visual_set_suggests_nearby_property_names(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "barChart")
+            visual.data["name"] = "chart1"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    "Demo",
+                    "chart1",
+                    "dataLabel.show=true",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("Did you mean", result.stdout)
+            self.assertIn('"dataLabels.show"', result.stdout)
+
+    def test_visual_set_all_prevalidates_and_does_not_partially_write(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            for idx in range(2):
+                visual = project.create_visual(page, "cardVisual")
+                visual.data["name"] = f"card{idx}"
+                visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set-all",
+                    "Demo",
+                    "background.show=true",
+                    "notARealProperty=true",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertNotEqual(result.exit_code, 0)
+            restored = Project.find(root / "Sample.pbip")
+            page = restored.find_page("Demo")
+            for visual in restored.get_visuals(page):
+                self.assertIsNone(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
+
+    def test_visual_set_all_supports_dry_run(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            for idx in range(2):
+                visual = project.create_visual(page, "cardVisual")
+                visual.data["name"] = f"card{idx}"
+                visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set-all",
+                    "Demo",
+                    "background.show=true",
+                    "--dry-run",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Would set background.show", result.stdout)
+            restored = Project.find(root / "Sample.pbip")
+            page = restored.find_page("Demo")
+            for visual in restored.get_visuals(page):
+                self.assertIsNone(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
 
 
 if __name__ == "__main__":

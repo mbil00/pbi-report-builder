@@ -13,10 +13,13 @@ Table of all visuals on a page with index, name, type, position, size, and z-ord
 ```bash
 pbi visual get <page> <visual>                  # overview: formatting, bindings, sort
 pbi visual get <page> <visual> <property>        # single property value
+pbi visual get <page> <visual> <prop1> <prop2>   # multiple property values
 pbi visual get <page> <visual> --raw             # full JSON
 ```
 
 Overview shows: position, container formatting, chart formatting, data bindings, and sort definition.
+
+When multiple properties are passed, the CLI returns a compact property/value table instead of forcing one command per property.
 
 ## pbi visual set
 
@@ -25,7 +28,15 @@ Supports single property or batch mode:
 ```bash
 pbi visual set <page> <visual> <property> <value>          # single (legacy)
 pbi visual set <page> <visual> prop=value [prop=value ...]  # batch
+pbi visual set <page> <visual> prop=value [prop=value ...] --dry-run
 ```
+
+Notes:
+
+- batches are validated before saving
+- `--dry-run` shows the resolved changes without writing files
+- common raw/alias names such as `dropShadow.show`, `label.show`, and `dataLabels.show` are accepted when they map cleanly to canonical CLI properties
+- invalid properties now include close-match suggestions
 
 Batch examples:
 
@@ -84,6 +95,7 @@ Apply the same property assignments to multiple visuals on a page. Use `--type` 
 ```bash
 pbi visual set-all <page> prop=value [prop=value ...]                       # all visuals on page
 pbi visual set-all <page> prop=value [prop=value ...] --type slicer         # only slicers
+pbi visual set-all <page> prop=value [prop=value ...] --dry-run             # validate and preview
 ```
 
 ```bash
@@ -96,6 +108,8 @@ pbi visual set-all "Sales" background.show=true background.color="#FFFFFF"
 # Style all cards
 pbi visual set-all "Sales" cardValue.bold=true cardLabel.show=true --type cardVisual
 ```
+
+`set-all` now prevalidates the whole batch before saving any visual, so invalid properties fail fast instead of partially updating the page.
 
 ## pbi visual paste-style
 
