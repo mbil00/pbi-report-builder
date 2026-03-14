@@ -1,0 +1,27 @@
+relationship 1219c513-7cdb-4ec7-ba91-ecd7d995cfd0
+	joinOnDateBehavior: datePartOnly
+	fromColumn: Date.Date
+	toColumn: LocalDateTable_6809f789-ca23-4187-a37b-4db3392ec26d.Date
+
+relationship 69741abb-7a53-4e69-895b-237bb6593d2b
+	joinOnDateBehavior: datePartOnly
+	fromColumn: Sales.OrderDateTime
+	toColumn: LocalDateTable_1c70d7f3-d3ce-413d-a037-1b8c36a46c65.Date
+
+relationship AutoDetected_6bc79685-6de2-4a84-82af-e890b0c75d2d
+	fromColumn: Sales.CustomerID
+	toColumn: Customers.CustomerID
+
+relationship AutoDetected_1125b8be-2422-4d78-9b38-c283a1009d4b
+	fromColumn: Sales.ProductID
+	toColumn: Product.ProductID
+
+relationship 94ecf910-f6f2-2b68-480d-1c98c8234d63
+	fromColumn: Sales.OrderDate
+	toColumn: Date.Date
+
+relationship 735b3dda-86ff-4275-87cd-73638f54e97b
+	joinOnDateBehavior: datePartOnly
+	fromColumn: RelativeTimeOffsets.DateTime
+	toColumn: LocalDateTable_7c936782-73bc-442d-baa7-259d0c0b70ec.Date
+

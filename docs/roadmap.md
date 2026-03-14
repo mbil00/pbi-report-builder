@@ -21,7 +21,7 @@ Use `pbi capabilities` to inspect the current support matrix.
 
 Close the remaining gaps where Power BI supports a feature and PBIR can represent it, but the CLI does not yet emit the exact object structure:
 
-- advanced filters: relative date/time and visual Top N
+- advanced filters: passthrough and any still-unobserved exported filter families
 - deeper bookmark state: filters, sort state, active projections, grouped visuals
 - richer page-binding coverage for tooltip and drillthrough
 - broader report-level metadata and resource package management

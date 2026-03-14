@@ -12,6 +12,7 @@ from pbi.filters import (
     add_exclude_filter,
     add_include_filter,
     add_relative_date_filter,
+    add_relative_time_filter,
     add_topn_filter,
     add_tuple_filter,
     parse_filter,
@@ -140,9 +141,16 @@ class PagePropertyShapeTests(unittest.TestCase):
 
 
 class UnsupportedFilterWriterTests(unittest.TestCase):
-    def test_relative_date_writer_is_blocked(self) -> None:
-        with self.assertRaises(NotImplementedError):
-            add_relative_date_filter({}, "Calendar", "Date")
+    def test_relative_date_in_this_requires_count_one(self) -> None:
+        with self.assertRaises(ValueError):
+            add_relative_date_filter(
+                {},
+                "Date",
+                "Date",
+                operator="InThis",
+                time_units_count=2,
+                time_unit_type="Months",
+            )
 
 
 class SchemaBackedAdvancedFilterTests(unittest.TestCase):
@@ -214,6 +222,43 @@ class SchemaBackedAdvancedFilterTests(unittest.TestCase):
             parse_filter(filter_obj).values,
             ["top 7 by Order_Details.Revenue"],
         )
+
+    def test_relative_date_filter_uses_between_datespan_shape(self) -> None:
+        data: dict = {}
+        add_relative_date_filter(
+            data,
+            "Date",
+            "Date",
+            operator="InLast",
+            time_units_count=100,
+            time_unit_type="Days",
+            include_today=True,
+        )
+
+        filter_obj = data["filterConfig"]["filters"][0]
+        condition = filter_obj["filter"]["Where"][0]["Condition"]["Between"]
+        self.assertEqual(filter_obj["type"], "RelativeDate")
+        self.assertIn("DateSpan", condition["LowerBound"])
+        self.assertIn("DateSpan", condition["UpperBound"])
+        self.assertEqual(parse_filter(filter_obj).values, ["in last 100 days incl today"])
+
+    def test_relative_time_filter_uses_between_now_shape(self) -> None:
+        data: dict = {}
+        add_relative_time_filter(
+            data,
+            "Date",
+            "Date",
+            operator="InNext",
+            time_units_count=1,
+            time_unit_type="Hours",
+        )
+
+        filter_obj = data["filterConfig"]["filters"][0]
+        condition = filter_obj["filter"]["Where"][0]["Condition"]["Between"]
+        self.assertEqual(filter_obj["type"], "RelativeTime")
+        self.assertEqual(condition["LowerBound"], {"Now": {}})
+        self.assertIn("DateAdd", condition["UpperBound"])
+        self.assertEqual(parse_filter(filter_obj).values, ["in next 1 hours"])
 
 
 if __name__ == "__main__":

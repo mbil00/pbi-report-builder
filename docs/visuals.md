@@ -340,11 +340,24 @@ pbi visual column "Sales" table 1 --rename "Product" --align Left
 
 ## pbi visual types
 
-Reference for visual types and their data roles.
+Reference for known visual types and their data roles.
 
 ```bash
 pbi visual types                    # all types with role names
 pbi visual types scatterChart       # detailed roles for one type
+```
+
+The CLI distinguishes between:
+
+- `role-backed` visual types: role metadata is modeled and can be used with data binding helpers
+- `sample-backed` visual types: observed in exported PBIR samples and supported for creation, but binding roles are not modeled yet
+
+Common aliases are normalized on create:
+
+```bash
+pbi visual create "Sales" card
+pbi visual create "Sales" table
+pbi visual create "Sales" matrix
 ```
 
 ## pbi visual props

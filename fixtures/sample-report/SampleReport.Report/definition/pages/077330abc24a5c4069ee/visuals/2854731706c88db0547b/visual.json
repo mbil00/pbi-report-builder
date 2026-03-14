@@ -1,0 +1,50 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.6.0/schema.json",
+  "name": "2854731706c88db0547b",
+  "position": {
+    "x": 997.95501022494886,
+    "y": 591.5746421267894,
+    "z": 9,
+    "height": 128.26175869120655,
+    "width": 282.04498977505114,
+    "tabOrder": 9
+  },
+  "visual": {
+    "visualType": "scorecard",
+    "objects": {
+      "scorecard": [
+        {
+          "properties": {
+            "displayMode": {
+              "expr": {
+                "Literal": {
+                  "Value": "'tile'"
+                }
+              }
+            },
+            "scorecardReference": {
+              "kind": "ItemLocation",
+              "byReference": {
+                "itemId": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'d1396c2c-00f0-4a7e-aae1-9777c24a7caa'"
+                    }
+                  }
+                }
+              }
+            },
+            "goalIds": {
+              "expr": {
+                "Literal": {
+                  "Value": "'9e6acdf4-aca3-40e7-8e53-fbeb4084343b'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

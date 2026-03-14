@@ -1061,6 +1061,8 @@ def visual_create(
     project: ProjectOpt = None,
 ) -> None:
     """Create a new visual on a page."""
+    from pbi.roles import is_known_visual_type, normalize_visual_type
+
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -1068,13 +1070,32 @@ def visual_create(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    vis = proj.create_visual(pg, visual_type, x=x, y=y, width=width, height=height)
+    canonical_visual_type = normalize_visual_type(visual_type)
+    if visual_type != canonical_visual_type:
+        console.print(
+            f'[dim]Using canonical visual type [cyan]{canonical_visual_type}[/cyan] '
+            f'for alias "{visual_type}".[/dim]'
+        )
+    elif not is_known_visual_type(visual_type):
+        console.print(
+            f'[yellow]Warning:[/yellow] "{visual_type}" is not in the CLI visual catalog. '
+            "Creating a raw visual container."
+        )
+
+    vis = proj.create_visual(
+        pg,
+        canonical_visual_type,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+    )
     if name:
         vis.data["name"] = name
         vis.save()
     display = name or vis.name
     console.print(
-        f'Created [cyan]{visual_type}[/cyan] "{display}" on "{pg.display_name}" '
+        f'Created [cyan]{canonical_visual_type}[/cyan] "{display}" on "{pg.display_name}" '
         f"@ {x},{y} {width}x{height}"
     )
 
@@ -1281,6 +1302,8 @@ def visual_bind(
     project: ProjectOpt = None,
 ) -> None:
     """Bind a column (dimension) or measure (fact) to a visual's data role."""
+    from pbi.roles import get_visual_type_info, normalize_visual_role
+
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -1308,11 +1331,27 @@ def visual_bind(
         except (FileNotFoundError, ValueError):
             pass  # No model available, use user's specification
 
-    proj.add_binding(vis, role, entity, prop, field_type=field_type)
+    canonical_role = normalize_visual_role(vis.visual_type, role)
+    if canonical_role != role:
+        console.print(
+            f'[dim]Using canonical role [cyan]{canonical_role}[/cyan] '
+            f'for alias "{role}" on {vis.visual_type}.[/dim]'
+        )
+
+    info = get_visual_type_info(vis.visual_type)
+    if info and info.status == "role-backed":
+        supported_roles = {entry["name"] for entry in info.roles}
+        if canonical_role not in supported_roles:
+            console.print(
+                f'[yellow]Warning:[/yellow] Role "{canonical_role}" is not modeled for '
+                f'{vis.visual_type}. Supported roles: {", ".join(sorted(supported_roles))}'
+            )
+
+    proj.add_binding(vis, canonical_role, entity, prop, field_type=field_type)
     kind = "measure" if field_type == "measure" else "column"
     console.print(
         f'Bound [cyan]{entity}.{prop}[/cyan] ({kind}) → '
-        f'{vis.visual_type} role "[bold]{role}[/bold]"'
+        f'{vis.visual_type} role "[bold]{canonical_role}[/bold]"'
     )
 
 
@@ -1325,6 +1364,8 @@ def visual_unbind(
     project: ProjectOpt = None,
 ) -> None:
     """Remove data bindings from a visual."""
+    from pbi.roles import normalize_visual_role
+
     proj = _get_project(project)
     try:
         pg = proj.find_page(page)
@@ -1333,12 +1374,13 @@ def visual_unbind(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    removed = proj.remove_binding(vis, role, field_ref=field)
+    canonical_role = normalize_visual_role(vis.visual_type, role)
+    removed = proj.remove_binding(vis, canonical_role, field_ref=field)
     if removed:
         target = f" ({field})" if field else ""
-        console.print(f'Removed {removed} binding(s) from role "[bold]{role}[/bold]"{target}')
+        console.print(f'Removed {removed} binding(s) from role "[bold]{canonical_role}[/bold]"{target}')
     else:
-        console.print(f'[yellow]No bindings found for role "{role}"[/yellow]')
+        console.print(f'[yellow]No bindings found for role "{canonical_role}"[/yellow]')
 
 
 @visual_app.command("bindings")
@@ -1378,35 +1420,43 @@ def visual_types(
     visual_type: Annotated[Optional[str], typer.Argument(help="Show roles for a specific visual type.")] = None,
 ) -> None:
     """List known visual types and their data roles."""
-    from pbi.roles import VISUAL_ROLES
+    from pbi.roles import get_visual_type_info, list_visual_type_info, normalize_visual_type
 
     if visual_type:
-        vtype_lower = visual_type.lower()
-        matches = {k: v for k, v in VISUAL_ROLES.items() if vtype_lower in k.lower()}
+        normalized = normalize_visual_type(visual_type)
+        all_types = list_visual_type_info()
+        matches = [
+            info for info in all_types
+            if normalized.lower() in info.visual_type.lower()
+        ]
         if not matches:
             console.print(f'[red]Unknown visual type "{visual_type}".[/red]')
             console.print("[dim]Use 'pbi visual types' to see all known types.[/dim]")
             raise typer.Exit(1)
-        for vtype, roles in matches.items():
-            table = Table(title=vtype, box=box.SIMPLE)
+        for info in matches:
+            table = Table(title=info.visual_type, box=box.SIMPLE)
             table.add_column("Role", style="bold cyan")
             table.add_column("Description")
             table.add_column("Multi", style="dim", justify="center")
-            for role in roles:
+            for role in info.roles:
                 table.add_row(role["name"], role["description"], role["multi"])
             console.print(table)
+            console.print(f"[dim]Status:[/dim] {info.status}")
+            console.print(f"[dim]{info.note}[/dim]")
         return
 
     table = Table(title="Visual Types & Data Roles", box=box.SIMPLE)
     table.add_column("Visual Type", style="cyan")
+    table.add_column("Status", style="dim")
     table.add_column("Roles")
 
-    for vtype, roles in sorted(VISUAL_ROLES.items()):
-        role_names = ", ".join(r["name"] for r in roles)
-        table.add_row(vtype, role_names)
+    for info in list_visual_type_info():
+        role_names = ", ".join(r["name"] for r in info.roles) if info.roles else "-"
+        table.add_row(info.visual_type, info.status, role_names)
 
     console.print(table)
-    console.print("\n[dim]Use 'pbi visual types <type>' for detailed role info.[/dim]")
+    console.print("\n[dim]role-backed = role metadata modeled; sample-backed = observed in exported PBIR but binding roles are not modeled yet.[/dim]")
+    console.print("[dim]Use 'pbi visual types <type>' for detailed role info.[/dim]")
 
 
 @visual_app.command("sort")
@@ -2044,8 +2094,8 @@ def filter_add(
     topn: Annotated[Optional[int], typer.Option("--topn", help="Top N items count.")] = None,
     topn_by: Annotated[Optional[str], typer.Option("--topn-by", help="Order-by field for Top N (Table.Field).")] = None,
     bottom: Annotated[bool, typer.Option("--bottom", help="Use Bottom N instead of Top N.")] = False,
-    relative: Annotated[Optional[str], typer.Option("--relative", help="Reserved for a future schema-valid Relative Date implementation.")] = None,
-    include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Reserved for a future schema-valid Relative Date implementation.")] = True,
+    relative: Annotated[Optional[str], typer.Option("--relative", help="Relative filter: 'InLast 7 Days', 'InThis 1 Months', 'InNext 15 Minutes'.")] = None,
+    include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Include today for relative date filters when supported.")] = True,
     page: Annotated[Optional[str], typer.Option("--page", help="Page name (omit for report-level).")] = None,
     visual: Annotated[Optional[str], typer.Option("--visual", help="Visual name (requires --page).")] = None,
     hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
@@ -2056,14 +2106,14 @@ def filter_add(
     """Add a filter.
 
     Schema-backed writes currently support categorical, include, exclude,
-    tuple, range, and Top N filters.
-    Relative Date remains reserved until this CLI has a
+    tuple, range, Top N, Relative Date, and Relative Time filters.
+    Passthrough remains blocked until this CLI has a
     Microsoft-schema-valid PBIR implementation for that filter type.
     """
     from pbi.filters import (
         load_level_data, save_level_data,
         add_categorical_filter, add_exclude_filter, add_include_filter, add_range_filter,
-        add_topn_filter, add_relative_date_filter,
+        add_relative_date_filter, add_relative_time_filter, add_topn_filter,
     )
 
     valid_modes = {"categorical", "include", "exclude"}
@@ -2181,11 +2231,11 @@ def filter_add(
         if len(parts) != 3:
             console.print("[red]Error:[/red] --relative must be 'Operator Count Unit' (e.g. 'InLast 7 Days').")
             console.print("[dim]Operators: InLast, InThis, InNext[/dim]")
-            console.print("[dim]Units: Days, Weeks, Months, Quarters, Years[/dim]")
+            console.print("[dim]Units: Minutes, Hours, Days, Weeks, Months, Quarters, Years[/dim]")
             raise typer.Exit(1)
         rel_op, rel_count_str, rel_unit = parts
         valid_ops = ("InLast", "InThis", "InNext")
-        valid_units = ("Days", "Weeks", "Months", "Quarters", "Years")
+        valid_units = ("Minutes", "Hours", "Days", "Weeks", "Months", "Quarters", "Years")
         if rel_op not in valid_ops:
             console.print(f"[red]Error:[/red] Operator must be one of: {', '.join(valid_ops)}")
             raise typer.Exit(1)
@@ -2198,18 +2248,37 @@ def filter_add(
             console.print(f"[red]Error:[/red] Count must be an integer, got '{rel_count_str}'.")
             raise typer.Exit(1)
         try:
-            add_relative_date_filter(
-                data, entity, prop,
-                operator=rel_op, time_units_count=rel_count,
-                time_unit_type=rel_unit, include_today=include_today,
-                field_type=field_type, is_hidden=hidden,
-            )
-        except NotImplementedError as e:
+            if rel_unit in ("Minutes", "Hours"):
+                add_relative_time_filter(
+                    data,
+                    entity,
+                    prop,
+                    operator=rel_op,
+                    time_units_count=rel_count,
+                    time_unit_type=rel_unit,
+                    field_type=field_type,
+                    is_hidden=hidden,
+                    is_locked=locked,
+                )
+            else:
+                add_relative_date_filter(
+                    data,
+                    entity,
+                    prop,
+                    operator=rel_op,
+                    time_units_count=rel_count,
+                    time_unit_type=rel_unit,
+                    include_today=include_today,
+                    field_type=field_type,
+                    is_hidden=hidden,
+                    is_locked=locked,
+                )
+        except (NotImplementedError, ValueError) as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
         save_level_data(data, target)
         console.print(
-            f'Added relative date filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Added relative filter on [cyan]{entity}.{prop}[/cyan] '
             f'{rel_op.lower()} {rel_count} {rel_unit.lower()} at {level} level'
         )
 

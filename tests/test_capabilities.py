@@ -11,7 +11,7 @@ class CapabilityMatrixTests(unittest.TestCase):
         blocked = list_capabilities("blocked")
         features = {cap.feature for cap in blocked}
         self.assertIn(
-            "Relative date/time, passthrough, and visual top N",
+            "Passthrough filters",
             features,
         )
 

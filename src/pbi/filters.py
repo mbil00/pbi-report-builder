@@ -34,6 +34,20 @@ class TupleField:
     data_type: str | None = None
 
 
+DATE_UNIT_CODES = {
+    "Days": 0,
+    "Weeks": 1,
+    "Months": 2,
+    "Quarters": 3,
+    "Years": 4,
+}
+
+TIME_UNIT_CODES = {
+    "Minutes": 6,
+    "Hours": 7,
+}
+
+
 def get_filter_config(data: dict) -> dict:
     """Get the filterConfig from a JSON structure."""
     return data.get("filterConfig", {})
@@ -429,17 +443,106 @@ def add_relative_date_filter(
     include_today: bool = True,
     field_type: str = "column",
     is_hidden: bool = False,
+    is_locked: bool = False,
 ) -> dict:
-    """Relative date filter creation is intentionally blocked.
+    """Add a schema-backed Relative Date filter."""
+    if field_type != "column":
+        raise ValueError("Relative date filters currently require a column target field.")
+    if operator not in {"InLast", "InThis", "InNext"}:
+        raise ValueError("Relative date operator must be InLast, InThis, or InNext.")
+    if time_units_count <= 0:
+        raise ValueError("Relative date filters require a positive time unit count.")
+    if time_unit_type not in DATE_UNIT_CODES:
+        raise ValueError(
+            "Relative date filters support Days, Weeks, Months, Quarters, and Years."
+        )
 
-    Power BI supports relative date filters, but the current PBIR schema references
-    in this project do not expose a schema-valid query expression shape for the
-    implementation that used to be emitted here. Refuse to write malformed JSON instead.
-    """
-    raise NotImplementedError(
-        "Relative date filters are not emitted by this CLI because the previous "
-        "writer did not match Microsoft’s published PBIR semanticQuery schema."
-    )
+    unit_code = DATE_UNIT_CODES[time_unit_type]
+    alias = "d"
+    field_ref = _field_expr(entity, prop, field_type, entity)
+    filter_obj = {
+        "name": f"Filter_{secrets.token_hex(8)}",
+        "field": field_ref,
+        "type": "RelativeDate",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": alias, "Entity": entity, "Type": 0}],
+            "Where": [
+                {
+                    "Condition": _relative_date_condition(
+                        entity,
+                        prop,
+                        alias,
+                        operator=operator,
+                        time_units_count=time_units_count,
+                        unit_code=unit_code,
+                        include_today=include_today,
+                    )
+                }
+            ],
+        },
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": is_locked,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
+
+
+def add_relative_time_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    operator: str = "InLast",
+    time_units_count: int = 15,
+    time_unit_type: str = "Minutes",
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+) -> dict:
+    """Add a schema-backed Relative Time filter."""
+    if field_type != "column":
+        raise ValueError("Relative time filters currently require a column target field.")
+    if operator not in {"InLast", "InNext"}:
+        raise ValueError("Relative time operator must be InLast or InNext.")
+    if time_units_count <= 0:
+        raise ValueError("Relative time filters require a positive time unit count.")
+    if time_unit_type not in TIME_UNIT_CODES:
+        raise ValueError("Relative time filters support Minutes and Hours.")
+
+    unit_code = TIME_UNIT_CODES[time_unit_type]
+    alias = "d"
+    field_ref = _field_expr(entity, prop, field_type, entity)
+    filter_obj = {
+        "name": f"Filter_{secrets.token_hex(8)}",
+        "field": field_ref,
+        "type": "RelativeTime",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": alias, "Entity": entity, "Type": 0}],
+            "Where": [
+                {
+                    "Condition": _relative_time_condition(
+                        entity,
+                        prop,
+                        alias,
+                        operator=operator,
+                        time_units_count=time_units_count,
+                        unit_code=unit_code,
+                    )
+                }
+            ],
+        },
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": is_locked,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
 
 
 def remove_filter(data: dict, identifier: str) -> int:
@@ -490,6 +593,10 @@ def _extract_filter_values(f: dict) -> list[str]:
         summary = _extract_topn_summary(filter_data)
         if summary:
             values.append(summary)
+    if f.get("type") in {"RelativeDate", "RelativeTime"}:
+        summary = _extract_relative_summary(f)
+        if summary:
+            values.append(summary)
 
     for clause in where:
         cond = clause.get("Condition", {})
@@ -537,6 +644,98 @@ def _extract_filter_values(f: dict) -> list[str]:
     return values
 
 
+def _relative_date_condition(
+    entity: str,
+    prop: str,
+    alias: str,
+    *,
+    operator: str,
+    time_units_count: int,
+    unit_code: int,
+    include_today: bool,
+) -> dict:
+    """Build the published relative-date condition shape."""
+    field_expr = _field_expr(entity, prop, "column", alias)
+    now = _now_expr()
+
+    if operator == "InThis":
+        if time_units_count != 1:
+            raise ValueError("Relative date 'InThis' filters require a count of 1.")
+        return {
+            "Comparison": {
+                "ComparisonKind": 0,
+                "Left": field_expr,
+                "Right": _date_span_expr(now, unit_code),
+            }
+        }
+
+    if operator == "InLast":
+        if include_today:
+            lower = _date_span_expr(
+                _date_add_expr(
+                    _date_add_expr(now, 1, DATE_UNIT_CODES["Days"]),
+                    -time_units_count,
+                    unit_code,
+                ),
+                DATE_UNIT_CODES["Days"],
+            )
+            upper = _date_span_expr(now, DATE_UNIT_CODES["Days"])
+        else:
+            lower = _date_span_expr(_date_add_expr(now, -time_units_count, unit_code), unit_code)
+            upper = _date_span_expr(_date_add_expr(now, -1, unit_code), unit_code)
+    else:
+        if include_today:
+            lower = _date_span_expr(now, DATE_UNIT_CODES["Days"])
+            upper = _date_span_expr(
+                _date_add_expr(
+                    _date_add_expr(now, -1, DATE_UNIT_CODES["Days"]),
+                    time_units_count,
+                    unit_code,
+                ),
+                DATE_UNIT_CODES["Days"],
+            )
+        else:
+            lower = _date_span_expr(_date_add_expr(now, 1, unit_code), unit_code)
+            upper = _date_span_expr(_date_add_expr(now, time_units_count, unit_code), unit_code)
+
+    return {
+        "Between": {
+            "Expression": field_expr,
+            "LowerBound": lower,
+            "UpperBound": upper,
+        }
+    }
+
+
+def _relative_time_condition(
+    entity: str,
+    prop: str,
+    alias: str,
+    *,
+    operator: str,
+    time_units_count: int,
+    unit_code: int,
+) -> dict:
+    """Build the published relative-time condition shape."""
+    field_expr = _field_expr(entity, prop, "column", alias)
+    now = _now_expr()
+
+    if operator == "InLast":
+        lower = _date_add_expr(now, -time_units_count, unit_code)
+        upper = now
+    else:
+        lower = now
+        upper = _date_add_expr(now, time_units_count, unit_code)
+
+    return {
+        "Between": {
+            "Expression": field_expr,
+            "LowerBound": lower,
+            "UpperBound": upper,
+        }
+    }
+
+
 def _extract_topn_summary(filter_data: dict) -> str | None:
     """Extract a short display summary for a schema-backed Top N filter."""
     subquery = None
@@ -581,6 +780,104 @@ def _extract_topn_summary(filter_data: dict) -> str | None:
     return summary
 
 
+def _extract_relative_summary(filter_obj: dict) -> str | None:
+    """Extract a short display summary for schema-backed relative filters."""
+    filter_type = filter_obj.get("type")
+    where = filter_obj.get("filter", {}).get("Where", [])
+    if not where:
+        return None
+    condition = where[0].get("Condition", {})
+
+    if filter_type == "RelativeDate":
+        comparison = condition.get("Comparison")
+        if comparison and comparison.get("ComparisonKind") == 0:
+            right = comparison.get("Right", {})
+            span = right.get("DateSpan", {})
+            if _is_now_expr(span.get("Expression", {})):
+                unit_name = _time_unit_name(span.get("TimeUnit"))
+                if unit_name:
+                    return f"in this {unit_name.lower()}"
+
+        between = condition.get("Between")
+        if between:
+            lower = between.get("LowerBound", {}).get("DateSpan", {})
+            upper = between.get("UpperBound", {}).get("DateSpan", {})
+            summary = _match_relative_date_between(lower, upper)
+            if summary:
+                return summary
+
+    if filter_type == "RelativeTime":
+        between = condition.get("Between")
+        if between:
+            lower = between.get("LowerBound", {})
+            upper = between.get("UpperBound", {})
+            if _is_now_expr(upper):
+                parsed = _parse_date_add(lower)
+                if parsed and _is_now_expr(parsed[0]) and parsed[1] < 0:
+                    unit_name = _time_unit_name(parsed[2])
+                    if unit_name:
+                        return f"in last {abs(parsed[1])} {unit_name.lower()}"
+            if _is_now_expr(lower):
+                parsed = _parse_date_add(upper)
+                if parsed and _is_now_expr(parsed[0]) and parsed[1] > 0:
+                    unit_name = _time_unit_name(parsed[2])
+                    if unit_name:
+                        return f"in next {parsed[1]} {unit_name.lower()}"
+
+    return None
+
+
+def _match_relative_date_between(lower: dict, upper: dict) -> str | None:
+    """Recognize the published relative-date Between patterns."""
+    lower_expr = lower.get("Expression", {})
+    upper_expr = upper.get("Expression", {})
+    lower_span_unit = lower.get("TimeUnit")
+    upper_span_unit = upper.get("TimeUnit")
+
+    if (
+        lower_span_unit == DATE_UNIT_CODES["Days"]
+        and upper_span_unit == DATE_UNIT_CODES["Days"]
+        and _is_now_expr(upper_expr)
+    ):
+        first = _parse_date_add(lower_expr)
+        if first and first[1] < 0:
+            second = _parse_date_add(first[0])
+            if second and _is_now_expr(second[0]) and second[1] == 1 and second[2] == DATE_UNIT_CODES["Days"]:
+                unit_name = _time_unit_name(first[2])
+                if unit_name:
+                    return f"in last {abs(first[1])} {unit_name.lower()} incl today"
+
+    if (
+        lower_span_unit == DATE_UNIT_CODES["Days"]
+        and upper_span_unit == DATE_UNIT_CODES["Days"]
+        and _is_now_expr(lower_expr)
+    ):
+        first = _parse_date_add(upper_expr)
+        if first and first[1] > 0:
+            second = _parse_date_add(first[0])
+            if second and _is_now_expr(second[0]) and second[1] == -1 and second[2] == DATE_UNIT_CODES["Days"]:
+                unit_name = _time_unit_name(first[2])
+                if unit_name:
+                    return f"in next {first[1]} {unit_name.lower()} incl today"
+
+    lower_add = _parse_date_add(lower_expr)
+    upper_add = _parse_date_add(upper_expr)
+    if lower_add and upper_add:
+        if (
+            _is_now_expr(lower_add[0])
+            and _is_now_expr(upper_add[0])
+            and lower_add[2] == upper_add[2] == lower_span_unit == upper_span_unit
+        ):
+            unit_name = _time_unit_name(lower_add[2])
+            if unit_name:
+                if lower_add[1] < 0 and upper_add[1] == -1:
+                    return f"in last {abs(lower_add[1])} {unit_name.lower()}"
+                if lower_add[1] == 1 and upper_add[1] > 0:
+                    return f"in next {upper_add[1]} {unit_name.lower()}"
+
+    return None
+
+
 def _extract_expression_ref(
     expr: dict,
     *,
@@ -598,6 +895,51 @@ def _extract_expression_ref(
         prop = expr[key].get("Property", "?")
         return entity, prop
     return "?", "?"
+
+
+def _now_expr() -> dict:
+    return {"Now": {}}
+
+
+def _date_add_expr(expression: dict, amount: int, time_unit: int) -> dict:
+    return {
+        "DateAdd": {
+            "Expression": expression,
+            "Amount": amount,
+            "TimeUnit": time_unit,
+        }
+    }
+
+
+def _date_span_expr(expression: dict, time_unit: int) -> dict:
+    return {
+        "DateSpan": {
+            "Expression": expression,
+            "TimeUnit": time_unit,
+        }
+    }
+
+
+def _is_now_expr(node: dict) -> bool:
+    return node == {"Now": {}}
+
+
+def _parse_date_add(node: dict) -> tuple[dict, int, int] | None:
+    date_add = node.get("DateAdd")
+    if not isinstance(date_add, dict):
+        return None
+    return (
+        date_add.get("Expression", {}),
+        date_add.get("Amount"),
+        date_add.get("TimeUnit"),
+    )
+
+
+def _time_unit_name(unit_code: int | None) -> str | None:
+    for name, code in {**DATE_UNIT_CODES, **TIME_UNIT_CODES}.items():
+        if code == unit_code:
+            return name
+    return None
 
 
 def _field_expr(entity: str, prop: str, field_type: str, source_name: str) -> dict:

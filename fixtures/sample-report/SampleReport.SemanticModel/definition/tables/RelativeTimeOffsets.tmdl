@@ -1,0 +1,62 @@
+table RelativeTimeOffsets
+	lineageTag: a72e2afb-508c-4452-bab0-65875ea18108
+
+	column EventID
+		dataType: string
+		lineageTag: aa0c998f-20c8-41d2-852c-0973399cf8b0
+		summarizeBy: none
+		sourceColumn: EventID
+
+		annotation SummarizationSetBy = Automatic
+
+	column OffsetMinutes
+		dataType: int64
+		formatString: 0
+		lineageTag: 592a7765-f7ea-410a-9f20-9a9a15796f57
+		summarizeBy: sum
+		sourceColumn: OffsetMinutes
+
+		annotation SummarizationSetBy = Automatic
+
+	column Label
+		dataType: string
+		lineageTag: db55acb5-2d45-4936-93ee-8f1f0838d87a
+		summarizeBy: none
+		sourceColumn: Label
+
+		annotation SummarizationSetBy = Automatic
+
+	column Scenario
+		dataType: string
+		lineageTag: c7272730-d347-4635-991c-f6f489972506
+		summarizeBy: none
+		sourceColumn: Scenario
+
+		annotation SummarizationSetBy = Automatic
+
+	column DateTime = NOW() + DIVIDE ( RelativeTimeOffsets[OffsetMinutes], 1440.0 )
+		formatString: General Date
+		lineageTag: 77538a4a-43a9-4819-8cfd-65d0f5a9bf9f
+		summarizeBy: none
+
+		variation Variation
+			isDefault
+			relationship: 735b3dda-86ff-4275-87cd-73638f54e97b
+			defaultHierarchy: LocalDateTable_7c936782-73bc-442d-baa7-259d0c0b70ec.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	partition RelativeTimeOffsets = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\sample-data\RelativeTimeOffsets.csv"),[Delimiter=",", Columns=4, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"EventID", type text}, {"OffsetMinutes", Int64.Type}, {"Label", type text}, {"Scenario", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

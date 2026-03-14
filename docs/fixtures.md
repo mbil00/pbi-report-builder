@@ -27,27 +27,45 @@ Every fixture should be committed as a real exported `PBIP` project:
 
 ### Needed Now
 
-- [ ] Relative Date filter fixtures
-- [ ] Relative Time filter fixtures
-- [ ] Visual Top N fixtures
 - [ ] Passthrough filter fixture
 
 ### Useful Next
 
 - [ ] Native Power BI Include / Exclude examples
 - [ ] Native Power BI Tuple examples
-- [ ] Richer Advanced filter examples
-- [ ] Bookmark state examples
-- [ ] Navigation / action examples
-- [ ] Drillthrough / tooltip examples
-- [ ] Field parameter examples
-- [ ] Slicer behavior examples
+- [ ] Missing advanced filter variants
+- [ ] Actual field parameter examples
+- [ ] Any slicer behaviors not already covered by the sample report
 
 ### Covered Enough For Now
 
 - [x] Top N filter shape
   Source: `/tmp/pbip-demo/src/Report04.Report/definition/pages/708d7c04691a88810062/visuals/624d1cd33dddc2386da0/visual.json`
   Notes: this sample was used to implement the schema-backed `TopN` writer.
+- [x] Relative Date filter shapes
+  Source: `fixtures/sample-report/SampleReport.Report/definition/report.json`
+  Notes: report/page/visual examples now cover `InNext`, `InLast`, and `InThis` exported shapes.
+- [x] Relative Time filter shapes
+  Source: `fixtures/sample-report/SampleReport.Report/definition/pages/80e0ecafc8e0e031e091/visuals/d8e7ea99dd81e99a0b03/visual.json`
+  Notes: this sample covers the exported `InLast` and `InNext` relative-time `Between` patterns.
+- [x] Visual Top N fixtures
+  Source: `fixtures/sample-report/SampleReport.Report/definition/pages/a03dd607c2d7b5054706`
+  Notes: the sample page named `04 VisualTopN` still exports ordinary `TopN` filters; no separate `VisualTopN` payload has been observed.
+- [x] Bookmark state examples
+  Source: `fixtures/sample-report/SampleReport.Report/definition/bookmarks`
+  Notes: the sample includes bookmarks for filters, sort state, visibility changes, and a bookmark navigator.
+- [x] Navigation and action examples
+  Source: `fixtures/sample-report/SampleReport.Report/definition/pages/8cc5b2c8090b5e0e1415`
+  Notes: the sample includes page navigation, bookmark, drillthrough, and web URL buttons.
+- [x] Drillthrough and tooltip examples
+  Source: `fixtures/sample-report/SampleReport.Report/definition/pages/b868b2039b03c0990728` and `fixtures/sample-report/SampleReport.Report/definition/pages/b62a600c2e9a0e7a01d6`
+  Notes: the sample includes a drillthrough page plus a hidden tooltip page with a back button.
+- [x] Core slicer behavior examples
+  Source: `fixtures/sample-report/SampleReport.Report/definition/pages/8b17add4693ee01b15d7`
+  Notes: the sample includes hierarchy slicers, synced slicers, and multiple slicer configurations.
+- [x] Bound visual role examples for newer built-in visuals
+  Source: `fixtures/sample-report/SampleReport.Report/definition/pages/077330abc24a5c4069ee`
+  Notes: this page now captures real binding shapes for `advancedSlicerVisual`, `listSlicer`, `textSlicer`, `barChart`, `columnChart`, `azureMap`, `decompositionTreeVisual`, `keyDriversVisual`, and `cardVisual`.
 
 ## Recommended Fixture Report Layout
 
@@ -88,20 +106,20 @@ This is not mandatory, but it makes fixture comparisons and CLI tests much simpl
 
 ### 1. Relative Date
 
-Status: `needed`
+Status: `covered`
 
 Create examples for a plain date column, not a datetime field.
 
-- [ ] Report-level relative date filter
-- [ ] Page-level relative date filter
-- [ ] Visual-level relative date filter
-- [ ] `InLast` example
-- [ ] `InThis` example
-- [ ] `InNext` example
-- [ ] `Days` unit example
-- [ ] `Months` unit example
-- [ ] include-today `on`
-- [ ] include-today `off`
+- [x] Report-level relative date filter
+- [x] Page-level relative date filter
+- [x] Visual-level relative date filter
+- [x] `InLast` example
+- [x] `InThis` example
+- [x] `InNext` example
+- [x] `Days` unit example
+- [x] `Months` unit example
+- [x] include-today `on`
+- [x] include-today `off`
 
 Preferred field:
 
@@ -109,14 +127,14 @@ Preferred field:
 
 ### 2. Relative Time
 
-Status: `needed`
+Status: `covered`
 
 Create examples for a real datetime column.
 
-- [ ] Visual-level relative time filter
-- [ ] last 15 minutes
-- [ ] last 1 hour
-- [ ] next 1 hour
+- [x] Visual-level relative time filter
+- [x] last 15 minutes
+- [x] last 1 hour
+- [x] next 1 hour
 
 Preferred field:
 
@@ -124,15 +142,15 @@ Preferred field:
 
 ### 3. Visual Top N
 
-Status: `needed`
+Status: `covered`
 
-This is distinct from the currently implemented `TopN` writer. We need examples that export as `VisualTopN`, if Power BI emits that type separately.
+The current sample report page named `04 VisualTopN` exports plain `TopN` filters rather than a distinct `VisualTopN` payload.
 
-- [ ] Visual-level `Top` example
-- [ ] Visual-level `Bottom` example
-- [ ] target field is a category column
-- [ ] order-by field is a measure
-- [ ] cross-table order-by example
+- [x] Visual-level `Top` example
+- [x] Visual-level `Bottom` example
+- [x] target field is a category column
+- [x] order-by field is a measure
+- [x] cross-table order-by example
 
 Preferred fields:
 
@@ -169,16 +187,20 @@ Status: `useful`
 
 ### 7. Richer Advanced Filters
 
-Status: `useful`
+Status: `partial`
 
-- [ ] `is`
-- [ ] `is not`
-- [ ] `contains`
-- [ ] `does not contain`
-- [ ] `starts with`
+- [x] `is`
+- [x] `is not`
+- [x] `contains`
+- [x] `does not contain`
+- [x] `starts with`
 - [ ] `ends with`
-- [ ] `is blank`
-- [ ] `is not blank`
+- [x] `is blank`
+- [x] `is not blank`
+
+Source:
+
+- `fixtures/sample-report/SampleReport.Report/definition/pages/2de7f287b823385150d1/visuals/256b4535129be547c9b6/visual.json`
 
 ### 8. Top N Variants
 
@@ -196,46 +218,50 @@ The basic Top N shape is already covered, but more scope variants help prove whe
 
 ### 9. Bookmark State
 
-Status: `useful`
+Status: `covered`
 
-- [ ] bookmark that captures filters
-- [ ] bookmark that captures sort state
-- [ ] bookmark that changes visibility
-- [ ] bookmark navigator
+- [x] bookmark that captures filters
+- [x] bookmark that captures sort state
+- [x] bookmark that changes visibility
+- [x] bookmark navigator
 
 ### 10. Buttons and Navigation
 
-Status: `useful`
+Status: `covered`
 
-- [ ] page navigation button
-- [ ] bookmark button
-- [ ] back button
-- [ ] drillthrough button
-- [ ] web URL button
+- [x] page navigation button
+- [x] bookmark button
+- [x] back button
+- [x] drillthrough button
+- [x] web URL button
 
 ### 11. Drillthrough and Tooltip
 
-Status: `useful`
+Status: `covered`
 
-- [ ] drillthrough target page with passed fields
-- [ ] tooltip page bound to a visual
+- [x] drillthrough target page with passed fields
+- [x] tooltip page bound to a visual
 
 ### 12. Field Parameters
 
-Status: `useful`
+Status: `needed`
 
 - [ ] axis switch parameter
 - [ ] measure switch parameter
 
+Notes:
+
+- The sample report includes a page named `10 Field Parameters`, but no field-parameter table or parameter-driven visual was found in the exported semantic model/report definition.
+
 ### 13. Slicers
 
-Status: `useful`
+Status: `partial`
 
-- [ ] hierarchy slicer
+- [x] hierarchy slicer
 - [ ] relative date slicer
 - [ ] between slicer
 - [ ] dropdown slicer with search
-- [ ] synced slicers across pages
+- [x] synced slicers across pages
 
 ## Notes To Capture With Each Fixture
 

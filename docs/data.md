@@ -12,6 +12,8 @@ pbi visual bind <page> <visual> <role> <Table.Field> --measure    # force measur
 ```
 
 Field type (column vs measure) is auto-detected from the semantic model. Use `--measure` / `-m` to override.
+For visuals with newer Desktop role names, the CLI normalizes a few legacy aliases automatically.
+For example, `cardVisual` accepts `Values`, but writes the correct exported PBIR role `Data`.
 
 ```bash
 pbi visual bind "Sales" chart Category Product.Category
@@ -127,6 +129,16 @@ pbi filter add Customers.Region --topn 7 --topn-by Order_Details.Revenue
 pbi filter add Customers.Region --topn 5 --topn-by Order_Details.Revenue --bottom
 ```
 
+**Relative date / time filter** — dynamic windows from the current time:
+
+```bash
+pbi filter add Date.Date --relative "InLast 7 Days"
+pbi filter add Date.Date --relative "InThis 1 Months"
+pbi filter add Date.Date --relative "InNext 1 Quarters" --no-include-today
+pbi filter add Date.DateTime --relative "InLast 15 Minutes"
+pbi filter add Date.DateTime --relative "InNext 1 Hours"
+```
+
 ### pbi filter tuple
 
 Add a tuple filter from one or more row tuples:
@@ -138,10 +150,8 @@ pbi filter tuple \
   "Product.Color=Blue,Product.Size=Medium"
 ```
 
-**Relative date** filters are still blocked by the CLI.
-The earlier implementation emitted semantic-query objects that did not match
-Microsoft's published PBIR schema, so that option still fails fast instead of
-writing malformed report JSON.
+**Passthrough** filters are still blocked by the CLI.
+We still do not have a canonical exported PBIR example for that filter type.
 
 **Options:**
 
@@ -154,8 +164,8 @@ writing malformed report JSON.
 | `--topn` | Top N items count |
 | `--topn-by` | Order-by field for Top N (`Table.Field`) |
 | `--bottom` | Use Bottom N instead of Top N |
-| `--relative` | Reserved for a future schema-valid Relative Date implementation |
-| `--include-today` / `--no-include-today` | Reserved for a future schema-valid Relative Date implementation |
+| `--relative` | Relative filter as `Operator Count Unit` |
+| `--include-today` / `--no-include-today` | Include today for relative date filters when supported |
 | `--page` | Apply at page level |
 | `--visual` | Apply at visual level (requires `--page`) |
 | `--hidden` | Hide filter in view mode |

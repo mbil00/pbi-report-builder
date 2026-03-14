@@ -1,0 +1,26 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_ProTooling = ["DevMode"]
+
+annotation PBI_QueryOrder = ["Customers","Product","Date","Sales","RelativeTimeOffsets"]
+
+ref table Customers
+ref table Product
+ref table RelativeTimeOffsets
+ref table Date
+ref table DateTableTemplate_e6d71d31-13f3-4391-8fc3-00a0b06b5878
+ref table LocalDateTable_6809f789-ca23-4187-a37b-4db3392ec26d
+ref table Sales
+ref table LocalDateTable_1c70d7f3-d3ce-413d-a037-1b8c36a46c65
+ref table LocalDateTable_7c936782-73bc-442d-baa7-259d0c0b70ec
+
+ref cultureInfo en-US
+
