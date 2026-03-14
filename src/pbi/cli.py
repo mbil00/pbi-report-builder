@@ -19,6 +19,7 @@ from pbi.properties import (
     get_property,
     set_property,
     list_properties,
+    get_visual_objects,
 )
 from pbi.schema_refs import REPORT_SCHEMA
 
@@ -78,6 +79,99 @@ def map(
         console.print(f"Map written to [cyan]{out_path}[/cyan]")
     else:
         console.print(content, highlight=False, end="")
+
+
+@app.command("apply")
+def apply_cmd(
+    yaml_file: Annotated[Path, typer.Argument(help="YAML file to apply.")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without modifying files.")] = False,
+    page: Annotated[Optional[str], typer.Option("--page", help="Only apply to this page.")] = None,
+    overwrite: Annotated[bool, typer.Option("--overwrite", help="Full reconciliation: remove visuals not in YAML. Backs up the page first.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Apply a declarative YAML specification to the report.
+
+    The YAML format matches the output of 'pbi page export'. By default,
+    this is additive — only properties specified in the YAML are touched.
+    Use --overwrite to fully reconcile a page to match the YAML (destructive).
+    With --overwrite, the existing page is backed up to a .yaml file first.
+    """
+    from pbi.apply import apply_yaml
+
+    proj = _get_project(project)
+
+    # Resolve file path
+    yaml_path = yaml_file if yaml_file.is_absolute() else Path.cwd() / yaml_file
+    if not yaml_path.exists():
+        console.print(f"[red]Error:[/red] File not found: {yaml_path}")
+        raise typer.Exit(1)
+
+    yaml_content = yaml_path.read_text(encoding="utf-8")
+
+    # Backup before overwrite
+    if overwrite and not dry_run:
+        from pbi.export import export_yaml
+        import yaml as yaml_mod
+
+        spec = yaml_mod.safe_load(yaml_content)
+        pages_in_spec = [p.get("name") for p in spec.get("pages", []) if p.get("name")]
+
+        for page_name in pages_in_spec:
+            if page and page_name.lower() != page.lower():
+                continue
+            try:
+                existing_page = proj.find_page(page_name)
+            except ValueError:
+                continue  # Page doesn't exist yet, nothing to back up
+
+            backup_content = export_yaml(proj, page_filter=page_name)
+            backup_path = proj.root / f".pbi-backup-{page_name}.yaml"
+            backup_path.write_text(backup_content, encoding="utf-8")
+            console.print(f"[dim]Backed up \"{page_name}\" → {backup_path}[/dim]")
+
+            if overwrite:
+                # Delete existing visuals so they get recreated from YAML
+                visuals = proj.get_visuals(existing_page)
+                for v in visuals:
+                    proj.delete_visual(v)
+
+    result = apply_yaml(proj, yaml_content, page_filter=page, dry_run=dry_run)
+
+    # Report results
+    prefix = "[dim](dry run)[/dim] " if dry_run else ""
+
+    if result.pages_created:
+        for p in result.pages_created:
+            console.print(f'{prefix}Created page "[cyan]{p}[/cyan]"')
+    if result.pages_updated:
+        for p in result.pages_updated:
+            console.print(f'{prefix}Updated page "[cyan]{p}[/cyan]"')
+    if result.visuals_created:
+        for p, v in result.visuals_created:
+            console.print(f'{prefix}Created visual "[cyan]{v}[/cyan]" on "{p}"')
+    if result.visuals_updated:
+        for p, v in result.visuals_updated:
+            console.print(f'{prefix}Updated visual "[cyan]{v}[/cyan]" on "{p}"')
+
+    if result.properties_set or result.bindings_added or result.filters_added:
+        parts = []
+        if result.properties_set:
+            parts.append(f"{result.properties_set} properties")
+        if result.bindings_added:
+            parts.append(f"{result.bindings_added} bindings")
+        if result.filters_added:
+            parts.append(f"{result.filters_added} filters")
+        console.print(f"{prefix}Set {', '.join(parts)}")
+
+    for warning in result.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+    for error in result.errors:
+        console.print(f"[red]Error:[/red] {error}")
+
+    if result.errors:
+        raise typer.Exit(1)
+    if not result.has_changes and not dry_run:
+        console.print("[dim]No changes applied.[/dim]")
 
 
 @app.command()
@@ -244,7 +338,7 @@ def report_props() -> None:
     table.add_column("Type", style="dim")
     table.add_column("Description")
 
-    for name, vtype, desc in list_properties(REPORT_PROPERTIES):
+    for name, vtype, desc, _group, _enums in list_properties(REPORT_PROPERTIES):
         table.add_row(name, vtype, desc)
 
     console.print(table)
@@ -364,7 +458,7 @@ def page_props() -> None:
     table.add_column("Type", style="dim")
     table.add_column("Description")
 
-    for name, vtype, desc in list_properties(PAGE_PROPERTIES):
+    for name, vtype, desc, _group, _enums in list_properties(PAGE_PROPERTIES):
         table.add_row(name, vtype, desc)
 
     console.print(table)
@@ -430,6 +524,38 @@ def page_delete(
 
     proj.delete_page(pg)
     console.print(f'Deleted page "[cyan]{pg.display_name}[/cyan]"')
+
+
+@page_app.command("export")
+def page_export(
+    page: Annotated[Optional[str], typer.Argument(help="Page name (omit to export all pages).")] = None,
+    output: Annotated[Optional[Path], typer.Option("-o", "--output", help="Output file (default: stdout).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Export page(s) as detailed YAML for use with 'pbi apply'.
+
+    The output includes all properties, bindings, sort definitions, and filters
+    in a format that can be directly fed back to 'pbi apply' for round-trip editing.
+    """
+    from pbi.export import export_yaml
+
+    proj = _get_project(project)
+
+    if page:
+        try:
+            proj.find_page(page)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    content = export_yaml(proj, page_filter=page)
+
+    if output:
+        out_path = output if output.is_absolute() else proj.root / output
+        out_path.write_text(content, encoding="utf-8")
+        console.print(f"Exported to [cyan]{out_path}[/cyan]")
+    else:
+        console.print(content, highlight=False, end="")
 
 
 @page_app.command("save-template")
@@ -1602,20 +1728,97 @@ def visual_column(
 
 
 @visual_app.command("props")
-def visual_props() -> None:
-    """List available visual properties."""
-    table = Table(title="Visual Properties", box=box.SIMPLE)
+def visual_props(
+    visual_type: Annotated[Optional[str], typer.Option("--type", "-t", help="Show only properties for this visual type.")] = None,
+    group: Annotated[Optional[str], typer.Option("--group", "-g", help="Filter by group: position, core, container, chart.")] = None,
+) -> None:
+    """List available visual properties.
+
+    Use --type to show properties for a specific visual type (e.g. --type clusteredColumnChart).
+    Use --group to filter by property group (position, core, container, chart).
+    """
+    props = list_properties(VISUAL_PROPERTIES, group=group, visual_type=visual_type)
+
+    if not props:
+        filters = []
+        if visual_type:
+            filters.append(f'type="{visual_type}"')
+        if group:
+            filters.append(f'group="{group}"')
+        console.print(f'[yellow]No properties match filters: {", ".join(filters)}[/yellow]')
+        return
+
+    title = "Visual Properties"
+    if visual_type:
+        title += f" ({visual_type})"
+    if group:
+        title += f" [{group}]"
+
+    table = Table(title=title, box=box.SIMPLE)
     table.add_column("Property", style="cyan")
     table.add_column("Type", style="dim")
+    table.add_column("Group", style="dim")
     table.add_column("Description")
+    table.add_column("Values", style="dim")
 
-    for name, vtype, desc in list_properties(VISUAL_PROPERTIES):
-        table.add_row(name, vtype, desc)
+    current_group = None
+    for name, vtype, desc, prop_group, enum_values in props:
+        if prop_group != current_group:
+            if current_group is not None:
+                table.add_section()
+            current_group = prop_group
+        vals = ", ".join(enum_values) if enum_values else ""
+        table.add_row(name, vtype, prop_group or "", desc, vals)
 
     console.print(table)
     console.print(
-        "\n[dim]You can also use raw JSON paths "
-        "(e.g. 'visual.objects.legend[0].properties.show')[/dim]"
+        "\n[dim]Use 'chart:<object>.<prop>' for unregistered chart properties. "
+        "Use --type <visualType> to filter by chart type.[/dim]"
+    )
+
+
+@visual_app.command("objects")
+def visual_objects(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Show all chart formatting objects currently set on a visual.
+
+    Introspects visual.objects to show what properties are configured,
+    including values from all selector entries. Useful for discovering
+    what can be modified with 'chart:<object>.<prop>' syntax.
+    """
+    proj = _get_project(project)
+    try:
+        pg = proj.find_page(page)
+        vis = proj.find_visual(pg, visual)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    chart_objects = get_visual_objects(vis.data)
+    if not chart_objects:
+        console.print(f"[dim]No chart objects on {vis.visual_type} \"{vis.name}\".[/dim]")
+        return
+
+    table = Table(title=f"Chart Objects on {vis.visual_type}", box=box.SIMPLE)
+    table.add_column("Object", style="cyan")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+
+    for obj_key in sorted(chart_objects):
+        props = chart_objects[obj_key]
+        first = True
+        for prop_name, value in sorted(props.items()):
+            obj_label = obj_key if first else ""
+            table.add_row(obj_label, prop_name, str(value))
+            first = False
+        table.add_section()
+
+    console.print(table)
+    console.print(
+        f"\n[dim]Set with: pbi visual set {page} {visual} chart:<object>.<prop>=<value>[/dim]"
     )
 
 

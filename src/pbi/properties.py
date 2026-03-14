@@ -22,6 +22,10 @@ class PropertyDef:
     objects_path: str = "visualContainerObjects"  # or "objects" for chart formatting
     top_level: bool = False  # True for page-level objects (data.objects vs data.visual.objects)
     selector: str | None = None  # "default" for {"id": "default"} selector entry
+    # Rich metadata for discovery and validation
+    group: str | None = None  # "position", "core", "container", "chart"
+    visual_types: tuple[str, ...] | None = None  # None = all types; tuple = specific types
+    default: str | None = None  # Default value as display string
 
 
 # ── Visual properties ──────────────────────────────────────────────
@@ -1435,6 +1439,112 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     ),
 }
 
+# ── Visual type tagging ───────────────────────────────────────────
+# Tag chart-specific properties with the visual types they apply to.
+# Properties without visual_types (None) apply to all visual types.
+
+_AXIS_TYPES = (
+    "clusteredBarChart", "clusteredColumnChart",
+    "stackedBarChart", "stackedColumnChart",
+    "hundredPercentStackedBarChart", "hundredPercentStackedColumnChart",
+    "lineChart", "areaChart", "stackedAreaChart",
+    "lineStackedColumnComboChart", "lineClusteredColumnComboChart",
+    "waterfallChart", "ribbonChart",
+)
+_LEGEND_TYPES = _AXIS_TYPES + ("pieChart", "donutChart", "scatterChart", "map", "filledMap", "treemap", "funnel")
+_LABEL_TYPES = _LEGEND_TYPES + ("gauge",)
+_LINE_TYPES = ("lineChart", "areaChart", "stackedAreaChart", "lineStackedColumnComboChart", "lineClusteredColumnComboChart")
+_COMBO_TYPES = ("lineStackedColumnComboChart", "lineClusteredColumnComboChart")
+_TABLE_TYPES = ("tableEx", "pivotTable")
+_CARD_TYPES = ("card", "multiRowCard")
+_NEW_CARD_TYPES = ("cardVisual",)
+_SLICER_TYPES = ("slicer",)
+_KPI_TYPES = ("kpi",)
+_GAUGE_TYPES = ("gauge",)
+_PIE_TYPES = ("pieChart", "donutChart")
+_SCATTER_TYPES = ("scatterChart",)
+_SHAPE_TYPES = ("shape",)
+_IMAGE_TYPES = ("image",)
+_WATERFALL_TYPES = ("waterfallChart",)
+
+_TYPE_MAP: dict[str, tuple[str, ...]] = {
+    # Axes
+    "xAxis.": _AXIS_TYPES,
+    "yAxis.": _AXIS_TYPES,
+    "y2Axis.": _COMBO_TYPES,
+    # Legend
+    "legend.": _LEGEND_TYPES,
+    # Labels
+    "labels.": _LABEL_TYPES,
+    # Plot area
+    "plotArea.": _AXIS_TYPES,
+    # Data colors
+    "dataColors.": _LEGEND_TYPES,
+    # Line formatting
+    "line.": _LINE_TYPES,
+    "shapes.": _LINE_TYPES + _SCATTER_TYPES,
+    # Pie/donut
+    "slices.": _PIE_TYPES,
+    # Old card
+    "categoryLabels.": _CARD_TYPES,
+    "wordWrap.": _CARD_TYPES,
+    # New card (cardVisual)
+    "layout.": _NEW_CARD_TYPES,
+    "cardValue.": _NEW_CARD_TYPES,
+    "cardLabel.": _NEW_CARD_TYPES,
+    "cardShape.": _NEW_CARD_TYPES,
+    "cardDivider.": _NEW_CARD_TYPES,
+    "cardBorder.": _NEW_CARD_TYPES,
+    "cardShadow.": _NEW_CARD_TYPES,
+    "cardPadding.": _NEW_CARD_TYPES,
+    "cardOverflow.": _NEW_CARD_TYPES,
+    "accentBarColor.": _NEW_CARD_TYPES,
+    # Slicer
+    "slicer.": _SLICER_TYPES,
+    "slicerHeader.": _SLICER_TYPES,
+    "slicerItems.": _SLICER_TYPES,
+    # KPI
+    "kpi.": _KPI_TYPES,
+    "kpiTarget.": _KPI_TYPES,
+    "kpiTrend.": _KPI_TYPES,
+    "kpiTitle.": _KPI_TYPES,
+    "kpiStatus.": _KPI_TYPES,
+    # Gauge
+    "gauge.": _GAUGE_TYPES,
+    "gaugeTarget.": _GAUGE_TYPES,
+    "gaugeCallout.": _GAUGE_TYPES,
+    # Waterfall
+    "waterfall.": _WATERFALL_TYPES,
+    # Shape
+    "shape.": _SHAPE_TYPES,
+    "shapeText.": _SHAPE_TYPES,
+    # Image
+    "imageScaling.": _IMAGE_TYPES,
+    # Table/matrix
+    "table.": _TABLE_TYPES,
+    "matrix.": ("pivotTable",),
+    "columnHeaders.": _TABLE_TYPES,
+    "rowHeaders.": ("pivotTable",),
+    "values.": _TABLE_TYPES,
+    "grid.": _TABLE_TYPES,
+    "total.": _TABLE_TYPES,
+}
+
+# Apply visual_types to properties that don't already have them set
+for _prop_name, _prop_def in VISUAL_PROPERTIES.items():
+    if _prop_def.visual_types is not None:
+        continue
+    for _prefix, _types in _TYPE_MAP.items():
+        if _prop_name.startswith(_prefix):
+            _prop_def.visual_types = _types
+            break
+
+# Clean up loop variables from module namespace
+for _n in ("_prop_name", "_prop_def", "_prefix", "_types"):
+    globals().pop(_n, None)
+globals().pop("_n", None)
+
+
 # ── Report properties ──────────────────────────────────────────────
 
 REPORT_PROPERTIES: dict[str, PropertyDef] = {
@@ -1656,7 +1766,14 @@ def get_property(
 
     If measure_ref is given, reads from the selector-bearing entry for that
     measure instead of the default (index 0) entry.
+
+    Supports 'chart:<object>.<prop>' prefix for reading unregistered
+    visual.objects properties dynamically.
     """
+    # Dynamic chart property: chart:<objectKey>.<propName>
+    if prop_name.startswith("chart:"):
+        return _get_dynamic_chart_prop(data, prop_name)
+
     prop_def = registry.get(prop_name)
 
     if prop_def and prop_def.container_key:
@@ -1677,7 +1794,15 @@ def set_property(
     If measure_ref is given, writes to a per-measure selector entry instead
     of the default (index 0) entry. This enables per-measure formatting in
     multi-measure visuals (e.g. cardVisual accent bars).
+
+    Supports 'chart:<object>.<prop>' prefix for writing unregistered
+    visual.objects properties dynamically with auto-inferred value types.
     """
+    # Dynamic chart property: chart:<objectKey>.<propName>
+    if prop_name.startswith("chart:"):
+        _set_dynamic_chart_prop(data, prop_name, value)
+        return
+
     prop_def = registry.get(prop_name)
 
     if prop_def and prop_def.enum_values:
@@ -1696,7 +1821,8 @@ def set_property(
     elif prop_def is None:
         raise ValueError(
             f'Unknown property "{prop_name}". '
-            f"Use 'pbi visual props' or 'pbi page props' to see available properties."
+            f"Use 'pbi visual props' or 'pbi page props' to see available properties, "
+            f"or use 'chart:<object>.<prop>' for unregistered chart properties."
         )
 
 
@@ -1789,6 +1915,94 @@ def _set_container_prop(
     target.setdefault("properties", {})[prop_def.container_prop] = encoded
 
 
+def _infer_value_type(value: str) -> str:
+    """Infer PBI value type from a CLI string value.
+
+    Used by the chart: prefix to encode values without a PropertyDef.
+    """
+    if value.startswith("#"):
+        return "color"
+    if value.lower() in ("true", "false"):
+        return "boolean"
+    try:
+        int(value)
+        return "number"
+    except ValueError:
+        pass
+    try:
+        float(value)
+        return "number"
+    except ValueError:
+        pass
+    return "enum"  # Default: treat as quoted string
+
+
+def _parse_chart_prefix(prop_name: str) -> tuple[str, str]:
+    """Parse 'chart:<objectKey>.<propName>' into (objectKey, propName)."""
+    rest = prop_name[len("chart:"):]
+    dot = rest.find(".")
+    if dot == -1:
+        raise ValueError(
+            f'Invalid chart property "{prop_name}". '
+            f"Use chart:<object>.<prop> format (e.g. chart:legend.show)."
+        )
+    return rest[:dot], rest[dot + 1:]
+
+
+def _get_dynamic_chart_prop(data: dict, prop_name: str) -> Any:
+    """Read a dynamic chart property from visual.objects."""
+    obj_key, prop_key = _parse_chart_prefix(prop_name)
+    objects = data.get("visual", {}).get("objects", {})
+    entries = objects.get(obj_key, [])
+    if not entries or not isinstance(entries, list):
+        return None
+    raw = entries[0].get("properties", {}).get(prop_key)
+    if raw is None:
+        return None
+    return decode_pbi_value(raw)
+
+
+def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> None:
+    """Write a dynamic chart property to visual.objects with auto-inferred encoding."""
+    obj_key, prop_key = _parse_chart_prefix(prop_name)
+    value_type = _infer_value_type(value)
+    encoded = encode_pbi_value(value, value_type)
+
+    objects = data.setdefault("visual", {}).setdefault("objects", {})
+    entries = objects.setdefault(obj_key, [])
+    if not entries:
+        entries.append({"properties": {}})
+    entries[0].setdefault("properties", {})[prop_key] = encoded
+
+
+def get_visual_objects(data: dict) -> dict[str, dict[str, Any]]:
+    """Introspect all current visual.objects on a visual.
+
+    Returns {objectKey: {propName: decodedValue, ...}, ...}.
+    """
+    objects = data.get("visual", {}).get("objects", {})
+    result: dict[str, dict[str, Any]] = {}
+    for obj_key, entries in objects.items():
+        if not isinstance(entries, list) or not entries:
+            continue
+        props: dict[str, Any] = {}
+        for entry in entries:
+            selector = entry.get("selector")
+            entry_props = entry.get("properties", {})
+            for prop_name, raw_val in entry_props.items():
+                decoded = decode_pbi_value(raw_val)
+                if selector:
+                    # Show selector-qualified props
+                    sel_id = selector.get("id", selector.get("metadata", "?"))
+                    key = f"{prop_name} [{sel_id}]"
+                else:
+                    key = prop_name
+                props[key] = decoded
+        if props:
+            result[obj_key] = props
+    return result
+
+
 def _get_by_path(data: dict, path: str) -> Any:
     """Navigate a dot-separated path into a dict."""
     current = data
@@ -1821,11 +2035,44 @@ def _coerce_simple(value: str, value_type: str) -> Any:
     return value
 
 
-def list_properties(registry: dict[str, PropertyDef]) -> list[tuple[str, str, str]]:
-    """Return (name, type, description) for all properties in a registry."""
-    # Display page_color as "color" — the encoding difference is internal
+def list_properties(
+    registry: dict[str, PropertyDef],
+    *,
+    group: str | None = None,
+    visual_type: str | None = None,
+) -> list[tuple[str, str, str, str | None, tuple[str, ...] | None]]:
+    """Return (name, type, description, group, enum_values) for properties.
+
+    Filters:
+      group — only properties in this group
+      visual_type — only properties applicable to this visual type
+    """
     display_type = lambda t: "color" if t == "page_color" else t
-    return [
-        (name, display_type(p.value_type), p.description)
-        for name, p in sorted(registry.items())
-    ]
+    result = []
+    for name, p in sorted(registry.items()):
+        prop_group = _derive_group(name, p)
+        if group and prop_group != group:
+            continue
+        if visual_type and p.visual_types and visual_type not in p.visual_types:
+            continue
+        result.append((
+            name,
+            display_type(p.value_type),
+            p.description,
+            prop_group,
+            p.enum_values,
+        ))
+    return result
+
+
+def _derive_group(name: str, prop: PropertyDef) -> str:
+    """Derive the display group for a property."""
+    if prop.group:
+        return prop.group
+    if name.startswith("position."):
+        return "position"
+    if prop.objects_path == "objects" or (prop.container_key and prop.objects_path == "objects"):
+        return "chart"
+    if prop.container_key:
+        return "container"
+    return "core"
