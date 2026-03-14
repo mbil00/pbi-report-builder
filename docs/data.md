@@ -95,6 +95,16 @@ pbi filter list --page "Sales"                     # page-level
 pbi filter list --page "Sales" --visual chart      # visual-level
 ```
 
+The listing shows:
+
+- filter `Name`
+- one or more resolved `Field` references
+- filter `Type`
+- summary values/conditions
+- hidden / locked flags
+
+This is especially useful for tuple filters and other generated filters that are easier to remove by name than by structure.
+
 ### pbi filter add
 
 Add a filter. Exactly one filter type per command.
@@ -121,6 +131,8 @@ pbi filter add Sales.Revenue --min 1000 --max 50000
 pbi filter add Sales.Revenue --min 1000
 pbi filter add Sales.OrderDate --min "2024-01-01" --max "2024-12-31"
 ```
+
+`--locked` now applies to range filters too.
 
 **Top N filter** — keep top or bottom N values by another field:
 
@@ -176,11 +188,18 @@ We still do not have a canonical exported PBIR example for that filter type.
 
 ```bash
 pbi filter remove <Table.Field>                                    # report-level
+pbi filter remove <filter-name>                                    # report-level by generated filter name
 pbi filter remove <Table.Field> --page "Sales"                     # page-level
 pbi filter remove <Table.Field> --page "Sales" --visual chart      # visual-level
 ```
 
 ```bash
 pbi filter remove Product.Category
+pbi filter remove Filter_a1b2c3d4
 pbi filter remove Sales.Revenue --page "Sales"
 ```
+
+Notes:
+
+- tuple filters can now be removed by one of their component field references, for example `Product.Color`
+- if the semantic model is unavailable, literal values are treated conservatively as strings rather than guessed as dates or numbers

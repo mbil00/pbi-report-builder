@@ -363,3 +363,21 @@ pbi visual create "Sales" matrix
 ## pbi visual props
 
 List all named visual properties with types and descriptions.
+
+```bash
+pbi visual props
+```
+
+## pbi visual objects
+
+List raw PBIR object keys that exist on a visual. This is useful when working with sample-backed visuals or when the named property registry does not model a particular object yet.
+
+```bash
+pbi visual objects <page> <visual>
+```
+
+Use this command when you need to inspect:
+
+- raw `visual.objects` sections
+- raw `visual.visualContainerObjects` sections
+- exact PBIR object roots for later `page export` / `pbi apply` workflows

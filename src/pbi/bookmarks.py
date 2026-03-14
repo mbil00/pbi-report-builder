@@ -91,25 +91,8 @@ def list_bookmarks(project: Project) -> list[BookmarkInfo]:
 
 def get_bookmark(project: Project, identifier: str) -> dict:
     """Get a bookmark's full data by name or display name."""
-    bm_dir = _bookmarks_dir(project)
-    if not bm_dir.exists():
-        raise FileNotFoundError("No bookmarks directory found")
-
-    # Try exact file match first
-    for f in bm_dir.glob("*.bookmark.json"):
-        try:
-            data = _read_json(f)
-        except (json.JSONDecodeError, KeyError):
-            continue
-
-        bm_name = data.get("name", "")
-        display = data.get("displayName", "")
-        if bm_name == identifier or display == identifier:
-            return data
-        if identifier.lower() in display.lower() or identifier.lower() in bm_name.lower():
-            return data
-
-    raise FileNotFoundError(f'Bookmark "{identifier}" not found')
+    data, _ = _find_bookmark_file(project, identifier)
+    return data
 
 
 def create_bookmark(
@@ -239,17 +222,23 @@ def update_bookmark_visuals(
     # Apply hidden
     if hidden_visuals:
         for vis_name in hidden_visuals:
-            containers[vis_name] = {
-                "singleVisual": {
-                    "display": {"mode": "hidden"},
-                },
-            }
+            container = containers.setdefault(vis_name, {})
+            single_visual = container.setdefault("singleVisual", {})
+            single_visual["display"] = {"mode": "hidden"}
 
     # Apply visible (remove hidden state)
     if visible_visuals:
         for vis_name in visible_visuals:
-            if vis_name in containers:
-                del containers[vis_name]
+            container = containers.get(vis_name)
+            if not isinstance(container, dict):
+                continue
+            single_visual = container.get("singleVisual")
+            if isinstance(single_visual, dict):
+                single_visual.pop("display", None)
+                if not single_visual:
+                    container.pop("singleVisual", None)
+            if not container:
+                containers.pop(vis_name, None)
 
     if active_section:
         sections[active_section] = section
@@ -280,7 +269,8 @@ def _find_bookmark_file(project: Project, identifier: str) -> tuple[dict, Path]:
     if not bm_dir.exists():
         raise FileNotFoundError("No bookmarks directory found")
 
-    # Exact match first
+    exact_matches: list[tuple[dict, Path]] = []
+    partial_matches: list[tuple[dict, Path]] = []
     for f in bm_dir.glob("*.bookmark.json"):
         try:
             data = _read_json(f)
@@ -290,19 +280,27 @@ def _find_bookmark_file(project: Project, identifier: str) -> tuple[dict, Path]:
         bm_name = data.get("name", "")
         display = data.get("displayName", "")
         if bm_name == identifier or display == identifier:
-            return data, f
-
-    # Partial match
-    for f in bm_dir.glob("*.bookmark.json"):
-        try:
-            data = _read_json(f)
-        except (json.JSONDecodeError, KeyError):
+            exact_matches.append((data, f))
             continue
-
-        bm_name = data.get("name", "")
-        display = data.get("displayName", "")
         if identifier.lower() in display.lower() or identifier.lower() in bm_name.lower():
-            return data, f
+            partial_matches.append((data, f))
+
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        matches = ", ".join(
+            candidate.get("displayName") or candidate.get("name", "")
+            for candidate, _ in exact_matches
+        )
+        raise ValueError(f'Ambiguous bookmark "{identifier}". Matches: {matches}')
+    if len(partial_matches) == 1:
+        return partial_matches[0]
+    if len(partial_matches) > 1:
+        matches = ", ".join(
+            candidate.get("displayName") or candidate.get("name", "")
+            for candidate, _ in partial_matches
+        )
+        raise ValueError(f'Ambiguous bookmark "{identifier}". Matches: {matches}')
 
     raise FileNotFoundError(f'Bookmark "{identifier}" not found')
 

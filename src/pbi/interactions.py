@@ -41,6 +41,10 @@ def set_interaction(
             f"Must be one of: {', '.join(sorted(INTERACTION_TYPES))}"
         )
 
+    if interaction_type == "Default":
+        remove_interaction(page, source, target)
+        return
+
     interactions = page.data.setdefault("visualInteractions", [])
 
     # Update existing or add new

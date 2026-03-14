@@ -56,7 +56,7 @@ ProjectOpt = Annotated[
 def _get_project(project: Path | None) -> Project:
     try:
         return Project.find(project)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
@@ -96,6 +96,9 @@ def apply_cmd(
     Use --overwrite to fully reconcile a page to match the YAML (destructive).
     With --overwrite, the existing page is backed up to a .yaml file first.
     """
+    import shutil
+    import tempfile
+
     from pbi.apply import apply_yaml
 
     proj = _get_project(project)
@@ -129,13 +132,28 @@ def apply_cmd(
             backup_path.write_text(backup_content, encoding="utf-8")
             console.print(f"[dim]Backed up \"{page_name}\" → {backup_path}[/dim]")
 
-            if overwrite:
-                # Delete existing visuals so they get recreated from YAML
-                visuals = proj.get_visuals(existing_page)
-                for v in visuals:
-                    proj.delete_visual(v)
+    snapshot_dir: Path | None = None
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    if overwrite and not dry_run:
+        temp_dir = tempfile.TemporaryDirectory()
+        snapshot_dir = Path(temp_dir.name) / "definition"
+        shutil.copytree(proj.definition_folder, snapshot_dir)
 
-    result = apply_yaml(proj, yaml_content, page_filter=page, dry_run=dry_run)
+    result = apply_yaml(
+        proj,
+        yaml_content,
+        page_filter=page,
+        dry_run=dry_run,
+        overwrite=overwrite,
+    )
+
+    if result.errors and snapshot_dir is not None:
+        shutil.rmtree(proj.definition_folder)
+        shutil.copytree(snapshot_dir, proj.definition_folder)
+        console.print("[dim]Rolled back failed overwrite apply.[/dim]")
+
+    if temp_dir is not None:
+        temp_dir.cleanup()
 
     # Report results
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
@@ -575,7 +593,11 @@ def page_save_template(
         raise typer.Exit(1)
 
     visuals = proj.get_visuals(pg)
-    path = save_template(proj, pg, template_name, visuals)
+    try:
+        path = save_template(proj, pg, template_name, visuals)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
     console.print(
         f'Saved template "[cyan]{template_name}[/cyan]" '
         f"({len(visuals)} visuals) → {path}"
@@ -600,7 +622,7 @@ def page_apply_template(
 
     try:
         created = apply_template(proj, pg, template_name)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
@@ -643,7 +665,12 @@ def page_delete_template(
     from pbi.templates import delete_template
 
     proj = _get_project(project)
-    if delete_template(proj, template_name):
+    try:
+        deleted = delete_template(proj, template_name)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    if deleted:
         console.print(f'Deleted template "[cyan]{template_name}[/cyan]"')
     else:
         console.print(f'[yellow]Template "{template_name}" not found.[/yellow]')
@@ -681,7 +708,7 @@ def page_set_drillthrough(
         try:
             from pbi.model import SemanticModel
             model = SemanticModel.load(proj.root)
-            _, prop, field_type = model.resolve_field(field)
+            entity, prop, field_type = model.resolve_field(field)
         except (FileNotFoundError, ValueError):
             pass
         parsed.append((entity, prop, field_type))
@@ -749,7 +776,14 @@ def page_set_tooltip(
                 console.print(f"[red]Error:[/red] Field '{field}' must be Table.Field format.")
                 raise typer.Exit(1)
             entity, prop = field[:dot], field[dot + 1:]
-            parsed.append((entity, prop, "column"))
+            field_type = "column"
+            try:
+                from pbi.model import SemanticModel
+                model = SemanticModel.load(proj.root)
+                entity, prop, field_type = model.resolve_field(field)
+            except (FileNotFoundError, ValueError):
+                pass
+            parsed.append((entity, prop, field_type))
 
     configure_tooltip_page(pg, parsed or None, width=width, height=height)
     pg.save()
@@ -2039,7 +2073,7 @@ def filter_list(
     project: ProjectOpt = None,
 ) -> None:
     """List filters at report, page, or visual level."""
-    from pbi.filters import load_level_data, get_filters, parse_filter
+    from pbi.filters import filter_field_refs, load_level_data, get_filters, parse_filter
 
     proj = _get_project(project)
     try:
@@ -2054,6 +2088,7 @@ def filter_list(
         return
 
     table = Table(title=f"{level.title()} Filters", box=box.SIMPLE)
+    table.add_column("Name", style="dim")
     table.add_column("Field", style="cyan")
     table.add_column("Type")
     table.add_column("Values/Condition")
@@ -2062,12 +2097,10 @@ def filter_list(
 
     for f in filters:
         info = parse_filter(f, level)
-        field_label = (
-            f"{info.field_entity}.{info.field_prop}"
-            if info.field_entity != "?" and info.field_prop != "?"
-            else f.get("displayName", "(tuple)")
-        )
+        field_refs = filter_field_refs(f)
+        field_label = ", ".join(field_refs) if field_refs else f.get("displayName", "(tuple)")
         table.add_row(
+            info.name or "-",
             field_label,
             info.filter_type,
             ", ".join(info.values) if info.values else "-",
@@ -2181,7 +2214,7 @@ def filter_add(
     elif has_range:
         add_range_filter(
             data, entity, prop, min_val=min_val, max_val=max_val,
-            field_type=field_type, is_hidden=hidden, data_type=data_type,
+            field_type=field_type, is_hidden=hidden, is_locked=locked, data_type=data_type,
         )
         save_level_data(data, target)
         bounds = []
@@ -2545,10 +2578,16 @@ def interaction_set(
         raise typer.Exit(1)
 
     pg.save()
-    console.print(
-        f'Set interaction: [cyan]{src_vis.name}[/cyan] → '
-        f'[cyan]{tgt_vis.name}[/cyan] = [bold]{interaction_type}[/bold]'
-    )
+    if interaction_type == "Default":
+        console.print(
+            f'Reset interaction: [cyan]{src_vis.name}[/cyan] → '
+            f'[cyan]{tgt_vis.name}[/cyan] to [bold]Default[/bold]'
+        )
+    else:
+        console.print(
+            f'Set interaction: [cyan]{src_vis.name}[/cyan] → '
+            f'[cyan]{tgt_vis.name}[/cyan] = [bold]{interaction_type}[/bold]'
+        )
 
 
 @interaction_app.command("remove")
@@ -2710,7 +2749,7 @@ def bookmark_show(
             table.add_section()
             for vis_name, vis_state in containers.items():
                 single = vis_state.get("singleVisual", {})
-                display_state = single.get("displayState", {})
+                display_state = single.get("display", {})
                 mode = display_state.get("mode", "normal")
                 table.add_row(f"[dim]{section_name}[/dim] {vis_name}", mode)
 
@@ -2785,7 +2824,7 @@ def bookmark_update(
             hidden_visuals=hide,
             visible_visuals=show,
         )
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
@@ -2818,7 +2857,7 @@ def bookmark_delete(
 
     try:
         display_name = delete_bookmark(proj, bookmark)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 

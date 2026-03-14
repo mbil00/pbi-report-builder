@@ -50,6 +50,7 @@ def apply_yaml(
     *,
     page_filter: str | None = None,
     dry_run: bool = False,
+    overwrite: bool = False,
 ) -> ApplyResult:
     """Apply a YAML specification to the project.
 
@@ -92,7 +93,7 @@ def apply_yaml(
         if page_filter and page_name.lower() != page_filter.lower():
             continue
 
-        _apply_page(project, page_spec, result, dry_run=dry_run)
+        _apply_page(project, page_spec, result, dry_run=dry_run, overwrite=overwrite)
 
     return result
 
@@ -103,6 +104,7 @@ def _apply_page(
     result: ApplyResult,
     *,
     dry_run: bool,
+    overwrite: bool,
 ) -> None:
     """Apply a single page specification."""
     page_name = page_spec["name"]
@@ -174,9 +176,22 @@ def _apply_page(
         result.errors.append(f"Page {page_name}: 'visuals' must be a list.")
         return
 
+    kept_visual_ids: set[str] = set()
     for vis_spec in visuals_spec:
         if isinstance(vis_spec, dict):
-            _apply_visual(project, page, vis_spec, result, dry_run=dry_run)
+            _apply_visual(
+                project,
+                page,
+                vis_spec,
+                result,
+                dry_run=dry_run,
+                keep_visual_ids=kept_visual_ids if not dry_run and overwrite else None,
+            )
+
+    if not dry_run and overwrite:
+        for visual in list(project.get_visuals(page)):
+            if visual.folder.name not in kept_visual_ids:
+                project.delete_visual(visual)
 
 
 def _apply_visual(
@@ -186,6 +201,7 @@ def _apply_visual(
     result: ApplyResult,
     *,
     dry_run: bool,
+    keep_visual_ids: set[str] | None = None,
 ) -> None:
     """Apply a single visual specification."""
     page_name = page.display_name
@@ -236,6 +252,9 @@ def _apply_visual(
         _count_dry_run_changes(vis_spec, result)
         return
 
+    if keep_visual_ids is not None:
+        keep_visual_ids.add(visual.folder.name)
+
     raw_pbir = vis_spec.get("pbir")
     if isinstance(raw_pbir, dict):
         _apply_raw_visual_payload(visual, raw_pbir)
@@ -253,37 +272,38 @@ def _apply_visual(
         visual.data["position"]["height"] = h
         result.properties_set += 2
 
-    if not isinstance(raw_pbir, dict):
-        # Apply visual properties (nested objects become dot-separated props)
-        exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
-                         "filters", "isHidden", "pbir"}
-        _apply_nested_properties(
-            visual.data, vis_spec,
-            exclude_keys=exclude_keys,
-            registry=VISUAL_PROPERTIES,
-            result=result,
-            context=f"{page_name}/{vis_name or visual.name}",
-            dry_run=dry_run,
-        )
+    # Apply visual properties (nested objects become dot-separated props)
+    exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
+                     "filters", "isHidden", "pbir"}
+    _apply_nested_properties(
+        visual.data, vis_spec,
+        exclude_keys=exclude_keys,
+        registry=VISUAL_PROPERTIES,
+        result=result,
+        context=f"{page_name}/{vis_name or visual.name}",
+        dry_run=dry_run,
+        ignore_selector_errors=isinstance(raw_pbir, dict),
+        ignore_unknown_roots=_raw_object_roots(raw_pbir) if isinstance(raw_pbir, dict) else None,
+    )
 
-        # isHidden
-        if "isHidden" in vis_spec:
-            visual.data["isHidden"] = bool(vis_spec["isHidden"])
-            result.properties_set += 1
+    # isHidden
+    if "isHidden" in vis_spec:
+        visual.data["isHidden"] = bool(vis_spec["isHidden"])
+        result.properties_set += 1
 
-        # Bindings
-        if "bindings" in vis_spec:
-            _apply_bindings(project, visual, vis_spec["bindings"], result)
+    # Bindings
+    if "bindings" in vis_spec:
+        _apply_bindings(project, visual, vis_spec["bindings"], result)
 
-        # Sort
-        if "sort" in vis_spec:
-            _apply_sort(project, visual, vis_spec["sort"], result)
+    # Sort
+    if "sort" in vis_spec:
+        _apply_sort(project, visual, vis_spec["sort"], result)
 
-        # Filters
-        if "filters" in vis_spec:
-            _apply_filters(visual.data, vis_spec["filters"], result,
-                           context=f"{page_name}/{vis_name or visual.name}",
-                           dry_run=dry_run)
+    # Filters
+    if "filters" in vis_spec:
+        _apply_filters(visual.data, vis_spec["filters"], result,
+                       context=f"{page_name}/{vis_name or visual.name}",
+                       dry_run=dry_run)
 
     visual.save()
 
@@ -298,6 +318,8 @@ def _apply_nested_properties(
     context: str,
     dry_run: bool,
     prefix: str = "",
+    ignore_selector_errors: bool = False,
+    ignore_unknown_roots: set[str] | None = None,
 ) -> None:
     """Flatten nested YAML dicts into dot-separated property names and apply them.
 
@@ -320,6 +342,8 @@ def _apply_nested_properties(
                 context=context,
                 dry_run=dry_run,
                 prefix=prop_name,
+                ignore_selector_errors=ignore_selector_errors,
+                ignore_unknown_roots=ignore_unknown_roots,
             )
         else:
             # Leaf value — apply as property
@@ -331,7 +355,32 @@ def _apply_nested_properties(
                 set_property(data, prop_name, str_value, registry)
                 result.properties_set += 1
             except ValueError as e:
+                if ignore_selector_errors and "[" in prop_name and "]" in prop_name:
+                    continue
+                root = prop_name.split(".", 1)[0]
+                if ignore_unknown_roots and root in ignore_unknown_roots:
+                    continue
                 result.errors.append(f"{context}: {prop_name}: {e}")
+
+
+def _raw_object_roots(raw_pbir: dict) -> set[str]:
+    """Return YAML object roots projected from the raw visual payload."""
+    visual = raw_pbir.get("visual", {})
+    roots = set(visual.get("objects", {}).keys())
+    roots.update(visual.get("visualContainerObjects", {}).keys())
+    roots.update({
+        "shadow" if "dropShadow" in roots else "",
+        "subtitle" if "subTitle" in roots else "",
+        "header" if "visualHeader" in roots else "",
+        "tooltip" if "visualTooltip" in roots else "",
+        "action" if "visualLink" in roots else "",
+        "xAxis" if "categoryAxis" in roots else "",
+        "yAxis" if "valueAxis" in roots else "",
+        "line" if "lineStyles" in roots else "",
+        "dataColors" if "dataPoint" in roots else "",
+    })
+    roots.discard("")
+    return roots
 
 
 def _apply_bindings(

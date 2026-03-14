@@ -37,3 +37,12 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 3. Add first-class navigation/action commands instead of relying on low-level property writes.
 4. Expand `report` commands to resources, annotations, and report objects.
 5. Build recipe-driven authoring on top of the lower-level PBIR editors.
+
+## Agent note
+
+For larger changes, prefer the workflow in [Agent Workflows](agent-workflows.md):
+
+- inspect with `pbi info` / `pbi map`
+- mutate with schema-backed commands where possible
+- use `pbi page export` + `pbi apply` for larger declarative page edits
+- finish with `pbi validate`

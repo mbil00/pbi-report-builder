@@ -41,6 +41,8 @@ pbi interaction set "Sales" dateSlicer kpiCard NoFilter
 pbi interaction set "Sales" regionSlicer revenueChart Default
 ```
 
+`Default` is implemented as a reset: the CLI removes the custom override for that source-target pair instead of storing a literal `"Default"` interaction entry.
+
 ### pbi interaction remove
 
 Remove custom interactions. Omit the target to remove all interactions from a source.

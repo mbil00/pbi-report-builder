@@ -281,6 +281,7 @@ def add_range_filter(
     max_val: str | None = None,
     field_type: str = "column",
     is_hidden: bool = False,
+    is_locked: bool = False,
     data_type: str | None = None,
 ) -> dict:
     """Add a range filter (between min and max). Returns the filter dict."""
@@ -324,7 +325,7 @@ def add_range_filter(
         },
         "field": field_ref,
         "isHiddenInViewMode": is_hidden,
-        "isLockedInViewMode": False,
+        "isLockedInViewMode": is_locked,
         "howCreated": "User",
     }
 
@@ -567,20 +568,54 @@ def _filter_matches(f: dict, identifier: str) -> bool:
     """Check if a filter matches the given identifier."""
     if f.get("name", "").lower() == identifier:
         return True
-    field = f.get("field", {})
-    entity, prop = _extract_field_ref(field)
-    field_ref = f"{entity}.{prop}".lower()
-    return field_ref == identifier
+    return any(field_ref.lower() == identifier for field_ref in filter_field_refs(f))
 
 
 def _extract_field_ref(field: dict) -> tuple[str, str]:
     """Extract (entity, property) from a PBI field reference."""
-    for key in ("Column", "Measure"):
-        if key in field:
-            entity = field[key].get("Expression", {}).get("SourceRef", {}).get("Entity", "?")
-            prop = field[key].get("Property", "?")
-            return entity, prop
-    return "?", "?"
+    return _extract_expression_ref(field)
+
+
+def filter_field_refs(filter_obj: dict) -> list[str]:
+    """Return all recognizable field refs for a filter."""
+    refs: list[str] = []
+    alias_map = {
+        source.get("Name"): source.get("Entity")
+        for source in filter_obj.get("filter", {}).get("From", [])
+        if source.get("Name") and source.get("Entity")
+    }
+
+    entity, prop = _extract_field_ref(filter_obj.get("field", {}))
+    if entity != "?" and prop != "?":
+        refs.append(f"{entity}.{prop}")
+
+    for clause in filter_obj.get("filter", {}).get("Where", []):
+        condition = clause.get("Condition", {})
+        if "In" in condition:
+            for expr in condition["In"].get("Expressions", []):
+                entity, prop = _extract_expression_ref(expr, alias_map=alias_map)
+                if entity != "?" and prop != "?":
+                    refs.append(f"{entity}.{prop}")
+        if "Comparison" in condition:
+            entity, prop = _extract_expression_ref(
+                condition["Comparison"].get("Left", {}),
+                alias_map=alias_map,
+            )
+            if entity != "?" and prop != "?":
+                refs.append(f"{entity}.{prop}")
+        if "Between" in condition:
+            entity, prop = _extract_expression_ref(
+                condition["Between"].get("Expression", {}),
+                alias_map=alias_map,
+            )
+            if entity != "?" and prop != "?":
+                refs.append(f"{entity}.{prop}")
+
+    deduped: list[str] = []
+    for ref in refs:
+        if ref not in deduped:
+            deduped.append(ref)
+    return deduped
 
 
 def _extract_filter_values(f: dict) -> list[str]:
@@ -885,6 +920,8 @@ def _extract_expression_ref(
 ) -> tuple[str, str]:
     """Extract an entity/property reference from a query expression."""
     alias_map = alias_map or {}
+    if "Aggregation" in expr:
+        return _extract_expression_ref(expr["Aggregation"].get("Expression", {}), alias_map=alias_map)
     for key in ("Column", "Measure"):
         if key not in expr:
             continue
@@ -971,7 +1008,7 @@ def _format_literal(value: str, data_type: str | None = None) -> str:
     if raw.lower() == "null":
         return "null"
 
-    if normalized_type in {"date", "datetime", "datetimeoffset"} or _looks_like_date(raw):
+    if normalized_type in {"date", "datetime", "datetimeoffset"}:
         if "T" in raw:
             return f"datetime'{raw}'"
         return f"datetime'{raw}T00:00:00'"
@@ -980,7 +1017,7 @@ def _format_literal(value: str, data_type: str | None = None) -> str:
         if re.fullmatch(r"-?\d+", raw):
             return f"{raw}L"
 
-    if normalized_type in {"double", "decimal", "currency", "number"} or _looks_like_number(raw):
+    if normalized_type in {"double", "decimal", "currency", "number"}:
         return f"{raw}D"
 
     escaped = raw.replace("'", "''")

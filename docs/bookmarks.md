@@ -19,6 +19,8 @@ pbi bookmark show <bookmark> --raw            # full JSON
 
 Bookmark is matched by name or display name (case-insensitive, partial match supported).
 
+If a partial match is ambiguous, the CLI now fails instead of picking the first bookmark.
+
 ## pbi bookmark create
 
 ```bash
@@ -66,6 +68,8 @@ pbi bookmark update "Minimal View" --show detailTable
 pbi bookmark update "Full View" --show detailTable --show filterPanel
 ```
 
+Visibility updates preserve unrelated bookmark state for the affected visual container instead of replacing it wholesale.
+
 ## pbi bookmark delete
 
 ```bash
@@ -100,7 +104,7 @@ Each bookmark file (schema v2.1.0):
         "visualContainers": {
           "detailTable": {
             "singleVisual": {
-              "displayState": { "mode": "hidden" }
+              "display": { "mode": "hidden" }
             }
           }
         }

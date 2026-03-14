@@ -87,8 +87,27 @@ The exported YAML now includes:
 
 - stable visual `id` values so re-applying the same spec updates existing visuals instead of duplicating unnamed ones
 - exact `pbir` payloads for visuals and raw filter payloads for full-fidelity round-trips
+- high-level fields like `position`, `size`, `isHidden`, `bindings`, `sort`, and `filters` can still be edited and re-applied even when a visual has a `pbir` block
 
 Use `-o` when saving to a file.
+
+## pbi apply
+
+Apply a YAML spec back into the report.
+
+```bash
+pbi apply page.yaml
+pbi apply page.yaml --page "Sales Overview"
+pbi apply page.yaml --dry-run
+pbi apply page.yaml --overwrite
+```
+
+Behavior:
+
+- default mode is additive
+- `--dry-run` validates and reports intended changes without writing files
+- `--overwrite` reconciles the page to the YAML and removes visuals not present in the spec
+- `--overwrite` writes backup YAML files and rolls the PBIR definition back automatically if apply fails
 
 ## Page Templates
 
@@ -105,6 +124,8 @@ pbi page save-template "Sales Overview" sales-layout
 pbi page save-template "KPI Dashboard" kpi-strip
 ```
 
+Template names must be file-safe. Path separators and absolute paths are rejected.
+
 ### pbi page apply-template
 
 Apply a saved template to a page. Creates visuals matching the template's layout and formatting. Sets page dimensions and background from the template.
@@ -118,6 +139,12 @@ pbi page apply-template <page> <template-name>
 pbi page create "Q2 Sales"
 pbi page apply-template "Q2 Sales" sales-layout
 ```
+
+Notes:
+
+- applying the same template multiple times now generates unique visual and group names
+- created visuals get fresh `z` and `tabOrder` values relative to the target page
+- malformed template JSON now raises a user-facing CLI error instead of failing deep in the loader
 
 ### pbi page templates
 
@@ -153,6 +180,8 @@ pbi page set-drillthrough "Details" Product.Category Region.Country
 # Cross-report drillthrough
 pbi page set-drillthrough "Shared Details" Product.Category --cross-report
 ```
+
+If a semantic model exists, the CLI resolves the field to canonical PBIR entity/property names before writing the page binding.
 
 ### pbi page clear-drillthrough
 

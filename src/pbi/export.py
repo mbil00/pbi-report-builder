@@ -13,7 +13,7 @@ import yaml
 
 from pbi.project import Project, Page, Visual
 from pbi.properties import decode_pbi_value
-from pbi.filters import get_filters, parse_filter
+from pbi.filters import filter_field_refs, get_filters, parse_filter
 
 
 def export_page(project: Project, page: Page) -> dict:
@@ -227,11 +227,16 @@ def _export_filters(data: dict) -> list[dict]:
     result = []
     for f in filters:
         info = parse_filter(f)
+        field_refs = filter_field_refs(f)
         entry: dict[str, Any] = {
-            "field": f"{info.field_entity}.{info.field_prop}",
+            "field": field_refs[0] if field_refs else f"{info.field_entity}.{info.field_prop}",
             "type": info.filter_type,
             "raw": copy.deepcopy(f),
         }
+        if info.name:
+            entry["name"] = info.name
+        if len(field_refs) > 1:
+            entry["fields"] = field_refs
         if info.values:
             entry["values"] = info.values
         if info.is_hidden:

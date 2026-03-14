@@ -84,6 +84,24 @@ pages:
           - Sales.Sales Amount Advanced: >= 1000
 ```
 
+### pbi apply
+
+Apply a YAML spec back into the report. This is the inverse of `pbi page export`.
+
+```bash
+pbi apply report.yaml
+pbi apply report.yaml --page "Sales Overview"
+pbi apply report.yaml --dry-run
+pbi apply report.yaml --overwrite
+```
+
+Behavior:
+
+- default mode is additive: only fields present in the YAML are touched
+- `--overwrite` reconciles a page to the YAML and removes visuals not present in the spec
+- `--overwrite` now creates per-page backup YAML files and rolls back the PBIR definition if apply fails
+- exported YAML may include a raw `pbir` block for full-fidelity round-trips; high-level edits like `bindings`, `sort`, `filters`, `isHidden`, `position`, and `size` still apply on top of that payload
+
 ### pbi validate
 
 Check project files for structural errors. See [Validation](validation.md).
@@ -121,8 +139,8 @@ pbi report props
 | [Data & Filters](data.md) | Data binding, filters, semantic model |
 | [Interactions & Navigation](interactions.md) | Visual interactions, button actions |
 | [Bookmarks](bookmarks.md) | Bookmark management |
+| [Agent Workflows](agent-workflows.md) | Recommended export/apply, naming, template, and validation workflows for agents |
 | [Themes](themes.md) | Theme apply, export, remove |
 | [Capabilities & Roadmap](capabilities.md) | Current coverage and next expansion areas |
-| [Fixture Spec](fixtures.md) | PBIP/PBIR examples still needed to close feature gaps |
 | [Implementation Roadmap](roadmap.md) | Schema-first expansion priorities |
 | [Validation & Structure](validation.md) | Schema validation, PBIR file structure |

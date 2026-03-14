@@ -112,8 +112,19 @@ def _parse_tmdl_name(text: str) -> str:
     """Parse a TMDL name — handles 'quoted names' and unquoted."""
     text = text.strip()
     if text.startswith("'"):
-        end = text.index("'", 1)
-        return text[1:end]
+        chars: list[str] = []
+        i = 1
+        while i < len(text):
+            ch = text[i]
+            if ch == "'":
+                if i + 1 < len(text) and text[i + 1] == "'":
+                    chars.append("'")
+                    i += 2
+                    continue
+                return "".join(chars)
+            chars.append(ch)
+            i += 1
+        return "".join(chars)
     return text.split()[0].rstrip("=").strip()
 
 
