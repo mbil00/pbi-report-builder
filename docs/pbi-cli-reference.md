@@ -47,8 +47,8 @@ pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue
 # Batch property writes
 pbi page set-all background.color="#F0EDE8"
 pbi page set-all background.color="#F0EDE8" --exclude "_"
-pbi visual set-all "Sales Overview" border.show=true --visual-type slicer
-pbi visual set-all --all-pages columnHeaders.backColor="#162F38" --visual-type tableEx
+pbi visual set-all border.show=true --page "Sales Overview" --visual-type slicer
+pbi visual set-all columnHeaders.backColor="#162F38" --all-pages --visual-type tableEx
 
 # Discovery with filtering
 pbi map --page "Sales Overview"    # single page detail

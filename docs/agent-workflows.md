@@ -286,10 +286,10 @@ pbi visual set "Sales" revenueChart title.text="Q2 Revenue"
 pbi visual set "Sales" revenueChart border.show=true border.radius=8 shadow.show=true
 
 # Apply to all visuals of a type on one page
-pbi visual set-all "Sales" border.show=true border.radius=4 --visual-type slicer
+pbi visual set-all border.show=true border.radius=4 --page "Sales" --visual-type slicer
 
 # Apply across ALL pages at once
-pbi visual set-all --all-pages columnHeaders.backColor="#162F38" --visual-type tableEx
+pbi visual set-all columnHeaders.backColor="#162F38" --all-pages --visual-type tableEx
 
 # Set properties on all pages
 pbi page set-all background.color="#F0EDE8"

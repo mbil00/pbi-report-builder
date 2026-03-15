@@ -2000,9 +2000,9 @@ class VisualSetRegressionTests(unittest.TestCase):
                 [
                     "visual",
                     "set-all",
-                    "Demo",
                     "background.show=true",
                     "notARealProperty=true",
+                    "--page", "Demo",
                     "--project",
                     str(root / "Sample.pbip"),
                 ],
@@ -2030,8 +2030,8 @@ class VisualSetRegressionTests(unittest.TestCase):
                 [
                     "visual",
                     "set-all",
-                    "Demo",
                     "background.show=true",
+                    "--page", "Demo",
                     "--dry-run",
                     "--project",
                     str(root / "Sample.pbip"),

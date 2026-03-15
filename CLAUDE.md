@@ -22,10 +22,10 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 - `--dry-run` — all mutating apply/create/edit/format commands
 - `--name, -n` — create commands (friendly name)
 - `--title` — visual create (sets title.show + title.text)
-- `--all-pages` — `visual set-all` (apply across all pages)
+- `--all-pages` — `visual set-all` (apply across all pages, mutually exclusive with `--page`)
 - `--exclude` — `page set-all` (skip pages matching substring)
 - `--overwrite` — `apply` (full reconciliation, removes visuals not in YAML)
-- `--page` — `map` (filter to single page), `apply` (filter to single page)
+- `--page` — `map` (filter to single page), `apply` (filter to single page), `visual set-all` (target page)
 
 ## Output Patterns
 

@@ -46,20 +46,27 @@ def visual_set(
 
 @visual_app.command("set-all")
 def visual_set_all(
-    page: Annotated[str | None, typer.Argument(help="Page name, display name, or index. Omit with --all-pages.")] = None,
-    assignments: Annotated[list[str] | None, typer.Argument(help="Property assignments: prop=value ...")] = None,
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value ...")],
+    page: Annotated[str | None, typer.Option("--page", help="Page name, display name, or index.")] = None,
     visual_type: Annotated[str | None, typer.Option("--visual-type", help="Only apply to visuals of this type (e.g. slicer, cardVisual, tableEx).")] = None,
     all_pages: Annotated[bool, typer.Option("--all-pages", help="Apply to all pages.")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set properties on multiple visuals at once."""
+    """Set properties on multiple visuals at once.
+
+    Target a single page with --page, or all pages with --all-pages.
+    """
     if not assignments:
         console.print("[red]Error:[/red] Provide at least one prop=value assignment.")
         raise typer.Exit(1)
 
     if not all_pages and not page:
-        console.print("[red]Error:[/red] Provide a page name or use --all-pages.")
+        console.print("[red]Error:[/red] Provide --page or use --all-pages.")
+        raise typer.Exit(1)
+
+    if all_pages and page:
+        console.print("[red]Error:[/red] --page and --all-pages are mutually exclusive.")
         raise typer.Exit(1)
 
     from ..common import get_project

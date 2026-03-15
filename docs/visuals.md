@@ -39,16 +39,16 @@ pbi visual set "Sales Overview" revenueChart accentBar.color="#E8A83E" --for-mea
 ## Bulk Styling
 
 ```bash
-pbi visual set-all "Sales Overview" background.show=true background.color="#FFFFFF"
-pbi visual set-all "Sales Overview" border.radius=4 border.show=true --visual-type slicer
-pbi visual set-all "Sales Overview" background.show=true --dry-run
+pbi visual set-all background.show=true background.color="#FFFFFF" --page "Sales Overview"
+pbi visual set-all border.radius=4 border.show=true --page "Sales Overview" --visual-type slicer
+pbi visual set-all background.show=true --page "Sales Overview" --dry-run
 
 # Apply across ALL pages at once
-pbi visual set-all --all-pages columnHeaders.backColor="#162F38" --visual-type tableEx
-pbi visual set-all --all-pages border.show=true border.radius=4
+pbi visual set-all columnHeaders.backColor="#162F38" --all-pages --visual-type tableEx
+pbi visual set-all border.show=true border.radius=4 --all-pages
 ```
 
-When `--all-pages` is used, the page argument is omitted. Combine with `--visual-type` to target specific visual types across the entire report.
+Use `--page` to target a single page, or `--all-pages` for the entire report. Combine with `--visual-type` to target specific visual types.
 
 ## CRUD
 
