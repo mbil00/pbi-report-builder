@@ -1,0 +1,83 @@
+# PBI Report Builder — Development Guide
+
+CLI tool for editing Power BI PBIP project files. Agent-first design.
+
+## Stack
+
+Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/pbi/`, commands in `src/pbi/commands/`. Tests via `python -m pytest tests/`.
+
+## Command Grammar
+
+**Verbs:** `list`, `get`, `set`, `create`, `copy`, `delete`, `clear`, `export`, `apply`. Use `get` to view details (never `show`). Use `delete` to remove resources (never `remove`). Use `unhide` as the opposite of `hide`. Use `clear` to remove configuration (sort, formatting, interactions, drillthrough, tooltip).
+
+**Arguments:** Targets are positional, options are named. Setters use `key=value` positional args. Field references use `Table.Field` format everywhere.
+
+**Scope narrowing:** Use `--page` and `--visual` optional flags to narrow scope (see filter commands). Default scope is report-level. `--visual` requires `--page`.
+
+**Common flags:**
+- `--project, -p` — all commands (via `ProjectOpt`)
+- `--json` — all list commands, parameter name `as_json`
+- `--raw, -r` — get/detail commands (dumps full JSON)
+- `--force, -f` — all delete commands (skip confirmation)
+- `--dry-run` — all mutating apply/create/edit/format commands
+- `--name, -n` — create commands (friendly name)
+- `--title` — visual create (sets title.show + title.text)
+
+## Output Patterns
+
+**Rich markup styles:**
+- `[cyan]` — entity names, field references, display names
+- `[dim]` — metadata, secondary info, arrows (`->`), dry-run prefix, `(none)` placeholders
+- `[bold]` — headings, table titles
+- `[yellow]` — warnings, hidden state, empty results with guidance
+- `[red]` — errors only
+- `[green]` — success/supported status
+
+**Messages:**
+- Error: `console.print(f"[red]Error:[/red] {msg}")` then `raise typer.Exit(1)`
+- Warning: `console.print(f"[yellow]Warning:[/yellow] {msg}")`
+- Created: `console.print(f'Created page "[cyan]{name}[/cyan]"')`
+- Deleted: `console.print(f'Deleted page "[cyan]{name}[/cyan]"')`
+- Changed: `console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")`
+- No-op: `console.print(f'[dim]No change:[/dim] [cyan]{name}[/cyan] is already {state}')`
+- Empty list: `console.print("[yellow]No items. Use \`pbi item create\` to add one.[/yellow]")` then `raise typer.Exit(0)`
+- Dry-run prefix: `prefix = "[dim](dry run)[/dim] " if dry_run else ""`
+- No changes: `console.print("[dim]No changes applied.[/dim]")`
+
+**Tables:** `Table(box=box.SIMPLE)`. Primary column `style="cyan"`, metadata `style="dim"`, booleans as `"yes"` or `""`.
+
+**--json:** Early return with `console.print_json(json.dumps(rows, indent=2))`. Return list of dicts.
+
+## Lookup Resolution
+
+All find functions follow this precedence: exact ID → exact display name (case-insensitive) → partial match (unique) → 1-based index → fuzzy suggestion → available list fallback.
+
+Fuzzy: `difflib.get_close_matches(input, names, n=3, cutoff=0.5)`. Format: `'Not found. Did you mean: "X", "Y"?'`. If no close match, fall back to `'Not found. Available: "A", "B", "C"'`.
+
+## Confirmation
+
+All destructive commands prompt unless `--force/-f`:
+```python
+if not force:
+    confirm = typer.confirm(f'Delete "{name}"?')
+    if not confirm:
+        raise typer.Abort()
+```
+
+## Visual Creation
+
+`create_visual()` scaffolds `queryState` with empty role projections from the type's role catalog. The CLI command prints available roles after creation so agents know what to bind.
+
+## Key Files
+
+- `src/pbi/commands/common.py` — `ProjectOpt`, `console`, `get_project()`, `parse_property_assignments()`
+- `src/pbi/project.py` — `Project` class, page/visual CRUD, find with fuzzy suggestions
+- `src/pbi/properties.py` — `VISUAL_PROPERTIES`, `PAGE_PROPERTIES`, `get_property()`, `set_property()`
+- `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`
+- `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, field resolution with fuzzy suggestions
+- `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
+- `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)
+
+## Engineering Rule
+
+New write paths must be validated against Microsoft's published PBIR schema or derived from a canonical exported PBIR sample with test coverage. No guessing JSON structures.
