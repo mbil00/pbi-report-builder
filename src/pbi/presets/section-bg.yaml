@@ -1,0 +1,10 @@
+name: section-bg
+description: Subtle fill for page section zoning — wide rectangle with light background.
+properties:
+  border.show: true
+  border.radius: 10
+  border.color: '#EDEBE9'
+  background.show: false
+  chart:fill.show: true
+  chart:fill.fillColor: '#F5F5F5'
+  chart:outline.show: false

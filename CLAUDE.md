@@ -28,7 +28,13 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 - `--exclude` — `page set-all` (skip pages matching substring)
 - `--overwrite` — `apply` (full reconciliation, removes visuals not in YAML)
 - `--page` — `map` (filter to single page), `apply` (filter to single page), `visual set-all` (target page)
-- `--global, -g` — `style` commands (use global styles from ~/.config/pbi/styles/)
+- `--global, -g` — `style`, `component`, `template` commands (use global scope from ~/.config/pbi/)
+- `--bundled` — `style list` (include built-in shape presets)
+- `--from-project` — `page import` (source project path)
+- `--include-resources` — `page import` (also copy image files)
+- `--set` — `component apply` (parameter overrides as key=value)
+- `--set-each` — `component apply --row` (per-instance values as key=v1,v2,v3)
+- `--row` — `component apply` (batch stamp N instances in a row)
 
 ## Output Patterns
 
@@ -83,9 +89,12 @@ if not force:
 - `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`
 - `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, `Relationship`, field resolution, BFS path finding
 - `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
-- `src/pbi/styles.py` — style presets (project + global), capture from visual, apply to visuals
+- `src/pbi/styles.py` — style presets (project + global + bundled), capture from visual, apply to visuals
 - `src/pbi/themes.py` — theme apply/export/delete/migrate, color migration
+- `src/pbi/components.py` — reusable visual components (save/apply/stamp), parameter detection, `{{ }}` substitution
+- `src/pbi/images.py` — image resource management (add/list/prune for RegisteredResources)
 - `src/pbi/mapper.py` — `pbi map` with `--page`/`--pages`/`--model` filters
+- `src/pbi/presets/` — bundled shape style presets (rounded-container, section-bg, separator, card-frame)
 - `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)
 
 ## YAML Apply Features

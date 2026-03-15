@@ -4,6 +4,8 @@
 
 ```bash
 pbi visual list "Sales Overview"
+pbi visual tree "Sales Overview"              # group hierarchy as a tree
+pbi visual tree "Sales Overview" --json       # tree as JSON
 pbi visual get "Sales Overview" revenueChart
 pbi visual get "Sales Overview" revenueChart title.show background.color
 pbi visual get "Sales Overview" revenueChart --all-props
@@ -17,6 +19,8 @@ pbi visual properties
 pbi visual properties --visual-type clusteredColumnChart
 pbi visual properties --match dropShadow --show-aliases
 ```
+
+`pbi visual tree` renders the group hierarchy with nested children, showing type, position, size, and hidden state — essential for understanding complex pages with 100+ visuals.
 
 `pbi visual get-page` lists explicit properties across every visual on a page.
 Use `--all-props` when you also want core state such as geometry and hidden

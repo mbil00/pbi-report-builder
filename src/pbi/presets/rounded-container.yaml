@@ -1,0 +1,14 @@
+name: rounded-container
+description: Filled rounded rectangle with shadow — use as KPI card or visual container background.
+properties:
+  border.show: true
+  border.radius: 15
+  border.color: '#DDD6CC'
+  shadow.show: true
+  shadow.preset: Center
+  shadow.blur: 15
+  shadow.spread: 3
+  shadow.transparency: 70
+  background.show: false
+  chart:fill.show: false
+  chart:outline.show: false

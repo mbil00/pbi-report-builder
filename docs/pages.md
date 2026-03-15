@@ -100,6 +100,35 @@ Key template behaviors:
 - Applying a template updates the target page to match the template; use `--overwrite` to remove visuals not present in the template
 - Templates can include visuals, bindings, filters, interactions, and page-local bookmarks
 
+## Import (Cross-Project)
+
+```bash
+# Copy a page from another project
+pbi page import --from-project "/path/to/QBR Report" --page "Divisional Dashboard" \
+  --name "My Dashboard"
+
+# Also copy image resources used by the page
+pbi page import --from-project "/path/to/other" --page "Introduction" \
+  --include-resources
+```
+
+Import copies the entire page directory, regenerates all visual and page IDs, and fixes group references (parentGroupName). Use `--include-resources` to also copy image files from `RegisteredResources/` and register them in the target project.
+
+## Sections
+
+```bash
+# Create a section with background shape and title textbox
+pbi page section create "Dashboard" "Market / Sell" \
+  --x 221 --y 130 --width 512 --height 220 \
+  --background "#F5F5F5" --radius 10 \
+  --title-color "#002C77" --title-font "DIN" --title-size 14
+
+# List sections on a page
+pbi page section list "Dashboard"
+```
+
+Each section creates a shape visual (background), a textbox visual (title), and groups them together. Customizable via `--background`, `--radius`, `--title-color`, `--title-font`, `--title-size`.
+
 ## Drillthrough
 
 ```bash

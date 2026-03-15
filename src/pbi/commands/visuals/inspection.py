@@ -8,6 +8,8 @@ import typer
 from rich import box
 from rich.table import Table
 
+from rich.tree import Tree
+
 from pbi.properties import (
     VISUAL_PROPERTIES,
     decode_pbi_value,
@@ -689,3 +691,130 @@ def visual_diff(
     for prop_name, left_value, right_value in rows:
         table.add_row(prop_name, left_value, right_value)
     console.print(table)
+
+
+@visual_app.command("tree")
+def visual_tree(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show visual hierarchy as a tree with group nesting."""
+    proj, pg = resolve_page_target(project, page)
+    visuals = proj.get_visuals(pg)
+
+    if not visuals:
+        console.print(f'[yellow]No visuals on "{pg.display_name}".[/yellow]')
+        raise typer.Exit(0)
+
+    if as_json:
+        import json as json_mod
+        console.print_json(json_mod.dumps(_build_tree_data(visuals), indent=2))
+        return
+
+    from pbi.project import Visual as VisualType
+
+    # Build parent → children mapping
+    groups: dict[str, list[VisualType]] = {}
+    group_visuals: dict[str, VisualType] = {}
+    top_level = []
+
+    for vis in visuals:
+        if "visualGroup" in vis.data:
+            group_visuals[vis.name] = vis
+            groups.setdefault(vis.name, [])
+        else:
+            parent = vis.data.get("parentGroupName")
+            if parent:
+                groups.setdefault(parent, []).append(vis)
+            else:
+                top_level.append(vis)
+
+    # Also add groups that are top-level (not children of another group)
+    top_groups = []
+    for _gname, gvis in group_visuals.items():
+        parent = gvis.data.get("parentGroupName")
+        if parent:
+            groups.setdefault(parent, []).append(gvis)
+        else:
+            top_groups.append(gvis)
+
+    total = len(visuals)
+    tree = Tree(f'[bold]{pg.display_name}[/bold] [dim]({total} visuals)[/dim]')
+
+    def _add_node(parent_tree, vis):
+        pos = vis.position
+        pos_str = f'{pos.get("x", 0)},{pos.get("y", 0)} {pos.get("width", 0)}x{pos.get("height", 0)}'
+        hidden = " [yellow](hidden)[/yellow]" if vis.data.get("isHidden") else ""
+
+        if "visualGroup" in vis.data:
+            display = vis.data.get("visualGroup", {}).get("displayName", vis.name)
+            children = groups.get(vis.name, [])
+            label = f'[bold][group][/bold] [cyan]{display}[/cyan] [dim]({len(children)} children, {pos_str})[/dim]{hidden}'
+            node = parent_tree.add(label)
+            for child in children:
+                _add_node(node, child)
+        else:
+            name_label = f'[cyan]{vis.name}[/cyan] ' if vis.name != vis.visual_type else ''
+            label = f'{name_label}{vis.visual_type} [dim]{pos_str}[/dim]{hidden}'
+            parent_tree.add(label)
+
+    # Render top-level groups first, then ungrouped visuals
+    for gvis in top_groups:
+        _add_node(tree, gvis)
+    for vis in top_level:
+        _add_node(tree, vis)
+
+    console.print(tree)
+
+
+def _build_tree_data(visuals: list) -> list[dict]:
+    """Build JSON-serializable tree structure."""
+    from pbi.project import Visual as VisualType
+
+    groups: dict[str, list[VisualType]] = {}
+    group_visuals: dict[str, VisualType] = {}
+    top_level: list[VisualType] = []
+
+    for vis in visuals:
+        if "visualGroup" in vis.data:
+            group_visuals[vis.name] = vis
+            groups.setdefault(vis.name, [])
+        else:
+            parent = vis.data.get("parentGroupName")
+            if parent:
+                groups.setdefault(parent, []).append(vis)
+            else:
+                top_level.append(vis)
+
+    top_groups: list[VisualType] = []
+    for _gname, gvis in group_visuals.items():
+        parent = gvis.data.get("parentGroupName")
+        if parent:
+            groups.setdefault(parent, []).append(gvis)
+        else:
+            top_groups.append(gvis)
+
+    def _node(vis):
+        pos = vis.position
+        entry = {
+            "name": vis.name,
+            "type": vis.visual_type if "visualGroup" not in vis.data else "group",
+            "x": pos.get("x", 0),
+            "y": pos.get("y", 0),
+            "width": pos.get("width", 0),
+            "height": pos.get("height", 0),
+        }
+        if "visualGroup" in vis.data:
+            entry["displayName"] = vis.data.get("visualGroup", {}).get("displayName", vis.name)
+            entry["children"] = [_node(c) for c in groups.get(vis.name, [])]
+        if vis.data.get("isHidden"):
+            entry["hidden"] = True
+        return entry
+
+    result = []
+    for gvis in top_groups:
+        result.append(_node(gvis))
+    for vis in top_level:
+        result.append(_node(vis))
+    return result

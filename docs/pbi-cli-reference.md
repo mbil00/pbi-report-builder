@@ -86,6 +86,31 @@ pbi page template-get corp-intro --global
 pbi page apply-template "Landing" corp-intro --global --overwrite
 pbi page template-clone corp-intro --to-project
 
+# Components (reusable grouped widgets)
+pbi component save "Dashboard" "KPI Group" --name kpi-card
+pbi component list
+pbi component get kpi-card
+pbi component apply "Dashboard" kpi-card --x 16 --y 200 --set title=Revenue
+pbi component apply "Dashboard" kpi-card --row 4 --x 16 --y 200 --gap 12 \
+  --set-each title=Revenue,Margin,Pipeline,Backlog
+pbi component clone kpi-card --to-global
+pbi component delete kpi-card --force
+
+# Page import and sections
+pbi page import --from-project /path/to/other --page "Dashboard" --name "My Dashboard"
+pbi page import --from-project /path/to/other --page "Intro" --include-resources
+pbi page section create "Dashboard" "Market / Sell" --x 221 --y 130 --width 512 --height 220
+pbi page section list "Dashboard"
+
+# Image resources
+pbi image add ./logo.png
+pbi image list
+pbi image prune --force
+
+# Visual tree (group hierarchy)
+pbi visual tree "Dashboard"
+pbi visual tree "Dashboard" --json
+
 # Navigation helpers
 pbi nav set-page "Sales Overview" navButton "Executive Summary"
 pbi nav set-bookmark "Sales Overview" toggleBtn "Show Details"
@@ -134,8 +159,8 @@ pbi filter delete Customers.Region --page "Sales Overview" --visual revenueChart
 | Topic | File |
 |-------|------|
 | [Report Commands](report.md) | Report metadata and settings |
-| [Page Commands](pages.md) | Page CRUD, templates, drillthrough, tooltip |
-| [Visual Commands](visuals.md) | Visual CRUD, styling, grouping, sorting, formatting |
+| [Page Commands](pages.md) | Page CRUD, templates, import, sections, drillthrough, tooltip |
+| [Visual Commands](visuals.md) | Visual CRUD, styling, grouping, tree view, sorting, formatting |
 | [Data & Filters](data.md) | Data binding and filters |
 | [Semantic Model Commands](model.md) | Model inspection, field formatting, measure/column edits, batch apply |
 | [Interactions & Navigation](interactions.md) | Visual interactions and button actions |
@@ -143,4 +168,4 @@ pbi filter delete Customers.Region --page "Sales Overview" --visual revenueChart
 | [Properties Reference](properties.md) | Visual property catalog |
 | [Themes](themes.md) | Theme apply, export, delete, migrate |
 | [Validation](validation.md) | Structural, layout, and relationship validation |
-| [Agent Workflows](agent-workflows.md) | Recommended agent workflows |
+| [Agent Workflows](agent-workflows.md) | Recommended agent workflows (includes components, sections, images) |

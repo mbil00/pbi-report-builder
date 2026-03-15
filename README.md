@@ -29,7 +29,9 @@ pbi validate                                      # Check structural integrity
 | `pbi theme` | Theme apply/export/delete |
 | `pbi bookmark` | Bookmark CRUD |
 | `pbi interaction` | Visual cross-filter/highlight interactions |
-| `pbi style` | Reusable visual style presets |
+| `pbi style` | Reusable visual style presets (+ bundled shape presets) |
+| `pbi component` | Reusable visual components (grouped widgets with parameters) |
+| `pbi image` | Image resource management (add, list, prune) |
 | `pbi apply` | Declarative YAML page authoring |
 | `pbi map` | Generate full project index as YAML |
 | `pbi validate` | Structural validation |

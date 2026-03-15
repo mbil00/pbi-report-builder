@@ -1,0 +1,8 @@
+name: separator
+description: Thin horizontal line separator — set width wide and height to 2-4px.
+properties:
+  border.show: false
+  background.show: false
+  chart:fill.show: true
+  chart:fill.fillColor: '#EDEBE9'
+  chart:outline.show: false

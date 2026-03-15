@@ -1,0 +1,10 @@
+name: card-frame
+description: Transparent shape with border only — use as a lightweight visual frame.
+properties:
+  border.show: true
+  border.radius: 10
+  border.color: '#EDEBE9'
+  background.show: false
+  shadow.show: false
+  chart:fill.show: false
+  chart:outline.show: false

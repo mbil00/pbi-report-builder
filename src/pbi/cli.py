@@ -13,6 +13,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 from pbi.commands.bookmarks import bookmark_app
+from pbi.commands.components import component_app
 from pbi.commands.common import (
     ProjectOpt,
     console,
@@ -22,6 +23,7 @@ from pbi.commands.common import (
     resolve_output_path,
 )
 from pbi.commands.filters import filter_app
+from pbi.commands.images import image_app
 from pbi.commands.interactions import interaction_app
 from pbi.commands.model import model_app
 from pbi.commands.navigation import nav_app
@@ -75,6 +77,8 @@ app.add_typer(theme_app, name="theme")
 app.add_typer(style_app, name="style")
 app.add_typer(bookmark_app, name="bookmark")
 app.add_typer(interaction_app, name="interaction")
+app.add_typer(image_app, name="image")
+app.add_typer(component_app, name="component")
 
 
 def _safe_backup_path(project_root: Path, page_name: str) -> Path:
@@ -270,13 +274,14 @@ def style_create(
 def style_list(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     global_scope: Annotated[bool, typer.Option("--global", "-g", help="Show only global styles.")] = False,
+    bundled: Annotated[bool, typer.Option("--bundled", help="Include built-in shape presets.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List saved style presets (project + global)."""
     from pbi.styles import list_styles
 
     proj = get_project(project) if not global_scope else None
-    styles = list_styles(proj, global_scope=global_scope)
+    styles = list_styles(proj, global_scope=global_scope, include_bundled=bundled)
 
     if not styles:
         console.print("[yellow]No styles saved. Use `pbi style create` to create one.[/yellow]")

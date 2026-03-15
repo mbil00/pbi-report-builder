@@ -34,6 +34,11 @@ def _global_styles_dir() -> Path:
     return Path.home() / ".config" / "pbi" / "styles"
 
 
+def _bundled_styles_dir() -> Path:
+    """Return the bundled presets directory shipped with the package."""
+    return Path(__file__).parent / "presets"
+
+
 def create_style(
     project: Project | None,
     style_name: str,
@@ -101,6 +106,11 @@ def get_style(project: Project | None, style_name: str, *, global_scope: bool = 
     if global_path.exists():
         return _load_style_file(global_path, style_name, scope="global")
 
+    # Bundled presets (shipped with package)
+    bundled_path = _bundled_styles_dir() / f"{_validate_style_name(style_name)}.yaml"
+    if bundled_path.exists():
+        return _load_style_file(bundled_path, style_name, scope="bundled")
+
     raise FileNotFoundError(f'Style "{style_name}" not found')
 
 
@@ -135,8 +145,18 @@ def _load_style_file(path: Path, style_name: str, *, scope: str = "project") -> 
     )
 
 
-def list_styles(project: Project | None, *, global_scope: bool = False) -> list[StylePreset]:
-    """List saved style presets. Merges project + global unless scoped."""
+def list_styles(
+    project: Project | None,
+    *,
+    global_scope: bool = False,
+    include_bundled: bool = False,
+) -> list[StylePreset]:
+    """List saved style presets. Merges project + global unless scoped.
+
+    Bundled presets (shipped with the package) are only included when
+    ``include_bundled`` is True.  They are always resolvable by name
+    via ``get_style``.
+    """
     presets: list[StylePreset] = []
     seen_names: set[str] = set()
 
@@ -161,6 +181,18 @@ def list_styles(project: Project | None, *, global_scope: bool = False) -> list[
                     seen_names.add(preset.name)
             except (FileNotFoundError, ValueError):
                 continue
+
+    if include_bundled:
+        bundled_dir = _bundled_styles_dir()
+        if bundled_dir.exists():
+            for path in sorted(bundled_dir.glob("*.yaml")):
+                try:
+                    preset = _load_style_file(path, path.stem, scope="bundled")
+                    if preset.name not in seen_names:
+                        presets.append(preset)
+                        seen_names.add(preset.name)
+                except (FileNotFoundError, ValueError):
+                    continue
 
     return presets
 

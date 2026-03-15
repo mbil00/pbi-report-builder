@@ -23,8 +23,10 @@ from .common import (
 page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
 page_drillthrough_app = typer.Typer(help="Page drillthrough operations.", no_args_is_help=True)
 page_tooltip_app = typer.Typer(help="Page tooltip operations.", no_args_is_help=True)
+page_section_app = typer.Typer(help="Page section operations.", no_args_is_help=True)
 page_app.add_typer(page_drillthrough_app, name="drillthrough")
 page_app.add_typer(page_tooltip_app, name="tooltip")
+page_app.add_typer(page_section_app, name="section")
 
 
 def _get_page(project: Path | None, page: str):
@@ -692,3 +694,284 @@ def page_clear_tooltip(
         console.print(f'Removed tooltip config from "[cyan]{pg.display_name}[/cyan]"')
     else:
         console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
+
+
+# ── Page import ──────────────────────────────────────────────
+
+@page_app.command("import")
+def page_import(
+    from_project: Annotated[str, typer.Option("--from-project", help="Path to source PBIP project.")],
+    page: Annotated[str, typer.Option("--page", help="Source page name, display name, or index.")],
+    name: Annotated[str | None, typer.Option("--name", "-n", help="Display name in target project (default: same as source).")] = None,
+    include_resources: Annotated[bool, typer.Option("--include-resources", help="Also copy image resources.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Import a page from another project.
+
+    Copies all visuals and page structure. Use --include-resources to also
+    copy image files from the source project's RegisteredResources.
+    """
+    import json as json_mod
+    import secrets
+    import shutil
+
+    from pbi.project import Project as ProjClass
+    from pbi.project import _read_json, _write_json
+
+    target_proj = get_project(project)
+    try:
+        source_proj = ProjClass.find(from_project)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] Cannot open source project: {e}")
+        raise typer.Exit(1)
+
+    try:
+        source_page = source_proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    target_name = name or source_page.display_name
+
+    # Copy the page directory
+    new_id = secrets.token_hex(10)
+    new_dir = target_proj.definition_folder / "pages" / new_id
+    shutil.copytree(source_page.folder, new_dir)
+
+    # Update page identity
+    page_json_path = new_dir / "page.json"
+    new_data = _read_json(page_json_path)
+    new_data["name"] = new_id
+    new_data["displayName"] = target_name
+    _write_json(page_json_path, new_data)
+
+    # Rename all visual folders to new IDs (avoid conflicts)
+    visuals_dir = new_dir / "visuals"
+    old_to_new: dict[str, str] = {}
+    if visuals_dir.exists():
+        for visual_dir in list(visuals_dir.iterdir()):
+            if not visual_dir.is_dir():
+                continue
+            new_visual_id = secrets.token_hex(10)
+            new_visual_dir = visuals_dir / new_visual_id
+            visual_dir.rename(new_visual_dir)
+            old_name = visual_dir.name
+
+            visual_json = new_visual_dir / "visual.json"
+            if visual_json.exists():
+                vdata = _read_json(visual_json)
+                old_to_new[vdata.get("name", old_name)] = new_visual_id
+                vdata["name"] = new_visual_id
+                _write_json(visual_json, vdata)
+
+        # Fix parentGroupName references
+        for visual_dir in visuals_dir.iterdir():
+            if not visual_dir.is_dir():
+                continue
+            visual_json = visual_dir / "visual.json"
+            if not visual_json.exists():
+                continue
+            vdata = _read_json(visual_json)
+            parent = vdata.get("parentGroupName")
+            if parent and parent in old_to_new:
+                vdata["parentGroupName"] = old_to_new[parent]
+                _write_json(visual_json, vdata)
+
+    # Add to page order
+    target_proj._add_to_page_order(new_id)
+
+    # Copy image resources if requested
+    resource_count = 0
+    if include_resources:
+        source_res_dir = source_proj.report_folder / "StaticResources" / "RegisteredResources"
+        if source_res_dir.exists():
+            target_res_dir = target_proj.report_folder / "StaticResources" / "RegisteredResources"
+            target_res_dir.mkdir(parents=True, exist_ok=True)
+
+            # Find which images the source page uses
+            source_visuals = source_proj.get_visuals(source_page)
+            from pbi.images import _scan_for_resource_refs
+            refs: dict[str, list[str]] = {}
+            for vis in source_visuals:
+                content = (vis.folder / "visual.json").read_text(encoding="utf-8-sig")
+                if "ResourcePackageItem" in content:
+                    data = json_mod.loads(content)
+                    _scan_for_resource_refs(data, vis.name, refs)
+
+            for image_name in refs:
+                source_file = source_res_dir / image_name
+                target_file = target_res_dir / image_name
+                if source_file.exists() and not target_file.exists():
+                    shutil.copy2(source_file, target_file)
+                    # Register in target report.json
+                    from pbi.images import _get_resource_package, _save_report_json
+                    report_data, items = _get_resource_package(target_proj)
+                    # Check not already registered
+                    existing = {item.get("name") for item in items}
+                    if image_name not in existing:
+                        items.append({
+                            "type": 202,
+                            "name": image_name,
+                            "path": f"RegisteredResources/{image_name}",
+                        })
+                        _save_report_json(target_proj, report_data)
+                    resource_count += 1
+
+    visual_count = len(list(visuals_dir.iterdir())) if visuals_dir.exists() else 0
+    console.print(
+        f'Imported "[cyan]{source_page.display_name}[/cyan]" from {source_proj.project_name} '
+        f'as "[cyan]{target_name}[/cyan]" ({visual_count} visuals)'
+    )
+    if resource_count:
+        console.print(f"[dim]Copied {resource_count} image resource(s)[/dim]")
+
+
+# ── Page sections ──────────────────────────────────────────────
+
+@page_section_app.command("create")
+def page_section_create(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    title: Annotated[str, typer.Argument(help="Section title text.")],
+    x: Annotated[int, typer.Option(help="X position.")] = 0,
+    y: Annotated[int, typer.Option(help="Y position.")] = 0,
+    width: Annotated[int, typer.Option("-W", "--width", help="Section width.")] = 512,
+    height: Annotated[int, typer.Option("-H", "--height", help="Section height.")] = 220,
+    background: Annotated[str, typer.Option("--background", help="Background fill color.")] = "#F5F5F5",
+    radius: Annotated[int, typer.Option("--radius", help="Border radius.")] = 10,
+    title_color: Annotated[str, typer.Option("--title-color", help="Title text color.")] = "#002C77",
+    title_font: Annotated[str, typer.Option("--title-font", help="Title font family.")] = "Segoe UI Semibold",
+    title_size: Annotated[int, typer.Option("--title-size", help="Title font size.")] = 14,
+    project: ProjectOpt = None,
+) -> None:
+    """Create a page section with background shape and title textbox."""
+    from pbi.properties import VISUAL_PROPERTIES, set_property as set_prop
+
+    proj = get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Create background shape
+    bg = proj.create_visual(pg, "shape", x=x, y=y, width=width, height=height)
+    bg.data["name"] = f"section-bg-{title.lower().replace(' ', '-')[:20]}"
+    set_prop(bg.data, "border.show", "true", VISUAL_PROPERTIES)
+    set_prop(bg.data, "border.radius", str(radius), VISUAL_PROPERTIES)
+    set_prop(bg.data, "border.color", "#EDEBE9", VISUAL_PROPERTIES)
+    set_prop(bg.data, "background.show", "false", VISUAL_PROPERTIES)
+    # Set chart-level fill for the shape
+    _set_chart_prop(bg.data, "fill", "show", True)
+    _set_chart_prop(bg.data, "fill", "fillColor", background)
+    _set_chart_prop(bg.data, "outline", "show", False)
+    bg.save()
+
+    # Create title textbox
+    title_height = title_size + 16
+    tb = proj.create_visual(pg, "textbox", x=x + 8, y=y + 4, width=width - 16, height=title_height)
+    tb.data["name"] = f"section-title-{title.lower().replace(' ', '-')[:20]}"
+    # Set textbox paragraphs
+    tb.data.setdefault("visual", {})["objects"] = {
+        "general": [{
+            "properties": {
+                "paragraphs": [{
+                    "textRuns": [{
+                        "value": f"'{title}'",
+                        "textStyle": {
+                            "fontFamily": f"'{title_font}'",
+                            "fontSize": f"'{title_size}pt'",
+                            "color": {"expr": {"Literal": {"Value": f"'{title_color}'"}}},
+                        },
+                    }],
+                }],
+            },
+        }],
+    }
+    set_prop(tb.data, "background.show", "false", VISUAL_PROPERTIES)
+    set_prop(tb.data, "border.show", "false", VISUAL_PROPERTIES)
+    tb.save()
+
+    # Group them
+    group = proj.create_group(pg, [bg, tb], display_name=f"Section: {title}")
+
+    console.print(
+        f'Created section "[cyan]{title}[/cyan]" on "{pg.display_name}" '
+        f"at ({x}, {y}) {width}x{height}"
+    )
+    console.print(f"  [dim]Background: {bg.name}[/dim]")
+    console.print(f"  [dim]Title: {tb.name}[/dim]")
+    console.print(f"  [dim]Group: {group.name}[/dim]")
+
+
+@page_section_app.command("list")
+def page_section_list(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """List sections on a page (groups with 'Section:' prefix or section-bg visuals)."""
+    proj = get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    visuals = proj.get_visuals(pg)
+    sections = []
+    for vis in visuals:
+        if "visualGroup" not in vis.data:
+            continue
+        display = vis.data.get("visualGroup", {}).get("displayName", "")
+        if display.startswith("Section:") or vis.name.startswith("section-bg"):
+            pos = vis.position
+            sections.append({
+                "name": display.replace("Section: ", "") if display.startswith("Section:") else vis.name,
+                "x": pos.get("x", 0),
+                "y": pos.get("y", 0),
+                "width": pos.get("width", 0),
+                "height": pos.get("height", 0),
+            })
+
+    if not sections:
+        console.print("[yellow]No sections found. Use `pbi page section create` to add one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Section", style="cyan")
+    table.add_column("Position", style="dim")
+    table.add_column("Size", style="dim")
+
+    for sec in sections:
+        table.add_row(
+            sec["name"],
+            f'{sec["x"]}, {sec["y"]}',
+            f'{sec["width"]}x{sec["height"]}',
+        )
+    console.print(table)
+
+
+def _set_chart_prop(data: dict, obj_name: str, prop_name: str, value: object) -> None:
+    """Set a chart-level object property (visual.objects)."""
+    objects = data.setdefault("visual", {}).setdefault("objects", {})
+    entries = objects.setdefault(obj_name, [])
+    # Find or create the default selector entry
+    entry = None
+    for e in entries:
+        sel = e.get("selector", {})
+        if sel.get("id") == "default":
+            entry = e
+            break
+    if entry is None:
+        entry = {"selector": {"id": "default"}, "properties": {}}
+        entries.append(entry)
+
+    if isinstance(value, bool):
+        encoded = {"expr": {"Literal": {"Value": f"{'true' if value else 'false'}L"}}}
+    elif isinstance(value, (int, float)):
+        encoded = {"expr": {"Literal": {"Value": f"{value}D"}}}
+    elif isinstance(value, str) and value.startswith("#"):
+        # Color
+        encoded = {"expr": {"Literal": {"Value": f"'{value}'"}}}
+    else:
+        encoded = {"expr": {"Literal": {"Value": f"'{value}'"}}}
+    entry["properties"][prop_name] = [encoded]

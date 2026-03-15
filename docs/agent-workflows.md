@@ -10,9 +10,15 @@ Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative 
 | Restyle / restructure a page | `pbi page export` → edit YAML → `pbi apply` |
 | Redesign a page completely | `pbi page export` → edit YAML → `pbi apply --overwrite` |
 | Reuse a standard intro/info/detail page | `pbi page apply-template` |
+| Stamp repeated composite widgets | `pbi component save` → `pbi component apply --row N` |
+| Import a page from another project | `pbi page import --from-project ... --page ...` |
+| Add page section backgrounds | `pbi page section create` |
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
 | Apply consistent formatting | `pbi style apply` or `style:` in YAML |
+| Apply a built-in shape preset | `pbi style apply --style rounded-container` |
 | Change a theme's colors everywhere | `pbi theme migrate old.json new.json` |
+| Manage embedded images | `pbi image add` / `pbi image prune` |
+| Understand group hierarchy | `pbi visual tree "Page"` |
 | Preview a page layout visually | `pbi render "Page" --screenshot` |
 
 **Rule of thumb:** For any page-level work, start with `pbi page export`. Use imperative commands only for quick one-off tweaks.
@@ -26,6 +32,7 @@ pbi info                              # tree view of pages and visuals
 pbi page list                         # page table with sizes and counts
 pbi page get "Page Name"              # page properties, background, visual count
 pbi visual list "Page Name"           # visual table with positions and types
+pbi visual tree "Page Name"           # group hierarchy as a tree
 pbi visual get "Page" visual --full   # everything: props, objects, columns, filters, sort
 pbi model tables                      # semantic model tables
 pbi model fields TableName            # columns + measures for binding
@@ -186,6 +193,108 @@ Templates can carry:
 - page-local bookmarks
 
 Use `--overwrite` on `page apply-template` when the target page should be reconciled exactly to the template.
+
+## Components (Reusable Grouped Widgets)
+
+Components sit between styles (one visual) and templates (entire page). They capture a group of visuals with relative positions, formatting, bindings, filters, and parameterizable fields.
+
+### Save a component from an existing group
+
+```bash
+pbi component save "Dashboard" "KPI: Revenue" --name kpi-card-with-py \
+  --description "KPI gauge with prior year value and rounded container"
+# Saves 4 visuals with auto-detected parameters (title, filters)
+```
+
+### Stamp onto a page
+
+```bash
+pbi component apply "Dashboard" kpi-card-with-py --x 16 --y 200 \
+  --set title="Compliance Rate" \
+  --set "filter[DimFacts.Kpi Name]=Compliance Rate"
+```
+
+### Batch stamp a row of instances
+
+```bash
+pbi component apply "Dashboard" kpi-card-with-py \
+  --row 4 --x 16 --y 200 --gap 12 \
+  --set-each title=Revenue,Margin,Pipeline,Backlog \
+  --set-each "filter[DimFacts.Kpi Name]=Revenue,Margin,Pipeline,Backlog"
+```
+
+### Manage components
+
+```bash
+pbi component list
+pbi component get kpi-card-with-py
+pbi component clone kpi-card-with-py --to-global
+pbi component delete kpi-card-with-py --force
+```
+
+Component storage mirrors styles: project in `.pbi-components/`, global in `~/.config/pbi/components/`. Parameters use `{{ name }}` syntax in the saved YAML and are substituted at stamp time via `--set`.
+
+## Page Sections
+
+Create section backgrounds (shape + title textbox, grouped) in one command:
+
+```bash
+pbi page section create "Dashboard" "Market / Sell" \
+  --x 221 --y 130 --width 512 --height 220 \
+  --background "#F5F5F5" --radius 10 \
+  --title-color "#002C77" --title-font "DIN" --title-size 14
+
+pbi page section list "Dashboard"
+```
+
+## Page Import (Cross-Project)
+
+Copy a page from another PBIP project:
+
+```bash
+pbi page import --from-project "/path/to/QBR Report" --page "Divisional Dashboard" \
+  --name "My Dashboard"
+
+# Also copy image resources used by the page
+pbi page import --from-project "/path/to/other" --page "Introduction" \
+  --include-resources
+```
+
+Import regenerates all visual IDs and fixes group references automatically.
+
+## Image Resources
+
+Manage embedded images (logos, banners) in `RegisteredResources/`:
+
+```bash
+pbi image add ./company-logo.png           # register an image file
+pbi image list                              # list with sizes and reference counts
+pbi image prune --force                     # remove unreferenced images
+```
+
+## Shape Presets (Bundled Styles)
+
+Four built-in shape style presets ship with the tool, always available by name:
+
+| Preset | Description |
+|--------|-------------|
+| `rounded-container` | Filled rounded rect with shadow — KPI card background |
+| `section-bg` | Subtle fill for page section zoning |
+| `separator` | Thin horizontal/vertical line |
+| `card-frame` | Transparent with border only |
+
+```bash
+# Use in imperative commands
+pbi style apply "Dashboard" bgShape --style rounded-container
+
+# Use in YAML
+- name: bgShape
+  type: shape
+  style: rounded-container
+
+# List bundled presets
+pbi style list --bundled
+```
 
 ## Bulk Operations
 

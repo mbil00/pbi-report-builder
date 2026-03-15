@@ -9,19 +9,19 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 
 | Area | Current support |
 |------|-----------------|
-| Project discovery and auditing | `pbi info`, `pbi map` (with `--page`/`--pages`/`--model` filters), `pbi validate` (structure + layout + relationship validation) |
+| Project discovery and auditing | `pbi info`, `pbi map` (with `--page`/`--pages`/`--model` filters), `pbi validate` (structure + layout + relationship validation), `pbi visual tree` (group hierarchy) |
 
 ## Partial
 
 | Area | Current support | Main gaps |
 |------|-----------------|-----------|
-| Pages | CRUD, properties, `set-all` batch updates, reorder, active page, full reusable templates (project + global), drillthrough, tooltip | no page annotations/extensions editor |
-| Visual containers and formatting | CRUD, layout, alignment (`visual align`), grouping, style presets (project + global), sort, conditional formatting (imperative + YAML), column config (`--all-pages` bulk rename), `set-all --all-pages --where` conditional bulk updates, visual type conversion in apply, `page-diff` | no schema-aware visual/query recipe builder |
+| Pages | CRUD, properties, `set-all` batch updates, reorder, active page, full reusable templates (project + global), cross-project page import (`page import --from-project`), page sections (`page section create/list`), drillthrough, tooltip | no page annotations/extensions editor |
+| Visual containers and formatting | CRUD, layout, alignment (`visual align`), grouping, tree view (`visual tree`), style presets (project + global + bundled shape presets), sort, conditional formatting (imperative + YAML), column config (`--all-pages` bulk rename), `set-all --all-pages --where` conditional bulk updates, visual type conversion in apply, `page-diff` | no schema-aware visual/query recipe builder |
 | Semantic model and data binding | model introspection, relationships (`model relationships`, `model path`), field formatting, column visibility, measure/calculated-column CRUD, declarative `model apply` (file or stdin), bind/unbind, bindings list | no higher-level query builder, no field parameter workflow |
 | Filters | categorical, include, exclude, tuple, range, Top N, and relative date/time at report/page/visual scope; TopN and range also in YAML apply | no Passthrough examples yet |
 | Bookmarks and interactions | bookmark CRUD, interaction CRUD, first-class nav commands (`nav set-page`, `nav set-bookmark`, `nav set-back`, `nav set-url`, `nav clear`), both declarable in YAML apply | no bookmark groups |
-| Authoring accelerators | `pbi apply` (styles, interactions, bookmarks, conditionalFormatting, bracket selectors, `chart:` prefix, type conversion, overwrite, stdin), `pbi diff` (file or stdin), page export, full-page templates (project + global), style presets (`--from-visual`, global scope, `clone`) | no report scaffold wizard |
-| Themes and report resources | theme list/apply/export/delete/migrate (color replacement across visuals) | no broader resource package management |
+| Authoring accelerators | `pbi apply` (styles, interactions, bookmarks, conditionalFormatting, bracket selectors, `chart:` prefix, type conversion, overwrite, stdin), `pbi diff` (file or stdin), page export, full-page templates (project + global), style presets (`--from-visual`, global scope, `clone`, bundled shape presets), reusable components (`component save/apply/apply --row`, parameter substitution) | no report scaffold wizard |
+| Themes and report resources | theme list/apply/export/delete/migrate (color replacement across visuals), image resource management (`image add/list/prune`) | no broader resource package management beyond images |
 | Report-level metadata | `report get`, `report set`, `report properties` for core metadata/settings | no resource package editor, no annotations editor |
 
 ## Blocked / Planned
