@@ -32,12 +32,13 @@ For deterministic automation, use exact page names and exact visual names. Frien
 ```bash
 # Property reads
 pbi report get layoutOptimization settings.pagesPosition
-pbi page get "Sales Overview" width displayOption
+pbi page get "Sales Overview"                          # overview with background, visual count
+pbi page get "Sales Overview" width displayOption      # specific properties
+pbi visual get "Sales Overview" revenueChart --full    # everything in one call
 pbi visual get "Sales Overview" revenueChart title.show background.color
-pbi visual get "Sales Overview" revenueChart title.show tooltip.show --defaults
 pbi visual get "Sales Overview" revenueChart --all-props
-pbi visual get-page "Sales Overview" --visual-type cardVisual
 pbi visual diff "Sales Overview" revenueChart "Executive Summary" revenueChartCopy
+pbi visual page-diff "Sales Overview" "Executive Summary"
 
 # Property writes
 pbi report set settings.useEnhancedTooltips=true settings.pagesPosition=Bottom
@@ -46,26 +47,40 @@ pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue
 
 # Batch property writes
 pbi page set-all background.color="#F0EDE8"
-pbi page set-all background.color="#F0EDE8" --exclude "_"
 pbi visual set-all border.show=true --page "Sales Overview" --visual-type slicer
 pbi visual set-all columnHeaders.backColor="#162F38" --all-pages --visual-type tableEx
+pbi visual set-all border.color="#DDD6CC" --all-pages --where border.color="#EDEBE9"
 
-# Discovery with filtering
+# Bulk column rename across all pages
+pbi visual column "any" "any" Sales.UPN --rename "User Principal Name" --all-pages
+
+# Discovery
 pbi map --page "Sales Overview"    # single page detail
 pbi map --pages                    # pages only, no model
 pbi map --model                    # model only
+pbi model relationships            # table relationships
+pbi model path Sales Customers     # relationship chain
+
+# Diff and apply
+pbi diff sales.yaml                # preview what apply would change
+pbi apply sales.yaml --dry-run     # validate
+pbi apply sales.yaml               # apply
+
+# Styles (reusable formatting presets)
+pbi style create card-style --from-visual "Sales" kpiStrip
+pbi style apply "Device Intel" --visual-type cardVisual --style card-style
+pbi style list                     # project + global styles
+pbi style clone card-style --to-global
+
+# Layout
+pbi visual align "Sales" s1 s2 s3 --distribute horizontal --margin 16
+pbi visual align "Sales" chart1 chart2 --align top --match-height
 
 # Stateful operations
-pbi visual sort get "Sales Overview" revenueChart
 pbi visual sort set "Sales Overview" revenueChart Sales.Revenue --direction desc
-pbi visual sort clear "Sales Overview" revenueChart
-
-pbi visual format get "Sales Overview" revenueChart
 pbi visual format set "Sales Overview" revenueChart dataPoint.fill --mode measure --source Sales.ColorMeasure
-pbi visual format clear "Sales Overview" revenueChart dataPoint.fill
 
 # Theme migration
-pbi theme migrate old-theme.json new-theme.json --dry-run
 pbi theme migrate old-theme.json new-theme.json
 ```
 
@@ -105,4 +120,6 @@ pbi filter delete Customers.Region --page "Sales Overview" --visual revenueChart
 | [Interactions & Navigation](interactions.md) | Visual interactions and button actions |
 | [Bookmarks](bookmarks.md) | Bookmark management |
 | [Properties Reference](properties.md) | Visual property catalog |
+| [Themes](themes.md) | Theme apply, export, delete, migrate |
+| [Validation](validation.md) | Structural, layout, and relationship validation |
 | [Agent Workflows](agent-workflows.md) | Recommended agent workflows |

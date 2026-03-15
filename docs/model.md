@@ -15,6 +15,32 @@ pbi model fields Sales
 
 Use `pbi model fields <table>` when you need exact `Table.Field` references for binding, sorting, or filters.
 
+## Relationships
+
+List all relationships in the semantic model, or filter by table:
+
+```bash
+pbi model relationships
+pbi model relationships --from Sales
+pbi model relationships --to Customers
+pbi model relationships --json
+```
+
+Find the shortest relationship path between two tables:
+
+```bash
+pbi model path Sales Customers
+# Path (1 hop):
+#   Sales.CustomerID → Customers.CustomerID
+
+pbi model path Product Customers
+# Path (2 hops):
+#   Sales.ProductID → Product.ProductID
+#   Sales.CustomerID → Customers.CustomerID
+```
+
+Use this to verify cross-table references before building visuals. `pbi validate` will also warn about visuals referencing tables with no relationship path.
+
 ## Format fields
 
 Set a semantic-model format string on either a column or a measure:

@@ -11,6 +11,7 @@ pbi visual get "Sales Overview" revenueChart title.show tooltip.show --defaults
 pbi visual get-page "Sales Overview"
 pbi visual get-page "Sales Overview" --visual-type cardVisual --all-props
 pbi visual diff "Sales Overview" revenueChart "Executive Summary" revenueChartCopy
+pbi visual get "Sales Overview" revenueChart --full    # everything: props, objects, columns, filters, sort
 pbi visual get "Sales Overview" revenueChart --raw
 pbi visual properties
 pbi visual properties --visual-type clusteredColumnChart
@@ -20,7 +21,7 @@ pbi visual properties --match dropShadow --show-aliases
 `pbi visual get-page` lists explicit properties across every visual on a page.
 Use `--all-props` when you also want core state such as geometry and hidden
 flags. `pbi visual diff` compares two visuals and reports only the differing
-explicit properties.
+explicit properties. `pbi visual page-diff` compares two pages (visual counts, shared/unique visuals, property differences).
 
 `pbi visual get --defaults` resolves effective values using explicit settings
 plus the CLI's known defaults for common properties, and marks each row as
@@ -48,7 +49,11 @@ pbi visual set-all columnHeaders.backColor="#162F38" --all-pages --visual-type t
 pbi visual set-all border.show=true border.radius=4 --all-pages
 ```
 
-Use `--page` to target a single page, or `--all-pages` for the entire report. Combine with `--visual-type` to target specific visual types.
+Use `--page` to target a single page, or `--all-pages` for the entire report. Combine with `--visual-type` to target specific visual types. Use `--where prop=value` to only affect visuals where a property currently matches:
+
+```bash
+pbi visual set-all border.color="#DDD6CC" --all-pages --where border.color="#EDEBE9"
+```
 
 ## CRUD
 
@@ -71,6 +76,17 @@ pbi visual arrange row "Sales Overview" card1 card2 card3 --x 40 --y 80 --gap 16
 pbi visual arrange column "Sales Overview" slicer1 slicer2 slicer3 --x 24 --y 120 --gap 12
 pbi visual arrange grid "Sales Overview" card1 card2 card3 card4 --columns 2 --x 40 --y 80 --column-gap 16 --row-gap 24
 ```
+
+## Alignment
+
+```bash
+pbi visual align "Sales Overview" s1 s2 s3 s4 --distribute horizontal --margin 16
+pbi visual align "Sales Overview" chart1 chart2 --align top
+pbi visual align "Sales Overview" chart1 chart2 --align left --match-height
+pbi visual align "Sales Overview" card1 card2 card3 --align center-x
+```
+
+Options: `--align` (left, right, top, bottom, center-x, center-y), `--distribute` (horizontal, vertical), `--match-width`, `--match-height`, `--margin`.
 
 ## Grouping
 
@@ -131,8 +147,11 @@ pbi visual types clusteredColumnChart
 ```bash
 pbi visual column "Sales Overview" detailTable Product.Category --rename "Category"
 pbi visual column "Sales Overview" executiveCard Sales.TotalRevenue --rename "Revenue"
+
+# Bulk rename across all pages
+pbi visual column "any" "any" DevicesWithPrimaryUser.UPN --rename "User Principal Name" --all-pages
 ```
 
 `pbi visual column --rename` works on projection-backed visuals, not just
-table-style visuals. Width and per-field formatting options are still mainly
-useful on table and matrix visuals.
+table-style visuals. Use `--all-pages` to rename a field everywhere at once.
+Width and per-field formatting options are still mainly useful on table and matrix visuals.

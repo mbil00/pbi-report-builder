@@ -40,6 +40,15 @@ Exit code 0 if no errors (warnings are OK), exit code 1 if errors found.
 - Required fields: `displayName`, `name`, `explorationState`
 - `explorationState.activeSection` present
 
+**Layout:**
+- Visuals with zero or negative width/height
+- Visuals extending past page bounds (x+width > page width, y+height > page height, 5px tolerance)
+- Overlapping visuals (bounding box intersection > 10px in both axes)
+
+**Model relationships:**
+- Visuals referencing fields from multiple tables that have no relationship path in the semantic model
+- Only warns if the model has a `relationships.tmdl` file (skipped otherwise)
+
 ### Output
 
 ```
