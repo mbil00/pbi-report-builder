@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from pbi.drillthrough import (
+    build_drillthrough_payload,
+    build_tooltip_payload,
+    parse_drillthrough_shorthand,
+    parse_tooltip_shorthand,
+)
 from pbi.properties import (
     VISUAL_PROPERTIES,
     canonical_object_property_name,
@@ -45,10 +51,29 @@ def apply_page_roundtrip_fields(
     page_data: dict[str, Any],
     page_spec: Mapping[str, Any],
     *,
+    project_root: Path,
     dry_run: bool,
 ) -> int:
     """Apply page-level round-trip metadata from YAML spec to page data."""
     changes = 0
+    shorthand = _compile_page_binding_shorthand(page_spec, project_root)
+    if shorthand:
+        changes += len(shorthand)
+        if dry_run:
+            return changes
+        page_data["type"] = shorthand["type"]
+        page_data["pageBinding"] = copy.deepcopy(shorthand["pageBinding"])
+        page_data["visibility"] = "HiddenInViewMode"
+        if "filters" in shorthand:
+            filter_config = page_data.setdefault("filterConfig", {})
+            existing_filters = filter_config.setdefault("filters", [])
+            existing_filters[:] = [
+                f for f in existing_filters
+                if not f.get("name", "").startswith("drillFilter")
+            ]
+            existing_filters.extend(copy.deepcopy(shorthand["filters"]))
+        return changes
+
     for key in ("type", "pageBinding"):
         if key not in page_spec:
             continue
@@ -60,6 +85,41 @@ def apply_page_roundtrip_fields(
         else:
             page_data[key] = copy.deepcopy(page_spec[key])
     return changes
+
+
+def _compile_page_binding_shorthand(
+    page_spec: Mapping[str, Any],
+    project_root: Path,
+) -> dict[str, Any] | None:
+    """Compile tooltip/drillthrough shorthand into canonical page fields."""
+    has_tooltip = "tooltip" in page_spec
+    has_drillthrough = "drillthrough" in page_spec
+
+    if not has_tooltip and not has_drillthrough:
+        return None
+    if has_tooltip and has_drillthrough:
+        raise ValueError("Use either 'tooltip' or 'drillthrough' on a page, not both.")
+    if "type" in page_spec or "pageBinding" in page_spec:
+        raise ValueError(
+            "Do not combine page shorthand with low-level 'type' or 'pageBinding'; use one form or the other."
+        )
+
+    if has_tooltip:
+        fields = parse_tooltip_shorthand(project_root, page_spec.get("tooltip"))
+        return {
+            "type": "Tooltip",
+            "pageBinding": build_tooltip_payload(fields),
+            "visibility": "HiddenInViewMode",
+        }
+
+    fields, cross_report = parse_drillthrough_shorthand(project_root, page_spec.get("drillthrough"))
+    binding, filters = build_drillthrough_payload(fields, cross_report=cross_report)
+    return {
+        "type": "Drillthrough",
+        "pageBinding": binding,
+        "filters": filters,
+        "visibility": "HiddenInViewMode",
+    }
 
 
 def export_bindings(visual_data: Mapping[str, Any]) -> dict[str, Any]:

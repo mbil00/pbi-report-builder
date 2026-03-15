@@ -13,8 +13,9 @@ from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
 from pbi.filters import add_topn_filter
 from pbi.project import Project
-from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
+from pbi.styles import create_style
 
 
 class YamlRoundTripTests(unittest.TestCase):
@@ -187,6 +188,80 @@ pages:
             self.assertNotIn("fontColor", exported["title"])
             self.assertNotIn("gridHorizontal", exported["grid"])
             self.assertNotIn("fontColorPrimary", exported["values"])
+
+    def test_export_emits_style_reference_for_exact_preset_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            create_style(
+                source,
+                "card-standard",
+                {
+                    "background.color": "#112233",
+                    "title.show": True,
+                    "title.text": "Overview",
+                },
+            )
+            page = source.create_page("Demo")
+            visual = source.create_visual(page, "cardVisual")
+            visual.data["name"] = "card1"
+            set_property(visual.data, "background.color", "#112233", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.text", "Overview", VISUAL_PROPERTIES)
+            visual.save()
+
+            spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
+            exported = spec["pages"][0]["visuals"][0]
+
+            self.assertEqual(exported["style"], "card-standard")
+            self.assertNotIn("background", exported)
+            self.assertNotIn("title", exported)
+
+            target = self._make_project(root / "target")
+            create_style(
+                target,
+                "card-standard",
+                {
+                    "background.color": "#112233",
+                    "title.show": True,
+                    "title.text": "Overview",
+                },
+            )
+            result = apply_yaml(target, yaml.safe_dump(spec, sort_keys=False))
+            self.assertEqual(result.errors, [])
+            page = target.find_page("Demo")
+            visual = target.find_visual(page, "card1")
+            self.assertEqual(
+                get_property(visual.data, "background.color", VISUAL_PROPERTIES),
+                "#112233",
+            )
+
+    def test_export_keeps_explicit_properties_for_partial_preset_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            create_style(
+                project,
+                "card-standard",
+                {
+                    "background.color": "#112233",
+                    "title.show": True,
+                },
+            )
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual")
+            visual.data["name"] = "card1"
+            set_property(visual.data, "background.color", "#112233", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.text", "Extra", VISUAL_PROPERTIES)
+            visual.save()
+
+            spec = yaml.safe_load(export_yaml(project, page_filter="Demo"))
+            exported = spec["pages"][0]["visuals"][0]
+
+            self.assertNotIn("style", exported)
+            self.assertEqual(exported["background"]["color"], "#112233")
+            self.assertEqual(exported["title"]["text"], "Extra")
 
     def test_export_uses_canonical_page_property_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -377,6 +452,30 @@ pages:
             self.assertEqual(page.width, 400)
             self.assertEqual(page.height, 300)
 
+    def test_apply_tooltip_shorthand_compiles_to_canonical_page_binding(self) -> None:
+        spec = """\
+version: 1
+pages:
+- name: Tip
+  width: 400
+  height: 300
+  tooltip:
+    fields:
+    - Product.Category
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._make_project(Path(tmp))
+            result = apply_yaml(project, spec)
+
+            self.assertEqual(result.errors, [])
+            page = project.find_page("Tip")
+            self.assertEqual(page.data["type"], "Tooltip")
+            self.assertEqual(page.data["visibility"], "HiddenInViewMode")
+            self.assertEqual(page.data["pageBinding"]["type"], "Tooltip")
+            param = page.data["pageBinding"]["parameters"][0]["fieldExpr"]["Column"]
+            self.assertEqual(param["Expression"]["SourceRef"]["Entity"], "Product")
+            self.assertEqual(param["Property"], "Category")
+
     def test_export_apply_round_trip_preserves_drillthrough_page_binding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -395,6 +494,31 @@ pages:
             self.assertEqual(page.data["pageBinding"]["type"], "Drillthrough")
             self.assertEqual(page.data["pageBinding"]["referenceScope"], "CrossReport")
             self.assertEqual(page.data["filterConfig"]["filters"][0]["name"], "drillFilter0")
+
+    def test_apply_drillthrough_shorthand_supports_cross_report(self) -> None:
+        spec = """\
+version: 1
+pages:
+- name: Drill
+  drillthrough:
+    fields:
+    - Product.Category
+    - Sales.Total Revenue (measure)
+    crossReport: true
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._make_project(Path(tmp))
+            result = apply_yaml(project, spec)
+
+            self.assertEqual(result.errors, [])
+            page = project.find_page("Drill")
+            self.assertEqual(page.data["type"], "Drillthrough")
+            self.assertEqual(page.data["visibility"], "HiddenInViewMode")
+            self.assertEqual(page.data["pageBinding"]["referenceScope"], "CrossReport")
+            params = page.data["pageBinding"]["parameters"]
+            self.assertEqual(len(params), 2)
+            self.assertEqual(page.data["filterConfig"]["filters"][0]["name"], "drillFilter0")
+            self.assertEqual(page.data["filterConfig"]["filters"][1]["name"], "drillFilter1")
 
 
 if __name__ == "__main__":

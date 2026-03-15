@@ -17,6 +17,7 @@ from pbi.project import Project, Page, Visual
 from pbi.properties import (
     VISUAL_PROPERTIES,
     PAGE_PROPERTIES,
+    normalize_property_name,
     set_property,
 )
 from pbi.filters import add_categorical_filter
@@ -28,6 +29,7 @@ from pbi.roundtrip import (
     match_existing_projection,
     parse_binding_items,
 )
+from pbi.styles import StylePreset, get_style
 
 
 @dataclass
@@ -71,6 +73,7 @@ def apply_yaml(
         ApplyResult with summary of changes made.
     """
     result = ApplyResult()
+    style_cache: dict[str, StylePreset] = {}
 
     try:
         spec = yaml.safe_load(yaml_content)
@@ -100,7 +103,14 @@ def apply_yaml(
         if page_filter and page_name.lower() != page_filter.lower():
             continue
 
-        _apply_page(project, page_spec, result, dry_run=dry_run, overwrite=overwrite)
+        _apply_page(
+            project,
+            page_spec,
+            result,
+            dry_run=dry_run,
+            overwrite=overwrite,
+            style_cache=style_cache,
+        )
 
     return result
 
@@ -112,6 +122,7 @@ def _apply_page(
     *,
     dry_run: bool,
     overwrite: bool,
+    style_cache: dict[str, StylePreset],
 ) -> None:
     """Apply a single page specification."""
     page_name = page_spec["name"]
@@ -158,17 +169,22 @@ def _apply_page(
             else:
                 result.properties_set += 1
 
-    result.properties_set += apply_page_roundtrip_fields(
-        page.data,
-        page_spec,
-        dry_run=dry_run,
-    )
+    try:
+        result.properties_set += apply_page_roundtrip_fields(
+            page.data,
+            page_spec,
+            project_root=project.root,
+            dry_run=dry_run,
+        )
+    except ValueError as e:
+        result.errors.append(f"Page {page_name}: {e}")
+        return
 
     # Apply page-level nested objects (background, outspace)
     _apply_nested_properties(
         page.data, page_spec,
         exclude_keys={"name", "width", "height", "displayOption", "visibility",
-                       "visuals", "filters", "type", "pageBinding"},
+                       "visuals", "filters", "type", "pageBinding", "tooltip", "drillthrough"},
         registry=PAGE_PROPERTIES,
         result=result,
         context=f"Page {page_name}",
@@ -198,6 +214,7 @@ def _apply_page(
                 vis_spec,
                 result,
                 dry_run=dry_run,
+                style_cache=style_cache,
                 keep_visual_ids=kept_visual_ids if not dry_run and overwrite else None,
             )
 
@@ -214,6 +231,7 @@ def _apply_visual(
     result: ApplyResult,
     *,
     dry_run: bool,
+    style_cache: dict[str, StylePreset],
     keep_visual_ids: set[str] | None = None,
 ) -> None:
     """Apply a single visual specification."""
@@ -245,12 +263,12 @@ def _apply_visual(
         w, h = _parse_size(vis_spec.get("size", "300 x 200"))
         if dry_run:
             result.visuals_created.append((page_name, vis_name or vis_type))
-            return
-        visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
-        if vis_name:
-            visual.data["name"] = vis_name
-            visual.save()
-        result.visuals_created.append((page_name, vis_name or vis_type))
+        else:
+            visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
+            if vis_name:
+                visual.data["name"] = vis_name
+                visual.save()
+            result.visuals_created.append((page_name, vis_name or vis_type))
     elif visual is None:
         result.errors.append(
             f"Page {page_name}: visual \"{vis_name}\" not found and no 'type' "
@@ -260,13 +278,35 @@ def _apply_visual(
     else:
         result.visuals_updated.append((page_name, vis_name or visual.name))
 
+    visual_type = visual.visual_type if visual is not None else vis_type
+    context = f"{page_name}/{vis_name or visual.name if visual is not None else vis_type}"
+    try:
+        style_assignments = _resolve_style_assignments(
+            project,
+            vis_spec.get("style"),
+            visual_type=visual_type,
+            style_cache=style_cache,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        result.errors.append(f"{context}: {e}")
+        return
+
     if dry_run:
         # Count would-be changes
+        result.properties_set += len(style_assignments)
         _count_dry_run_changes(vis_spec, result)
         return
 
     if keep_visual_ids is not None:
         keep_visual_ids.add(visual.folder.name)
+
+    for style_name, prop_name, value in style_assignments:
+        try:
+            set_property(visual.data, prop_name, str(value), VISUAL_PROPERTIES)
+            result.properties_set += 1
+        except ValueError as e:
+            result.errors.append(f'{context}: style "{style_name}" {prop_name}: {e}')
+            return
 
     raw_pbir = vis_spec.get("pbir")
     if isinstance(raw_pbir, dict):
@@ -287,13 +327,13 @@ def _apply_visual(
 
     # Apply visual properties (nested objects become dot-separated props)
     exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
-                     "filters", "isHidden", "pbir"}
+                     "filters", "isHidden", "pbir", "style"}
     _apply_nested_properties(
         visual.data, vis_spec,
         exclude_keys=exclude_keys,
         registry=VISUAL_PROPERTIES,
         result=result,
-        context=f"{page_name}/{vis_name or visual.name}",
+        context=context,
         dry_run=dry_run,
         ignore_selector_errors=isinstance(raw_pbir, dict),
         ignore_unknown_roots=_raw_object_roots(raw_pbir) if isinstance(raw_pbir, dict) else None,
@@ -315,7 +355,7 @@ def _apply_visual(
     # Filters
     if "filters" in vis_spec:
         _apply_filters(visual.data, vis_spec["filters"], result,
-                       context=f"{page_name}/{vis_name or visual.name}",
+                       context=context,
                        dry_run=dry_run)
 
     visual.save()
@@ -582,7 +622,7 @@ def _apply_raw_visual_payload(visual: Visual, raw_pbir: dict) -> None:
 def _count_dry_run_changes(vis_spec: dict, result: ApplyResult) -> None:
     """Count property changes for dry-run reporting."""
     exclude = {"id", "name", "type", "position", "size", "bindings", "sort",
-                "filters", "isHidden", "pbir"}
+                "filters", "isHidden", "pbir", "style"}
     for key, value in vis_spec.items():
         if key in exclude:
             continue
@@ -600,3 +640,34 @@ def _count_dry_run_changes(vis_spec: dict, result: ApplyResult) -> None:
 
     if "filters" in vis_spec:
         result.filters_added += len(vis_spec["filters"])
+
+
+def _resolve_style_assignments(
+    project: Project,
+    style_spec: Any,
+    *,
+    visual_type: str | None,
+    style_cache: dict[str, StylePreset],
+) -> list[tuple[str, str, Any]]:
+    """Resolve ordered style references into applicable property assignments."""
+    if style_spec is None:
+        return []
+    if isinstance(style_spec, str):
+        style_names = [style_spec]
+    elif isinstance(style_spec, list) and all(isinstance(item, str) for item in style_spec):
+        style_names = style_spec
+    else:
+        raise ValueError("'style' must be a string or list of strings.")
+
+    assignments: list[tuple[str, str, Any]] = []
+    for style_name in style_names:
+        if style_name not in style_cache:
+            style_cache[style_name] = get_style(project, style_name)
+        preset = style_cache[style_name]
+        for raw_prop_name, value in preset.properties.items():
+            prop_name = normalize_property_name(raw_prop_name, VISUAL_PROPERTIES)
+            prop_def = VISUAL_PROPERTIES.get(prop_name)
+            if visual_type and prop_def and prop_def.visual_types and visual_type not in prop_def.visual_types:
+                continue
+            assignments.append((style_name, prop_name, value))
+    return assignments

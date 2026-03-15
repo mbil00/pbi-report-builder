@@ -20,6 +20,7 @@ from pbi.roundtrip import (
     export_page_roundtrip_fields,
     prune_visual_pbir,
 )
+from pbi.styles import apply_style_reference, match_style_preset
 
 
 def export_page(project: Project, page: Page) -> dict:
@@ -92,6 +93,11 @@ def export_yaml(project: Project, page_filter: str | None = None) -> str:
         sort_keys=False,
         width=120,
     )
+
+
+def export_visual_spec(project: Project, visual: Visual) -> dict:
+    """Export one visual as a canonical apply-compatible dict."""
+    return _export_visual(project, visual)
 
 
 def _export_visual(project: Project, visual: Visual) -> dict:
@@ -177,6 +183,10 @@ def _export_visual(project: Project, visual: Visual) -> dict:
     raw_visual = prune_visual_pbir(visual.data, result)
     if raw_visual:
         result["pbir"] = raw_visual
+
+    matched_style = match_style_preset(project, result)
+    if matched_style is not None:
+        result = apply_style_reference(result, matched_style.name)
 
     return result
 

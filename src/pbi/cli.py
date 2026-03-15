@@ -41,6 +41,7 @@ visual_format_app = typer.Typer(help="Visual conditional formatting operations."
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
+style_app = typer.Typer(help="Style preset operations.", no_args_is_help=True)
 bookmark_app = typer.Typer(help="Bookmark operations.", no_args_is_help=True)
 interaction_app = typer.Typer(help="Visual interaction operations.", no_args_is_help=True)
 report_app = typer.Typer(help="Report metadata operations.", no_args_is_help=True)
@@ -50,6 +51,7 @@ app.add_typer(visual_app, name="visual")
 app.add_typer(model_app, name="model")
 app.add_typer(filter_app, name="filter")
 app.add_typer(theme_app, name="theme")
+app.add_typer(style_app, name="style")
 app.add_typer(bookmark_app, name="bookmark")
 app.add_typer(interaction_app, name="interaction")
 page_app.add_typer(page_drillthrough_app, name="drillthrough")
@@ -285,6 +287,114 @@ def apply_cmd(
         raise typer.Exit(1)
     if not result.has_changes and not dry_run:
         console.print("[dim]No changes applied.[/dim]")
+
+
+@style_app.command("create")
+def style_create(
+    style_name: Annotated[str, typer.Argument(help="Name for the saved style preset.")],
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments as prop=value.")],
+    description: Annotated[str | None, typer.Option("--description", help="Optional style description.")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Replace an existing style preset.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Create a project-scoped visual style preset."""
+    from pbi.styles import create_style
+
+    if not assignments:
+        console.print("[red]Error:[/red] Provide at least one prop=value assignment.")
+        raise typer.Exit(1)
+
+    proj = _get_project(project)
+    try:
+        props = dict(_parse_property_assignments(assignments))
+        path = create_style(
+            proj,
+            style_name,
+            props,
+            description=description,
+            overwrite=force,
+        )
+    except (FileExistsError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(
+        f'Saved style "[cyan]{style_name}[/cyan]" '
+        f"({len(props)} properties) → {path}"
+    )
+
+
+@style_app.command("list")
+def style_list(
+    project: ProjectOpt = None,
+) -> None:
+    """List saved style presets."""
+    from pbi.styles import list_styles
+
+    proj = _get_project(project)
+    styles = list_styles(proj)
+
+    if not styles:
+        console.print("[yellow]No styles saved. Use `pbi style create` to create one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Properties")
+    table.add_column("Description", style="dim")
+    table.add_column("File", style="dim")
+    for style in styles:
+        table.add_row(
+            style.name,
+            str(len(style.properties)),
+            style.description or "",
+            style.path.name,
+        )
+    console.print(table)
+
+
+@style_app.command("show")
+def style_show(
+    style_name: Annotated[str, typer.Argument(help="Style preset name.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Show one saved style preset as YAML."""
+    from pbi.styles import dump_style, get_style
+
+    proj = _get_project(project)
+    try:
+        style = get_style(proj, style_name)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    typer.echo(dump_style(style), nl=False)
+
+
+@style_app.command("delete")
+def style_delete(
+    style_name: Annotated[str, typer.Argument(help="Style preset name to delete.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete a saved style preset."""
+    from pbi.styles import delete_style
+
+    proj = _get_project(project)
+    if not force:
+        confirm = typer.confirm(f'Delete style "{style_name}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        deleted = delete_style(proj, style_name)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    if deleted:
+        console.print(f'Deleted style "[cyan]{style_name}[/cyan]"')
+    else:
+        console.print(f'[yellow]Style "{style_name}" not found.[/yellow]')
 
 
 @app.command()
@@ -1248,7 +1358,9 @@ def visual_diff(
     all_props: Annotated[bool, typer.Option("--all-props", help="Include core properties like position and hidden state.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Compare explicit properties between two visuals."""
+    """Compare canonical exported visual specs between two visuals."""
+    from pbi.export import export_visual_spec
+
     proj = _get_project(project)
     try:
         left_pg = proj.find_page(left_page)
@@ -1259,8 +1371,14 @@ def visual_diff(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    left_props = _collect_visual_property_map(left_vis.data, include_core=all_props)
-    right_props = _collect_visual_property_map(right_vis.data, include_core=all_props)
+    left_props = _flatten_visual_diff_spec(
+        export_visual_spec(proj, left_vis),
+        include_core=all_props,
+    )
+    right_props = _flatten_visual_diff_spec(
+        export_visual_spec(proj, right_vis),
+        include_core=all_props,
+    )
 
     ordered_keys: list[str] = []
     for prop_name in [*left_props.keys(), *right_props.keys()]:
@@ -1289,6 +1407,74 @@ def visual_diff(
     for prop_name, left_value, right_value in rows:
         table.add_row(prop_name, left_value, right_value)
     console.print(table)
+
+
+def _flatten_visual_diff_spec(
+    visual_spec: dict,
+    *,
+    include_core: bool,
+) -> dict[str, str]:
+    """Flatten a canonical exported visual spec into path/value rows for diffing."""
+    import copy
+
+    filtered = copy.deepcopy(visual_spec)
+    filtered.pop("id", None)
+    filtered.pop("name", None)
+    if not include_core:
+        for key in ("position", "size", "isHidden"):
+            filtered.pop(key, None)
+    else:
+        position = filtered.get("position")
+        if isinstance(position, str):
+            parts = [part.strip() for part in position.split(",", 1)]
+            if len(parts) == 2:
+                filtered["position"] = {"x": parts[0], "y": parts[1]}
+        size = filtered.get("size")
+        if isinstance(size, str):
+            parts = [part.strip() for part in size.lower().split("x", 1)]
+            if len(parts) == 2:
+                filtered["size"] = {"width": parts[0], "height": parts[1]}
+
+    rows: dict[str, str] = {}
+    _flatten_diff_value(filtered, rows)
+    return rows
+
+
+def _flatten_diff_value(
+    value: object,
+    rows: dict[str, str],
+    *,
+    prefix: str = "",
+) -> None:
+    """Recursively flatten a nested exported spec into dotted paths."""
+    if isinstance(value, dict):
+        if not value and prefix:
+            rows[prefix] = "{}"
+            return
+        for key, child in value.items():
+            child_prefix = key if not prefix else f"{prefix}.{key}"
+            _flatten_diff_value(child, rows, prefix=child_prefix)
+        return
+
+    if isinstance(value, list):
+        if not value:
+            rows[prefix] = "[]"
+            return
+        for index, child in enumerate(value):
+            child_prefix = f"{prefix}[{index}]"
+            _flatten_diff_value(child, rows, prefix=child_prefix)
+        return
+
+    rows[prefix] = _stringify_diff_value(value)
+
+
+def _stringify_diff_value(value: object) -> str:
+    """Stringify scalar values for visual diff output."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
 
 
 def _prepare_visual_property_updates(

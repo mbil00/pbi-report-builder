@@ -26,6 +26,7 @@ from pbi.model import _parse_tmdl_name
 from pbi.project import Project, _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
+from pbi.styles import create_style, get_style
 from pbi.templates import apply_template, save_template
 
 
@@ -164,6 +165,243 @@ class TemplateRegressionTests(unittest.TestCase):
                 parent = visual.data.get("parentGroupName")
                 if parent:
                     self.assertIn(parent, valid_group_names)
+
+
+class StylePresetRegressionTests(unittest.TestCase):
+    def test_style_create_list_show_delete_cli_flow(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            empty_list = runner.invoke(
+                app,
+                ["style", "list", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(empty_list.exit_code, 0, empty_list.stdout)
+            self.assertIn("No styles saved", empty_list.stdout)
+
+            create_result = runner.invoke(
+                app,
+                [
+                    "style",
+                    "create",
+                    "card-standard",
+                    "border.show=true",
+                    "border.radius=10",
+                    "title.text=Standard Card",
+                    "--description",
+                    "Card baseline",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+            style_path = root / ".pbi-styles" / "card-standard.yaml"
+            self.assertTrue(style_path.exists())
+            style = get_style(Project.find(root / "Sample.pbip"), "card-standard")
+            self.assertEqual(style.properties["border.show"], True)
+            self.assertEqual(style.properties["border.radius"], 10)
+            self.assertEqual(style.properties["title.text"], "Standard Card")
+
+            list_result = runner.invoke(
+                app,
+                ["style", "list", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            self.assertIn("card-standard", list_result.stdout)
+            self.assertIn("3", list_result.stdout)
+
+            show_result = runner.invoke(
+                app,
+                ["style", "show", "card-standard", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(show_result.exit_code, 0, show_result.stdout)
+            self.assertIn("name: card-standard", show_result.stdout)
+            self.assertIn("border.show: true", show_result.stdout)
+            self.assertIn("title.text: Standard Card", show_result.stdout)
+
+            delete_result = runner.invoke(
+                app,
+                ["style", "delete", "card-standard", "--force", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+            self.assertFalse(style_path.exists())
+
+    def test_style_create_rejects_invalid_name(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            result = runner.invoke(
+                app,
+                [
+                    "style",
+                    "create",
+                    "../escape",
+                    "border.show=true",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("Style name", result.stdout)
+
+    def test_apply_style_presets_merge_in_order_and_explicit_values_win(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            create_style(
+                project,
+                "base-card",
+                {
+                    "background.color": "#111111",
+                    "border.show": True,
+                    "border.radius": 4,
+                    "grid.rowPadding": 3,
+                },
+            )
+            create_style(
+                project,
+                "accent-card",
+                {
+                    "background.color": "#222222",
+                    "border.radius": 8,
+                    "title.show": True,
+                },
+            )
+
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "card1",
+                                    "type": "cardVisual",
+                                    "position": "0, 0",
+                                    "size": "200 x 100",
+                                    "style": ["base-card", "accent-card"],
+                                    "background": {"color": "#333333"},
+                                    "title": {"text": "Sales"},
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, spec)
+
+            self.assertEqual(result.errors, [])
+            page = project.find_page("Demo")
+            visual = project.find_visual(page, "card1")
+            self.assertEqual(
+                get_property(visual.data, "background.color", VISUAL_PROPERTIES),
+                "#333333",
+            )
+            self.assertTrue(get_property(visual.data, "border.show", VISUAL_PROPERTIES))
+            self.assertEqual(
+                get_property(visual.data, "border.radius", VISUAL_PROPERTIES),
+                8,
+            )
+            self.assertTrue(get_property(visual.data, "title.show", VISUAL_PROPERTIES))
+            self.assertEqual(
+                get_property(visual.data, "title.text", VISUAL_PROPERTIES),
+                "Sales",
+            )
+            self.assertIsNone(get_property(visual.data, "grid.rowPadding", VISUAL_PROPERTIES))
+
+    def test_apply_style_reports_missing_preset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "card1",
+                                    "type": "cardVisual",
+                                    "position": "0, 0",
+                                    "size": "200 x 100",
+                                    "style": "missing-style",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, spec)
+
+            self.assertTrue(result.errors)
+            self.assertIn('Style "missing-style" not found', result.errors[0])
+
+
+class VisualDiffRegressionTests(unittest.TestCase):
+    def test_visual_diff_uses_canonical_exported_spec(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+
+            left = project.create_visual(page, "tableEx")
+            left.data["name"] = "left"
+            project.add_binding(left, "Values", "Product", "Category")
+            project.set_sort(left, "Product", "Category", descending=True)
+            add_range_filter(left.data, "Sales", "Amount", min_val="10", max_val="20")
+            left.data["visual"].setdefault("query", {})["queryMetadata"] = {"foo": "left"}
+            left.save()
+
+            right = project.create_visual(page, "tableEx")
+            right.data["name"] = "right"
+            project.add_binding(right, "Values", "Product", "Brand")
+            project.set_sort(right, "Product", "Brand", descending=False)
+            add_range_filter(right.data, "Sales", "Quantity", min_val="20", max_val="30")
+            right.data["visual"].setdefault("query", {})["queryMetadata"] = {"foo": "right"}
+            right.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "diff",
+                    "Demo",
+                    "left",
+                    "Demo",
+                    "right",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("bindings.Values", result.stdout)
+            self.assertIn("Product.Category", result.stdout)
+            self.assertIn("Product.Brand", result.stdout)
+            self.assertIn("sort", result.stdout)
+            self.assertIn("Descending", result.stdout)
+            self.assertIn("Ascending", result.stdout)
+            self.assertIn("filters[0].field", result.stdout)
+            self.assertIn("Sales.Amount", result.stdout)
+            self.assertIn("Sales.Quantity", result.stdout)
+            self.assertIn("filters[0].values[0]", result.stdout)
+            self.assertIn("pbir.visual.query.quer", result.stdout)
+            self.assertIn("left", result.stdout)
+            self.assertIn("right", result.stdout)
 
 
 class BookmarkInteractionRegressionTests(unittest.TestCase):
