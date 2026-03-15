@@ -85,7 +85,8 @@ pbi filter remove visual "Sales Overview" revenueChart Customers.Region
 | [Report Commands](report.md) | Report metadata and settings |
 | [Page Commands](pages.md) | Page CRUD, templates, drillthrough, tooltip |
 | [Visual Commands](visuals.md) | Visual CRUD, styling, grouping, sorting, formatting |
-| [Data & Filters](data.md) | Data binding, filters, semantic model |
+| [Data & Filters](data.md) | Data binding and filters |
+| [Semantic Model Commands](model.md) | Model inspection, field formatting, measure/column edits, batch apply |
 | [Interactions & Navigation](interactions.md) | Visual interactions and button actions |
 | [Bookmarks](bookmarks.md) | Bookmark management |
 | [Properties Reference](properties.md) | Visual property catalog |

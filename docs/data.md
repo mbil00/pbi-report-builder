@@ -22,6 +22,13 @@ pbi model measures Sales
 pbi model fields Sales
 ```
 
+Write-side semantic-model editing is documented in [Semantic Model Commands](model.md), including:
+
+- `pbi model format`
+- `pbi model column hide|show|create|edit|get|delete`
+- `pbi model measure create|edit|show|delete`
+- `pbi model apply`
+
 ## Filter Scope
 
 Filters use positional scope:
