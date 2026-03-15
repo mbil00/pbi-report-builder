@@ -13,6 +13,7 @@ Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative 
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
 | Apply consistent formatting | `pbi style apply` or `style:` in YAML |
 | Change a theme's colors everywhere | `pbi theme migrate old.json new.json` |
+| Preview a page layout visually | `pbi render "Page" --screenshot` |
 
 **Rule of thumb:** For any page-level work, start with `pbi page export`. Use imperative commands only for quick one-off tweaks.
 
@@ -215,6 +216,17 @@ pbi visual align "Sales" chart1 chart2 --align top --match-height
 pbi nav set-page "Sales" nextBtn "Details"
 pbi nav set-bookmark "Sales" toggleBtn "Minimal View"
 ```
+
+## Preview (Layout Mockups)
+
+Render a page as an HTML mockup to visually verify layout before publishing:
+
+```bash
+pbi render "Dashboard" -o dashboard.html              # HTML only
+pbi render "Dashboard" -o dashboard.html --screenshot  # HTML + PNG
+```
+
+The mockup shows pixel-accurate positions, sizes, backgrounds, borders, text content, and titles. Data visuals appear as labeled placeholders with their bound field names. Useful for reviewing layout changes after `pbi apply` without opening Power BI.
 
 ## Validation
 
