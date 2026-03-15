@@ -8,7 +8,7 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 
 ## Command Grammar
 
-**Verbs:** `list`, `get`, `set`, `create`, `copy`, `delete`, `clear`, `export`, `apply`. Use `get` to view details (never `show`). Use `delete` to remove resources (never `remove`). Use `unhide` as the opposite of `hide`. Use `clear` to remove configuration (sort, formatting, interactions, drillthrough, tooltip).
+**Verbs:** `list`, `get`, `set`, `set-all`, `create`, `copy`, `delete`, `clear`, `export`, `apply`, `migrate`. Use `get` to view details (never `show`). Use `delete` to remove resources (never `remove`). Use `unhide` as the opposite of `hide`. Use `clear` to remove configuration (sort, formatting, interactions, drillthrough, tooltip).
 
 **Arguments:** Targets are positional, options are named. Setters use `key=value` positional args. Field references use `Table.Field` format everywhere.
 
@@ -22,6 +22,10 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 - `--dry-run` — all mutating apply/create/edit/format commands
 - `--name, -n` — create commands (friendly name)
 - `--title` — visual create (sets title.show + title.text)
+- `--all-pages` — `visual set-all` (apply across all pages)
+- `--exclude` — `page set-all` (skip pages matching substring)
+- `--overwrite` — `apply` (full reconciliation, removes visuals not in YAML)
+- `--page` — `map` (filter to single page), `apply` (filter to single page)
 
 ## Output Patterns
 
@@ -76,7 +80,20 @@ if not force:
 - `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`
 - `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, field resolution with fuzzy suggestions
 - `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
+- `src/pbi/themes.py` — theme apply/export/delete/migrate, color migration
+- `src/pbi/mapper.py` — `pbi map` with `--page`/`--pages`/`--model` filters
 - `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)
+
+## YAML Apply Features
+
+The apply engine supports these property syntaxes in YAML:
+- **Nested properties:** `title: { show: true, text: "Hello" }` → `title.show=true`
+- **Bracket selectors:** `value.fontSize [Measures Table.X]: 20` → per-measure formatting
+- **chart: prefix:** `chart:legend.show: true` → unregistered chart object properties
+- **chart: with selector:** `chart:icon.shapeType [default]: back`
+- **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
+- **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
+- **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages
 
 ## Engineering Rule
 

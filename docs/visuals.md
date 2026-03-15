@@ -42,7 +42,13 @@ pbi visual set "Sales Overview" revenueChart accentBar.color="#E8A83E" --for-mea
 pbi visual set-all "Sales Overview" background.show=true background.color="#FFFFFF"
 pbi visual set-all "Sales Overview" border.radius=4 border.show=true --visual-type slicer
 pbi visual set-all "Sales Overview" background.show=true --dry-run
+
+# Apply across ALL pages at once
+pbi visual set-all --all-pages columnHeaders.backColor="#162F38" --visual-type tableEx
+pbi visual set-all --all-pages border.show=true border.radius=4
 ```
+
+When `--all-pages` is used, the page argument is omitted. Combine with `--visual-type` to target specific visual types across the entire report.
 
 ## CRUD
 
@@ -51,6 +57,8 @@ pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart --wi
 pbi visual create "Sales Overview" card --name kpiCard --title "Total Revenue"
 pbi visual move "Sales Overview" revenueChart --x 40 --y 80
 pbi visual resize "Sales Overview" revenueChart --width 720 --height 420
+pbi visual resize "Sales Overview" revenueChart --height 300           # width unchanged
+pbi visual resize "Sales Overview" revenueChart --width 500            # height unchanged
 pbi visual copy "Sales Overview" revenueChart --to-page "Executive Summary" --name revenueChartCopy
 pbi visual rename "Sales Overview" revenueChart revenueByCategory
 pbi visual delete "Sales Overview" revenueChart --force

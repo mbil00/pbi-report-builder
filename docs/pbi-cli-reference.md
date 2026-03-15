@@ -44,6 +44,17 @@ pbi report set settings.useEnhancedTooltips=true settings.pagesPosition=Bottom
 pbi page set "Sales Overview" width=1440 displayOption=FitToWidth
 pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue"
 
+# Batch property writes
+pbi page set-all background.color="#F0EDE8"
+pbi page set-all background.color="#F0EDE8" --exclude "_"
+pbi visual set-all "Sales Overview" border.show=true --visual-type slicer
+pbi visual set-all --all-pages columnHeaders.backColor="#162F38" --visual-type tableEx
+
+# Discovery with filtering
+pbi map --page "Sales Overview"    # single page detail
+pbi map --pages                    # pages only, no model
+pbi map --model                    # model only
+
 # Stateful operations
 pbi visual sort get "Sales Overview" revenueChart
 pbi visual sort set "Sales Overview" revenueChart Sales.Revenue --direction desc
@@ -52,6 +63,10 @@ pbi visual sort clear "Sales Overview" revenueChart
 pbi visual format get "Sales Overview" revenueChart
 pbi visual format set "Sales Overview" revenueChart dataPoint.fill --mode measure --source Sales.ColorMeasure
 pbi visual format clear "Sales Overview" revenueChart dataPoint.fill
+
+# Theme migration
+pbi theme migrate old-theme.json new-theme.json --dry-run
+pbi theme migrate old-theme.json new-theme.json
 ```
 
 ## Filters

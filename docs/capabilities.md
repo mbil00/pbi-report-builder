@@ -9,19 +9,19 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 
 | Area | Current support |
 |------|-----------------|
-| Project discovery and auditing | `pbi info`, `pbi map`, `pbi validate` |
+| Project discovery and auditing | `pbi info`, `pbi map` (with `--page`/`--pages`/`--model` filters), `pbi validate` |
 
 ## Partial
 
 | Area | Current support | Main gaps |
 |------|-----------------|-----------|
-| Pages | CRUD, properties, templates, drillthrough, tooltip | no reorder command, no active page setter, no page annotations/extensions editor |
-| Visual containers and formatting | CRUD, layout, grouping, style, sort, conditional formatting, column config | no schema-aware visual/query recipe builder, no exhaustive per-visual formatting coverage |
+| Pages | CRUD, properties, `set-all` batch updates, reorder, active page, templates, drillthrough, tooltip | no page annotations/extensions editor |
+| Visual containers and formatting | CRUD, layout, grouping, style, sort, conditional formatting, column config, `set-all --all-pages` cross-page bulk updates, visual type conversion in apply | no schema-aware visual/query recipe builder, no exhaustive per-visual formatting coverage |
 | Semantic model and data binding | model introspection, field formatting, column visibility, measure/calculated-column CRUD, declarative `model apply`, bind/unbind, bindings list | no higher-level query builder, no field parameter workflow |
 | Filters | categorical, include, exclude, tuple, range, Top N, and relative date/time filters at report/page/visual scope | no Passthrough examples yet; public support still depends on exact exported shapes |
 | Bookmarks and interactions | bookmark CRUD, interaction CRUD | no bookmark groups, no dedicated action/navigation command surface |
-| Authoring accelerators | `pbi apply`, page export, templates, style presets | no report scaffold wizard, no layout generators, no semantic-model-driven starter flow |
-| Themes and report resources | theme list/apply/export/delete | no broader resource package management, no theme authoring workflow |
+| Authoring accelerators | `pbi apply` (with bracket selectors, `chart:` prefix, type conversion, overwrite deletion reporting), page export, templates, style presets | no report scaffold wizard, no layout generators, no semantic-model-driven starter flow |
+| Themes and report resources | theme list/apply/export/delete/migrate (color replacement across visuals) | no broader resource package management, no theme authoring workflow |
 | Report-level metadata | `report get`, `report set`, `report properties` for core metadata/settings | no resource package editor, no annotations editor, no report objects editor |
 
 ## Blocked / Planned
@@ -33,11 +33,10 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 
 ## Recommended build order
 
-1. Add `pages metadata` commands for page order and active page.
-2. Build richer filter coverage from real PBIR examples plus schema validation.
-3. Add first-class navigation/action commands instead of relying on low-level property writes.
-4. Expand `report` commands to resources, annotations, and report objects.
-5. Build recipe-driven authoring on top of the lower-level PBIR editors.
+1. Build richer filter coverage from real PBIR examples plus schema validation.
+2. Add first-class navigation/action commands instead of relying on low-level property writes.
+3. Expand `report` commands to resources, annotations, and report objects.
+4. Build recipe-driven authoring on top of the lower-level PBIR editors.
 
 ## Agent note
 

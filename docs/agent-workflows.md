@@ -202,8 +202,9 @@ No need to reverse-engineer the reference page's formatting with `visual get` ca
 
 - **Additive by default** — only visuals and properties in the YAML are touched; existing visuals not in the YAML are left alone
 - **Stable IDs** — export includes `id` values so re-apply updates the same visuals instead of creating duplicates
-- **Dry-run** — always available to preview changes before writing
-- **Overwrite mode** — full reconciliation with automatic backup and rollback on failure
+- **Dry-run** — always available to preview changes before writing; lists all visuals that would be created on new pages and visuals that would be deleted in overwrite mode
+- **Overwrite mode** — full reconciliation with automatic backup and rollback on failure; reports deleted visuals in output
+- **Visual type conversion** — when a YAML visual has an existing `id` but a different `type`, the old visual is deleted and recreated with the new type (preserving position, size, and name)
 - **Round-trip safe** — exported YAML can be re-applied without modification; bindings, column widths, display names, and page tooltip/drillthrough metadata survive the round-trip
 
 ### YAML property reference
@@ -238,6 +239,28 @@ slicerHeader: { show, fontColor, background, fontSize }
 action: { show, type }  # type: Back, Bookmark, PageNavigation, WebUrl
 ```
 
+#### Bracket selectors (per-measure formatting)
+
+Per-measure formatting uses bracket notation in YAML. This is the same syntax that `pbi page export` produces:
+
+```yaml
+value:
+  fontSize [Measures Table.Total Devices]: 20
+  labelDisplayUnits [Measures Table.Total Devices]: 1.0
+  labelDisplayUnits [Measures Table.Non-Compliant Devices]: 1.0
+```
+
+#### chart: prefix (unregistered chart properties)
+
+For chart object properties not in the named property registry, use the `chart:` prefix:
+
+```yaml
+chart:legend.seriesOrder: descending
+chart:icon.shapeType [default]: back
+chart:layout.contentOrder: callout_image_referenceLabel
+chart:padding.paddingUniform: 12
+```
+
 ### The `pbir` block (advanced)
 
 Exported YAML includes a `pbir` block on each visual — this is the raw PBIR JSON payload that preserves everything, including features the high-level properties don't cover (conditional formatting, per-measure selectors, complex object structures).
@@ -262,15 +285,23 @@ pbi visual set "Sales" revenueChart title.text="Q2 Revenue"
 # Batch properties on one visual
 pbi visual set "Sales" revenueChart border.show=true border.radius=8 shadow.show=true
 
-# Apply to all visuals of a type
-pbi visual set-all "Sales" --type slicer border.show=true border.radius=4
+# Apply to all visuals of a type on one page
+pbi visual set-all "Sales" border.show=true border.radius=4 --visual-type slicer
+
+# Apply across ALL pages at once
+pbi visual set-all --all-pages columnHeaders.backColor="#162F38" --visual-type tableEx
+
+# Set properties on all pages
+pbi page set-all background.color="#F0EDE8"
+pbi page set-all background.color="#F0EDE8" --exclude "_"
 
 # Rename a table column
 pbi visual column "Sales" revenueTable "Products.Name" --rename "Product" -w 300
 
-# Move and resize
-pbi visual move "Sales" revenueChart 16 200
-pbi visual resize "Sales" revenueChart 940 400
+# Move and resize (width/height independently optional)
+pbi visual move "Sales" revenueChart --x 16 --y 200
+pbi visual resize "Sales" revenueChart --width 940 --height 400
+pbi visual resize "Sales" revenueChart --height 120    # keep existing width
 ```
 
 ## Naming Strategy
@@ -294,6 +325,9 @@ Before building, understand the report structure and available data:
 ```bash
 pbi info                           # tree view of pages and visuals
 pbi map -o report.yaml             # full index with bindings and filters
+pbi map --page "Sales Overview"    # single page detail
+pbi map --pages                    # pages only, no model section
+pbi map --model                    # model only, no pages section
 pbi page list                      # page table with sizes and counts
 pbi visual list "Page Name"        # visual table with positions and types
 pbi model tables                   # semantic model tables

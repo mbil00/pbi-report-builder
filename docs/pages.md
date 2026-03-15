@@ -12,6 +12,16 @@ pbi page properties
 
 Page mutation uses `key=value` only.
 
+## Batch Updates
+
+```bash
+pbi page set-all background.color="#F0EDE8"                    # all pages
+pbi page set-all background.color="#F0EDE8" --exclude "_"      # skip pages with "_" in the name
+pbi page set-all width=1920 height=1080 --dry-run              # preview changes
+```
+
+`pbi page set-all` applies properties to every page in the project. Use `--exclude` to skip pages whose display name contains a given substring (e.g. hidden pages prefixed with `_`).
+
 ## Page Order & Active Page
 
 ```bash
@@ -45,6 +55,12 @@ pbi apply sales-overview.yaml --overwrite
 
 `pbi page export` emits apply-compatible YAML for both page metadata and visuals,
 including tooltip/drillthrough page binding metadata when present.
+
+Key apply behaviors:
+- **Additive by default** — only visuals in the YAML are touched
+- **`--overwrite`** — full reconciliation: visuals not in YAML are deleted (with backup). Deleted visuals are reported in the output
+- **`--dry-run`** — previews all changes including visuals that would be created on new pages and visuals that would be deleted in overwrite mode
+- **Visual type conversion** — if a YAML visual specifies an existing `id` but a different `type`, the old visual is deleted and recreated with the new type
 
 ## Templates
 

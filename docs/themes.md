@@ -45,6 +45,29 @@ Remove the custom theme, reverting to the base theme only.
 pbi theme delete
 ```
 
+## pbi theme migrate
+
+Migrate per-visual color overrides from an old theme to a new theme. Compares the two theme JSONs to build a color mapping, then scans all visuals and pages for properties matching old colors and replaces them with new colors.
+
+```bash
+pbi theme migrate <old-theme> <new-theme>
+pbi theme migrate <old-theme> <new-theme> --dry-run
+```
+
+```bash
+# Preview what would change
+pbi theme migrate ./old-corporate.json ./new-corporate.json --dry-run
+# Output:
+# (dry run) Would update #2E7D8C -> #162F38 on 8 visual(s)
+# (dry run) Would update #EDEBE9 -> #DDD6CC on 45 visual(s)
+# (dry run) Would update background.color on 9 page(s)
+
+# Apply the migration
+pbi theme migrate ./old-corporate.json ./new-corporate.json
+```
+
+This is essential after applying a new theme, because visuals with per-visual property overrides (explicit colors set via `pbi visual set` or YAML) keep their old colors. `migrate` replaces those overrides with the new theme's colors.
+
 ## Theme JSON Structure
 
 A Power BI theme JSON file contains color palette, visual defaults, and text formatting:
