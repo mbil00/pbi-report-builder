@@ -85,6 +85,64 @@ def write_model_table(root: Path, filename: str, content: str) -> Path:
 
 
 class ApplyWorkflowRegressionTests(unittest.TestCase):
+    def test_apply_accepts_stdin_with_dash(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "From stdin",
+                            "visuals": [],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = runner.invoke(
+                app,
+                ["apply", "-", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            applied = Project.find(root / "Sample.pbip")
+            applied.find_page("From stdin")
+
+    def test_apply_accepts_piped_stdin_without_file_argument(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Piped apply",
+                            "visuals": [],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = runner.invoke(
+                app,
+                ["apply", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            applied = Project.find(root / "Sample.pbip")
+            applied.find_page("Piped apply")
+
     def test_raw_pbir_visual_still_accepts_human_readable_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -258,6 +316,152 @@ pages:
             self.assertFalse((root / "outside.yaml").exists())
             backups = list(root.glob(".pbi-backup-*.yaml"))
             self.assertEqual(len(backups), 1)
+
+
+class YamlStdinWorkflowRegressionTests(unittest.TestCase):
+    def test_diff_accepts_stdin_with_dash(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "New from stdin",
+                            "visuals": [],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = runner.invoke(
+                app,
+                ["diff", "-", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("+ New page:", result.stdout)
+            self.assertIn("New from stdin", result.stdout)
+
+    def test_diff_accepts_piped_stdin_without_file_argument(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Piped diff",
+                            "visuals": [],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = runner.invoke(
+                app,
+                ["diff", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("+ New page:", result.stdout)
+            self.assertIn("Piped diff", result.stdout)
+
+    def test_model_apply_accepts_stdin_with_dash(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            table_path = write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tcolumn Revenue
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Revenue
+                """,
+            )
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "measures": {
+                        "Sales": [
+                            {
+                                "name": "Total Revenue",
+                                "expression": "SUM ( Sales[Revenue] )",
+                                "format": "0",
+                            }
+                        ]
+                    }
+                },
+                sort_keys=False,
+            )
+
+            result = runner.invoke(
+                app,
+                ["model", "apply", "-", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Created measure", result.stdout)
+            self.assertIn("Total Revenue", table_path.read_text(encoding="utf-8"))
+
+    def test_model_apply_accepts_piped_stdin_without_file_argument(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            table_path = write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tcolumn Revenue
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Revenue
+                """,
+            )
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "measures": {
+                        "Sales": [
+                            {
+                                "name": "Total Revenue",
+                                "expression": "SUM ( Sales[Revenue] )",
+                                "format": "0",
+                            }
+                        ]
+                    }
+                },
+                sort_keys=False,
+            )
+
+            result = runner.invoke(
+                app,
+                ["model", "apply", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Created measure", result.stdout)
+            self.assertIn("Total Revenue", table_path.read_text(encoding="utf-8"))
 
 
 class PathSecurityRegressionTests(unittest.TestCase):

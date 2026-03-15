@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -83,3 +84,23 @@ def resolve_output_path(
             raise ValueError(f"Output path must stay within {root}")
     resolved.parent.mkdir(parents=True, exist_ok=True)
     return resolved
+
+
+def resolve_yaml_input(yaml_source: str | Path | None) -> str:
+    """Resolve YAML from a file path, '-' sentinel, or piped stdin."""
+    if yaml_source not in (None, "-"):
+        yaml_path = yaml_source if isinstance(yaml_source, Path) else Path(yaml_source)
+        yaml_path = yaml_path if yaml_path.is_absolute() else Path.cwd() / yaml_path
+        if not yaml_path.exists():
+            raise ValueError(f"File not found: {yaml_path}")
+        yaml_content = yaml_path.read_text(encoding="utf-8")
+        if not yaml_content.strip():
+            raise ValueError(f"YAML file is empty: {yaml_path}")
+        return yaml_content
+
+    if not sys.stdin.isatty():
+        yaml_content = sys.stdin.read()
+        if yaml_content.strip():
+            return yaml_content
+
+    raise ValueError("Provide a YAML file, use '-' to read from stdin, or pipe YAML into the command.")

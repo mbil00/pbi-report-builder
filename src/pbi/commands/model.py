@@ -9,7 +9,7 @@ import typer
 from rich import box
 from rich.table import Table
 
-from .common import ProjectOpt, console, get_project
+from .common import ProjectOpt, console, get_project, resolve_yaml_input
 
 model_app = typer.Typer(help="Semantic model operations.", no_args_is_help=True)
 model_column_app = typer.Typer(help="Semantic model column operations.", no_args_is_help=True)
@@ -192,7 +192,7 @@ def model_search(
 
 @model_app.command("apply")
 def model_apply(
-    yaml_file: Annotated[Path, typer.Argument(help="YAML file describing model changes.")],
+    yaml_file: Annotated[str | None, typer.Argument(help="YAML file describing model changes. Use '-' or omit to read from stdin.")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview model changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -200,12 +200,12 @@ def model_apply(
     from pbi.model_apply import apply_model_yaml
 
     proj = get_project(project)
-    yaml_path = yaml_file if yaml_file.is_absolute() else Path.cwd() / yaml_file
-    if not yaml_path.exists():
-        console.print(f"[red]Error:[/red] File not found: {yaml_path}")
+    try:
+        yaml_content = resolve_yaml_input(yaml_file)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    yaml_content = yaml_path.read_text(encoding="utf-8")
     result = apply_model_yaml(proj.root, yaml_content, dry_run=dry_run)
 
     prefix = "[dim](dry run)[/dim] " if dry_run else ""

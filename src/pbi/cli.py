@@ -18,6 +18,7 @@ from pbi.commands.common import (
     console,
     get_project,
     parse_property_assignments,
+    resolve_yaml_input,
     resolve_output_path,
 )
 from pbi.commands.filters import filter_app
@@ -111,7 +112,7 @@ def map(
 
 @app.command("apply")
 def apply_cmd(
-    yaml_file: Annotated[Path, typer.Argument(help="YAML file to apply.")],
+    yaml_file: Annotated[Optional[str], typer.Argument(help="YAML file to apply. Use '-' or omit to read from stdin.")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without modifying files.")] = False,
     page: Annotated[Optional[str], typer.Option("--page", help="Only apply to this page.")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Full reconciliation: remove visuals not in YAML. Backs up the page first.")] = False,
@@ -127,14 +128,11 @@ def apply_cmd(
     from pbi.apply import apply_yaml
 
     proj = get_project(project)
-
-    # Resolve file path
-    yaml_path = yaml_file if yaml_file.is_absolute() else Path.cwd() / yaml_file
-    if not yaml_path.exists():
-        console.print(f"[red]Error:[/red] File not found: {yaml_path}")
+    try:
+        yaml_content = resolve_yaml_input(yaml_file)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
-
-    yaml_content = yaml_path.read_text(encoding="utf-8")
 
     # Backup before overwrite
     if overwrite and not dry_run:
@@ -435,7 +433,7 @@ def style_clone(
 
 @app.command("diff")
 def diff_cmd(
-    yaml_file: Annotated[Path, typer.Argument(help="YAML file to compare against current state.")],
+    yaml_file: Annotated[Optional[str], typer.Argument(help="YAML file to compare against current state. Use '-' or omit to read from stdin.")] = None,
     page: Annotated[Optional[str], typer.Option("--page", help="Only diff this page.")] = None,
     project: ProjectOpt = None,
 ) -> None:
@@ -443,13 +441,14 @@ def diff_cmd(
     from pbi.export import export_visual_spec
 
     proj = get_project(project)
-    yaml_path = yaml_file if yaml_file.is_absolute() else Path.cwd() / yaml_file
-    if not yaml_path.exists():
-        console.print(f"[red]Error:[/red] File not found: {yaml_path}")
+    try:
+        yaml_content = resolve_yaml_input(yaml_file)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
     import yaml as yaml_mod
-    spec = yaml_mod.safe_load(yaml_path.read_text(encoding="utf-8"))
+    spec = yaml_mod.safe_load(yaml_content)
     if not isinstance(spec, dict) or "pages" not in spec:
         console.print("[red]Error:[/red] YAML must have a 'pages' key.")
         raise typer.Exit(1)
