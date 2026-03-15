@@ -18,14 +18,17 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 - `--project, -p` — all commands (via `ProjectOpt`)
 - `--json` — all list commands, parameter name `as_json`
 - `--raw, -r` — get/detail commands (dumps full JSON)
+- `--full` — `visual get` (dump properties, objects, columns, filters, sort in one call)
 - `--force, -f` — all delete commands (skip confirmation)
 - `--dry-run` — all mutating apply/create/edit/format commands
 - `--name, -n` — create commands (friendly name)
 - `--title` — visual create (sets title.show + title.text)
-- `--all-pages` — `visual set-all` (apply across all pages, mutually exclusive with `--page`)
+- `--all-pages` — `visual set-all`, `visual column` (apply across all pages, mutually exclusive with `--page`)
+- `--where` — `visual set-all` (filter by current property value, e.g. `--where border.color=#EDEBE9`)
 - `--exclude` — `page set-all` (skip pages matching substring)
 - `--overwrite` — `apply` (full reconciliation, removes visuals not in YAML)
 - `--page` — `map` (filter to single page), `apply` (filter to single page), `visual set-all` (target page)
+- `--global, -g` — `style` commands (use global styles from ~/.config/pbi/styles/)
 
 ## Output Patterns
 
@@ -78,8 +81,9 @@ if not force:
 - `src/pbi/project.py` — `Project` class, page/visual CRUD, find with fuzzy suggestions
 - `src/pbi/properties.py` — `VISUAL_PROPERTIES`, `PAGE_PROPERTIES`, `get_property()`, `set_property()`
 - `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`
-- `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, field resolution with fuzzy suggestions
+- `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, `Relationship`, field resolution, BFS path finding
 - `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
+- `src/pbi/styles.py` — style presets (project + global), capture from visual, apply to visuals
 - `src/pbi/themes.py` — theme apply/export/delete/migrate, color migration
 - `src/pbi/mapper.py` — `pbi map` with `--page`/`--pages`/`--model` filters
 - `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)
@@ -91,9 +95,15 @@ The apply engine supports these property syntaxes in YAML:
 - **Bracket selectors:** `value.fontSize [Measures Table.X]: 20` → per-measure formatting
 - **chart: prefix:** `chart:legend.show: true` → unregistered chart object properties
 - **chart: with selector:** `chart:icon.shapeType [default]: back`
+- **style: reference:** `style: card-style` → applies all properties from a saved style preset
+- **interactions:** page-level `interactions:` list with source/target/type
+- **bookmarks:** top-level `bookmarks:` list with name/page/hide
+- **conditionalFormatting:** `mode: measure` or `mode: gradient` with min/mid/max stops
+- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), plus categorical/include/exclude
 - **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
 - **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
 - **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages
+- **Diff preview:** `pbi diff <yaml>` shows property-by-property changes before applying
 
 ## Engineering Rule
 

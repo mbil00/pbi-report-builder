@@ -1,386 +1,184 @@
 # Agent Workflows
 
-This guide is the shortest path for an agent to make reliable PBIR changes without fighting internal IDs or partial feature coverage.
+Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative commands.
 
 ## Choose Your Workflow
 
-| Task | Recommended approach |
-|------|---------------------|
-| **Build a new page from scratch** | Write YAML + `pbi apply` |
-| **Restyle or restructure a page** | `pbi page export` → edit YAML → `pbi apply` |
-| **Add visuals to a page** | `pbi page export` → add visuals to YAML → `pbi apply` |
-| **Redesign a page completely** | `pbi page export` → edit YAML → `pbi apply --overwrite` |
-| **Change 1-2 properties on a visual** | `pbi visual set` (imperative) |
-| **Quick data binding change** | `pbi visual bind` / `pbi visual unbind` |
-| **Add/remove filters** | `pbi filter add` / `pbi filter delete` |
-| **Bookmark or interaction tweak** | `pbi bookmark` / `pbi interaction` commands |
+| Task | Approach |
+|------|----------|
+| Build a new page | Write YAML + `pbi apply` |
+| Restyle / restructure a page | `pbi page export` → edit YAML → `pbi apply` |
+| Redesign a page completely | `pbi page export` → edit YAML → `pbi apply --overwrite` |
+| Tweak 1-2 properties | `pbi visual set` (imperative) |
+| Apply consistent formatting | `pbi style apply` or `style:` in YAML |
+| Change a theme's colors everywhere | `pbi theme migrate old.json new.json` |
 
-**Rule of thumb:** For any page-level work, start with `pbi page export` and edit the YAML. Use imperative commands only for quick one-off tweaks to a single visual.
+**Rule of thumb:** For any page-level work, start with `pbi page export`. Use imperative commands only for quick one-off tweaks.
+
+## Discovery (Before You Build)
+
+Understand what exists before writing anything:
+
+```bash
+pbi info                              # tree view of pages and visuals
+pbi page list                         # page table with sizes and counts
+pbi page get "Page Name"              # page properties, background, visual count
+pbi visual list "Page Name"           # visual table with positions and types
+pbi visual get "Page" visual --full   # everything: props, objects, columns, filters, sort
+pbi model tables                      # semantic model tables
+pbi model fields TableName            # columns + measures for binding
+pbi model relationships               # table relationships (verify cross-table joins)
+pbi model path TableA TableB          # relationship chain between two tables
+```
+
+For an existing page you want to modify:
+
+```bash
+pbi page export "Sales Overview" -o sales.yaml
+```
+
+This gives you the complete YAML spec — position, size, styling, bindings, column widths, display names, filters, sort, interactions, and the raw `pbir` block for full fidelity.
 
 ## The Apply Workflow (Preferred)
 
-`pbi apply` creates, styles, binds, and positions visuals from a declarative YAML file in a single command. It is the most efficient way to build or modify pages.
+`pbi apply` creates, styles, binds, and positions visuals from a declarative YAML file in a single command.
 
-### Building a new page
+### Export → Edit → Apply
 
-Write a YAML spec and apply it:
+```bash
+pbi page export "Sales Overview" -o sales.yaml   # capture current state
+# edit sales.yaml (change what you need)
+pbi diff sales.yaml                               # preview changes property-by-property
+pbi apply sales.yaml --dry-run                    # validate
+pbi apply sales.yaml                              # apply
+pbi validate                                      # check layout + structure
+```
+
+Common YAML edits:
+- Reposition/resize visuals (`position` / `size`)
+- Change titles, colors, borders (inline properties)
+- Swap bindings (field references under `bindings`)
+- Add/remove visuals (append to or delete from `visuals` list; use `--overwrite` for deletions)
+- Duplicate a visual (copy a YAML block, change the `name`)
+- Restyle everything (find-and-replace a color)
+
+### Interactions and Bookmarks in YAML
+
+Instead of running 20+ imperative `pbi interaction set` commands, declare them in the YAML:
 
 ```yaml
-# new-page.yaml
-version: 1
 pages:
 - name: Sales Overview
-  width: 1920
-  height: 1080
-  background:
-    color: '#F5F5F5'
-  visuals:
-  - name: slicerRegion
-    type: slicer
-    position: 16, 8
-    size: 308 x 79
-    title:
-      show: true
-      text: Region
-      fontSize: 9
-    border:
-      show: true
-      radius: 4
-    bindings:
-      Values:
-      - Sales.Region
+  interactions:
+  - source: slicerRegion
+    target: revenueChart
+    type: DataFilter
+  - source: kpiStrip
+    target: revenueChart
+    type: NoFilter
+  visuals: [...]
 
-  - name: revenueTable
-    type: tableEx
-    position: 16, 200
-    size: 1888 x 500
-    title:
-      show: true
-      text: Revenue by Product
-      fontSize: 12
-      bold: true
-    border:
-      show: true
-      radius: 10
-    shadow:
-      show: true
-      transparency: 80
-    columnHeaders:
-      fontColor: '#FFFFFF'
-      backColor: '#2E7D8C'
-      bold: true
-    values:
-      fontColor: '#323130'
-    grid:
-      horizontal: true
-      horizontalColor: '#EDEBE9'
-      vertical: false
-    bindings:
-      Values:
-      - Products.Name
-      - Products.Category
-      - Measures.TotalRevenue
+bookmarks:
+- name: Minimal View
+  page: Sales Overview
+  hide: [detailTable, footnote]
 ```
 
-```bash
-pbi apply new-page.yaml --dry-run    # preview changes
-pbi apply new-page.yaml              # create the page and visuals
-pbi validate                         # verify structural integrity
-```
-
-One command creates the page, all visuals, binds data, and applies formatting.
-
-### Modifying an existing page (export → edit → apply)
-
-This is the most common workflow. Export the current page, edit the YAML, and apply it back.
-
-**Step 1 — Export the page:**
-
-```bash
-pbi page export "Sales Overview" -o sales.yaml
-```
-
-This captures every visual with its position, size, styling, bindings, column widths, display names, filters, sort definitions, and any page tooltip/drillthrough binding metadata. The output is a complete, editable snapshot of the page.
-
-**Step 2 — Edit the YAML:**
-
-The exported YAML is human-readable. Make your changes directly:
+### Conditional Formatting in YAML
 
 ```yaml
-visuals:
-- name: revenueTable
-  position: 16, 200          # ← move it
-  size: 1888 x 600           # ← make it taller
-  title:
-    text: Q2 Revenue         # ← change the title
-  bindings:
-    Values:
-    - Products.Name
-    - Products.Category
-    - Measures.Q2Revenue      # ← swap the measure
-
-# Add a new visual — just append to the list
-- name: regionSlicer
-  type: slicer
-  position: 16, 8
-  size: 308 x 79
-  title: { show: true, text: Region }
-  border: { show: true, radius: 4 }
-  bindings:
-    Values:
-    - Sales.Region
+conditionalFormatting:
+  dataPoint.fill:
+    mode: measure
+    source: Measures.ComplianceColor
+  values.fontColor:
+    mode: gradient
+    source: Sales.Revenue
+    min: { color: "#FF0000", value: 0 }
+    max: { color: "#00FF00", value: 100 }
 ```
 
-Common edits:
-- Reposition or resize visuals (change `position` / `size`)
-- Change titles, colors, border radius (edit properties inline)
-- Swap data bindings (change field references in `bindings`)
-- Add new visuals (append to the `visuals` list)
-- Remove visuals (delete from the list + use `--overwrite`)
-- Duplicate a visual (copy a block, change the `name`)
-- Restyle everything (find-and-replace a color across the file)
-
-Binding shorthand supports both the original field-only form and richer entries for renamed/sized fields:
+### Filters in YAML
 
 ```yaml
-bindings:
-  Values:
-  - Products.Name
-  - field: Products.Category
-    displayName: Category
-    width: 220
-  - Measures.TotalRevenue | Revenue | 160
+filters:
+- field: Product.Category
+  type: include
+  values: [Bikes, Accessories]
+- field: Devices.Manufacturer
+  type: topN
+  count: 15
+  by: Measures Table.Total Devices
+- field: Sales.Revenue
+  type: range
+  min: 1000
+  max: 50000
 ```
 
-**Step 3 — Preview and apply:**
+## Styles (Reusable Formatting)
+
+Styles save formatting as named presets. Use them to keep visuals consistent across pages without repeating property lists.
+
+### Capture a style from an existing visual
 
 ```bash
-pbi apply sales.yaml --dry-run     # preview what would change
-pbi apply sales.yaml               # apply (additive — only touches visuals in the YAML)
-pbi validate                       # verify structural integrity
+pbi style create card-style --from-visual "Executive Overview" --visual kpiStrip
 ```
 
-**Step 4 (optional) — Full reconciliation:**
-
-Use `--overwrite` when the YAML should be the single source of truth. Visuals not in the YAML will be removed. A backup is created automatically and rolled back on failure:
+### Apply a style
 
 ```bash
-pbi apply sales.yaml --overwrite
+# To one visual
+pbi style apply "Device Intelligence" kpiStrip --style card-style
+
+# To all visuals of a type on a page
+pbi style apply "Device Intelligence" --visual-type cardVisual --style card-style
+
+# In YAML — just reference the style name
+- name: kpiStrip
+  type: cardVisual
+  style: card-style
+  bindings: { ... }
 ```
 
-### Why export → edit → apply is the fastest workflow
-
-| Alternative approach | Calls for a 10-visual page restyle |
-|---|---|
-| Imperative (`visual set` + `bind` + `column` per visual) | ~80 calls |
-| Write YAML from scratch | 1 call, but you write ~100 lines |
-| **Export → edit → apply** | **1 export + 1 apply, edit only what changed** |
-
-The export gives you a correct starting point — you don't need to know the YAML format, property names, or binding syntax. Just export, change what you want, and apply.
-
-### Example: restyle a page to match another
-
-A common task: "make the Sign-In page look like the Device Estate page."
+### Global styles (shared across projects)
 
 ```bash
-# 1. Export both pages
-pbi page export "Device Estate" -o device-estate.yaml
-pbi page export "Sign-In & Activity" -o sign-in.yaml
-
-# 2. Copy the styling from device-estate.yaml into sign-in.yaml
-#    (border, shadow, padding, columnHeaders, grid properties)
-#    The YAML is plain text — copy-paste or find-and-replace works.
-
-# 3. Preview and apply
-pbi apply sign-in.yaml --dry-run
-pbi apply sign-in.yaml
+pbi style create card-style ... --global        # save to ~/.config/pbi/styles/
+pbi style clone card-style --to-project         # copy global → project
+pbi style clone card-style --to-global          # copy project → global
+pbi style list                                  # shows both scopes
 ```
 
-No need to reverse-engineer the reference page's formatting with `visual get` calls — the exported YAML has everything.
+Style resolution: project-scoped styles take priority, global styles are the fallback.
 
-### Key behaviors
-
-- **Additive by default** — only visuals and properties in the YAML are touched; existing visuals not in the YAML are left alone
-- **Stable IDs** — export includes `id` values so re-apply updates the same visuals instead of creating duplicates
-- **Dry-run** — always available to preview changes before writing; lists all visuals that would be created on new pages and visuals that would be deleted in overwrite mode
-- **Overwrite mode** — full reconciliation with automatic backup and rollback on failure; reports deleted visuals in output
-- **Visual type conversion** — when a YAML visual has an existing `id` but a different `type`, the old visual is deleted and recreated with the new type (preserving position, size, and name)
-- **Round-trip safe** — exported YAML can be re-applied without modification; bindings, column widths, display names, and page tooltip/drillthrough metadata survive the round-trip
-
-### YAML property reference
-
-The high-level YAML properties map directly to CLI property names:
-
-```yaml
-# Container properties (all visual types)
-title: { show, text, fontSize, bold, color }
-border: { show, radius, width }
-shadow: { show, transparency }
-padding: { top, bottom, left, right }
-
-# Table properties (tableEx, matrix)
-columnHeaders: { fontColor, backColor, fontSize, bold, fontFamily, wordWrap }
-values: { fontColor, backColor, fontSize, fontFamily, wordWrap }
-grid: { rowPadding, textSize, horizontal, horizontalColor, horizontalWeight, vertical }
-
-# MultiRowCard properties
-categoryLabels: { show, fontSize, color }
-
-# Chart properties
-legend: { show, position, fontSize }
-labels: { show, fontSize, color }
-xAxis: { show, title, fontSize }
-yAxis: { show, title, fontSize }
-
-# Slicer properties
-slicerHeader: { show, fontColor, background, fontSize }
-
-# Action button
-action: { show, type }  # type: Back, Bookmark, PageNavigation, WebUrl
-```
-
-#### Bracket selectors (per-measure formatting)
-
-Per-measure formatting uses bracket notation in YAML. This is the same syntax that `pbi page export` produces:
-
-```yaml
-value:
-  fontSize [Measures Table.Total Devices]: 20
-  labelDisplayUnits [Measures Table.Total Devices]: 1.0
-  labelDisplayUnits [Measures Table.Non-Compliant Devices]: 1.0
-```
-
-#### chart: prefix (unregistered chart properties)
-
-For chart object properties not in the named property registry, use the `chart:` prefix:
-
-```yaml
-chart:legend.seriesOrder: descending
-chart:icon.shapeType [default]: back
-chart:layout.contentOrder: callout_image_referenceLabel
-chart:padding.paddingUniform: 12
-```
-
-### The `pbir` block (advanced)
-
-Exported YAML includes a `pbir` block on each visual — this is the raw PBIR JSON payload that preserves everything, including features the high-level properties don't cover (conditional formatting, per-measure selectors, complex object structures).
-
-In most workflows, you don't need to touch the `pbir` block. The high-level properties and bindings handle position, size, styling, and data. The `pbir` block is there for:
-
-- **Full-fidelity round-trip** — export preserves it, apply passes it through, nothing is lost
-- **Advanced formatting** — conditional formatting rules, per-measure accent bar colors, gradient stops
-- **Selector-heavy objects** — properties that vary by field (e.g. different column widths per column)
-- **Unsupported visual types** — the `pbir` block carries any visual through even if the CLI doesn't have named properties for it
-
-When editing exported YAML, prefer changing the high-level properties over modifying the `pbir` block. The high-level fields override the `pbir` payload for: `position`, `size`, `isHidden`, `bindings`, `sort`, and `filters`.
-
-## Imperative Commands (For Quick Edits)
-
-Use these for targeted changes to existing visuals:
+## Bulk Operations
 
 ```bash
-# Change a single property
-pbi visual set "Sales" revenueChart title.text="Q2 Revenue"
+# Set properties across all pages
+pbi visual set-all border.show=true border.radius=4 --all-pages --visual-type slicer
 
-# Batch properties on one visual
-pbi visual set "Sales" revenueChart border.show=true border.radius=8 shadow.show=true
+# Set properties only where a value matches
+pbi visual set-all border.color="#DDD6CC" --all-pages --where border.color="#EDEBE9"
 
-# Apply to all visuals of a type on one page
-pbi visual set-all border.show=true border.radius=4 --page "Sales" --visual-type slicer
+# Rename a column everywhere
+pbi visual column "any" "any" DevicesWithPrimaryUser.UPN --rename "User Principal Name" --all-pages
 
-# Apply across ALL pages at once
-pbi visual set-all columnHeaders.backColor="#162F38" --all-pages --visual-type tableEx
-
-# Set properties on all pages
-pbi page set-all background.color="#F0EDE8"
-pbi page set-all background.color="#F0EDE8" --exclude "_"
-
-# Rename a table column
-pbi visual column "Sales" revenueTable "Products.Name" --rename "Product" -w 300
-
-# Move and resize (width/height independently optional)
-pbi visual move "Sales" revenueChart --x 16 --y 200
-pbi visual resize "Sales" revenueChart --width 940 --height 400
-pbi visual resize "Sales" revenueChart --height 120    # keep existing width
+# Migrate all per-visual overrides when changing themes
+pbi theme migrate old-theme.json new-theme.json --dry-run
+pbi theme migrate old-theme.json new-theme.json
 ```
 
-## Naming Strategy
-
-Give visuals friendly names early — either in the YAML (`name:` field) or with `--name` on create:
+## Imperative Commands (Quick Edits)
 
 ```bash
-pbi visual create "Sales" clusteredColumnChart --name revenueChart
-pbi visual rename "Sales" 3 detailTable
+pbi visual set "Sales" chart title.text="Q2 Revenue" border.radius=8
+pbi visual move "Sales" chart --x 16 --y 200
+pbi visual resize "Sales" chart --width 940 --height 400
+pbi visual bind "Sales" chart Values Sales.Revenue
+pbi visual align "Sales" s1 s2 s3 s4 --distribute horizontal --margin 16
+pbi visual align "Sales" chart1 chart2 --align top --match-height
 ```
-
-Why:
-- friendly names make all commands deterministic (no ambiguous index/ID lookups)
-- export preserves names so YAML stays readable
-- templates and apply both key on names for updates vs creates
-
-## Discovery
-
-Before building, understand the report structure and available data:
-
-```bash
-pbi info                           # tree view of pages and visuals
-pbi map -o report.yaml             # full index with bindings and filters
-pbi map --page "Sales Overview"    # single page detail
-pbi map --pages                    # pages only, no model section
-pbi map --model                    # model only, no pages section
-pbi page list                      # page table with sizes and counts
-pbi visual list "Page Name"        # visual table with positions and types
-pbi model tables                   # semantic model tables
-pbi model columns TableName        # columns in a table
-pbi model measures "Measures Table" # available measures
-```
-
-For an existing page you want to restyle, export first:
-
-```bash
-pbi page export "Sales Overview" -o sales.yaml
-```
-
-This gives you the complete YAML spec you can edit and re-apply.
-
-## Filters
-
-```bash
-pbi filter add Product.Category --mode include --value Bikes --value Accessories
-pbi filter add Sales.Revenue --mode range --min 1000 --max 50000 --locked
-pbi filter add Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue
-pbi filter add --mode tuple --row "Product.Color=Red,Product.Size=Large"
-pbi filter list --page "Sales"
-```
-
-Supported types: categorical, include, exclude, tuple, range, Top N, relative date, relative time.
-
-## Bookmarks and Interactions
-
-```bash
-pbi bookmark create "Minimal View" "Sales" --hide detailTable
-pbi bookmark update "Minimal View" --show detailTable
-pbi interaction set "Sales" regionSlicer revenueChart NoFilter
-```
-
-## Drillthrough and Tooltip Pages
-
-```bash
-pbi page set-drillthrough "Product Details" Product.Category
-pbi page set-tooltip "Sales Tooltip" Product.Category -W 400 -H 300
-```
-
-## Templates
-
-Use templates for reusable layout scaffolds (positions + formatting, no data):
-
-```bash
-pbi page save-template "Sales Overview" sales-layout
-pbi page apply-template "Q2 Sales" sales-layout
-pbi page templates              # list available templates
-```
-
-Templates preserve layout and formatting but not bindings, sort, or filters.
 
 ## Validation
 
@@ -389,3 +187,15 @@ Run after any structural changes:
 ```bash
 pbi validate
 ```
+
+Checks:
+- JSON structure and required fields
+- Page order consistency
+- Visual interaction references
+- Bookmark schema compliance
+- **Layout issues** — overlapping visuals, out-of-bounds, zero-size
+- **Relationship gaps** — cross-table bindings without a relationship path
+
+## Naming Strategy
+
+Name visuals early (`name:` in YAML or `--name` on create). Friendly names make commands deterministic, exports readable, and applies idempotent.
