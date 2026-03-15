@@ -70,13 +70,21 @@ app.add_typer(interaction_app, name="interaction")
 
 @app.command()
 def map(
+    page: Annotated[Optional[str], typer.Option("--page", help="Show only this page (name, display name, or index).")] = None,
+    pages_only: Annotated[bool, typer.Option("--pages", help="Show pages only (no model).")] = False,
+    model_only: Annotated[bool, typer.Option("--model", help="Show model only (no pages).")] = False,
     output: Annotated[Optional[Path], typer.Option("-o", "--output", help="Output file (default: stdout). Use 'pbi-map.yaml' for a project index.")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Generate a human-readable YAML map of the entire project."""
     from pbi.mapper import generate_map
     proj = get_project(project)
-    content = generate_map(proj)
+    content = generate_map(
+        proj,
+        page_filter=page,
+        pages_only=pages_only,
+        model_only=model_only,
+    )
 
     if output:
         out_path = output if output.is_absolute() else proj.root / output
@@ -175,6 +183,9 @@ def apply_cmd(
     if result.visuals_updated:
         for p, v in result.visuals_updated:
             console.print(f'{prefix}Updated visual "[cyan]{v}[/cyan]" on "{p}"')
+    if result.visuals_deleted:
+        for p, v in result.visuals_deleted:
+            console.print(f'{prefix}Deleted visual "[cyan]{v}[/cyan]" on "{p}" (not in YAML)')
 
     if result.properties_set or result.bindings_added or result.filters_added:
         parts = []

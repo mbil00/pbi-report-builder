@@ -54,6 +54,7 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     """Apply a custom theme JSON file to the project.
 
     Copies the theme file to RegisteredResources/ and updates report.json.
+    Removes any previously applied custom theme first.
     Returns the theme name.
     """
     # Read and validate theme JSON
@@ -62,10 +63,12 @@ def apply_theme(project: Project, theme_path: Path) -> str:
 
     theme_name = theme_data.get("name", theme_path.stem)
 
-    # Copy theme to RegisteredResources
+    # Remove existing custom theme (file + resource entry) before applying new one
+    _remove_existing_custom_theme(project)
+
+    # Copy theme to RegisteredResources (flat, not in BaseThemes/ subdirectory)
     resources_dir = (
-        project.report_folder / "StaticResources"
-        / "RegisteredResources" / "BaseThemes"
+        project.report_folder / "StaticResources" / "RegisteredResources"
     )
     resources_dir.mkdir(parents=True, exist_ok=True)
     dest = resources_dir / f"{theme_name}.json"
@@ -75,15 +78,23 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     report = _read_report(project)
     _normalize_resource_packages(report)
     report.setdefault("$schema", REPORT_SCHEMA)
-    report.setdefault("layoutOptimization", "None")
     report.setdefault("themeCollection", {})
+
+    # Get reportVersionAtImport from baseTheme (must be an object, not a string)
+    base_theme = report.get("themeCollection", {}).get("baseTheme", {})
+    version_at_import = base_theme.get("reportVersionAtImport", {})
+    if not isinstance(version_at_import, dict):
+        version_at_import = {}
 
     # Set custom theme reference
     report["themeCollection"]["customTheme"] = {
         "name": theme_name,
-        "reportVersionAtImport": "5.55",
+        "reportVersionAtImport": version_at_import,
         "type": "RegisteredResources",
     }
+
+    # Remove layoutOptimization if present (not in PBIR schema)
+    report.pop("layoutOptimization", None)
 
     # Ensure resourcePackages has the registered resources entry
     _ensure_resource_entry(report, theme_name)
@@ -103,17 +114,17 @@ def export_theme(project: Project, output_path: Path) -> str:
         raise FileNotFoundError("No custom theme applied to this project")
 
     theme_name = custom.get("name", "")
-    # Look in RegisteredResources
-    theme_file = (
-        project.report_folder / "StaticResources"
-        / "RegisteredResources" / "BaseThemes" / f"{theme_name}.json"
-    )
+    # Look in RegisteredResources — try flat first, then legacy BaseThemes/ path
+    reg_dir = project.report_folder / "StaticResources" / "RegisteredResources"
+    theme_file = reg_dir / f"{theme_name}.json"
     if not theme_file.exists():
-        # Also try without BaseThemes/
-        theme_file = (
-            project.report_folder / "StaticResources"
-            / "RegisteredResources" / f"{theme_name}.json"
-        )
+        theme_file = reg_dir / "BaseThemes" / f"{theme_name}.json"
+    if not theme_file.exists():
+        # Try matching by filename pattern (handles numeric suffixed names)
+        for candidate in reg_dir.glob("*.json"):
+            if candidate.stem.startswith(theme_name.split(".")[0]):
+                theme_file = candidate
+                break
     if not theme_file.exists():
         raise FileNotFoundError(
             f'Theme file for "{theme_name}" not found in RegisteredResources'
@@ -128,7 +139,6 @@ def remove_theme(project: Project) -> str | None:
     report = _read_report(project)
     _normalize_resource_packages(report)
     report.setdefault("$schema", REPORT_SCHEMA)
-    report.setdefault("layoutOptimization", "None")
     report.setdefault("themeCollection", {})
     custom = report.get("themeCollection", {}).pop("customTheme", None)
     if not custom:
@@ -137,26 +147,254 @@ def remove_theme(project: Project) -> str | None:
     theme_name = custom.get("name", "")
 
     # Remove from resourcePackages
-    for pkg in report.get("resourcePackages", []):
-        if pkg.get("name") == "RegisteredResources":
-            items = pkg.get("items", [])
-            pkg["items"] = [
-                i for i in items if i.get("name") != theme_name
-            ]
+    _remove_resource_items_by_type(report, "CustomTheme")
 
-    # Remove file if it exists
-    theme_file = (
-        project.report_folder / "StaticResources"
-        / "RegisteredResources" / "BaseThemes" / f"{theme_name}.json"
-    )
-    if theme_file.exists():
-        theme_file.unlink()
+    # Remove file if it exists (check both flat and legacy paths)
+    _delete_theme_file(project, theme_name)
+
+    # Clean up layoutOptimization if present
+    report.pop("layoutOptimization", None)
 
     _write_report(project, report)
     return theme_name
 
 
+@dataclass
+class ColorReplacement:
+    """A color mapping from old theme to new theme."""
+    old_color: str
+    new_color: str
+    property_path: str  # e.g. "visualStyles.tableEx.*.columnHeaders.backColor"
+    count: int = 0  # number of visuals affected
+
+
+@dataclass
+class MigrateResult:
+    """Summary of what a theme migration would change."""
+    replacements: list[ColorReplacement]
+    page_background_changes: int = 0
+
+    @property
+    def total_changes(self) -> int:
+        return sum(r.count for r in self.replacements) + self.page_background_changes
+
+
+def migrate_theme(
+    project: Project,
+    old_theme_path: Path,
+    new_theme_path: Path,
+    *,
+    dry_run: bool = False,
+) -> MigrateResult:
+    """Migrate visual property overrides from old theme colors to new theme colors.
+
+    Compares the two theme JSONs to build a color mapping, then scans all visuals
+    for properties matching old colors and replaces them with new colors.
+    """
+    from pbi.properties import (
+        PAGE_PROPERTIES,
+        get_property,
+        set_property,
+    )
+
+    with open(old_theme_path, encoding="utf-8-sig") as f:
+        old_theme = json.load(f)
+    with open(new_theme_path, encoding="utf-8-sig") as f:
+        new_theme = json.load(f)
+
+    # Build color mapping by comparing theme properties at the same paths
+    color_map = _build_color_map(old_theme, new_theme)
+    if not color_map:
+        return MigrateResult(replacements=[])
+
+    result = MigrateResult(replacements=[
+        ColorReplacement(old_color=old, new_color=new, property_path=path)
+        for (old, new), path in zip(color_map.items(), color_map.keys())
+    ])
+    # Rebuild as simple old→new (deduplicated)
+    result.replacements = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for old_c, new_c in color_map.items():
+        pair = (old_c.lower(), new_c.lower())
+        if pair not in seen_pairs and pair[0] != pair[1]:
+            seen_pairs.add(pair)
+            result.replacements.append(ColorReplacement(
+                old_color=old_c, new_color=new_c, property_path="",
+            ))
+
+    # Scan all visuals and pages for color properties matching old values
+    for page in project.get_pages():
+        # Check page background color
+        page_bg = get_property(page.data, "background.color", PAGE_PROPERTIES)
+        if isinstance(page_bg, str):
+            mapped = _match_color(page_bg, color_map)
+            if mapped:
+                if not dry_run:
+                    set_property(page.data, "background.color", mapped, PAGE_PROPERTIES)
+                    page.save()
+                result.page_background_changes += 1
+
+        # Check all visuals
+        for visual in project.get_visuals(page):
+            if "visualGroup" in visual.data:
+                continue
+            changed = _migrate_visual_colors(visual.data, color_map, dry_run=dry_run)
+            if changed and not dry_run:
+                visual.save()
+            # Update counts on replacements
+            for repl in result.replacements:
+                repl.count += _count_visual_color_matches(visual.data, repl.old_color)
+
+    return result
+
+
+def _build_color_map(old_theme: dict, new_theme: dict) -> dict[str, str]:
+    """Extract color mappings by comparing same-path values in two themes."""
+    old_colors: dict[str, str] = {}
+    new_colors: dict[str, str] = {}
+    _extract_colors(old_theme, "", old_colors)
+    _extract_colors(new_theme, "", new_colors)
+
+    mapping: dict[str, str] = {}
+    for path, old_val in old_colors.items():
+        new_val = new_colors.get(path)
+        if new_val and old_val.lower() != new_val.lower():
+            mapping[old_val] = new_val
+
+    return mapping
+
+
+def _extract_colors(obj: object, path: str, out: dict[str, str]) -> None:
+    """Recursively extract color values (hex strings) from a theme dict."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            _extract_colors(value, f"{path}.{key}" if path else key, out)
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            _extract_colors(item, f"{path}[{i}]", out)
+    elif isinstance(obj, str) and obj.startswith("#") and len(obj) in (4, 7, 9):
+        out[path] = obj
+
+
+def _match_color(value: str, color_map: dict[str, str]) -> str | None:
+    """Find a matching old color in the map (case-insensitive)."""
+    for old, new in color_map.items():
+        if old.lower() == value.lower():
+            return new
+    return None
+
+
+def _migrate_visual_colors(
+    data: dict, color_map: dict[str, str], *, dry_run: bool,
+) -> bool:
+    """Scan and replace colors in visual objects. Returns True if changes were made."""
+    changed = False
+    for objects_key in ("objects", "visualContainerObjects"):
+        objects = data.get("visual", {}).get(objects_key, {})
+        for _obj_key, entries in objects.items():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                props = entry.get("properties", {})
+                for prop_name, raw_value in list(props.items()):
+                    color_str = _extract_color_from_value(raw_value)
+                    if color_str:
+                        replacement = _match_color(color_str, color_map)
+                        if replacement and not dry_run:
+                            _replace_color_in_value(props, prop_name, replacement)
+                            changed = True
+                        elif replacement:
+                            changed = True
+    return changed
+
+
+def _extract_color_from_value(raw: object) -> str | None:
+    """Extract hex color string from a PBI encoded value."""
+    if isinstance(raw, dict):
+        if "solid" in raw:
+            color = raw["solid"].get("color")
+            if isinstance(color, str) and color.startswith("#"):
+                return color
+            if isinstance(color, dict):
+                literal = color.get("expr", {}).get("Literal", {}).get("Value")
+                if isinstance(literal, str) and literal.startswith("'#"):
+                    return literal.strip("'")
+    return None
+
+
+def _replace_color_in_value(props: dict, prop_name: str, new_color: str) -> None:
+    """Replace color in a PBI encoded value structure."""
+    from pbi.properties import encode_pbi_value
+    props[prop_name] = encode_pbi_value(new_color, "color")
+
+
+def _count_visual_color_matches(data: dict, color: str) -> int:
+    """Count how many times a color appears in visual objects."""
+    count = 0
+    for objects_key in ("objects", "visualContainerObjects"):
+        objects = data.get("visual", {}).get(objects_key, {})
+        for entries in objects.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                for raw_value in entry.get("properties", {}).values():
+                    color_str = _extract_color_from_value(raw_value)
+                    if color_str and color_str.lower() == color.lower():
+                        count += 1
+    return count
+
+
 # ── Helpers ──────────────────────────────────────────────────
+
+def _remove_existing_custom_theme(project: Project) -> None:
+    """Remove any existing custom theme file and resource entry."""
+    report = _read_report(project)
+    custom = report.get("themeCollection", {}).get("customTheme")
+    if not custom:
+        return
+
+    theme_name = custom.get("name", "")
+
+    # Remove the file
+    _delete_theme_file(project, theme_name)
+
+    # Remove old resource entries with type CustomTheme
+    _remove_resource_items_by_type(report, "CustomTheme")
+
+    # Remove the customTheme reference
+    report.get("themeCollection", {}).pop("customTheme", None)
+
+    _write_report(project, report)
+
+
+def _delete_theme_file(project: Project, theme_name: str) -> None:
+    """Delete a theme file from RegisteredResources (flat or BaseThemes/)."""
+    reg_dir = project.report_folder / "StaticResources" / "RegisteredResources"
+    for path in [
+        reg_dir / f"{theme_name}.json",
+        reg_dir / "BaseThemes" / f"{theme_name}.json",
+    ]:
+        if path.exists():
+            path.unlink()
+
+    # Also check resource items for the path and clean up the actual file
+    report = _read_report(project)
+    for pkg in report.get("resourcePackages", []):
+        if pkg.get("name") == "RegisteredResources":
+            for item in pkg.get("items", []):
+                if item.get("type") == "CustomTheme":
+                    item_path = reg_dir / item.get("path", "")
+                    if item_path.exists():
+                        item_path.unlink()
+
+
+def _remove_resource_items_by_type(report: dict, item_type: str) -> None:
+    """Remove all resource items of the given type from RegisteredResources."""
+    for pkg in report.get("resourcePackages", []):
+        if pkg.get("name") == "RegisteredResources":
+            items = pkg.get("items", [])
+            pkg["items"] = [i for i in items if i.get("type") != item_type]
+
 
 def _read_report(project: Project) -> dict:
     path = project.definition_folder / "report.json"
@@ -201,7 +439,7 @@ def _ensure_resource_entry(report: dict, theme_name: str) -> None:
     items.append({
         "type": "CustomTheme",
         "name": theme_name,
-        "path": f"BaseThemes/{theme_name}.json",
+        "path": f"{theme_name}.json",
     })
 
 

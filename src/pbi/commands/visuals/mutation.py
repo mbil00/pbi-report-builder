@@ -46,36 +46,56 @@ def visual_set(
 
 @visual_app.command("set-all")
 def visual_set_all(
-    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value ...")],
+    page: Annotated[str | None, typer.Argument(help="Page name, display name, or index. Omit with --all-pages.")] = None,
+    assignments: Annotated[list[str] | None, typer.Argument(help="Property assignments: prop=value ...")] = None,
     visual_type: Annotated[str | None, typer.Option("--visual-type", help="Only apply to visuals of this type (e.g. slicer, cardVisual, tableEx).")] = None,
+    all_pages: Annotated[bool, typer.Option("--all-pages", help="Apply to all pages.")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Set properties on multiple visuals at once."""
-    proj, pg = resolve_page_target(project, page)
-    visuals = proj.get_visuals(pg)
-    if visual_type:
-        visuals = [vis for vis in visuals if vis.visual_type == visual_type]
-        if not visuals:
-            console.print(f'[yellow]No visuals of type "{visual_type}" on page "{pg.display_name}".[/yellow]')
-            raise typer.Exit(0)
+    if not assignments:
+        console.print("[red]Error:[/red] Provide at least one prop=value assignment.")
+        raise typer.Exit(1)
 
-    visuals = [vis for vis in visuals if "visualGroup" not in vis.data]
+    if not all_pages and not page:
+        console.print("[red]Error:[/red] Provide a page name or use --all-pages.")
+        raise typer.Exit(1)
+
+    from ..common import get_project
+
+    proj = get_project(project)
+
+    if all_pages:
+        target_pages = proj.get_pages()
+    else:
+        _, pg = resolve_page_target(project, page)
+        target_pages = [pg]
 
     try:
         pairs = parse_property_assignments(assignments)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
     prepared: list[tuple[object, dict, list[tuple[str, object, object]]]] = []
-    for vis in visuals:
-        try:
-            updated, changes = prepare_visual_property_updates(vis.data, pairs)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {vis.name}: {e}")
-            raise typer.Exit(1)
-        prepared.append((vis, updated, changes))
+    for pg in target_pages:
+        visuals = proj.get_visuals(pg)
+        if visual_type:
+            visuals = [vis for vis in visuals if vis.visual_type == visual_type]
+        visuals = [vis for vis in visuals if "visualGroup" not in vis.data]
+        for vis in visuals:
+            try:
+                updated, changes = prepare_visual_property_updates(vis.data, pairs)
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {vis.name}: {e}")
+                raise typer.Exit(1)
+            prepared.append((vis, updated, changes))
+
+    if not prepared:
+        scope = f' of type "{visual_type}"' if visual_type else ""
+        console.print(f"[yellow]No visuals{scope} found.[/yellow]")
+        raise typer.Exit(0)
 
     if dry_run:
         totals: dict[str, int] = {}
@@ -97,8 +117,9 @@ def visual_set_all(
         count_done += 1
 
     scope = f"visual-type={visual_type}" if visual_type else "all"
+    page_scope = "all pages" if all_pages else f'page "{page}"'
     props_str = " ".join(f"{prop}={value}" for prop, value in pairs)
-    console.print(f'Applied {props_str} to [cyan]{count_done}[/cyan] visuals ({scope})')
+    console.print(f'Applied {props_str} to [cyan]{count_done}[/cyan] visuals ({scope}, {page_scope})')
 
 
 @visual_app.command("move")
@@ -124,16 +145,22 @@ def visual_move(
 def visual_resize(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
-    width: Annotated[int, typer.Option("-W", "--width", help="Width.")],
-    height: Annotated[int, typer.Option("-H", "--height", help="Height.")],
+    width: Annotated[int | None, typer.Option("-W", "--width", help="Width (keeps current if omitted).")] = None,
+    height: Annotated[int | None, typer.Option("-H", "--height", help="Height (keeps current if omitted).")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Resize a visual."""
+    if width is None and height is None:
+        console.print("[red]Error:[/red] Provide at least one of --width or --height.")
+        raise typer.Exit(1)
+
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
 
     old_w = vis.position.get("width", 0)
     old_h = vis.position.get("height", 0)
-    vis.data.setdefault("position", {})["width"] = width
-    vis.data["position"]["height"] = height
+    new_w = width if width is not None else old_w
+    new_h = height if height is not None else old_h
+    vis.data.setdefault("position", {})["width"] = new_w
+    vis.data["position"]["height"] = new_h
     vis.save()
-    console.print(f"[dim]Resized:[/dim] {old_w}x{old_h} [dim]->[/dim] {width}x{height}")
+    console.print(f"[dim]Resized:[/dim] {old_w}x{old_h} [dim]->[/dim] {new_w}x{new_h}")

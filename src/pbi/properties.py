@@ -853,7 +853,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         container_key="layout", container_prop="alignment", objects_path="objects",
     ),
     "layout.contentOrder": PropertyDef(
-        None, "long", "Content order",
+        None, "enum", "Content order",
         container_key="layout", container_prop="contentOrder", objects_path="objects",
     ),
     "layout.orientation": PropertyDef(
@@ -1836,10 +1836,22 @@ def set_property(
     visual.objects properties dynamically with auto-inferred value types.
     """
     original_name = prop_name
+
+    # Extract bracket selector if present (e.g. "value.fontSize [Measures.X]")
+    # This enables per-measure formatting from YAML round-trip
+    bracket_measure = measure_ref
+    if bracket_measure is None and " [" in prop_name and prop_name.endswith("]"):
+        base, selector_part = prop_name.rsplit(" [", 1)
+        bracket_measure = selector_part[:-1]
+        prop_name = base
+
     prop_name = normalize_property_name(prop_name, registry)
 
     # Dynamic chart property: chart:<objectKey>.<propName>
     if prop_name.startswith("chart:"):
+        # Re-attach bracket selector for chart: properties (they handle it internally)
+        if bracket_measure is not None and measure_ref is None:
+            prop_name = f"{prop_name} [{bracket_measure}]"
         _set_dynamic_chart_prop(data, prop_name, value)
         return
 
@@ -1854,7 +1866,7 @@ def set_property(
             )
 
     if prop_def and prop_def.container_key:
-        _set_container_prop(data, prop_def, value, measure_ref=measure_ref)
+        _set_container_prop(data, prop_def, value, measure_ref=bracket_measure)
     elif prop_def and prop_def.json_path:
         coerced = _coerce_simple(value, prop_def.value_type)
         _set_by_path(data, prop_def.json_path, coerced)

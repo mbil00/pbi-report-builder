@@ -230,6 +230,49 @@ def page_set(
     pg.save()
 
 
+@page_app.command("set-all")
+def page_set_all(
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...].")],
+    exclude: Annotated[str | None, typer.Option("--exclude", help="Exclude pages whose display name contains this string.")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would change without saving.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Set properties on all pages at once."""
+    proj = get_project(project)
+    pages = proj.get_pages()
+
+    if exclude:
+        pages = [p for p in pages if exclude not in p.display_name]
+
+    if not pages:
+        console.print("[yellow]No pages match the filter.[/yellow]")
+        raise typer.Exit(0)
+
+    try:
+        pairs = parse_property_assignments(assignments)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    count_done = 0
+    for pg in pages:
+        for prop, value in pairs:
+            try:
+                set_property(pg.data, prop, value, PAGE_PROPERTIES)
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {pg.display_name}: {prop}: {e}")
+                raise typer.Exit(1)
+        if not dry_run:
+            pg.save()
+        count_done += 1
+
+    props_str = " ".join(f"{prop}={value}" for prop, value in pairs)
+    if dry_run:
+        console.print(f"Would set {props_str} on [cyan]{count_done}[/cyan] page(s)")
+    else:
+        console.print(f"Applied {props_str} to [cyan]{count_done}[/cyan] page(s)")
+
+
 @page_app.command("properties")
 def page_props() -> None:
     """List available page properties."""

@@ -39,6 +39,7 @@ class ApplyResult:
     pages_updated: list[str] = field(default_factory=list)
     visuals_created: list[tuple[str, str]] = field(default_factory=list)
     visuals_updated: list[tuple[str, str]] = field(default_factory=list)
+    visuals_deleted: list[tuple[str, str]] = field(default_factory=list)
     properties_set: int = 0
     bindings_added: int = 0
     filters_added: int = 0
@@ -50,6 +51,7 @@ class ApplyResult:
         return bool(
             self.pages_created or self.pages_updated
             or self.visuals_created or self.visuals_updated
+            or self.visuals_deleted
         )
 
 
@@ -128,6 +130,7 @@ def _apply_page(
     page_name = page_spec["name"]
 
     # Find or create page
+    page_is_new = False
     try:
         page = project.find_page(page_name)
         result.pages_updated.append(page_name)
@@ -136,68 +139,68 @@ def _apply_page(
         width = page_spec.get("width", 1280)
         height = page_spec.get("height", 720)
         display_option = page_spec.get("displayOption", "FitToPage")
+        page_is_new = True
         if dry_run:
             result.pages_created.append(page_name)
-            return
-        page = project.create_page(
-            page_name,
-            width=width,
-            height=height,
-            display_option=display_option,
-        )
-        result.pages_created.append(page_name)
+            page = None  # type: ignore[assignment]
+        else:
+            page = project.create_page(
+                page_name,
+                width=width,
+                height=height,
+                display_option=display_option,
+            )
+            result.pages_created.append(page_name)
 
-    if dry_run and page_name in result.pages_created:
-        return
-
-    # Apply page properties
-    page_props = {
-        "width": "width",
-        "height": "height",
-        "displayOption": "displayOption",
-        "visibility": "visibility",
-    }
-    for yaml_key, prop_name in page_props.items():
-        if yaml_key in page_spec:
-            value = str(page_spec[yaml_key])
-            if not dry_run:
-                try:
-                    set_property(page.data, prop_name, value, PAGE_PROPERTIES)
+    # Apply page properties (skip for dry-run on new pages — no page object)
+    if not (dry_run and page_is_new):
+        page_props = {
+            "width": "width",
+            "height": "height",
+            "displayOption": "displayOption",
+            "visibility": "visibility",
+        }
+        for yaml_key, prop_name in page_props.items():
+            if yaml_key in page_spec:
+                value = str(page_spec[yaml_key])
+                if not dry_run:
+                    try:
+                        set_property(page.data, prop_name, value, PAGE_PROPERTIES)
+                        result.properties_set += 1
+                    except ValueError as e:
+                        result.errors.append(f"Page {page_name}: {prop_name}: {e}")
+                else:
                     result.properties_set += 1
-                except ValueError as e:
-                    result.errors.append(f"Page {page_name}: {prop_name}: {e}")
-            else:
-                result.properties_set += 1
 
-    try:
-        result.properties_set += apply_page_roundtrip_fields(
-            page.data,
-            page_spec,
-            project_root=project.root,
+        try:
+            result.properties_set += apply_page_roundtrip_fields(
+                page.data,
+                page_spec,
+                project_root=project.root,
+                dry_run=dry_run,
+            )
+        except ValueError as e:
+            result.errors.append(f"Page {page_name}: {e}")
+            return
+
+        # Apply page-level nested objects (background, outspace)
+        _apply_nested_properties(
+            page.data, page_spec,
+            exclude_keys={"name", "width", "height", "displayOption", "visibility",
+                           "visuals", "filters", "type", "pageBinding", "tooltip", "drillthrough"},
+            registry=PAGE_PROPERTIES,
+            result=result,
+            context=f"Page {page_name}",
             dry_run=dry_run,
         )
-    except ValueError as e:
-        result.errors.append(f"Page {page_name}: {e}")
-        return
 
-    # Apply page-level nested objects (background, outspace)
-    _apply_nested_properties(
-        page.data, page_spec,
-        exclude_keys={"name", "width", "height", "displayOption", "visibility",
-                       "visuals", "filters", "type", "pageBinding", "tooltip", "drillthrough"},
-        registry=PAGE_PROPERTIES,
-        result=result,
-        context=f"Page {page_name}",
-        dry_run=dry_run,
-    )
+        # Apply page-level filters
+        if "filters" in page_spec:
+            _apply_filters(page.data, page_spec["filters"], result,
+                           context=f"Page {page_name}", dry_run=dry_run)
 
-    # Apply page-level filters
-    if "filters" in page_spec:
-        _apply_filters(page.data, page_spec["filters"], result,
-                       context=f"Page {page_name}", dry_run=dry_run)
-
-    if not dry_run:
-        page.save()
+        if not dry_run:
+            page.save()
 
     # Apply visuals
     visuals_spec = page_spec.get("visuals", [])
@@ -208,20 +211,28 @@ def _apply_page(
     kept_visual_ids: set[str] = set()
     for vis_spec in visuals_spec:
         if isinstance(vis_spec, dict):
-            _apply_visual(
-                project,
-                page,
-                vis_spec,
-                result,
-                dry_run=dry_run,
-                style_cache=style_cache,
-                keep_visual_ids=kept_visual_ids if not dry_run and overwrite else None,
-            )
+            if dry_run and page_is_new:
+                # For dry-run on new pages, just count the visuals that would be created
+                vis_name = vis_spec.get("name") or vis_spec.get("type", "unknown")
+                result.visuals_created.append((page_name, vis_name))
+                _count_dry_run_changes(vis_spec, result)
+            else:
+                _apply_visual(
+                    project,
+                    page,
+                    vis_spec,
+                    result,
+                    dry_run=dry_run,
+                    style_cache=style_cache,
+                    keep_visual_ids=kept_visual_ids if overwrite else None,
+                )
 
-    if not dry_run and overwrite:
+    if overwrite and not page_is_new:
         for visual in list(project.get_visuals(page)):
             if visual.folder.name not in kept_visual_ids:
-                project.delete_visual(visual)
+                result.visuals_deleted.append((page_name, visual.name))
+                if not dry_run:
+                    project.delete_visual(visual)
 
 
 def _apply_visual(
@@ -257,7 +268,23 @@ def _apply_visual(
         except ValueError:
             pass
 
-    if visual is None and vis_type:
+    # Handle visual type conversion: existing visual with different type
+    if visual is not None and vis_type and visual.visual_type != vis_type:
+        old_type = visual.visual_type
+        x, y = _parse_position(vis_spec.get("position", f"{visual.position.get('x', 0)}, {visual.position.get('y', 0)}"))
+        w, h = _parse_size(vis_spec.get("size", f"{visual.position.get('width', 300)} x {visual.position.get('height', 200)}"))
+        if dry_run:
+            result.visuals_deleted.append((page_name, vis_name or visual.name))
+            result.visuals_created.append((page_name, vis_name or vis_type))
+        else:
+            project.delete_visual(visual)
+            visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
+            if vis_name:
+                visual.data["name"] = vis_name
+                visual.save()
+            result.visuals_deleted.append((page_name, f"{vis_name or visual.name} ({old_type})"))
+            result.visuals_created.append((page_name, vis_name or vis_type))
+    elif visual is None and vis_type:
         # Create new visual
         x, y = _parse_position(vis_spec.get("position", "0, 0"))
         w, h = _parse_size(vis_spec.get("size", "300 x 200"))
@@ -475,21 +502,25 @@ def _apply_sort(
     sort_spec: str,
     result: ApplyResult,
 ) -> None:
-    """Apply sort from a spec like 'Table.Field Descending'."""
-    parts = str(sort_spec).strip().split()
-    if len(parts) < 1:
+    """Apply sort from a spec like 'Table.Field Descending' or 'Measures Table.Total Devices (measure) Descending'."""
+    text = str(sort_spec).strip()
+    if not text:
         return
 
-    field_ref = parts[0]
-    # Handle "(measure)" in the middle
-    is_measure = "(measure)" in sort_spec
-    field_ref = field_ref.replace("(measure)", "").strip()
+    # Handle "(measure)" annotation
+    is_measure = "(measure)" in text
+    text = text.replace("(measure)", "").strip()
+
+    # Extract direction from the end (last word if it's a direction keyword)
     direction = "Descending"
-    for part in parts[1:]:
-        if part.lower() in ("ascending", "asc"):
-            direction = "Ascending"
-        elif part.lower() in ("descending", "desc"):
-            direction = "Descending"
+    for suffix in ("Ascending", "ascending", "asc", "Descending", "descending", "desc"):
+        if text.endswith(f" {suffix}"):
+            direction = "Ascending" if suffix.lower() in ("ascending", "asc") else "Descending"
+            text = text[: -len(suffix)].strip()
+            break
+
+    # Everything remaining is the field reference (Table.Field, may contain spaces)
+    field_ref = text
 
     dot = field_ref.find(".")
     if dot == -1:

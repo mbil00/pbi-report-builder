@@ -11,8 +11,20 @@ from pbi.formatting import get_conditional_formats
 from pbi.properties import decode_pbi_value
 
 
-def generate_map(project: Project) -> str:
-    """Generate a full YAML map of the project."""
+def generate_map(
+    project: Project,
+    *,
+    page_filter: str | None = None,
+    pages_only: bool = False,
+    model_only: bool = False,
+) -> str:
+    """Generate a full YAML map of the project.
+
+    Args:
+        page_filter: Show only this page (name, display name, or 1-based index).
+        pages_only: Show pages only, no model section.
+        model_only: Show model only, no pages section.
+    """
     lines: list[str] = []
     rel = _rel_path_fn(project.root)
 
@@ -24,17 +36,33 @@ def generate_map(project: Project) -> str:
     lines.append("")
 
     # Semantic model
-    _write_model_section(lines, project)
+    if not pages_only:
+        _write_model_section(lines, project)
+
+    if model_only:
+        return "\n".join(lines) + "\n"
 
     # Report-level filters
-    _write_filters_section(lines, project.get_report_meta(), "report", indent=0)
+    if not page_filter:
+        _write_filters_section(lines, project.get_report_meta(), "report", indent=0)
 
     # Pages
     lines.append("pages:")
     meta = project.get_pages_meta()
     active_page = meta.get("activePageName")
 
-    for page in project.get_pages():
+    all_pages = project.get_pages()
+
+    if page_filter:
+        # Resolve the page filter via project.find_page for consistent lookup
+        try:
+            matched = project.find_page(page_filter)
+            all_pages = [matched]
+        except ValueError:
+            lines.append(f"  # No page matching \"{page_filter}\"")
+            return "\n".join(lines) + "\n"
+
+    for page in all_pages:
         visuals = project.get_visuals(page)
         _write_page(lines, project, page, visuals, active_page, rel)
 

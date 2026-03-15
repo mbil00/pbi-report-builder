@@ -359,6 +359,13 @@ def export_object_properties(
                     objects_path=objects_path,
                     selector=selector_id,
                 )
+                # Suppress selector-qualified properties that match known defaults
+                # (avoids confusing "cardBorder.show [default]: false" alongside
+                # an explicit "border.show: true")
+                if selector_name:
+                    prop_def = registry.get(canonical)
+                    if prop_def and prop_def.default is not None and decoded == prop_def.default:
+                        continue
                 if canonical.startswith("chart:"):
                     flat_key = canonical
                     if selector_name:
