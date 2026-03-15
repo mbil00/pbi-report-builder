@@ -24,6 +24,7 @@ from pbi.commands.common import (
 from pbi.commands.filters import filter_app
 from pbi.commands.interactions import interaction_app
 from pbi.commands.model import model_app
+from pbi.commands.navigation import nav_app
 from pbi.commands.pages import page_app
 from pbi.commands.reports import report_app
 from pbi.commands.themes import theme_app
@@ -68,6 +69,7 @@ app.add_typer(report_app, name="report")
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
 app.add_typer(model_app, name="model")
+app.add_typer(nav_app, name="nav")
 app.add_typer(filter_app, name="filter")
 app.add_typer(theme_app, name="theme")
 app.add_typer(style_app, name="style")

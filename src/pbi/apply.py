@@ -840,8 +840,10 @@ def _apply_bookmarks(
             continue
 
         hide = entry.get("hide", [])
-        show = entry.get("show")  # unused for create, but documents intent
         target = entry.get("target")
+        capture_data = entry.get("captureData", True)
+        capture_display = entry.get("captureDisplay", True)
+        capture_page = entry.get("capturePage", True)
 
         if dry_run:
             result.properties_set += 1
@@ -857,6 +859,9 @@ def _apply_bookmarks(
                 visuals=visuals,
                 hidden_visuals=hide if hide else None,
                 target_visuals=target if target else None,
+                suppress_data=not bool(capture_data),
+                suppress_display=not bool(capture_display),
+                suppress_active_section=not bool(capture_page),
             )
             result.properties_set += 1
         except (ValueError, FileNotFoundError) as e:

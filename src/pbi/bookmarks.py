@@ -247,6 +247,72 @@ def update_bookmark_visuals(
     return data
 
 
+def export_bookmarks(project: Project, *, page: Page | None = None) -> list[dict]:
+    """Export bookmarks as apply-compatible YAML entries."""
+    bm_dir = _bookmarks_dir(project)
+    if not bm_dir.exists():
+        return []
+
+    page_lookup = {pg.name: pg.display_name for pg in project.get_pages()}
+    page_name = page.name if page is not None else None
+    meta = _load_meta(project)
+    order = _bookmark_order(meta)
+    order_map = {name: idx for idx, name in enumerate(order)}
+    rows: list[tuple[int, dict]] = []
+
+    for f in sorted(bm_dir.glob("*.bookmark.json")):
+        try:
+            data = _read_json(f)
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+        exploration = data.get("explorationState", {})
+        active_section = exploration.get("activeSection", "")
+        if page_name is not None and active_section != page_name:
+            continue
+
+        display_name = data.get("displayName") or data.get("name")
+        if not isinstance(display_name, str) or not display_name:
+            continue
+
+        entry: dict = {
+            "name": display_name,
+            "page": page_lookup.get(active_section, active_section),
+        }
+
+        options = data.get("options", {})
+        if options.get("targetVisualNames"):
+            entry["target"] = list(options["targetVisualNames"])
+        if options.get("suppressData"):
+            entry["captureData"] = False
+        if options.get("suppressDisplay"):
+            entry["captureDisplay"] = False
+        if options.get("suppressActiveSection"):
+            entry["capturePage"] = False
+
+        hidden: list[str] = []
+        sections = exploration.get("sections", {})
+        section = sections.get(active_section, {}) if isinstance(sections, dict) else {}
+        containers = section.get("visualContainers", {}) if isinstance(section, dict) else {}
+        if isinstance(containers, dict):
+            for vis_name, vis_state in containers.items():
+                if not isinstance(vis_state, dict):
+                    continue
+                single_visual = vis_state.get("singleVisual", {})
+                if not isinstance(single_visual, dict):
+                    continue
+                display = single_visual.get("display", {})
+                if isinstance(display, dict) and display.get("mode") == "hidden":
+                    hidden.append(vis_name)
+        if hidden:
+            entry["hide"] = hidden
+
+        rows.append((order_map.get(data.get("name", ""), 999), entry))
+
+    rows.sort(key=lambda item: (item[0], item[1]["name"]))
+    return [entry for _idx, entry in rows]
+
+
 def delete_bookmark(project: Project, identifier: str) -> str:
     """Delete a bookmark. Returns its display name."""
     data, file_path = _find_bookmark_file(project, identifier)

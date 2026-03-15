@@ -10,7 +10,7 @@ import yaml
 from typer.testing import CliRunner
 
 from pbi.apply import apply_yaml
-from pbi.bookmarks import get_bookmark, update_bookmark_visuals
+from pbi.bookmarks import create_bookmark, get_bookmark, list_bookmarks, update_bookmark_visuals
 from pbi.cli import app
 from pbi.export import export_yaml
 from pbi.filters import (
@@ -581,28 +581,63 @@ class TemplateRegressionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 save_template(project, page, "../escape", [visual])
 
-    def test_applying_group_template_twice_keeps_unique_group_names(self) -> None:
+    def test_global_template_preserves_bindings_and_bookmarks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            project = make_project(Path(tmp))
-            page = project.create_page("Demo")
-            v1 = project.create_visual(page, "textSlicer", x=0, y=0, width=100, height=50)
-            v2 = project.create_visual(page, "cardVisual", x=120, y=0, width=100, height=50)
-            group = project.create_group(page, [v1, v2], display_name="salesGroup")
+            root = Path(tmp)
+            home = root / "home"
+            with mock.patch("pathlib.Path.home", return_value=home):
+                source = make_project(root / "source")
+                source_page = source.create_page("Source")
+                visual = source.create_visual(source_page, "textSlicer", x=0, y=0, width=100, height=50)
+                visual.data["name"] = "regionSlicer"
+                visual.save()
+                source.add_binding(visual, "Values", "Customers", "Region")
+                create_bookmark(
+                    source,
+                    display_name="Intro Hidden",
+                    page=source_page,
+                    visuals=source.get_visuals(source_page),
+                    hidden_visuals=["regionSlicer"],
+                )
 
-            save_template(project, page, "layout", [group, v1, v2])
-            apply_template(project, page, "layout")
-            apply_template(project, page, "layout")
+                save_template(source, source_page, "intro", global_scope=True)
 
-            visuals = project.get_visuals(page)
-            groups = [v for v in visuals if "visualGroup" in v.data]
-            group_names = [v.name for v in groups]
-            self.assertEqual(len(group_names), len(set(group_names)))
+                target = make_project(root / "target")
+                target_page = target.create_page("Landing")
+                result = apply_template(target, target_page, "intro", global_scope=True)
 
-            valid_group_names = set(group_names)
-            for visual in visuals:
-                parent = visual.data.get("parentGroupName")
-                if parent:
-                    self.assertIn(parent, valid_group_names)
+                self.assertEqual(result.errors, [])
+                applied_visual = target.find_visual(target_page, "regionSlicer")
+                projections = applied_visual.data["visual"]["query"]["queryState"]["Values"]["projections"]
+                self.assertEqual(projections[0]["queryRef"], "Customers.Region")
+
+                bookmarks = list_bookmarks(target)
+                self.assertEqual(len(bookmarks), 1)
+                self.assertEqual(bookmarks[0].display_name, "Intro Hidden")
+                self.assertEqual(bookmarks[0].active_section, target_page.name)
+
+    def test_page_templates_json_lists_project_and_global_scope(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            with mock.patch("pathlib.Path.home", return_value=home):
+                project = make_project(root)
+                page = project.create_page("Demo")
+                project.create_visual(page, "cardVisual")
+                save_template(project, page, "local-template")
+                save_template(project, page, "global-template", global_scope=True)
+
+                result = runner.invoke(
+                    app,
+                    ["page", "templates", "--json", "--project", str(root / "Sample.pbip")],
+                )
+
+                self.assertEqual(result.exit_code, 0, result.stdout)
+                data = json.loads(result.stdout)
+                scopes = {row["name"]: row["scope"] for row in data}
+                self.assertEqual(scopes["local-template"], "project")
+                self.assertEqual(scopes["global-template"], "global")
 
 
 class StylePresetRegressionTests(unittest.TestCase):
@@ -3174,31 +3209,156 @@ class TestCalcCommands(unittest.TestCase):
 class TestPageCreateFromTemplate(unittest.TestCase):
     """pbi page create --from-template."""
 
-    def test_page_create_with_template(self):
-        from pbi.templates import save_template
+    def test_page_create_with_global_template(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            with mock.patch("pathlib.Path.home", return_value=home):
+                source = make_project(root / "source")
+                source_page = source.create_page("Source")
+                source.create_visual(source_page, "card")
+                source.create_visual(source_page, "tableEx")
+                visuals = source.get_visuals(source_page)
+                save_template(source, source_page, "my-layout", visuals, global_scope=True)
 
+                target_root = root / "target"
+                make_project(target_root)
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "page",
+                        "create",
+                        "New Page",
+                        "--from-template",
+                        "my-layout",
+                        "--template-global",
+                        "--project",
+                        str(target_root / "Sample.pbip"),
+                    ],
+                )
+                self.assertEqual(result.exit_code, 0, result.stdout)
+                self.assertIn("Created page", result.stdout)
+                self.assertIn("my-layout", result.stdout)
+                self.assertIn("2 visuals created", result.stdout)
+
+
+class NavigationCommandTests(unittest.TestCase):
+    def test_nav_set_page_resolves_target_page_and_clears_old_action(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
+            home = project.create_page("Home")
+            details = project.create_page("Details")
+            visual = project.create_visual(home, "shape")
+            visual.data["name"] = "navButton"
+            set_property(visual.data, "action.type", "WebUrl", VISUAL_PROPERTIES)
+            set_property(visual.data, "action.url", "https://example.com", VISUAL_PROPERTIES)
+            visual.save()
 
-            # Create a page with visuals, save as template
-            source_page = project.create_page("Source")
-            project.create_visual(source_page, "card")
-            project.create_visual(source_page, "tableEx")
-            visuals = project.get_visuals(source_page)
-            save_template(project, source_page, "my-layout", visuals)
-
-            # Create a new page using the template
             result = runner.invoke(
                 app,
-                ["page", "create", "New Page", "--from-template", "my-layout",
-                 "--project", str(root / "Sample.pbip")],
+                ["nav", "set-page", "Home", "navButton", "Details", "--project", str(root / "Sample.pbip")],
             )
+
             self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Created page", result.stdout)
-            self.assertIn("my-layout", result.stdout)
-            self.assertIn("2 visuals created", result.stdout)
+            updated = Project.find(root / "Sample.pbip").find_visual(
+                Project.find(root / "Sample.pbip").find_page("Home"),
+                "navButton",
+            )
+            self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "PageNavigation")
+            self.assertEqual(get_property(updated.data, "action.page", VISUAL_PROPERTIES), details.name)
+            self.assertIsNone(get_property(updated.data, "action.url", VISUAL_PROPERTIES))
+
+    def test_nav_set_bookmark_and_clear(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Home")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "bookmarkButton"
+            visual.save()
+            bookmark = create_bookmark(
+                project,
+                display_name="Show Details",
+                page=page,
+                visuals=project.get_visuals(page),
+            )
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "nav",
+                    "set-bookmark",
+                    "Home",
+                    "bookmarkButton",
+                    "Show Details",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            refreshed = Project.find(root / "Sample.pbip")
+            updated = refreshed.find_visual(refreshed.find_page("Home"), "bookmarkButton")
+            self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "Bookmark")
+            self.assertEqual(get_property(updated.data, "action.bookmark", VISUAL_PROPERTIES), bookmark["name"])
+
+            clear_result = runner.invoke(
+                app,
+                ["nav", "clear", "Home", "bookmarkButton", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+
+            refreshed = Project.find(root / "Sample.pbip")
+            updated = refreshed.find_visual(refreshed.find_page("Home"), "bookmarkButton")
+            self.assertEqual(get_property(updated.data, "action.bookmark", VISUAL_PROPERTIES), None)
+
+    def test_nav_set_url_and_back(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Home")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "urlButton"
+            visual.save()
+
+            url_result = runner.invoke(
+                app,
+                [
+                    "nav",
+                    "set-url",
+                    "Home",
+                    "urlButton",
+                    "https://example.com/docs",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(url_result.exit_code, 0, url_result.stdout)
+
+            refreshed = Project.find(root / "Sample.pbip")
+            updated = refreshed.find_visual(refreshed.find_page("Home"), "urlButton")
+            self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "WebUrl")
+            self.assertEqual(
+                get_property(updated.data, "action.url", VISUAL_PROPERTIES),
+                "https://example.com/docs",
+            )
+
+            back_result = runner.invoke(
+                app,
+                ["nav", "set-back", "Home", "urlButton", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(back_result.exit_code, 0, back_result.stdout)
+
+            refreshed = Project.find(root / "Sample.pbip")
+            updated = refreshed.find_visual(refreshed.find_page("Home"), "urlButton")
+            self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "Back")
+            self.assertEqual(get_property(updated.data, "action.url", VISUAL_PROPERTIES), None)
 
 
 class TestVisualInspect(unittest.TestCase):

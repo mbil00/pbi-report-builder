@@ -1,207 +1,261 @@
-"""Page template management — save and apply reusable page layouts.
-
-Templates capture a page's visual layout (positions, types, formatting)
-without data bindings. Stored as JSON files in <project>/.pbi-templates/.
-"""
+"""Reusable page template storage backed by apply-compatible YAML."""
 
 from __future__ import annotations
 
 import copy
-import json
+from dataclasses import dataclass
 from pathlib import Path
-from json import JSONDecodeError
+from typing import Any
 
-from pbi.project import Project, Page, Visual
-from pbi.schema_refs import VISUAL_CONTAINER_SCHEMA
+import yaml
+
+from pbi.apply import ApplyResult, apply_yaml
+from pbi.bookmarks import export_bookmarks
+from pbi.export import export_pages
+from pbi.project import Page, Project, Visual
+
+
+@dataclass(frozen=True)
+class PageTemplate:
+    """A saved reusable page template."""
+
+    name: str
+    path: Path
+    spec: dict[str, Any]
+    description: str | None = None
+    scope: str = "project"
+
+
+def _global_templates_dir() -> Path:
+    """Return the global templates directory (~/.config/pbi/templates/)."""
+    return Path.home() / ".config" / "pbi" / "templates"
 
 
 def save_template(
     project: Project,
     page: Page,
     template_name: str,
-    visuals: list[Visual],
+    visuals: list[Visual] | None = None,
+    *,
+    description: str | None = None,
+    overwrite: bool = False,
+    global_scope: bool = False,
 ) -> Path:
-    """Save a page's layout as a reusable template.
+    """Save a page as a reusable YAML template."""
+    _ = visuals  # Retained for call-site compatibility.
 
-    Captures page dimensions, visual positions, types, and formatting.
-    Strips data bindings, filters, and sort definitions.
-    """
-    template = {
-        "name": template_name,
-        "page": {
-            "width": page.width,
-            "height": page.height,
-            "displayOption": page.display_option,
-        },
-        "visuals": [],
-    }
+    path = _global_template_path(template_name) if global_scope else _template_path(project, template_name)
+    if path.exists() and not overwrite:
+        raise FileExistsError(
+            f'Template "{template_name}" already exists. Use --force to replace it.'
+        )
 
-    # Capture page-level objects (background, outspace)
-    page_objects = page.data.get("objects")
-    if page_objects:
-        template["page"]["objects"] = copy.deepcopy(page_objects)
+    payload = export_pages(project, page_filter=page.display_name)
+    bookmarks = export_bookmarks(project, page=page)
+    if bookmarks:
+        payload["bookmarks"] = bookmarks
+    payload["name"] = _validate_template_name(template_name)
+    if description:
+        payload["description"] = description
 
-    for vis in visuals:
-        entry: dict = {
-            "position": copy.deepcopy(vis.position),
-        }
-
-        if "visualGroup" in vis.data:
-            # Group container
-            vg = vis.data["visualGroup"]
-            entry["visualGroup"] = {
-                "displayName": vg.get("displayName", ""),
-                "groupMode": vg.get("groupMode", "ScaleMode"),
-            }
-            vg_objects = vg.get("objects")
-            if vg_objects:
-                entry["visualGroup"]["objects"] = copy.deepcopy(vg_objects)
-            entry["name"] = vis.name
-        else:
-            # Regular visual
-            visual_data = vis.data.get("visual", {})
-            entry["visualType"] = visual_data.get("visualType", "unknown")
-
-            # Preserve friendly name
-            is_hex = all(c in "0123456789abcdef" for c in vis.name) and len(vis.name) >= 16
-            if not is_hex:
-                entry["name"] = vis.name
-
-            # Capture formatting only (not data)
-            objects = visual_data.get("objects")
-            if objects:
-                entry["objects"] = copy.deepcopy(objects)
-
-            container_objects = visual_data.get("visualContainerObjects")
-            if container_objects:
-                entry["visualContainerObjects"] = copy.deepcopy(container_objects)
-
-            # Capture group membership
-            parent = vis.data.get("parentGroupName")
-            if parent:
-                entry["parentGroupName"] = parent
-
-            # Hidden flag
-            if vis.data.get("isHidden"):
-                entry["isHidden"] = True
-
-        template["visuals"].append(entry)
-
-    # Write template
-    dest = _template_path(project, template_name)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with open(dest, "w", encoding="utf-8") as f:
-        json.dump(template, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-
-    return dest
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(
+            payload,
+            sort_keys=False,
+            allow_unicode=True,
+            width=120,
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def apply_template(
     project: Project,
     page: Page,
     template_name: str,
-) -> list[Visual]:
-    """Apply a template to an existing page.
+    *,
+    global_scope: bool = False,
+    overwrite: bool = False,
+    dry_run: bool = False,
+) -> ApplyResult:
+    """Apply a saved template to a target page."""
+    template = get_template(project, template_name, global_scope=global_scope)
+    spec = copy.deepcopy(template.spec)
 
-    Creates visuals matching the template's layout and formatting.
-    Does not modify existing visuals on the page.
-    Returns the created visuals.
-    """
-    template = _load_template(project, template_name)
+    pages = spec.get("pages")
+    if not isinstance(pages, list) or not pages:
+        raise ValueError(f'Template "{template_name}" must define a non-empty pages list.')
+    if len(pages) != 1:
+        raise ValueError(f'Template "{template_name}" must contain exactly one page.')
 
-    # Apply page properties
-    page_tmpl = template.get("page", {})
-    if "width" in page_tmpl:
-        page.data["width"] = page_tmpl["width"]
-    if "height" in page_tmpl:
-        page.data["height"] = page_tmpl["height"]
-    if "displayOption" in page_tmpl:
-        page.data["displayOption"] = page_tmpl["displayOption"]
-    if "objects" in page_tmpl:
-        page.data["objects"] = copy.deepcopy(page_tmpl["objects"])
-    page.save()
+    page_spec = pages[0]
+    if not isinstance(page_spec, dict):
+        raise ValueError(f'Template "{template_name}" page entry must be a mapping.')
 
-    existing_visuals = project.get_visuals(page)
-    used_names = {vis.name for vis in existing_visuals}
-    next_z = max((vis.position.get("z", 0) for vis in existing_visuals), default=0) + 1
-    next_tab_order = max((vis.position.get("tabOrder", -1) for vis in existing_visuals), default=-1) + 1
+    source_page_name = page_spec.get("name")
+    page_spec["name"] = page.display_name
 
-    # Track group name mapping (old name -> new name) for parent references
-    group_map: dict[str, str] = {}
-    created: list[Visual] = []
-
-    # Create groups first, then regular visuals
-    group_entries = [e for e in template.get("visuals", []) if "visualGroup" in e]
-    visual_entries = [e for e in template.get("visuals", []) if "visualGroup" not in e]
-
-    for entry in group_entries:
-        vis, next_z, next_tab_order = _create_from_entry(
-            page,
-            entry,
-            group_map,
-            used_names,
-            next_z,
-            next_tab_order,
-        )
-        old_name = entry.get("name", "")
-        group_map[old_name] = vis.name
-        created.append(vis)
-
-    for entry in visual_entries:
-        vis, next_z, next_tab_order = _create_from_entry(
-            page,
-            entry,
-            group_map,
-            used_names,
-            next_z,
-            next_tab_order,
-        )
-        created.append(vis)
-
-    return created
-
-
-def list_templates(project: Project) -> list[dict]:
-    """List available templates with name and visual count."""
-    templates_dir = _templates_dir(project)
-    if not templates_dir.exists():
-        return []
-
-    result = []
-    for f in sorted(templates_dir.glob("*.json")):
-        try:
-            with open(f, encoding="utf-8-sig") as fh:
-                data = json.load(fh)
-            result.append({
-                "name": data.get("name", f.stem),
-                "file": f.name,
-                "visuals": len(data.get("visuals", [])),
-                "size": f"{data.get('page', {}).get('width', '?')} x {data.get('page', {}).get('height', '?')}",
-            })
-        except (json.JSONDecodeError, KeyError):
+    for bookmark in spec.get("bookmarks", []):
+        if not isinstance(bookmark, dict):
             continue
+        if bookmark.get("page") == source_page_name:
+            bookmark["page"] = page.display_name
 
-    return result
+    yaml_content = yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=120)
+    return apply_yaml(
+        project,
+        yaml_content,
+        page_filter=page.display_name,
+        dry_run=dry_run,
+        overwrite=overwrite,
+    )
 
 
-def delete_template(project: Project, template_name: str) -> bool:
-    """Delete a template. Returns True if deleted."""
-    path = _template_path(project, template_name)
-    if path.exists():
-        path.unlink()
-        return True
-    return False
+def get_template(
+    project: Project | None,
+    template_name: str,
+    *,
+    global_scope: bool = False,
+) -> PageTemplate:
+    """Load and validate one saved page template."""
+    if global_scope:
+        path = _global_template_path(template_name)
+        if not path.exists():
+            raise FileNotFoundError(f'Global template "{template_name}" not found')
+        return _load_template_file(path, template_name, scope="global")
+
+    if project is not None:
+        path = _template_path(project, template_name)
+        if path.exists():
+            return _load_template_file(path, template_name, scope="project")
+
+    global_path = _global_template_path(template_name)
+    if global_path.exists():
+        return _load_template_file(global_path, template_name, scope="global")
+
+    raise FileNotFoundError(f'Template "{template_name}" not found')
 
 
-# ── Helpers ──────────────────────────────────────────────────
+def list_templates(
+    project: Project | None,
+    *,
+    global_scope: bool = False,
+) -> list[PageTemplate]:
+    """List saved page templates with project-first resolution."""
+    presets: list[PageTemplate] = []
+    seen_names: set[str] = set()
+
+    if not global_scope and project is not None:
+        templates_dir = _templates_dir(project)
+        if templates_dir.exists():
+            for path in sorted(templates_dir.glob("*.yaml")):
+                try:
+                    preset = _load_template_file(path, path.stem, scope="project")
+                    presets.append(preset)
+                    seen_names.add(preset.name)
+                except (FileNotFoundError, ValueError):
+                    continue
+
+    global_dir = _global_templates_dir()
+    if global_dir.exists():
+        for path in sorted(global_dir.glob("*.yaml")):
+            try:
+                preset = _load_template_file(path, path.stem, scope="global")
+                if preset.name not in seen_names:
+                    presets.append(preset)
+                    seen_names.add(preset.name)
+            except (FileNotFoundError, ValueError):
+                continue
+
+    return presets
+
+
+def delete_template(
+    project: Project | None,
+    template_name: str,
+    *,
+    global_scope: bool = False,
+) -> bool:
+    """Delete a saved page template."""
+    if global_scope:
+        path = _global_template_path(template_name)
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped templates.")
+        path = _template_path(project, template_name)
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
+def clone_template(
+    project: Project,
+    template_name: str,
+    *,
+    to_global: bool = False,
+    new_name: str | None = None,
+    overwrite: bool = False,
+) -> Path:
+    """Clone a template between project and global scope."""
+    target_name = new_name or template_name
+
+    if to_global:
+        source = get_template(project, template_name, global_scope=False)
+        if source.scope != "project":
+            path = _template_path(project, template_name)
+            if not path.exists():
+                raise FileNotFoundError(f'Project template "{template_name}" not found')
+            source = _load_template_file(path, template_name, scope="project")
+        target = dict(source.spec)
+        target["name"] = _validate_template_name(target_name)
+        return _write_template(_global_template_path(target_name), target, overwrite=overwrite)
+
+    source = get_template(project, template_name, global_scope=True)
+    target = dict(source.spec)
+    target["name"] = _validate_template_name(target_name)
+    return _write_template(_template_path(project, target_name), target, overwrite=overwrite)
+
+
+def dump_template(template: PageTemplate) -> str:
+    """Serialize a page template as YAML for CLI display."""
+    return yaml.safe_dump(
+        template.spec,
+        sort_keys=False,
+        allow_unicode=True,
+        width=120,
+    )
+
+
+def template_summary(template: PageTemplate) -> dict[str, Any]:
+    """Return summary rows for template listing output."""
+    pages = template.spec.get("pages", [])
+    page_spec = pages[0] if isinstance(pages, list) and pages else {}
+    visuals = page_spec.get("visuals", []) if isinstance(page_spec, dict) else []
+    bookmarks = template.spec.get("bookmarks", [])
+    return {
+        "name": template.name,
+        "scope": template.scope,
+        "file": template.path.name,
+        "page": page_spec.get("name", "") if isinstance(page_spec, dict) else "",
+        "visuals": len(visuals) if isinstance(visuals, list) else 0,
+        "bookmarks": len(bookmarks) if isinstance(bookmarks, list) else 0,
+        "size": (
+            f"{page_spec.get('width', '?')} x {page_spec.get('height', '?')}"
+            if isinstance(page_spec, dict)
+            else "? x ?"
+        ),
+        "description": template.description or "",
+    }
+
 
 def _templates_dir(project: Project) -> Path:
     return project.root / ".pbi-templates"
 
 
 def _validate_template_name(template_name: str) -> str:
-    """Reject template names that would escape the templates directory."""
     if not template_name or template_name in {".", ".."}:
         raise ValueError("Template name must be a non-empty file-safe name.")
     if "/" in template_name or "\\" in template_name:
@@ -212,97 +266,58 @@ def _validate_template_name(template_name: str) -> str:
 
 
 def _template_path(project: Project, template_name: str) -> Path:
-    """Resolve a validated template path inside .pbi-templates."""
     safe_name = _validate_template_name(template_name)
-    return _templates_dir(project) / f"{safe_name}.json"
+    return _templates_dir(project) / f"{safe_name}.yaml"
 
 
-def _load_template(project: Project, template_name: str) -> dict:
-    path = _template_path(project, template_name)
-    if not path.exists():
-        raise FileNotFoundError(f'Template "{template_name}" not found')
+def _global_template_path(template_name: str) -> Path:
+    safe_name = _validate_template_name(template_name)
+    return _global_templates_dir() / f"{safe_name}.yaml"
+
+
+def _load_template_file(path: Path, template_name: str, *, scope: str) -> PageTemplate:
     try:
-        with open(path, encoding="utf-8-sig") as f:
-            return json.load(f)
-    except JSONDecodeError as e:
-        raise ValueError(f'Template "{template_name}" is not valid JSON: {e.msg}') from e
+        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except yaml.YAMLError as e:
+        raise ValueError(f'Template "{template_name}" is not valid YAML: {e}') from e
+
+    if not isinstance(data, dict):
+        raise ValueError(f'Template "{template_name}" must be a YAML mapping.')
+
+    raw_name = data.get("name", template_name)
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        raise ValueError(f'Template "{template_name}" must have a non-empty string name.')
+    description = data.get("description")
+    if description is not None and not isinstance(description, str):
+        raise ValueError(f'Template "{template_name}" description must be a string.')
+
+    pages = data.get("pages")
+    if not isinstance(pages, list) or not pages:
+        raise ValueError(f'Template "{template_name}" must define a non-empty pages list.')
+
+    normalized = dict(data)
+    normalized["name"] = _validate_template_name(raw_name)
+    return PageTemplate(
+        name=normalized["name"],
+        path=path,
+        spec=normalized,
+        description=description,
+        scope=scope,
+    )
 
 
-def _create_from_entry(
-    page: Page,
-    entry: dict,
-    group_map: dict[str, str],
-    used_names: set[str],
-    next_z: int,
-    next_tab_order: int,
-) -> tuple[Visual, int, int]:
-    """Create a single visual from a template entry."""
-    import secrets
-    from pbi.project import _write_json
-
-    pos = entry.get("position", {})
-    position = copy.deepcopy(pos)
-    position["z"] = next_z
-    position["tabOrder"] = next_tab_order
-    visual_id = secrets.token_hex(10)
-    visual_dir = page.folder / "visuals" / visual_id
-    visual_dir.mkdir(parents=True, exist_ok=True)
-
-    if "visualGroup" in entry:
-        # Group container
-        vg = entry["visualGroup"]
-        requested_name = entry.get("name", visual_id)
-        name = _unique_name(requested_name, used_names)
-        data = {
-            "$schema": VISUAL_CONTAINER_SCHEMA,
-            "name": name,
-            "position": position,
-            "visualGroup": {
-                "displayName": vg.get("displayName", name),
-                "groupMode": vg.get("groupMode", "ScaleMode"),
-                "objects": copy.deepcopy(vg.get("objects", {})),
-            },
-        }
-    else:
-        # Regular visual
-        requested_name = entry.get("name", visual_id)
-        name = _unique_name(requested_name, used_names)
-        visual_type = entry.get("visualType", "shape")
-
-        visual_block: dict = {
-            "visualType": visual_type,
-            "query": {"queryState": {}},
-            "objects": copy.deepcopy(entry.get("objects", {})),
-        }
-        container_objects = entry.get("visualContainerObjects")
-        if container_objects:
-            visual_block["visualContainerObjects"] = copy.deepcopy(container_objects)
-
-        data = {
-            "$schema": VISUAL_CONTAINER_SCHEMA,
-            "name": name,
-            "position": position,
-            "visual": visual_block,
-        }
-
-        # Resolve group membership
-        parent = entry.get("parentGroupName")
-        if parent and parent in group_map:
-            data["parentGroupName"] = group_map[parent]
-
-        if entry.get("isHidden"):
-            data["isHidden"] = True
-
-    _write_json(visual_dir / "visual.json", data)
-    used_names.add(name)
-    return Visual(folder=visual_dir, data=data), next_z + 1, next_tab_order + 1
-
-
-def _unique_name(requested_name: str, used_names: set[str]) -> str:
-    """Generate a unique visual or group name for a page."""
-    if requested_name not in used_names:
-        return requested_name
-    index = 2
-    while f"{requested_name}_{index}" in used_names:
-        index += 1
-    return f"{requested_name}_{index}"
+def _write_template(path: Path, payload: dict[str, Any], *, overwrite: bool) -> Path:
+    if path.exists() and not overwrite:
+        name = payload.get("name", path.stem)
+        raise FileExistsError(f'Template "{name}" already exists. Use --force to replace it.')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(
+            payload,
+            sort_keys=False,
+            allow_unicode=True,
+            width=120,
+        ),
+        encoding="utf-8",
+    )
+    return path

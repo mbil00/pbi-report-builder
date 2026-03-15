@@ -327,6 +327,7 @@ def page_create(
     height: Annotated[int, typer.Option(help="Page height in pixels.")] = 720,
     display_option: Annotated[str, typer.Option("--display-option", help="FitToPage, FitToWidth, or ActualSize.")] = "FitToPage",
     from_template: Annotated[str | None, typer.Option("--from-template", help="Apply a saved template after creating the page.")] = None,
+    template_global: Annotated[bool, typer.Option("--template-global", help="Resolve --from-template from global templates only.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Create a new page."""
@@ -338,12 +339,17 @@ def page_create(
         from pbi.templates import apply_template
 
         try:
-            created = apply_template(proj, pg, from_template)
-        except (FileNotFoundError, ValueError) as e:
+            result = apply_template(proj, pg, from_template, global_scope=template_global)
+        except (FileExistsError, FileNotFoundError, ValueError) as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
+        if result.errors:
+            for error in result.errors:
+                console.print(f"[red]Error:[/red] {error}")
+            raise typer.Exit(1)
+        created_count = len(result.visuals_created)
         console.print(
-            f'Applied template "[cyan]{from_template}[/cyan]" ({len(created)} visuals created)'
+            f'Applied template "[cyan]{from_template}[/cyan]" ({created_count} visuals created)'
         )
 
 
@@ -415,16 +421,27 @@ def page_export(
 def page_save_template(
     page: Annotated[str, typer.Argument(help="Page to save as template.")],
     template_name: Annotated[str, typer.Argument(help="Name for the template.")],
+    description: Annotated[str | None, typer.Option("--description", help="Optional template description.")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Replace an existing template.")] = False,
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Save as a global template (~/.config/pbi/templates/).")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Save a page's layout and formatting as a reusable template."""
+    """Save a page as a reusable full-page template."""
     from pbi.templates import save_template
 
     proj, pg = _get_page(project, page)
     visuals = proj.get_visuals(pg)
     try:
-        path = save_template(proj, pg, template_name, visuals)
-    except ValueError as e:
+        path = save_template(
+            proj,
+            pg,
+            template_name,
+            visuals,
+            description=description,
+            overwrite=force,
+            global_scope=global_scope,
+        )
+    except (FileExistsError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
     console.print(
@@ -437,6 +454,9 @@ def page_save_template(
 def page_apply_template(
     page: Annotated[str, typer.Argument(help="Target page to apply template to.")],
     template_name: Annotated[str, typer.Argument(help="Template name to apply.")],
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Resolve from global templates only.")] = False,
+    overwrite: Annotated[bool, typer.Option("--overwrite", help="Remove visuals on the target page that are not in the template.")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview template application without saving.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Apply a saved template to a page."""
@@ -445,44 +465,139 @@ def page_apply_template(
     proj, pg = _get_page(project, page)
 
     try:
-        created = apply_template(proj, pg, template_name)
+        result = apply_template(
+            proj,
+            pg,
+            template_name,
+            global_scope=global_scope,
+            overwrite=overwrite,
+            dry_run=dry_run,
+        )
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    if result.errors:
+        for error in result.errors:
+            console.print(f"[red]Error:[/red] {error}")
+        raise typer.Exit(1)
+    prefix = "[dim](dry run)[/dim] " if dry_run else ""
     console.print(
-        f'Applied template "[cyan]{template_name}[/cyan]" -> '
-        f'"{pg.display_name}" ({len(created)} visuals created)'
+        f'{prefix}Applied template "[cyan]{template_name}[/cyan]" -> '
+        f'"{pg.display_name}" ({len(result.visuals_created)} visuals created, '
+        f'{len(result.visuals_updated)} visuals updated)'
     )
+    if result.visuals_deleted:
+        console.print(f'{prefix}Deleted [cyan]{len(result.visuals_deleted)}[/cyan] visual(s) not in template')
 
 
 @page_app.command("templates")
 def page_templates(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Show only global templates.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List available page templates."""
-    from pbi.templates import list_templates
+    from pbi.templates import list_templates, template_summary
 
     proj = get_project(project)
-    templates = list_templates(proj)
+    templates = list_templates(proj, global_scope=global_scope)
 
     if not templates:
         console.print("[yellow]No templates saved. Use `pbi page save-template` to create one.[/yellow]")
         raise typer.Exit(0)
 
+    if as_json:
+        import json
+
+        rows = [template_summary(template) for template in templates]
+        console.print_json(json.dumps(rows, indent=2))
+        return
+
     table = Table(box=box.SIMPLE)
     table.add_column("Name", style="cyan")
+    table.add_column("Scope", style="dim")
+    table.add_column("Page")
     table.add_column("Visuals")
+    table.add_column("Bookmarks")
     table.add_column("Page Size")
+    table.add_column("Description", style="dim")
     table.add_column("File", style="dim")
     for template in templates:
-        table.add_row(template["name"], str(template["visuals"]), template["size"], template["file"])
+        summary = template_summary(template)
+        table.add_row(
+            summary["name"],
+            summary["scope"],
+            summary["page"],
+            str(summary["visuals"]),
+            str(summary["bookmarks"]),
+            summary["size"],
+            summary["description"],
+            summary["file"],
+        )
     console.print(table)
+
+
+@page_app.command("template-get")
+def page_template_get(
+    template_name: Annotated[str, typer.Argument(help="Template name to inspect.")],
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Look up in global templates only.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show one saved page template as YAML."""
+    from pbi.templates import dump_template, get_template
+
+    proj = get_project(project)
+    try:
+        template = get_template(proj, template_name, global_scope=global_scope)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(dump_template(template), highlight=False, end="")
+
+
+@page_app.command("template-clone")
+def page_template_clone(
+    template_name: Annotated[str, typer.Argument(help="Template to clone.")],
+    new_name: Annotated[str | None, typer.Option("--name", "-n", help="New name for the cloned template.")] = None,
+    to_global: Annotated[bool, typer.Option("--to-global", help="Clone project template to global scope.")] = False,
+    to_project: Annotated[bool, typer.Option("--to-project", help="Clone global template to project scope.")] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite if the target exists.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Clone a page template between project and global scope."""
+    from pbi.templates import clone_template
+
+    if not to_global and not to_project:
+        console.print("[red]Error:[/red] Specify --to-global or --to-project.")
+        raise typer.Exit(1)
+    if to_global and to_project:
+        console.print("[red]Error:[/red] Use either --to-global or --to-project, not both.")
+        raise typer.Exit(1)
+
+    proj = get_project(project)
+    try:
+        path = clone_template(
+            proj,
+            template_name,
+            to_global=to_global,
+            new_name=new_name,
+            overwrite=force,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    target_name = new_name or template_name
+    direction = "global" if to_global else "project"
+    console.print(f'Cloned template "[cyan]{template_name}[/cyan]" -> {direction} as "[cyan]{target_name}[/cyan]" -> {path}')
 
 
 @page_app.command("delete-template")
 def page_delete_template(
     template_name: Annotated[str, typer.Argument(help="Template name to delete.")],
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Delete from global templates.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Delete a saved page template."""
@@ -490,7 +605,7 @@ def page_delete_template(
 
     proj = get_project(project)
     try:
-        deleted = delete_template(proj, template_name)
+        deleted = delete_template(proj, template_name, global_scope=global_scope)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
