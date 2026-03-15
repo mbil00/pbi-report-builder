@@ -726,5 +726,107 @@ def calc_grid(
         console.print(f"  [dim]#{item['index']}[/dim]  {pos}  |  {size}")
 
 
+# ── Render ────────────────────────────────────────────────────────
+
+@app.command()
+def render(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    output: Annotated[Optional[Path], typer.Option("-o", "--output", help="Output HTML file path (default: <page>.html in project root).")] = None,
+    screenshot: Annotated[bool, typer.Option("--screenshot", "-s", help="Also generate a PNG screenshot via Puppeteer.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Render a page as an HTML layout mockup.
+
+    Generates an HTML file showing visual positions, sizes, titles,
+    text content, and formatting. Charts and data visuals appear as
+    labeled placeholders.
+
+    Use --screenshot to also capture a PNG via Puppeteer (requires
+    Node.js and puppeteer installed globally or in the project).
+    """
+    from pbi.render import render_page_html, render_page_screenshot_html
+
+    proj = get_project(project)
+    try:
+        pg = proj.find_page(page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Determine output path
+    if output:
+        out_path = resolve_output_path(output, base_dir=proj.root)
+    else:
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", pg.display_name).strip("._") or "page"
+        out_path = proj.root / f"{slug}.html"
+
+    # Write HTML
+    html_content = render_page_html(proj, pg)
+    out_path.write_text(html_content, encoding="utf-8")
+    console.print(f'Rendered "[cyan]{pg.display_name}[/cyan]" → [cyan]{out_path}[/cyan]')
+
+    visuals = proj.get_visuals(pg)
+    visible = [v for v in visuals if not v.data.get("isHidden") and "visualGroup" not in v.data]
+    console.print(f"[dim]{len(visible)} visuals, {pg.width}x{pg.height}px[/dim]")
+
+    if screenshot:
+        screenshot_path = out_path.with_suffix(".png")
+        # Write a separate screenshot-optimized HTML (no body padding)
+        screenshot_html_path = out_path.with_name(out_path.stem + "_screenshot.html")
+        screenshot_html = render_page_screenshot_html(proj, pg)
+        screenshot_html_path.write_text(screenshot_html, encoding="utf-8")
+
+        _run_puppeteer_screenshot(screenshot_html_path, screenshot_path, pg.width, pg.height)
+        # Clean up temp HTML
+        screenshot_html_path.unlink(missing_ok=True)
+
+
+def _run_puppeteer_screenshot(html_path: Path, output_path: Path, width: int, height: int) -> None:
+    """Run Puppeteer to take a screenshot of the HTML file."""
+    import subprocess
+
+    script = f"""\
+const puppeteer = require('puppeteer');
+(async () => {{
+  const browser = await puppeteer.launch({{
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  }});
+  const page = await browser.newPage();
+  await page.setViewport({{ width: {width}, height: {height}, deviceScaleFactor: 2 }});
+  await page.goto('file://{html_path.resolve()}', {{ waitUntil: 'networkidle0' }});
+  await page.screenshot({{
+    path: '{output_path.resolve()}',
+    clip: {{ x: 0, y: 0, width: {width}, height: {height} }},
+  }});
+  await browser.close();
+}})();
+"""
+    # Write script next to the HTML so node_modules resolution works
+    script_path = html_path.with_name("_pbi_screenshot.js")
+    script_path.write_text(script, encoding="utf-8")
+
+    try:
+        result = subprocess.run(
+            ["node", str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(html_path.parent),
+        )
+        if result.returncode != 0:
+            console.print(f"[red]Error:[/red] Puppeteer failed: {result.stderr.strip()}")
+            raise typer.Exit(1)
+        console.print(f"Screenshot → [cyan]{output_path}[/cyan]")
+    except FileNotFoundError:
+        console.print("[red]Error:[/red] Node.js not found. Install Node.js and puppeteer for screenshots.")
+        raise typer.Exit(1)
+    except subprocess.TimeoutExpired:
+        console.print("[red]Error:[/red] Puppeteer timed out.")
+        raise typer.Exit(1)
+    finally:
+        script_path.unlink(missing_ok=True)
+
+
 if __name__ == "__main__":
     app()
