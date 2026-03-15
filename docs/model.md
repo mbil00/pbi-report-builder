@@ -121,7 +121,11 @@ For larger changes, use `pbi model apply` with YAML:
 ```bash
 pbi model apply ./model-changes.yaml
 pbi model apply ./model-changes.yaml --dry-run
+cat model-changes.yaml | pbi model apply
+cat model-changes.yaml | pbi model apply --dry-run
 ```
+
+`pbi model apply` also accepts `-` to read YAML from stdin explicitly.
 
 Example:
 
@@ -164,6 +168,6 @@ Rules:
 For one-off edits, use the imperative commands above. For several related changes, prefer:
 
 1. `pbi model tables` / `pbi model columns` / `pbi model measures`
-2. prepare a YAML file
-3. `pbi model apply --dry-run`
-4. `pbi model apply`
+2. prepare a YAML file or generate YAML to stdout
+3. `pbi model apply ./model-changes.yaml --dry-run` or pipe into `pbi model apply --dry-run`
+4. `pbi model apply ./model-changes.yaml` or pipe into `pbi model apply`

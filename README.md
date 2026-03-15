@@ -12,6 +12,7 @@ pbi visual set "Sales" chart1 title.text="Revenue" border.show=true
 pbi page export "Sales Overview" -o sales.yaml    # Export page as YAML
 pbi apply sales.yaml --dry-run                    # Preview declarative changes
 pbi apply sales.yaml                              # Apply changes
+cat sales.yaml | pbi apply --dry-run              # Or pipe YAML through stdin
 pbi validate                                      # Check structural integrity
 ```
 
@@ -56,6 +57,8 @@ pbi page export "Sales Overview" -o sales.yaml   # Get current state
 # Edit the YAML (positions, styles, bindings)
 pbi apply sales.yaml --overwrite                  # Apply with full reconciliation
 ```
+
+YAML-driven commands also accept stdin. Use `-` or pipe content directly into `pbi apply`, `pbi diff`, or `pbi model apply`.
 
 See [docs/agent-workflows.md](docs/agent-workflows.md) for detailed patterns.
 

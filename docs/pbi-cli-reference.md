@@ -65,6 +65,12 @@ pbi model path Sales Customers     # relationship chain
 pbi diff sales.yaml                # preview what apply would change
 pbi apply sales.yaml --dry-run     # validate
 pbi apply sales.yaml               # apply
+cat sales.yaml | pbi diff          # diff from stdin
+cat sales.yaml | pbi apply         # apply from stdin
+
+# Model YAML apply
+pbi model apply model.yaml
+cat model.yaml | pbi model apply --dry-run
 
 # Styles (reusable formatting presets)
 pbi style create card-style --from-visual "Sales" kpiStrip

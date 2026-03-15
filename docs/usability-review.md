@@ -18,7 +18,7 @@ The README is 17 lines. It tells the user how to install but nothing about what 
 
 ### No `--version` flag
 
-Version is defined in `__init__.py` as `0.1.0` but not exposed. Basic CLI expectation.
+Resolved. The CLI now exposes `--version`; keep package metadata and the runtime version string aligned.
 
 ---
 
@@ -157,4 +157,4 @@ Variable positional args based on scope (`filter add report <field>` vs `filter 
 
 ## Overall Assessment
 
-Capable, well-designed tool that punches above its 0.1.0 version. The export-edit-apply workflow is genuinely innovative. Main barriers are naming inconsistencies and lack of structured output for agent consumption. The agent-first design philosophy is sound.
+Capable, well-designed tool that punches above its version number. The export-edit-apply workflow is genuinely innovative. Main barriers are naming inconsistencies and lack of structured output for agent consumption. The agent-first design philosophy is sound.

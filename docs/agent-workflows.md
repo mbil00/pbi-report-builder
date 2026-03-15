@@ -43,6 +43,8 @@ This gives you the complete YAML spec — position, size, styling, bindings, col
 
 `pbi apply` creates, styles, binds, and positions visuals from a declarative YAML file in a single command.
 
+YAML commands accept stdin as well as file paths. You can use `-` or pipe generated/templated YAML straight into `pbi apply`, `pbi diff`, or `pbi model apply`.
+
 ### Export → Edit → Apply
 
 ```bash
@@ -51,6 +53,7 @@ pbi page export "Sales Overview" -o sales.yaml   # capture current state
 pbi diff sales.yaml                               # preview changes property-by-property
 pbi apply sales.yaml --dry-run                    # validate
 pbi apply sales.yaml                              # apply
+cat sales.yaml | pbi apply --dry-run              # stdin works too
 pbi validate                                      # check layout + structure
 ```
 

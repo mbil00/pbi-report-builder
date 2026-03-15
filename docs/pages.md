@@ -51,10 +51,14 @@ pbi apply sales-overview.yaml
 pbi apply sales-overview.yaml --page "Sales Overview"
 pbi apply sales-overview.yaml --dry-run
 pbi apply sales-overview.yaml --overwrite
+cat sales-overview.yaml | pbi apply --dry-run
+cat sales-overview.yaml | pbi diff
 ```
 
 `pbi page export` emits apply-compatible YAML for both page metadata and visuals,
 including tooltip/drillthrough page binding metadata when present.
+
+`pbi apply` and `pbi diff` also accept `-` to read YAML from stdin explicitly.
 
 Key apply behaviors:
 - **Additive by default** — only visuals in the YAML are touched
