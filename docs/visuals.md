@@ -48,6 +48,7 @@ pbi visual set-all "Sales Overview" background.show=true --dry-run
 
 ```bash
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart --width 600 --height 400
+pbi visual create "Sales Overview" card --name kpiCard --title "Total Revenue"
 pbi visual move "Sales Overview" revenueChart --x 40 --y 80
 pbi visual resize "Sales Overview" revenueChart --width 720 --height 420
 pbi visual copy "Sales Overview" revenueChart --to-page "Executive Summary" --name revenueChartCopy

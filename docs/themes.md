@@ -37,12 +37,12 @@ pbi theme export <output-path>
 pbi theme export ./exported-theme.json
 ```
 
-## pbi theme remove
+## pbi theme delete
 
 Remove the custom theme, reverting to the base theme only.
 
 ```bash
-pbi theme remove
+pbi theme delete
 ```
 
 ## Theme JSON Structure

@@ -32,11 +32,28 @@ from pbi.properties import (
     property_aliases_for,
 )
 
+def _version_callback(value: bool) -> None:
+    if value:
+        from pbi import __version__
+        typer.echo(f"pbi {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
     name="pbi",
     help="CLI tool for editing Power BI PBIP project files.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-V", help="Show version and exit.", callback=_version_callback, is_eager=True),
+    ] = False,
+) -> None:
+    """CLI tool for editing Power BI PBIP project files."""
 style_app = typer.Typer(help="Style preset operations.", no_args_is_help=True)
 app.add_typer(report_app, name="report")
 app.add_typer(page_app, name="page")
@@ -217,6 +234,7 @@ def style_create(
 
 @style_app.command("list")
 def style_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List saved style presets."""
@@ -228,6 +246,13 @@ def style_list(
     if not styles:
         console.print("[yellow]No styles saved. Use `pbi style create` to create one.[/yellow]")
         raise typer.Exit(0)
+
+    if as_json:
+        import json
+
+        rows = [{"name": s.name, "properties": len(s.properties), "description": s.description or ""} for s in styles]
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(box=box.SIMPLE)
     table.add_column("Name", style="cyan")
@@ -244,8 +269,8 @@ def style_list(
     console.print(table)
 
 
-@style_app.command("show")
-def style_show(
+@style_app.command("get")
+def style_get(
     style_name: Annotated[str, typer.Argument(help="Style preset name.")],
     project: ProjectOpt = None,
 ) -> None:
@@ -310,8 +335,9 @@ def info(project: ProjectOpt = None) -> None:
         )
         for v in visuals:
             pos = v.position
+            name_label = f'[cyan]{v.name}[/cyan] ' if v.name != v.visual_type else ''
             page_node.add(
-                f'{v.visual_type} [dim]@ {pos.get("x", 0)},{pos.get("y", 0)} '
+                f'{name_label}{v.visual_type} [dim]@ {pos.get("x", 0)},{pos.get("y", 0)} '
                 f'{pos.get("width", 0)}x{pos.get("height", 0)}[/dim]'
             )
 

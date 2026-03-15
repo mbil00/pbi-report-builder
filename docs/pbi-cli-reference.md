@@ -6,7 +6,7 @@ Canonical reference for the `pbi` command-line tool.
 
 The CLI now follows one grammar:
 
-1. Targets are positional and come before options.
+1. Targets are positional and come before options. Scope narrowing uses `--page`/`--visual` flags.
 2. Generic setters use `key=value` only.
 3. Stateful features use `get`, `set`, and `clear`.
 4. Mutually exclusive behavior uses `--mode`.
@@ -56,26 +56,26 @@ pbi visual format clear "Sales Overview" revenueChart dataPoint.fill
 
 ## Filters
 
-Filters use positional scope:
+Scope is inferred from `--page` and `--visual` flags. Default is report level.
 
 ```bash
-pbi filter list report
-pbi filter list page "Sales Overview"
-pbi filter list visual "Sales Overview" revenueChart
+pbi filter list
+pbi filter list --page "Sales Overview"
+pbi filter list --page "Sales Overview" --visual revenueChart
 ```
 
 ```bash
-pbi filter add report Product.Category --mode include --value Bikes --value Accessories
-pbi filter add page "Sales Overview" Sales.Revenue --mode range --min 1000 --max 50000
-pbi filter add visual "Sales Overview" revenueChart Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction top
-pbi filter add report Date.Date --mode relative --operator InLast --count 7 --unit Days
-pbi filter add page "Sales Overview" --mode tuple --row "Product.Color=Red,Product.Size=Large"
+pbi filter add Product.Category --mode include --value Bikes --value Accessories
+pbi filter add Sales.Revenue --page "Sales Overview" --mode range --min 1000 --max 50000
+pbi filter add Customers.Region --page "Sales Overview" --visual revenueChart --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction top
+pbi filter add Date.Date --mode relative --operator InLast --count 7 --unit Days
+pbi filter add --page "Sales Overview" --mode tuple --row "Product.Color=Red,Product.Size=Large"
 ```
 
 ```bash
-pbi filter remove report Product.Category
-pbi filter remove page "Sales Overview" Sales.Revenue
-pbi filter remove visual "Sales Overview" revenueChart Customers.Region
+pbi filter delete Product.Category
+pbi filter delete Sales.Revenue --page "Sales Overview"
+pbi filter delete Customers.Region --page "Sales Overview" --visual revenueChart
 ```
 
 ## Detailed References

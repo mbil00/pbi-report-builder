@@ -25,18 +25,18 @@ pbi model fields Sales
 Write-side semantic-model editing is documented in [Semantic Model Commands](model.md), including:
 
 - `pbi model format`
-- `pbi model column hide|show|create|edit|get|delete`
-- `pbi model measure create|edit|show|delete`
+- `pbi model column hide|unhide|create|edit|get|delete`
+- `pbi model measure create|edit|get|delete`
 - `pbi model apply`
 
 ## Filter Scope
 
-Filters use positional scope:
+Scope is inferred from `--page` and `--visual` flags. Default is report level.
 
 ```bash
-pbi filter list report
-pbi filter list page "Sales Overview"
-pbi filter list visual "Sales Overview" revenueChart
+pbi filter list                                         # report level
+pbi filter list --page "Sales Overview"                 # page level
+pbi filter list --page "Sales Overview" --visual chart1 # visual level
 ```
 
 ## Add Filters
@@ -44,46 +44,46 @@ pbi filter list visual "Sales Overview" revenueChart
 ### Categorical / Include / Exclude
 
 ```bash
-pbi filter add report Product.Category --mode categorical --value Bikes
-pbi filter add report Product.Category --mode include --value Bikes --value Accessories
-pbi filter add page "Sales Overview" Product.Category --mode exclude --value Obsolete
+pbi filter add Product.Category --mode categorical --value Bikes
+pbi filter add Product.Category --mode include --value Bikes --value Accessories
+pbi filter add Product.Category --page "Sales Overview" --mode exclude --value Obsolete
 ```
 
 ### Range
 
 ```bash
-pbi filter add report Sales.Revenue --mode range --min 1000 --max 50000
-pbi filter add page "Sales Overview" Sales.OrderDate --mode range --min "2024-01-01" --max "2024-12-31"
+pbi filter add Sales.Revenue --mode range --min 1000 --max 50000
+pbi filter add Sales.OrderDate --page "Sales Overview" --mode range --min "2024-01-01" --max "2024-12-31"
 ```
 
 ### Top N
 
 ```bash
-pbi filter add report Customers.Region --mode topn --topn 7 --topn-by Sales.TotalRevenue --direction top
-pbi filter add report Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction bottom
+pbi filter add Customers.Region --mode topn --topn 7 --topn-by Sales.TotalRevenue --direction top
+pbi filter add Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction bottom
 ```
 
 ### Relative Date / Time
 
 ```bash
-pbi filter add report Date.Date --mode relative --operator InLast --count 7 --unit Days
-pbi filter add report Date.Date --mode relative --operator InNext --count 1 --unit Quarters --no-include-today
-pbi filter add report Date.DateTime --mode relative --operator InLast --count 15 --unit Minutes
+pbi filter add Date.Date --mode relative --operator InLast --count 7 --unit Days
+pbi filter add Date.Date --mode relative --operator InNext --count 1 --unit Quarters --no-include-today
+pbi filter add Date.DateTime --mode relative --operator InLast --count 15 --unit Minutes
 ```
 
 ### Tuple
 
 ```bash
-pbi filter add report --mode tuple --row "Product.Color=Red,Product.Size=Large"
-pbi filter add page "Sales Overview" --mode tuple \
+pbi filter add --mode tuple --row "Product.Color=Red,Product.Size=Large"
+pbi filter add --page "Sales Overview" --mode tuple \
   --row "Product.Color=Red,Product.Size=Large" \
   --row "Product.Color=Blue,Product.Size=Medium"
 ```
 
-## Remove Filters
+## Delete Filters
 
 ```bash
-pbi filter remove report Product.Category
-pbi filter remove page "Sales Overview" Sales.Revenue
-pbi filter remove visual "Sales Overview" revenueChart Customers.Region
+pbi filter delete Product.Category
+pbi filter delete Sales.Revenue --page "Sales Overview"
+pbi filter delete Customers.Region --page "Sales Overview" --visual revenueChart
 ```

@@ -38,7 +38,7 @@ Visibility changes apply to columns only.
 ```bash
 pbi model column hide Sales.InternalKey
 pbi model column hide Sales.RowHash Sales.SourceId
-pbi model column show Sales.InternalKey
+pbi model column unhide Sales.InternalKey
 ```
 
 ## Manage measures
@@ -48,7 +48,7 @@ Create, inspect, update, and delete measures:
 ```bash
 pbi model measure create Sales TotalRevenue "SUM ( Sales[Revenue] )" --format "$#,0"
 pbi model measure edit Sales TotalRevenue "SUM ( Sales[NetRevenue] )"
-pbi model measure show Sales TotalRevenue
+pbi model measure get Sales TotalRevenue
 pbi model measure delete Sales TotalRevenue
 ```
 
@@ -86,7 +86,7 @@ pbi model column create Sales MarginPct "DIVIDE ( Sales[Profit], Sales[Revenue] 
 Source columns are intentionally protected:
 
 - `pbi model column delete` only deletes calculated columns
-- `pbi model column hide/show` works only on columns, not measures
+- `pbi model column hide/unhide` works only on columns, not measures
 
 ## Declarative model apply
 

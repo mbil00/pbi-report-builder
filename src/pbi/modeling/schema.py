@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,7 +45,12 @@ class SemanticTable:
         for column in self.columns:
             if column.name.lower() == name_lower:
                 return column
-        available = ", ".join(f'"{c.name}"' for c in self.columns)
+        col_names = [c.name for c in self.columns]
+        close = difflib.get_close_matches(name, col_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(f'Column "{name}" not found in table "{self.name}". Did you mean: {suggestion}?')
+        available = ", ".join(f'"{n}"' for n in col_names)
         raise ValueError(f'Column "{name}" not found in table "{self.name}". Available: {available}')
 
     def find_measure(self, name: str) -> Measure:
@@ -53,7 +59,12 @@ class SemanticTable:
         for measure in self.measures:
             if measure.name.lower() == name_lower:
                 return measure
-        available = ", ".join(f'"{m.name}"' for m in self.measures)
+        meas_names = [m.name for m in self.measures]
+        close = difflib.get_close_matches(name, meas_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(f'Measure "{name}" not found in table "{self.name}". Did you mean: {suggestion}?')
+        available = ", ".join(f'"{n}"' for n in meas_names)
         raise ValueError(f'Measure "{name}" not found in table "{self.name}". Available: {available}')
 
 
@@ -94,7 +105,12 @@ class SemanticModel:
         if len(matches) > 1:
             names = ", ".join(f'"{table.name}"' for table in matches)
             raise ValueError(f'Ambiguous table "{name}". Matches: {names}')
-        available = ", ".join(f'"{table.name}"' for table in self.tables)
+        table_names = [t.name for t in self.tables]
+        close = difflib.get_close_matches(name, table_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(f'Table "{name}" not found. Did you mean: {suggestion}?')
+        available = ", ".join(f'"{n}"' for n in table_names)
         raise ValueError(f'Table "{name}" not found. Available: {available}')
 
     def resolve_field(self, field_ref: str) -> tuple[str, str, str]:
@@ -110,12 +126,17 @@ class SemanticModel:
             if measure.name.lower() == prop_lower:
                 return table.name, measure.name, "measure"
 
-        available_cols = [column.name for column in table.columns]
-        available_meas = [measure.name for measure in table.measures]
+        all_field_names = [c.name for c in table.columns] + [m.name for m in table.measures]
+        close = difflib.get_close_matches(prop, all_field_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(
+                f'Field "{prop}" not found in table "{table.name}". Did you mean: {suggestion}?'
+            )
         raise ValueError(
             f'Field "{prop}" not found in table "{table.name}". '
-            f"Columns: {', '.join(available_cols)}. "
-            f"Measures: {', '.join(available_meas)}."
+            f"Columns: {', '.join(c.name for c in table.columns)}. "
+            f"Measures: {', '.join(m.name for m in table.measures)}."
         )
 
 

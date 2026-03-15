@@ -16,6 +16,7 @@ theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
 
 @theme_app.command("list")
 def theme_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List active themes (base + custom)."""
@@ -27,6 +28,13 @@ def theme_list(
     if not themes:
         console.print("[yellow]No themes configured.[/yellow]")
         raise typer.Exit(0)
+
+    if as_json:
+        import json
+
+        rows = [{"type": "custom" if t.is_custom else "base", "name": t.name, "source": t.source} for t in themes]
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(box=box.SIMPLE)
     table.add_column("Type")
@@ -83,8 +91,8 @@ def theme_export(
     console.print(f'Exported theme "[cyan]{name}[/cyan]" -> {out_path}')
 
 
-@theme_app.command("remove")
-def theme_remove(
+@theme_app.command("delete")
+def theme_delete(
     project: ProjectOpt = None,
 ) -> None:
     """Remove the custom theme from the project (reverts to base theme)."""

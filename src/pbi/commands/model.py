@@ -30,9 +30,19 @@ def _get_model(project):
 
 
 @model_app.command("tables")
-def model_tables(project: ProjectOpt = None) -> None:
+def model_tables(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
     """List tables in the semantic model."""
     _, model = _get_model(project)
+
+    if as_json:
+        import json
+
+        rows = [{"name": t.name, "columns": len(t.columns), "measures": len(t.measures)} for t in model.tables]
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(title="Semantic Model Tables", box=box.SIMPLE)
     table.add_column("Table", style="cyan")
@@ -50,6 +60,7 @@ def model_columns(
     table_name: Annotated[str, typer.Argument(help="Table name.")],
     show_hidden: Annotated[bool, typer.Option("--hidden", help="Include hidden columns in the listing.")] = False,
     hidden_only: Annotated[bool, typer.Option("--hidden-only", help="Only show hidden columns.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List columns (dimensions) in a table."""
@@ -69,6 +80,19 @@ def model_columns(
         columns = [column for column in columns if column.is_hidden]
     elif not show_hidden:
         columns = [column for column in columns if not column.is_hidden]
+
+    if as_json:
+        import json
+
+        rows = [{
+            "name": c.name,
+            "dataType": c.data_type,
+            "format": c.format_string,
+            "hidden": c.is_hidden,
+            "sourceColumn": c.source_column,
+        } for c in columns]
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(title=f'Columns in "{sem_table.name}"', box=box.SIMPLE)
     table.add_column("Column", style="cyan")
@@ -95,6 +119,7 @@ def model_columns(
 @model_app.command("measures")
 def model_measures(
     table_name: Annotated[str, typer.Argument(help="Table name.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List measures (facts) in a table."""
@@ -104,6 +129,13 @@ def model_measures(
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+    if as_json:
+        import json
+
+        rows = [{"name": m.name, "expression": m.expression, "format": m.format_string} for m in sem_table.measures]
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(title=f'Measures in "{sem_table.name}"', box=box.SIMPLE)
     table.add_column("Measure", style="cyan")
@@ -218,8 +250,8 @@ def model_measure_edit(
         console.print(f'{prefix}[dim]No change:[/dim] [cyan]{table}.{name}[/cyan] expression is unchanged')
 
 
-@model_measure_app.command("show")
-def model_measure_show(
+@model_measure_app.command("get")
+def model_measure_get(
     table_name: Annotated[str, typer.Argument(help="Table name.")],
     measure_name: Annotated[str, typer.Argument(help="Measure name.")],
     project: ProjectOpt = None,
@@ -275,6 +307,7 @@ def model_measure_delete(
 @model_app.command("fields")
 def model_fields(
     table_name: Annotated[str, typer.Argument(help="Table name.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List all fields (columns + measures) for use with 'visual bind'."""
@@ -284,6 +317,18 @@ def model_fields(
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+    if as_json:
+        import json
+
+        rows = []
+        for column in sem_table.columns:
+            if not column.is_hidden:
+                rows.append({"ref": f"{sem_table.name}.{column.name}", "type": "column", "details": column.data_type})
+        for measure in sem_table.measures:
+            rows.append({"ref": f"{sem_table.name}.{measure.name}", "type": "measure", "details": measure.expression})
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(title=f'Fields in "{sem_table.name}"', box=box.SIMPLE)
     table.add_column("Field Reference", style="cyan")
@@ -438,13 +483,13 @@ def model_column_edit(
         console.print(f'{prefix}[dim]No change:[/dim] [cyan]{table}.{name}[/cyan] expression is unchanged')
 
 
-@model_column_app.command("show")
-def model_column_show(
+@model_column_app.command("unhide")
+def model_column_unhide(
     fields: Annotated[list[str], typer.Argument(help="Column references as Table.Column.")],
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview the change without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Show one or more previously hidden columns in the semantic model."""
+    """Unhide one or more previously hidden columns in the semantic model."""
     _model_set_column_visibility(fields, hidden=False, dry_run=dry_run, project=project)
 
 

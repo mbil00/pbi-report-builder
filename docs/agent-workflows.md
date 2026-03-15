@@ -12,7 +12,7 @@ This guide is the shortest path for an agent to make reliable PBIR changes witho
 | **Redesign a page completely** | `pbi page export` → edit YAML → `pbi apply --overwrite` |
 | **Change 1-2 properties on a visual** | `pbi visual set` (imperative) |
 | **Quick data binding change** | `pbi visual bind` / `pbi visual unbind` |
-| **Add/remove filters** | `pbi filter add` / `pbi filter remove` |
+| **Add/remove filters** | `pbi filter add` / `pbi filter delete` |
 | **Bookmark or interaction tweak** | `pbi bookmark` / `pbi interaction` commands |
 
 **Rule of thumb:** For any page-level work, start with `pbi page export` and edit the YAML. Use imperative commands only for quick one-off tweaks to a single visual.
@@ -312,10 +312,10 @@ This gives you the complete YAML spec you can edit and re-apply.
 ## Filters
 
 ```bash
-pbi filter add Product.Category --values "Bikes,Accessories" --mode include
-pbi filter add Sales.Revenue --min 1000 --max 50000 --locked
-pbi filter add Customers.Region --topn 5 --topn-by Sales.TotalRevenue
-pbi filter tuple "Product.Color=Red,Product.Size=Large"
+pbi filter add Product.Category --mode include --value Bikes --value Accessories
+pbi filter add Sales.Revenue --mode range --min 1000 --max 50000 --locked
+pbi filter add Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue
+pbi filter add --mode tuple --row "Product.Color=Red,Product.Size=Large"
 pbi filter list --page "Sales"
 ```
 

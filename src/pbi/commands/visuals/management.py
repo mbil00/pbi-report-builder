@@ -20,10 +20,11 @@ def visual_create(
     width: Annotated[int, typer.Option("-W", "--width", help="Width.")] = 300,
     height: Annotated[int, typer.Option("-H", "--height", help="Height.")] = 200,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Friendly name for the visual.")] = None,
+    title: Annotated[str | None, typer.Option("--title", help="Set title text (also enables title.show).")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Create a new visual on a page."""
-    from pbi.roles import is_known_visual_type, normalize_visual_type
+    from pbi.roles import get_visual_roles, is_known_visual_type, normalize_visual_type
 
     proj = get_project(project)
     try:
@@ -47,12 +48,27 @@ def visual_create(
     vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=width, height=height)
     if name:
         vis.data["name"] = name
+
+    if title:
+        from pbi.properties import VISUAL_PROPERTIES, set_property
+
+        set_property(vis.data, "title.show", "true", VISUAL_PROPERTIES)
+        set_property(vis.data, "title.text", title, VISUAL_PROPERTIES)
+
+    if name or title:
         vis.save()
+
     display = name or vis.name
     console.print(
         f'Created [cyan]{canonical_visual_type}[/cyan] "{display}" on "{pg.display_name}" '
         f"@ {x},{y} {width}x{height}"
     )
+
+    # Show scaffolded roles so the agent knows what to bind
+    roles = get_visual_roles(canonical_visual_type)
+    if roles:
+        role_names = [r["name"] + (" (multi)" if r["multi"] else "") for r in roles]
+        console.print(f'[dim]Roles: {", ".join(role_names)}[/dim]')
 
 
 @visual_app.command("copy")

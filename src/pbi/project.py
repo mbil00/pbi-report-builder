@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import secrets
 import shutil
@@ -215,7 +216,12 @@ class Project:
         except ValueError:
             pass
 
-        available = ", ".join(f'"{p.display_name}"' for p in pages)
+        names = [p.display_name for p in pages]
+        close = difflib.get_close_matches(identifier, names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(f'Page "{identifier}" not found. Did you mean: {suggestion}?')
+        available = ", ".join(f'"{n}"' for n in names)
         raise ValueError(f'Page "{identifier}" not found. Available: {available}')
 
     def get_visuals(self, page: Page) -> list[Visual]:
@@ -286,6 +292,14 @@ class Project:
                 f'Ambiguous visual "{identifier}". Matches: {names}'
             )
 
+        all_names = [v.name for v in visuals] + [v.visual_type for v in visuals]
+        close = difflib.get_close_matches(identifier, all_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(
+                f'Visual "{raw_identifier}" not found on "{page.display_name}". '
+                f"Did you mean: {suggestion}?"
+            )
         available = ", ".join(
             f'{i+1}: {v.name} ({v.visual_type})'
             for i, v in enumerate(visuals)
@@ -384,6 +398,20 @@ class Project:
             meta["activePageName"] = order[0]
         _write_json(meta_path, meta)
 
+    def set_page_order(self, page_ids: list[str]) -> None:
+        """Overwrite the page order with a new sequence of page folder IDs."""
+        meta_path = self.definition_folder / "pages" / "pages.json"
+        meta = _read_json(meta_path) if meta_path.exists() else {"$schema": PAGES_METADATA_SCHEMA}
+        meta["pageOrder"] = page_ids
+        _write_json(meta_path, meta)
+
+    def set_active_page(self, page_id: str) -> None:
+        """Set the active (default-open) page by folder ID."""
+        meta_path = self.definition_folder / "pages" / "pages.json"
+        meta = _read_json(meta_path) if meta_path.exists() else {"$schema": PAGES_METADATA_SCHEMA}
+        meta["activePageName"] = page_id
+        _write_json(meta_path, meta)
+
     # ── Visual CRUD ────────────────────────────────────────────
 
     def create_visual(
@@ -395,7 +423,9 @@ class Project:
         width: int = 300,
         height: int = 200,
     ) -> Visual:
-        """Create a new visual on a page."""
+        """Create a new visual on a page with type-aware scaffolding."""
+        from pbi.roles import get_visual_roles
+
         visual_id = secrets.token_hex(10)
         visual_dir = page.folder / "visuals" / visual_id
         visual_dir.mkdir(parents=True, exist_ok=True)
@@ -403,6 +433,12 @@ class Project:
         # Determine z-order (above existing visuals)
         existing = self.get_visuals(page)
         max_z = max((v.position.get("z", 0) for v in existing), default=0)
+
+        # Scaffold queryState with empty role projections for the visual type
+        roles = get_visual_roles(visual_type)
+        query_state: dict = {}
+        for role in roles:
+            query_state[role["name"]] = {"projections": []}
 
         data = {
             "$schema": VISUAL_CONTAINER_SCHEMA,
@@ -417,7 +453,7 @@ class Project:
             },
             "visual": {
                 "visualType": visual_type,
-                "query": {"queryState": {}},
+                "query": {"queryState": query_state},
                 "objects": {},
             },
         }

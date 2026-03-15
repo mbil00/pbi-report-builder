@@ -224,7 +224,7 @@ class StylePresetRegressionTests(unittest.TestCase):
 
             show_result = runner.invoke(
                 app,
-                ["style", "show", "card-standard", "--project", str(root / "Sample.pbip")],
+                ["style", "get", "card-standard", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(show_result.exit_code, 0, show_result.stdout)
             self.assertIn("name: card-standard", show_result.stdout)
@@ -867,7 +867,7 @@ class FilterModelRegressionTests(unittest.TestCase):
     def test_parse_tmdl_name_handles_escaped_apostrophes(self) -> None:
         self.assertEqual(_parse_tmdl_name("'Bob''s Revenue' ="), "Bob's Revenue")
 
-    def test_filter_add_uses_positional_scope_and_repeatable_values(self) -> None:
+    def test_filter_add_uses_named_scope_and_repeatable_values(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -879,7 +879,6 @@ class FilterModelRegressionTests(unittest.TestCase):
                 [
                     "filter",
                     "add",
-                    "report",
                     "Product.Category",
                     "--mode",
                     "include",
@@ -1075,7 +1074,7 @@ table Devices
                 [
                     "model",
                     "column",
-                    "show",
+                    "unhide",
                     "Devices.AzureADDeviceId",
                     "--project",
                     str(root / "Sample.pbip"),
@@ -1175,7 +1174,7 @@ table Sales
                 [
                     "model",
                     "measure",
-                    "show",
+                    "get",
                     "Sales",
                     "New KPI",
                     "--project",

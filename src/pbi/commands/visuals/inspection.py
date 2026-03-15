@@ -168,11 +168,32 @@ def visual_objects(
 @visual_app.command("list")
 def visual_list(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List all visuals on a page."""
     proj, pg = resolve_page_target(project, page)
     visuals = proj.get_visuals(pg)
+
+    if as_json:
+        import json
+
+        rows = []
+        for index, vis in enumerate(visuals, 1):
+            pos = vis.position
+            rows.append({
+                "index": index,
+                "name": vis.name,
+                "type": vis.visual_type,
+                "x": pos.get("x", 0),
+                "y": pos.get("y", 0),
+                "width": pos.get("width", 0),
+                "height": pos.get("height", 0),
+                "z": pos.get("z", 0),
+                "hidden": bool(vis.data.get("isHidden")),
+            })
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(title=f'Visuals on "{pg.display_name}"', box=box.SIMPLE)
     table.add_column("#", style="dim", width=3)

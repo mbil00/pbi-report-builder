@@ -15,6 +15,7 @@ bookmark_app = typer.Typer(help="Bookmark operations.", no_args_is_help=True)
 
 @bookmark_app.command("list")
 def bookmark_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List all bookmarks in the project."""
@@ -26,6 +27,22 @@ def bookmark_list(
     if not bookmarks:
         console.print("[yellow]No bookmarks. Use `pbi bookmark create` to add one.[/yellow]")
         raise typer.Exit(0)
+
+    if as_json:
+        import json as json_mod
+
+        rows = []
+        for bm in bookmarks:
+            rows.append({
+                "name": bm.name,
+                "displayName": bm.display_name,
+                "activeSection": bm.active_section,
+                "targets": bm.target_visuals or [],
+                "suppressData": bm.suppress_data,
+                "suppressDisplay": bm.suppress_display,
+            })
+        console.print_json(json_mod.dumps(rows, indent=2))
+        return
 
     table = Table(box=box.SIMPLE)
     table.add_column("Name", style="cyan")

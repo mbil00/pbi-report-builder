@@ -16,6 +16,7 @@ interaction_app = typer.Typer(help="Visual interaction operations.", no_args_is_
 @interaction_app.command("list")
 def interaction_list(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List visual interactions on a page."""
@@ -31,6 +32,12 @@ def interaction_list(
     interactions = get_interactions(pg)
     if not interactions:
         console.print("[dim]No custom interactions (all using default behavior).[/dim]")
+        return
+
+    if as_json:
+        import json
+
+        console.print_json(json.dumps(interactions, indent=2))
         return
 
     table = Table(title=f'Interactions on "{pg.display_name}"', box=box.SIMPLE)

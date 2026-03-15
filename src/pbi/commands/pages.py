@@ -41,11 +41,34 @@ def _resolve_page_fields(proj, fields: list[str]) -> list[tuple[str, str, str]]:
 
 
 @page_app.command("list")
-def page_list(project: ProjectOpt = None) -> None:
+def page_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
     """List all pages."""
     proj = get_project(project)
     pages = proj.get_pages()
     meta = proj.get_pages_meta()
+
+    if as_json:
+        import json
+
+        rows = []
+        for i, pg in enumerate(pages, 1):
+            visuals = proj.get_visuals(pg)
+            rows.append({
+                "index": i,
+                "name": pg.display_name,
+                "folder": pg.name,
+                "width": pg.width,
+                "height": pg.height,
+                "displayOption": pg.display_option,
+                "visibility": pg.visibility,
+                "active": meta.get("activePageName") == pg.name,
+                "visuals": len(visuals),
+            })
+        console.print_json(json.dumps(rows, indent=2))
+        return
 
     table = Table(box=box.SIMPLE)
     table.add_column("#", style="dim", width=3)
@@ -70,6 +93,72 @@ def page_list(project: ProjectOpt = None) -> None:
         )
 
     console.print(table)
+
+
+@page_app.command("reorder")
+def page_reorder(
+    pages: Annotated[list[str], typer.Argument(help="Pages in desired order (names, display names, or indices).")],
+    project: ProjectOpt = None,
+) -> None:
+    """Set page order. List all pages in desired order, or a subset to move to front."""
+    proj = get_project(project)
+    all_pages = proj.get_pages()
+    all_ids = [p.name for p in all_pages]
+
+    # Resolve referenced pages
+    resolved_ids: list[str] = []
+    for ref in pages:
+        try:
+            pg = proj.find_page(ref)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+        if pg.name in resolved_ids:
+            console.print(f'[red]Error:[/red] Page "{pg.display_name}" listed more than once.')
+            raise typer.Exit(1)
+        resolved_ids.append(pg.name)
+
+    # If partial list, append remaining pages in current order
+    if len(resolved_ids) < len(all_ids):
+        for pid in all_ids:
+            if pid not in resolved_ids:
+                resolved_ids.append(pid)
+
+    proj.set_page_order(resolved_ids)
+
+    # Display new order
+    id_to_page = {p.name: p for p in all_pages}
+    for i, pid in enumerate(resolved_ids, 1):
+        pg = id_to_page[pid]
+        console.print(f"  {i}. [cyan]{pg.display_name}[/cyan]")
+
+
+@page_app.command("set-active")
+def page_set_active(
+    page: Annotated[str, typer.Argument(help="Page to set as active (name, display name, or index).")],
+    project: ProjectOpt = None,
+) -> None:
+    """Set which page opens by default when the report is viewed."""
+    proj, pg = _get_page(project, page)
+    meta = proj.get_pages_meta()
+    old_active = meta.get("activePageName")
+
+    if old_active == pg.name:
+        console.print(f'[dim]"{pg.display_name}" is already the active page.[/dim]')
+        return
+
+    proj.set_active_page(pg.name)
+
+    old_name = None
+    if old_active:
+        for p in proj.get_pages():
+            if p.name == old_active:
+                old_name = p.display_name
+                break
+    if old_name:
+        console.print(f'Active page: "{old_name}" [dim]->[/dim] "[cyan]{pg.display_name}[/cyan]"')
+    else:
+        console.print(f'Active page set to "[cyan]{pg.display_name}[/cyan]"')
 
 
 @page_app.command("get")

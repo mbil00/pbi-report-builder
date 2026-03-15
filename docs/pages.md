@@ -12,6 +12,16 @@ pbi page properties
 
 Page mutation uses `key=value` only.
 
+## Page Order & Active Page
+
+```bash
+pbi page set-active "Sales Overview"
+pbi page reorder "Sales Overview" "Executive Summary" "Details"
+pbi page reorder "Sales Overview"   # moves Sales Overview to front, others keep order
+```
+
+`reorder` accepts a full or partial list. If partial, listed pages move to front and remaining pages keep their current order.
+
 ## CRUD
 
 ```bash

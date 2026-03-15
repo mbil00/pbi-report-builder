@@ -60,38 +60,29 @@ def _resolve_filter_field(
     return resolved_entity, resolved_prop, resolved_field_type, data_type
 
 
+def _resolve_scope(
+    page_opt: str | None,
+    visual_opt: str | None,
+) -> tuple[str | None, str | None]:
+    """Derive page_ref and visual_ref from --page/--visual flags."""
+    if visual_opt and not page_opt:
+        raise ValueError("--visual requires --page.")
+    return page_opt, visual_opt
+
+
 @filter_app.command("list")
 def filter_list(
-    scope: Annotated[str, typer.Argument(help="Target scope: report, page, or visual.")],
-    targets: Annotated[list[str], typer.Argument(help="Scope targets: none for report, <page> for page, <page> <visual> for visual.")] = [],
+    page_opt: Annotated[str | None, typer.Option("--page", help="Page name (narrows to page scope).")] = None,
+    visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """List filters at report, page, or visual level."""
+    """List filters. Defaults to report level; use --page/--visual to narrow scope."""
     from pbi.filters import filter_field_refs, get_filters, load_level_data, parse_filter
 
     proj = get_project(project)
-    if scope == "report":
-        if targets:
-            console.print("[red]Error:[/red] Report scope does not accept page or visual targets.")
-            raise typer.Exit(1)
-        page_ref = None
-        visual_ref = None
-    elif scope == "page":
-        if len(targets) != 1:
-            console.print("[red]Error:[/red] Page scope requires exactly <page>.")
-            raise typer.Exit(1)
-        page_ref = targets[0]
-        visual_ref = None
-    elif scope == "visual":
-        if len(targets) != 2:
-            console.print("[red]Error:[/red] Visual scope requires exactly <page> <visual>.")
-            raise typer.Exit(1)
-        page_ref, visual_ref = targets
-    else:
-        console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
-        raise typer.Exit(1)
-
     try:
+        page_ref, visual_ref = _resolve_scope(page_opt, visual_opt)
         data, level, _ = load_level_data(proj, page_ref, visual_ref)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -100,6 +91,24 @@ def filter_list(
     filters = get_filters(data)
     if not filters:
         console.print(f"[dim]No filters at {level} level.[/dim]")
+        return
+
+    if as_json:
+        import json as json_mod
+
+        rows = []
+        for filter_obj in filters:
+            info = parse_filter(filter_obj, level)
+            field_refs = filter_field_refs(filter_obj)
+            rows.append({
+                "name": info.name or None,
+                "field": ", ".join(field_refs) if field_refs else None,
+                "type": info.filter_type,
+                "values": info.values if info.values else [],
+                "hidden": info.is_hidden,
+                "locked": info.is_locked,
+            })
+        console.print_json(json_mod.dumps(rows, indent=2))
         return
 
     table = Table(title=f"{level.title()} Filters", box=box.SIMPLE)
@@ -128,8 +137,9 @@ def filter_list(
 
 @filter_app.command("add")
 def filter_add(
-    scope: Annotated[str, typer.Argument(help="Target scope: report, page, or visual.")],
-    targets: Annotated[list[str], typer.Argument(help="Target arguments followed by the filter field. For non-tuple modes: report <field>, page <page> <field>, visual <page> <visual> <field>. For tuple mode: omit the field and use --row.")] = [],
+    field: Annotated[str | None, typer.Argument(help="Filter field as Table.Field (omit for --mode tuple).")] = None,
+    page_opt: Annotated[str | None, typer.Option("--page", help="Page name (narrows to page scope).")] = None,
+    visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
     value: Annotated[list[str] | None, typer.Option("--value", help="Value for categorical/include/exclude filters. Repeatable.")] = None,
     mode: Annotated[
         str,
@@ -153,7 +163,7 @@ def filter_add(
     row: Annotated[list[str] | None, typer.Option("--row", help="Tuple row as comma-separated Field=Value pairs. Repeatable.")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Add a filter."""
+    """Add a filter. Defaults to report level; use --page/--visual to narrow scope."""
     from pbi.filters import (
         TupleField,
         add_categorical_filter,
@@ -183,51 +193,17 @@ def filter_add(
     model = _load_filter_model(project)
     proj = get_project(project)
 
-    if mode == "tuple":
-        if scope == "report":
-            if targets:
-                console.print("[red]Error:[/red] Tuple filters at report scope do not accept target arguments.")
-                raise typer.Exit(1)
-            page_ref = None
-            visual_ref = None
-        elif scope == "page":
-            if len(targets) != 1:
-                console.print("[red]Error:[/red] Tuple filters at page scope require exactly <page>.")
-                raise typer.Exit(1)
-            page_ref = targets[0]
-            visual_ref = None
-        elif scope == "visual":
-            if len(targets) != 2:
-                console.print("[red]Error:[/red] Tuple filters at visual scope require exactly <page> <visual>.")
-                raise typer.Exit(1)
-            page_ref, visual_ref = targets
-        else:
-            console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
-            raise typer.Exit(1)
-    else:
-        if scope == "report":
-            if len(targets) != 1:
-                console.print("[red]Error:[/red] Report scope requires exactly <field>.")
-                raise typer.Exit(1)
-            page_ref = None
-            visual_ref = None
-            field = targets[0]
-        elif scope == "page":
-            if len(targets) != 2:
-                console.print("[red]Error:[/red] Page scope requires exactly <page> <field>.")
-                raise typer.Exit(1)
-            page_ref = targets[0]
-            visual_ref = None
-            field = targets[1]
-        elif scope == "visual":
-            if len(targets) != 3:
-                console.print("[red]Error:[/red] Visual scope requires exactly <page> <visual> <field>.")
-                raise typer.Exit(1)
-            page_ref, visual_ref, field = targets
-        else:
-            console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
-            raise typer.Exit(1)
+    try:
+        page_ref, visual_ref = _resolve_scope(page_opt, visual_opt)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
+    # For non-tuple modes, field is required
+    if mode != "tuple":
+        if not field:
+            console.print("[red]Error:[/red] Field argument is required (use Table.Field format). Omit only for --mode tuple.")
+            raise typer.Exit(1)
         try:
             entity, prop, resolved_field_type, data_type = _resolve_filter_field(
                 field,
@@ -391,6 +367,7 @@ def filter_add(
         )
         return
 
+    # Tuple mode
     if not row:
         console.print("[red]Error:[/red] Tuple filters require at least one --row.")
         raise typer.Exit(1)
@@ -435,40 +412,19 @@ def filter_add(
     console.print(f'Added tuple filter with [cyan]{len(parsed_rows)}[/cyan] row(s) at {level} level')
 
 
-@filter_app.command("remove")
-def filter_remove(
-    scope: Annotated[str, typer.Argument(help="Target scope: report, page, or visual.")],
-    targets: Annotated[list[str], typer.Argument(help="Target arguments followed by the filter name or field to remove. report <filter>, page <page> <filter>, visual <page> <visual> <filter>.")],
+@filter_app.command("delete")
+def filter_delete(
+    field: Annotated[str, typer.Argument(help="Filter field reference or name to remove.")],
+    page_opt: Annotated[str | None, typer.Option("--page", help="Page name (narrows to page scope).")] = None,
+    visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Remove a filter by field reference or filter name."""
     from pbi.filters import load_level_data, remove_filter, save_level_data
 
     proj = get_project(project)
-    if scope == "report":
-        if len(targets) != 1:
-            console.print("[red]Error:[/red] Report scope requires exactly <filter>.")
-            raise typer.Exit(1)
-        page_ref = None
-        visual_ref = None
-        field = targets[0]
-    elif scope == "page":
-        if len(targets) != 2:
-            console.print("[red]Error:[/red] Page scope requires exactly <page> <filter>.")
-            raise typer.Exit(1)
-        page_ref = targets[0]
-        visual_ref = None
-        field = targets[1]
-    elif scope == "visual":
-        if len(targets) != 3:
-            console.print("[red]Error:[/red] Visual scope requires exactly <page> <visual> <filter>.")
-            raise typer.Exit(1)
-        page_ref, visual_ref, field = targets
-    else:
-        console.print("[red]Error:[/red] Scope must be 'report', 'page', or 'visual'.")
-        raise typer.Exit(1)
-
     try:
+        page_ref, visual_ref = _resolve_scope(page_opt, visual_opt)
         data, level, target = load_level_data(proj, page_ref, visual_ref)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
