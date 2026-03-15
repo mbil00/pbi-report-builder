@@ -1,11 +1,8 @@
-"""Compatibility facade for semantic-model helpers."""
+"""Focused semantic-model submodules."""
 
-from pbi.modeling import (
-    Column,
-    Measure,
-    SemanticModel,
-    SemanticTable,
-    _parse_tmdl_name,
+from .parser import _parse_tmdl_name
+from .schema import Column, Measure, SemanticModel, SemanticTable
+from .writes import (
     create_calculated_column,
     create_measure,
     delete_calculated_column,
