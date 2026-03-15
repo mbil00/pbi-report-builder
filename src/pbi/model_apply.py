@@ -9,6 +9,8 @@ from typing import Any
 import yaml
 
 from pbi.model import (
+    Column,
+    Measure,
     SemanticModel,
     create_calculated_column,
     create_measure,
@@ -58,13 +60,19 @@ def apply_model_yaml(
         result.errors.append("YAML must be a mapping.")
         return result
 
+    try:
+        model = SemanticModel.load(project_root)
+    except FileNotFoundError as e:
+        result.errors.append(str(e))
+        return result
+
     measures_spec = spec.get("measures")
     if measures_spec is not None:
-        _apply_measures(project_root, measures_spec, result, dry_run=dry_run)
+        _apply_measures(project_root, measures_spec, result, dry_run=dry_run, model=model)
 
     columns_spec = spec.get("columns")
     if columns_spec is not None:
-        _apply_columns(project_root, columns_spec, result, dry_run=dry_run)
+        _apply_columns(project_root, columns_spec, result, dry_run=dry_run, model=model)
 
     if measures_spec is None and columns_spec is None:
         result.errors.append("YAML must include 'measures' and/or 'columns'.")
@@ -78,6 +86,7 @@ def _apply_measures(
     result: ModelApplyResult,
     *,
     dry_run: bool,
+    model: SemanticModel,
 ) -> None:
     """Apply declarative measure changes."""
     if not isinstance(measures_spec, dict):
@@ -103,7 +112,6 @@ def _apply_measures(
                 continue
 
             try:
-                model = SemanticModel.load(project_root)
                 table = model.find_table(str(table_name))
                 existing = _find_measure(table, name)
                 changed = False
@@ -115,7 +123,18 @@ def _apply_measures(
                         expression,
                         format_string=fmt if isinstance(fmt, str) else None,
                         dry_run=dry_run,
+                        model=model,
                     )
+                    if not dry_run:
+                        table.measures.append(
+                            Measure(
+                                name=name,
+                                table=table.name,
+                                expression=expression,
+                                format_string=fmt if isinstance(fmt, str) else "",
+                                definition_path=table.definition_path,
+                            )
+                        )
                     result.measures_created.append(f"{table.name}.{name}")
                     continue
 
@@ -125,16 +144,22 @@ def _apply_measures(
                     existing.name,
                     expression,
                     dry_run=dry_run,
+                    model=model,
                 )
                 changed = changed or expr_changed
+                if expr_changed and not dry_run:
+                    existing.expression = expression
                 if isinstance(fmt, str):
                     _, _, _, fmt_changed = set_field_format(
                         project_root,
                         f"{table_name_resolved}.{measure_name}",
                         fmt,
                         dry_run=dry_run,
+                        model=model,
                     )
                     changed = changed or fmt_changed
+                    if fmt_changed and not dry_run:
+                        existing.format_string = fmt
                 if changed:
                     result.measures_updated.append(f"{table_name_resolved}.{measure_name}")
             except (FileNotFoundError, ValueError) as e:
@@ -147,6 +172,7 @@ def _apply_columns(
     result: ModelApplyResult,
     *,
     dry_run: bool,
+    model: SemanticModel,
 ) -> None:
     """Apply declarative column changes."""
     if not isinstance(columns_spec, dict):
@@ -169,6 +195,7 @@ def _apply_columns(
                     entry,
                     result,
                     dry_run=dry_run,
+                    model=model,
                 )
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"columns.{table_name}.{column_name}: {e}")
@@ -182,9 +209,9 @@ def _apply_column_entry(
     result: ModelApplyResult,
     *,
     dry_run: bool,
+    model: SemanticModel,
 ) -> None:
     """Apply one declarative column spec."""
-    model = SemanticModel.load(project_root)
     table = model.find_table(table_name)
     existing = _find_column(table, column_name)
 
@@ -215,7 +242,20 @@ def _apply_column_entry(
                 data_type=data_type,
                 format_string=fmt if isinstance(fmt, str) else None,
                 dry_run=dry_run,
+                model=model,
             )
+            if not dry_run:
+                existing = Column(
+                    name=column_name,
+                    table=table.name,
+                    data_type=data_type,
+                    is_hidden=False,
+                    expression=expression,
+                    format_string=fmt if isinstance(fmt, str) else "",
+                    definition_path=table.definition_path,
+                    kind="calculatedColumn",
+                )
+                table.columns.append(existing)
             result.columns_created.append(f"{table.name}.{column_name}")
             if isinstance(hidden, bool):
                 hidden_changed = False
@@ -227,7 +267,10 @@ def _apply_column_entry(
                         f"{table.name}.{column_name}",
                         hidden,
                         dry_run=dry_run,
+                        model=model,
                     )
+                    if hidden_changed and existing is not None:
+                        existing.is_hidden = hidden
                 if hidden_changed and f"{table.name}.{column_name}" not in result.columns_updated:
                     result.columns_updated.append(f"{table.name}.{column_name}")
             return
@@ -241,8 +284,11 @@ def _apply_column_entry(
                 existing.name,
                 expression,
                 dry_run=dry_run,
+                model=model,
             )
             changed = changed or expr_changed
+            if expr_changed and not dry_run:
+                existing.expression = expression
     else:
         if existing is None:
             raise ValueError("source columns are not created by model apply.")
@@ -253,16 +299,22 @@ def _apply_column_entry(
             f"{table.name}.{column_name}",
             fmt,
             dry_run=dry_run,
+            model=model,
         )
         changed = changed or fmt_changed
+        if fmt_changed and not dry_run and existing is not None:
+            existing.format_string = fmt
     if isinstance(hidden, bool):
         _, _, hidden_changed = set_column_hidden(
             project_root,
             f"{table.name}.{column_name}",
             hidden,
             dry_run=dry_run,
+            model=model,
         )
         changed = changed or hidden_changed
+        if hidden_changed and not dry_run and existing is not None:
+            existing.is_hidden = hidden
     if changed:
         result.columns_updated.append(f"{table.name}.{column_name}")
 

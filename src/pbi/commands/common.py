@@ -67,3 +67,19 @@ def parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:
             raise ValueError(f"Invalid assignment '{arg}'. Use prop=value format.")
         pairs.append((arg[:eq], arg[eq + 1 :]))
     return pairs
+
+
+def resolve_output_path(
+    output: Path,
+    *,
+    base_dir: Path,
+    confine_to: Path | None = None,
+) -> Path:
+    """Resolve an output path, optionally confining it to a project root."""
+    resolved = output.resolve() if output.is_absolute() else (base_dir / output).resolve()
+    if confine_to is not None:
+        root = confine_to.resolve()
+        if resolved != root and root not in resolved.parents:
+            raise ValueError(f"Output path must stay within {root}")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return resolved

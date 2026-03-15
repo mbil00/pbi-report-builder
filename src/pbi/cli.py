@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -11,7 +13,13 @@ from rich.table import Table
 from rich.tree import Tree
 
 from pbi.commands.bookmarks import bookmark_app
-from pbi.commands.common import ProjectOpt, console, get_project, parse_property_assignments
+from pbi.commands.common import (
+    ProjectOpt,
+    console,
+    get_project,
+    parse_property_assignments,
+    resolve_output_path,
+)
 from pbi.commands.filters import filter_app
 from pbi.commands.interactions import interaction_app
 from pbi.commands.model import model_app
@@ -66,6 +74,13 @@ app.add_typer(bookmark_app, name="bookmark")
 app.add_typer(interaction_app, name="interaction")
 
 
+def _safe_backup_path(project_root: Path, page_name: str) -> Path:
+    """Build a deterministic backup filename that cannot escape the project root."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", page_name).strip("._") or "page"
+    digest = hashlib.sha1(page_name.encode("utf-8")).hexdigest()[:8]
+    return project_root / f".pbi-backup-{slug[:40]}-{digest}.yaml"
+
+
 # ── Project info ───────────────────────────────────────────────────
 
 @app.command()
@@ -87,7 +102,7 @@ def map(
     )
 
     if output:
-        out_path = output if output.is_absolute() else proj.root / output
+        out_path = resolve_output_path(output, base_dir=proj.root)
         out_path.write_text(content, encoding="utf-8")
         console.print(f"Map written to [cyan]{out_path}[/cyan]")
     else:
@@ -109,9 +124,6 @@ def apply_cmd(
     Use --overwrite to fully reconcile a page to match the YAML (destructive).
     With --overwrite, the existing page is backed up to a .yaml file first.
     """
-    import shutil
-    import tempfile
-
     from pbi.apply import apply_yaml
 
     proj = get_project(project)
@@ -130,27 +142,22 @@ def apply_cmd(
         import yaml as yaml_mod
 
         spec = yaml_mod.safe_load(yaml_content)
-        pages_in_spec = [p.get("name") for p in spec.get("pages", []) if p.get("name")]
+        pages_in_spec = []
+        if isinstance(spec, dict):
+            pages_in_spec = [p.get("name") for p in spec.get("pages", []) if isinstance(p, dict) and p.get("name")]
 
         for page_name in pages_in_spec:
             if page and page_name.lower() != page.lower():
                 continue
             try:
-                existing_page = proj.find_page(page_name)
+                proj.find_page(page_name)
             except ValueError:
                 continue  # Page doesn't exist yet, nothing to back up
 
             backup_content = export_yaml(proj, page_filter=page_name)
-            backup_path = proj.root / f".pbi-backup-{page_name}.yaml"
+            backup_path = _safe_backup_path(proj.root, page_name)
             backup_path.write_text(backup_content, encoding="utf-8")
             console.print(f"[dim]Backed up \"{page_name}\" → {backup_path}[/dim]")
-
-    snapshot_dir: Path | None = None
-    temp_dir: tempfile.TemporaryDirectory[str] | None = None
-    if overwrite and not dry_run:
-        temp_dir = tempfile.TemporaryDirectory()
-        snapshot_dir = Path(temp_dir.name) / "definition"
-        shutil.copytree(proj.definition_folder, snapshot_dir)
 
     result = apply_yaml(
         proj,
@@ -159,14 +166,6 @@ def apply_cmd(
         dry_run=dry_run,
         overwrite=overwrite,
     )
-
-    if result.errors and snapshot_dir is not None:
-        shutil.rmtree(proj.definition_folder)
-        shutil.copytree(snapshot_dir, proj.definition_folder)
-        console.print("[dim]Rolled back failed overwrite apply.[/dim]")
-
-    if temp_dir is not None:
-        temp_dir.cleanup()
 
     # Report results
     prefix = "[dim](dry run)[/dim] " if dry_run else ""

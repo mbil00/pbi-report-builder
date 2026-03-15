@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import copy
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -92,34 +95,53 @@ def apply_yaml(
         result.errors.append("'pages' must be a list.")
         return result
 
-    for page_spec in pages_spec:
-        if not isinstance(page_spec, dict):
-            result.errors.append(f"Each page must be a mapping, got: {type(page_spec).__name__}")
-            continue
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    snapshot_dir: Path | None = None
+    if not dry_run:
+        temp_dir = tempfile.TemporaryDirectory()
+        snapshot_dir = Path(temp_dir.name) / "definition"
+        shutil.copytree(project.definition_folder, snapshot_dir)
 
-        page_name = page_spec.get("name")
-        if not page_name:
-            result.errors.append("Each page must have a 'name' key.")
-            continue
+    try:
+        try:
+            for page_spec in pages_spec:
+                if not isinstance(page_spec, dict):
+                    result.errors.append(f"Each page must be a mapping, got: {type(page_spec).__name__}")
+                    continue
 
-        if page_filter and page_name.lower() != page_filter.lower():
-            continue
+                page_name = page_spec.get("name")
+                if not page_name:
+                    result.errors.append("Each page must have a 'name' key.")
+                    continue
 
-        _apply_page(
-            project,
-            page_spec,
-            result,
-            dry_run=dry_run,
-            overwrite=overwrite,
-            style_cache=style_cache,
-        )
+                if page_filter and page_name.lower() != page_filter.lower():
+                    continue
 
-    # Apply bookmarks (top-level)
-    bookmarks_spec = spec.get("bookmarks", [])
-    if isinstance(bookmarks_spec, list) and bookmarks_spec:
-        _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run)
+                _apply_page(
+                    project,
+                    page_spec,
+                    result,
+                    dry_run=dry_run,
+                    overwrite=overwrite,
+                    style_cache=style_cache,
+                )
 
-    return result
+            # Apply bookmarks (top-level)
+            bookmarks_spec = spec.get("bookmarks", [])
+            if isinstance(bookmarks_spec, list) and bookmarks_spec:
+                _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run)
+        except Exception:
+            if snapshot_dir is not None:
+                _restore_definition_snapshot(project, snapshot_dir)
+            raise
+
+        if result.errors and snapshot_dir is not None:
+            _restore_definition_snapshot(project, snapshot_dir)
+
+        return result
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()
 
 
 def _apply_page(
@@ -159,6 +181,7 @@ def _apply_page(
 
     # Apply page properties (skip for dry-run on new pages — no page object)
     if not (dry_run and page_is_new):
+        page_error_count = len(result.errors)
         page_props = {
             "width": "width",
             "height": "height",
@@ -210,7 +233,7 @@ def _apply_page(
             _apply_interactions(project, page, page_spec["interactions"], result,
                                 context=f"Page {page_name}", dry_run=dry_run)
 
-        if not dry_run:
+        if not dry_run and len(result.errors) == page_error_count:
             page.save()
 
     # Apply visuals
@@ -329,6 +352,8 @@ def _apply_visual(
         result.errors.append(f"{context}: {e}")
         return
 
+    visual_error_count = len(result.errors)
+
     if dry_run:
         # Count would-be changes
         result.properties_set += len(style_assignments)
@@ -420,6 +445,9 @@ def _apply_visual(
                 result.properties_set += count
             except (ValueError, KeyError) as e:
                 result.errors.append(f"{context}: kpis expansion failed: {e}")
+
+    if len(result.errors) != visual_error_count:
+        return
 
     visual.save()
 
@@ -964,3 +992,10 @@ def _resolve_style_assignments(
                 continue
             assignments.append((style_name, prop_name, value))
     return assignments
+
+
+def _restore_definition_snapshot(project: Project, snapshot_dir: Path) -> None:
+    """Restore the report definition directory from a pre-apply snapshot."""
+    if project.definition_folder.exists():
+        shutil.rmtree(project.definition_folder)
+    shutil.copytree(snapshot_dir, project.definition_folder)

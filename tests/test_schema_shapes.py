@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from pbi.bookmarks import create_bookmark, update_bookmark_visuals
 from pbi.filters import (
@@ -20,7 +21,7 @@ from pbi.filters import (
 from pbi.project import Project
 from pbi.properties import PAGE_PROPERTIES, set_property
 from pbi.schema_refs import REPORT_SCHEMA
-from pbi.themes import apply_theme
+from pbi.themes import apply_theme, remove_theme
 
 
 class BookmarkSchemaShapeTests(unittest.TestCase):
@@ -127,6 +128,113 @@ class ThemeSchemaShapeTests(unittest.TestCase):
         self.assertEqual(pkg["type"], "RegisteredResources")
         self.assertTrue(all(isinstance(item["type"], str) for item in pkg["items"]))
         self.assertEqual(report["themeCollection"]["customTheme"]["name"], "Custom Theme")
+
+    def test_apply_theme_rejects_unsafe_theme_name(self) -> None:
+        report_path = self.definition_folder / "report.json"
+        report_path.write_text(
+            json.dumps({"$schema": REPORT_SCHEMA, "themeCollection": {}}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        theme_path = self.root / "custom-theme.json"
+        theme_path.write_text('{"name": "../../escape"}\n', encoding="utf-8")
+
+        with self.assertRaises(ValueError):
+            apply_theme(self.project, theme_path)
+
+        report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+        self.assertEqual(report.get("themeCollection"), {})
+
+    def test_remove_theme_does_not_follow_unsafe_resource_path(self) -> None:
+        victim = self.root.parent / "pbi-theme-victim.json"
+        victim.write_text("keep\n", encoding="utf-8")
+        self.addCleanup(lambda: victim.unlink(missing_ok=True))
+
+        report_path = self.definition_folder / "report.json"
+        report_path.write_text(
+            json.dumps(
+                {
+                    "$schema": REPORT_SCHEMA,
+                    "themeCollection": {
+                        "customTheme": {
+                            "name": "Unsafe Theme",
+                            "type": "RegisteredResources",
+                            "reportVersionAtImport": {},
+                        }
+                    },
+                    "resourcePackages": [
+                        {
+                            "name": "RegisteredResources",
+                            "type": "RegisteredResources",
+                            "items": [
+                                {
+                                    "name": "Unsafe Theme",
+                                    "path": "../../../../pbi-theme-victim.json",
+                                    "type": "CustomTheme",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        removed = remove_theme(self.project)
+        self.assertEqual(removed, "Unsafe Theme")
+        self.assertTrue(victim.exists())
+
+        report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+        self.assertNotIn("customTheme", report["themeCollection"])
+        self.assertEqual(report["resourcePackages"][0]["items"], [])
+
+    def test_apply_theme_keeps_existing_theme_if_copy_fails(self) -> None:
+        report_path = self.definition_folder / "report.json"
+        reg_dir = self.report_folder / "StaticResources" / "RegisteredResources"
+        reg_dir.mkdir(parents=True, exist_ok=True)
+        (reg_dir / "Old Theme.json").write_text('{"name":"Old Theme"}\n', encoding="utf-8")
+        report_path.write_text(
+            json.dumps(
+                {
+                    "$schema": REPORT_SCHEMA,
+                    "themeCollection": {
+                        "customTheme": {
+                            "name": "Old Theme",
+                            "type": "RegisteredResources",
+                            "reportVersionAtImport": {},
+                        }
+                    },
+                    "resourcePackages": [
+                        {
+                            "name": "RegisteredResources",
+                            "type": "RegisteredResources",
+                            "items": [
+                                {
+                                    "name": "Old Theme",
+                                    "path": "Old Theme.json",
+                                    "type": "CustomTheme",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        theme_path = self.root / "custom-theme.json"
+        theme_path.write_text('{"name": "New Theme"}\n', encoding="utf-8")
+
+        with mock.patch("pbi.themes.shutil.copy2", side_effect=OSError("boom")):
+            with self.assertRaises(OSError):
+                apply_theme(self.project, theme_path)
+
+        report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+        self.assertEqual(report["themeCollection"]["customTheme"]["name"], "Old Theme")
+        self.assertTrue((reg_dir / "Old Theme.json").exists())
 
 
 class PagePropertyShapeTests(unittest.TestCase):

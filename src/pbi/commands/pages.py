@@ -11,7 +11,14 @@ from rich.table import Table
 
 from pbi.properties import PAGE_PROPERTIES, get_property, list_properties, set_property
 
-from .common import ProjectOpt, console, get_project, parse_property_assignments, resolve_field_type
+from .common import (
+    ProjectOpt,
+    console,
+    get_project,
+    parse_property_assignments,
+    resolve_field_type,
+    resolve_output_path,
+)
 
 page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
 page_drillthrough_app = typer.Typer(help="Page drillthrough operations.", no_args_is_help=True)
@@ -397,7 +404,7 @@ def page_export(
     content = export_yaml(proj, page_filter=page)
 
     if output:
-        out_path = output if output.is_absolute() else proj.root / output
+        out_path = resolve_output_path(output, base_dir=proj.root)
         out_path.write_text(content, encoding="utf-8")
         console.print(f"Exported to [cyan]{out_path}[/cyan]")
     else:

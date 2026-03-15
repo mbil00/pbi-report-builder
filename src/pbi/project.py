@@ -116,7 +116,13 @@ class Project:
         report_path = None
         for artifact in pbip_data.get("artifacts", []):
             if "report" in artifact:
-                report_path = root / artifact["report"].get("path", "")
+                raw_report_path = artifact["report"].get("path", "")
+                if raw_report_path:
+                    report_path = _resolve_within_root(
+                        root,
+                        raw_report_path,
+                        label="Report artifact path",
+                    )
                 break
 
         # Fallback: search for .Report folder
@@ -753,3 +759,13 @@ def _write_json(path: Path, data: dict) -> None:
     with open(path, "w", encoding="utf-8", newline="\r\n") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
+
+
+def _resolve_within_root(root: Path, raw_path: str, *, label: str) -> Path:
+    """Resolve a project-relative path and reject escapes outside the root."""
+    base = root.resolve()
+    candidate = Path(raw_path)
+    resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ValueError(f"{label} must stay within the project root: {raw_path}")
+    return resolved

@@ -24,6 +24,78 @@ class ThemeInfo:
     is_custom: bool
 
 
+def _registered_resources_dir(project: Project) -> Path:
+    return project.report_folder / "StaticResources" / "RegisteredResources"
+
+
+def _validate_theme_name(theme_name: str) -> str:
+    """Reject theme names that would escape the resources directory."""
+    if not isinstance(theme_name, str) or not theme_name.strip():
+        raise ValueError("Theme name must be a non-empty file-safe name.")
+    normalized = theme_name.strip()
+    if normalized in {".", ".."}:
+        raise ValueError("Theme name must be a non-empty file-safe name.")
+    if "/" in normalized or "\\" in normalized:
+        raise ValueError("Theme name may not contain path separators.")
+    if Path(normalized).is_absolute():
+        raise ValueError("Theme name may not be an absolute path.")
+    return normalized
+
+
+def _resolve_registered_resource_path(project: Project, raw_path: str) -> Path:
+    """Resolve a resource path and reject escapes outside RegisteredResources."""
+    resources_dir = _registered_resources_dir(project)
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        raise ValueError(f"Theme resource path may not be absolute: {raw_path}")
+    resolved = (resources_dir.resolve() / candidate).resolve()
+    base = resources_dir.resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ValueError(f"Theme resource path must stay within RegisteredResources: {raw_path}")
+    return resolved
+
+
+def _custom_theme_paths(project: Project, report: dict, theme_name: str | None = None) -> list[Path]:
+    """Return confined filesystem paths for custom theme files referenced by the report."""
+    paths: list[Path] = []
+    resources_dir = _registered_resources_dir(project)
+
+    if theme_name:
+        try:
+            safe_name = _validate_theme_name(theme_name)
+        except ValueError:
+            safe_name = ""
+        if safe_name:
+            paths.extend(
+                [
+                    resources_dir / f"{safe_name}.json",
+                    resources_dir / "BaseThemes" / f"{safe_name}.json",
+                ]
+            )
+
+    for pkg in report.get("resourcePackages", []):
+        if pkg.get("name") != "RegisteredResources":
+            continue
+        for item in pkg.get("items", []):
+            if item.get("type") != "CustomTheme":
+                continue
+            raw_path = item.get("path", "")
+            if not isinstance(raw_path, str) or not raw_path:
+                continue
+            try:
+                paths.append(_resolve_registered_resource_path(project, raw_path))
+            except ValueError:
+                continue
+
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if path not in seen:
+            deduped.append(path)
+            seen.add(path)
+    return deduped
+
+
 def get_themes(project: Project) -> list[ThemeInfo]:
     """List active themes (base + custom) from report.json."""
     report = _read_report(project)
@@ -61,22 +133,24 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     with open(theme_path, encoding="utf-8-sig") as f:
         theme_data = json.load(f)
 
-    theme_name = theme_data.get("name", theme_path.stem)
+    theme_name = _validate_theme_name(theme_data.get("name", theme_path.stem))
 
-    # Remove existing custom theme (file + resource entry) before applying new one
-    _remove_existing_custom_theme(project)
-
-    # Copy theme to RegisteredResources (flat, not in BaseThemes/ subdirectory)
-    resources_dir = (
-        project.report_folder / "StaticResources" / "RegisteredResources"
-    )
-    resources_dir.mkdir(parents=True, exist_ok=True)
-    dest = resources_dir / f"{theme_name}.json"
-    shutil.copy2(theme_path, dest)
-
-    # Update report.json
     report = _read_report(project)
     _normalize_resource_packages(report)
+    old_paths = _custom_theme_paths(
+        project,
+        report,
+        report.get("themeCollection", {}).get("customTheme", {}).get("name"),
+    )
+
+    # Copy theme to RegisteredResources (flat, not in BaseThemes/ subdirectory)
+    resources_dir = _registered_resources_dir(project)
+    resources_dir.mkdir(parents=True, exist_ok=True)
+    dest = resources_dir / f"{theme_name}.json"
+    temp_dest = resources_dir / f".{theme_name}.json.tmp"
+    shutil.copy2(theme_path, temp_dest)
+    temp_dest.replace(dest)
+
     report.setdefault("$schema", REPORT_SCHEMA)
     report.setdefault("themeCollection", {})
 
@@ -96,10 +170,19 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     # Remove layoutOptimization if present (not in PBIR schema)
     report.pop("layoutOptimization", None)
 
+    _remove_resource_items_by_type(report, "CustomTheme")
+
     # Ensure resourcePackages has the registered resources entry
     _ensure_resource_entry(report, theme_name)
 
     _write_report(project, report)
+
+    for path in old_paths:
+        if path == dest:
+            continue
+        if path.exists():
+            path.unlink()
+
     return theme_name
 
 
@@ -114,18 +197,12 @@ def export_theme(project: Project, output_path: Path) -> str:
         raise FileNotFoundError("No custom theme applied to this project")
 
     theme_name = custom.get("name", "")
-    # Look in RegisteredResources — try flat first, then legacy BaseThemes/ path
-    reg_dir = project.report_folder / "StaticResources" / "RegisteredResources"
-    theme_file = reg_dir / f"{theme_name}.json"
-    if not theme_file.exists():
-        theme_file = reg_dir / "BaseThemes" / f"{theme_name}.json"
-    if not theme_file.exists():
-        # Try matching by filename pattern (handles numeric suffixed names)
-        for candidate in reg_dir.glob("*.json"):
-            if candidate.stem.startswith(theme_name.split(".")[0]):
-                theme_file = candidate
-                break
-    if not theme_file.exists():
+    theme_file = None
+    for candidate in _custom_theme_paths(project, report, theme_name):
+        if candidate.exists():
+            theme_file = candidate
+            break
+    if theme_file is None or not theme_file.exists():
         raise FileNotFoundError(
             f'Theme file for "{theme_name}" not found in RegisteredResources'
         )
@@ -145,17 +222,18 @@ def remove_theme(project: Project) -> str | None:
         return None
 
     theme_name = custom.get("name", "")
+    paths_to_remove = _custom_theme_paths(project, report, theme_name)
 
     # Remove from resourcePackages
     _remove_resource_items_by_type(report, "CustomTheme")
-
-    # Remove file if it exists (check both flat and legacy paths)
-    _delete_theme_file(project, theme_name)
 
     # Clean up layoutOptimization if present
     report.pop("layoutOptimization", None)
 
     _write_report(project, report)
+    for path in paths_to_remove:
+        if path.exists():
+            path.unlink()
     return theme_name
 
 
@@ -354,9 +432,7 @@ def _remove_existing_custom_theme(project: Project) -> None:
         return
 
     theme_name = custom.get("name", "")
-
-    # Remove the file
-    _delete_theme_file(project, theme_name)
+    paths_to_remove = _custom_theme_paths(project, report, theme_name)
 
     # Remove old resource entries with type CustomTheme
     _remove_resource_items_by_type(report, "CustomTheme")
@@ -365,27 +441,17 @@ def _remove_existing_custom_theme(project: Project) -> None:
     report.get("themeCollection", {}).pop("customTheme", None)
 
     _write_report(project, report)
+    for path in paths_to_remove:
+        if path.exists():
+            path.unlink()
 
 
 def _delete_theme_file(project: Project, theme_name: str) -> None:
     """Delete a theme file from RegisteredResources (flat or BaseThemes/)."""
-    reg_dir = project.report_folder / "StaticResources" / "RegisteredResources"
-    for path in [
-        reg_dir / f"{theme_name}.json",
-        reg_dir / "BaseThemes" / f"{theme_name}.json",
-    ]:
+    report = _read_report(project)
+    for path in _custom_theme_paths(project, report, theme_name):
         if path.exists():
             path.unlink()
-
-    # Also check resource items for the path and clean up the actual file
-    report = _read_report(project)
-    for pkg in report.get("resourcePackages", []):
-        if pkg.get("name") == "RegisteredResources":
-            for item in pkg.get("items", []):
-                if item.get("type") == "CustomTheme":
-                    item_path = reg_dir / item.get("path", "")
-                    if item_path.exists():
-                        item_path.unlink()
 
 
 def _remove_resource_items_by_type(report: dict, item_type: str) -> None:

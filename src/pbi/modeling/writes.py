@@ -18,11 +18,12 @@ def set_field_format(
     format_string: str,
     *,
     dry_run: bool = False,
+    model: SemanticModel | None = None,
 ) -> tuple[str, str, str, bool]:
     """Set the format string on a column or measure."""
-    model = SemanticModel.load(project_root)
-    table_name, field_name, field_type = model.resolve_field(field_ref)
-    table = model.find_table(table_name)
+    loaded_model = model or SemanticModel.load(project_root)
+    table_name, field_name, field_type = loaded_model.resolve_field(field_ref)
+    table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
 
@@ -44,13 +45,14 @@ def set_column_hidden(
     hidden: bool,
     *,
     dry_run: bool = False,
+    model: SemanticModel | None = None,
 ) -> tuple[str, str, bool]:
     """Show or hide a column in TMDL."""
-    model = SemanticModel.load(project_root)
-    table_name, field_name, field_type = model.resolve_field(field_ref)
+    loaded_model = model or SemanticModel.load(project_root)
+    table_name, field_name, field_type = loaded_model.resolve_field(field_ref)
     if field_type != "column":
         raise ValueError(f'Field "{field_ref}" resolves to a {field_type}, not a column.')
-    table = model.find_table(table_name)
+    table = loaded_model.find_table(table_name)
     column = table.find_column(field_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
@@ -74,10 +76,11 @@ def create_measure(
     *,
     format_string: str | None = None,
     dry_run: bool = False,
+    model: SemanticModel | None = None,
 ) -> tuple[str, str, bool]:
     """Create a new measure in a table TMDL file."""
-    model = SemanticModel.load(project_root)
-    table = model.find_table(table_name)
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
     if any(measure.name.lower() == measure_name.lower() for measure in table.measures):
@@ -104,10 +107,11 @@ def edit_measure_expression(
     expression: str,
     *,
     dry_run: bool = False,
+    model: SemanticModel | None = None,
 ) -> tuple[str, str, bool]:
     """Replace a measure expression while preserving its metadata lines."""
-    model = SemanticModel.load(project_root)
-    table = model.find_table(table_name)
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
     measure = table.find_measure(measure_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
@@ -160,10 +164,11 @@ def create_calculated_column(
     data_type: str,
     format_string: str | None = None,
     dry_run: bool = False,
+    model: SemanticModel | None = None,
 ) -> tuple[str, str, bool]:
     """Create a new calculated column in a table TMDL file."""
-    model = SemanticModel.load(project_root)
-    table = model.find_table(table_name)
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
     if any(column.name.lower() == column_name.lower() for column in table.columns):
@@ -191,10 +196,11 @@ def edit_calculated_column_expression(
     expression: str,
     *,
     dry_run: bool = False,
+    model: SemanticModel | None = None,
 ) -> tuple[str, str, bool]:
     """Replace a calculated-column expression while preserving metadata lines."""
-    model = SemanticModel.load(project_root)
-    table = model.find_table(table_name)
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
     column = table.find_column(column_name)
     if column.kind != "calculatedColumn":
         raise ValueError(f'Column "{table.name}.{column.name}" is a source column, not a calculated column.')

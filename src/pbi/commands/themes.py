@@ -9,7 +9,7 @@ import typer
 from rich import box
 from rich.table import Table
 
-from .common import ProjectOpt, console, get_project
+from .common import ProjectOpt, console, get_project, resolve_output_path
 
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
 
@@ -80,11 +80,11 @@ def theme_export(
     from pbi.themes import export_theme
 
     proj = get_project(project)
-    out_path = Path(output).resolve()
+    out_path = resolve_output_path(Path(output), base_dir=Path.cwd())
 
     try:
         name = export_theme(proj, out_path)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
@@ -99,7 +99,11 @@ def theme_delete(
     from pbi.themes import remove_theme
 
     proj = get_project(project)
-    name = remove_theme(proj)
+    try:
+        name = remove_theme(proj)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     if name:
         console.print(f'Removed custom theme "[cyan]{name}[/cyan]"')

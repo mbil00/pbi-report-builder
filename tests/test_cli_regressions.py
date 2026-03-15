@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 from typer.testing import CliRunner
@@ -22,6 +23,7 @@ from pbi.filters import (
     remove_filter,
 )
 from pbi.interactions import get_interactions, set_interaction
+from pbi.model_apply import apply_model_yaml
 from pbi.model import _parse_tmdl_name
 from pbi.project import Project, _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
@@ -146,6 +148,223 @@ pages:
             visuals = restored.get_visuals(page)
             self.assertEqual(len(visuals), 1)
             self.assertEqual(visuals[0].name, "keepme")
+
+    def test_apply_rolls_back_on_failure_without_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            visual.data["name"] = "card1"
+            visual.save()
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "card1",
+                                    "position": "99, 88",
+                                    "notARealProperty": {"bogus": True},
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, yaml_content, dry_run=False)
+            self.assertTrue(result.errors)
+
+            restored = Project.find(root / "Sample.pbip")
+            page = restored.find_page("Demo")
+            updated = restored.find_visual(page, "card1")
+            self.assertEqual(updated.position["x"], 10)
+            self.assertEqual(updated.position["y"], 20)
+
+    def test_apply_type_conversion_rolls_back_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "textSlicer", x=5, y=7, width=100, height=50)
+            visual.data["name"] = "vis1"
+            visual.save()
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "vis1",
+                                    "type": "cardVisual",
+                                    "position": "77, 66",
+                                    "notARealProperty": {"bogus": True},
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, yaml_content, dry_run=False)
+            self.assertTrue(result.errors)
+
+            restored = Project.find(root / "Sample.pbip")
+            page = restored.find_page("Demo")
+            updated = restored.find_visual(page, "vis1")
+            self.assertEqual(updated.visual_type, "textSlicer")
+            self.assertEqual(updated.position["x"], 5)
+            self.assertEqual(updated.position["y"], 7)
+
+    def test_overwrite_backup_filename_is_sanitized(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("../../outside")
+            visual = project.create_visual(page, "cardVisual")
+            visual.data["name"] = "card1"
+            visual.save()
+
+            spec_path = root / "escape.yaml"
+            spec_path.write_text(
+                """\
+version: 1
+pages:
+- name: ../../outside
+  visuals:
+  - name: card1
+    notARealProperty:
+      bogus: true
+""",
+                encoding="utf-8",
+            )
+
+            result = runner.invoke(
+                app,
+                ["apply", str(spec_path), "--overwrite", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertFalse((root / "outside.yaml").exists())
+            backups = list(root.glob(".pbi-backup-*.yaml"))
+            self.assertEqual(len(backups), 1)
+
+
+class PathSecurityRegressionTests(unittest.TestCase):
+    def test_project_rejects_pbip_report_path_outside_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            root = tmp_path / "project"
+            root.mkdir()
+            outside_report = tmp_path / "outside.Report" / "definition"
+            outside_report.mkdir(parents=True)
+
+            pbip = root / "Sample.pbip"
+            pbip.write_text(
+                json.dumps({"artifacts": [{"report": {"path": "../outside.Report"}}]}) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                Project.find(pbip)
+
+
+class OutputPathHardeningTests(unittest.TestCase):
+    def test_map_allows_output_outside_project(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            make_project(root)
+            outside = Path(tmp) / "outside.yaml"
+
+            result = runner.invoke(
+                app,
+                ["map", "--output", str(outside), "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertTrue(outside.exists())
+
+    def test_map_creates_nested_output_directory_inside_project(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            out_path = root / "exports" / "maps" / "project.yaml"
+
+            result = runner.invoke(
+                app,
+                ["map", "--output", "exports/maps/project.yaml", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertTrue(out_path.exists())
+
+    def test_page_export_allows_relative_escape(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            result = runner.invoke(
+                app,
+                ["page", "export", "Demo", "--output", "../escape.yaml", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertTrue((root.parent / "escape.yaml").exists())
+
+    def test_theme_export_creates_parent_directories(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            reg_dir = root / "Sample.Report" / "StaticResources" / "RegisteredResources"
+            reg_dir.mkdir(parents=True, exist_ok=True)
+            (reg_dir / "Custom Theme.json").write_text('{"name": "Custom Theme"}\n', encoding="utf-8")
+
+            report_path = project.definition_folder / "report.json"
+            report_data = _read_json(report_path)
+            report_data["themeCollection"]["customTheme"] = {
+                "name": "Custom Theme",
+                "type": "RegisteredResources",
+                "reportVersionAtImport": {},
+            }
+            report_data["resourcePackages"] = [
+                {
+                    "name": "RegisteredResources",
+                    "type": "RegisteredResources",
+                    "items": [
+                        {
+                            "name": "Custom Theme",
+                            "path": "Custom Theme.json",
+                            "type": "CustomTheme",
+                        }
+                    ],
+                }
+            ]
+            _write_json(report_path, report_data)
+
+            output = root / "exports" / "themes" / "theme.json"
+            result = runner.invoke(
+                app,
+                ["theme", "export", str(output), "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertTrue(output.exists())
 
 
 class TemplateRegressionTests(unittest.TestCase):
@@ -2663,6 +2882,35 @@ class TestModelSearch(unittest.TestCase):
             )
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No fields matching", result.stdout)
+
+
+class TestModelApplyPerformance(unittest.TestCase):
+    def test_model_apply_loads_semantic_model_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root, with_model=True)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "columns": {
+                        "Customers": {
+                            "Region": {
+                                "hidden": True,
+                                "format": "General",
+                            }
+                        }
+                    }
+                },
+                sort_keys=False,
+            )
+
+            from pbi.model import SemanticModel
+
+            with mock.patch("pbi.modeling.schema.SemanticModel.load", wraps=SemanticModel.load) as load_mock:
+                result = apply_model_yaml(root, yaml_content, dry_run=False)
+
+            self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
+            self.assertEqual(load_mock.call_count, 1)
 
 
 class TestCalcCommands(unittest.TestCase):
