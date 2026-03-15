@@ -365,7 +365,8 @@ def _apply_visual(
 
     # Apply visual properties (nested objects become dot-separated props)
     exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
-                     "filters", "conditionalFormatting", "isHidden", "pbir", "style"}
+                     "filters", "conditionalFormatting", "isHidden", "pbir", "style",
+                     "kpis", "layout", "accentBar", "referenceLabelLayout"}
     _apply_nested_properties(
         visual.data, vis_spec,
         exclude_keys=exclude_keys,
@@ -400,6 +401,25 @@ def _apply_visual(
     if "conditionalFormatting" in vis_spec:
         _apply_conditional_formatting(visual.data, vis_spec["conditionalFormatting"],
                                       result, context=context, dry_run=dry_run)
+
+    # KPI shorthand for cardVisual
+    if "kpis" in vis_spec:
+        kpis_list = vis_spec["kpis"]
+        if not isinstance(kpis_list, list):
+            result.errors.append(f"{context}: kpis must be a list of KPI definitions.")
+        else:
+            from pbi.card import expand_kpis
+            try:
+                count = expand_kpis(
+                    visual.data,
+                    kpis_list,
+                    layout=vis_spec.get("layout"),
+                    accent_bar=vis_spec.get("accentBar"),
+                    ref_label_layout=vis_spec.get("referenceLabelLayout"),
+                )
+                result.properties_set += count
+            except (ValueError, KeyError) as e:
+                result.errors.append(f"{context}: kpis expansion failed: {e}")
 
     visual.save()
 
