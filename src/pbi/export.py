@@ -53,6 +53,15 @@ def export_page(project: Project, page: Page) -> dict:
     if page_filters:
         page_dict["filters"] = page_filters
 
+    # Page-level interactions
+    interactions = page.data.get("visualInteractions", [])
+    if interactions:
+        page_dict["interactions"] = [
+            {"source": e["source"], "target": e["target"], "type": e["type"]}
+            for e in interactions
+            if "source" in e and "target" in e and "type" in e
+        ]
+
     # Visuals
     visual_list = []
     for vis in visuals:

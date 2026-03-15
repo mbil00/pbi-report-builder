@@ -434,6 +434,82 @@ def style_clone(
     console.print(f'Cloned "[cyan]{style_name}[/cyan]" → {direction} as "[cyan]{target_name}[/cyan]" → {path}')
 
 
+@app.command("diff")
+def diff_cmd(
+    yaml_file: Annotated[Path, typer.Argument(help="YAML file to compare against current state.")],
+    page: Annotated[Optional[str], typer.Option("--page", help="Only diff this page.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Show what 'pbi apply' would change, property by property."""
+    from pbi.export import export_visual_spec
+
+    proj = get_project(project)
+    yaml_path = yaml_file if yaml_file.is_absolute() else Path.cwd() / yaml_file
+    if not yaml_path.exists():
+        console.print(f"[red]Error:[/red] File not found: {yaml_path}")
+        raise typer.Exit(1)
+
+    import yaml as yaml_mod
+    spec = yaml_mod.safe_load(yaml_path.read_text(encoding="utf-8"))
+    if not isinstance(spec, dict) or "pages" not in spec:
+        console.print("[red]Error:[/red] YAML must have a 'pages' key.")
+        raise typer.Exit(1)
+
+    has_diffs = False
+    for page_spec in spec["pages"]:
+        page_name = page_spec.get("name", "")
+        if page and page_name.lower() != page.lower():
+            continue
+
+        try:
+            pg = proj.find_page(page_name)
+        except ValueError:
+            console.print(f'\n[green]+ New page:[/green] [cyan]{page_name}[/cyan]')
+            vis_count = len(page_spec.get("visuals", []))
+            if vis_count:
+                console.print(f"  {vis_count} visual(s) would be created")
+            has_diffs = True
+            continue
+
+        visuals = proj.get_visuals(pg)
+        vis_by_name = {v.name: v for v in visuals}
+        vis_by_id = {v.folder.name: v for v in visuals}
+
+        from pbi.commands.visuals.helpers import flatten_visual_diff_spec
+
+        for vis_spec in page_spec.get("visuals", []):
+            vis_name = vis_spec.get("name", "")
+            vis_id = vis_spec.get("id", "")
+
+            existing = vis_by_id.get(vis_id) or vis_by_name.get(vis_name)
+            if not existing:
+                console.print(f'\n[green]+ New visual:[/green] [cyan]{vis_name}[/cyan] on "{page_name}"')
+                has_diffs = True
+                continue
+
+            # Compare current vs YAML spec
+            current_spec = flatten_visual_diff_spec(export_visual_spec(proj, existing), include_core=True)
+            yaml_flat = flatten_visual_diff_spec(vis_spec, include_core=True)
+
+            diffs = []
+            for key in yaml_flat:
+                if key in {"id", "pbir"}:
+                    continue
+                curr = str(current_spec.get(key, ""))
+                proposed = str(yaml_flat[key])
+                if curr != proposed:
+                    diffs.append((key, curr, proposed))
+
+            if diffs:
+                has_diffs = True
+                console.print(f'\n[bold]{page_name}/{existing.name}[/bold]')
+                for prop, old, new in diffs:
+                    console.print(f"  [cyan]{prop}[/cyan]: {old or '(none)'} [dim]→[/dim] {new}")
+
+    if not has_diffs:
+        console.print("[dim]No differences found.[/dim]")
+
+
 @app.command()
 def info(project: ProjectOpt = None) -> None:
     """Show project overview."""

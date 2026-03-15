@@ -114,6 +114,11 @@ def apply_yaml(
             style_cache=style_cache,
         )
 
+    # Apply bookmarks (top-level)
+    bookmarks_spec = spec.get("bookmarks", [])
+    if isinstance(bookmarks_spec, list) and bookmarks_spec:
+        _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run)
+
     return result
 
 
@@ -187,7 +192,8 @@ def _apply_page(
         _apply_nested_properties(
             page.data, page_spec,
             exclude_keys={"name", "width", "height", "displayOption", "visibility",
-                           "visuals", "filters", "type", "pageBinding", "tooltip", "drillthrough"},
+                           "visuals", "filters", "interactions", "bookmarks",
+                           "type", "pageBinding", "tooltip", "drillthrough"},
             registry=PAGE_PROPERTIES,
             result=result,
             context=f"Page {page_name}",
@@ -198,6 +204,11 @@ def _apply_page(
         if "filters" in page_spec:
             _apply_filters(page.data, page_spec["filters"], result,
                            context=f"Page {page_name}", dry_run=dry_run)
+
+        # Apply interactions
+        if "interactions" in page_spec:
+            _apply_interactions(project, page, page_spec["interactions"], result,
+                                context=f"Page {page_name}", dry_run=dry_run)
 
         if not dry_run:
             page.save()
@@ -354,7 +365,7 @@ def _apply_visual(
 
     # Apply visual properties (nested objects become dot-separated props)
     exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
-                     "filters", "isHidden", "pbir", "style"}
+                     "filters", "conditionalFormatting", "isHidden", "pbir", "style"}
     _apply_nested_properties(
         visual.data, vis_spec,
         exclude_keys=exclude_keys,
@@ -384,6 +395,11 @@ def _apply_visual(
         _apply_filters(visual.data, vis_spec["filters"], result,
                        context=context,
                        dry_run=dry_run)
+
+    # Conditional formatting
+    if "conditionalFormatting" in vis_spec:
+        _apply_conditional_formatting(visual.data, vis_spec["conditionalFormatting"],
+                                      result, context=context, dry_run=dry_run)
 
     visual.save()
 
@@ -645,6 +661,161 @@ def _apply_filters(
             result.warnings.append(
                 f"{context}: filter type '{filter_type}' not yet supported in apply."
             )
+
+
+def _apply_conditional_formatting(
+    data: dict,
+    cf_spec: dict,
+    result: ApplyResult,
+    *,
+    context: str,
+    dry_run: bool,
+) -> None:
+    """Apply conditional formatting from the YAML spec.
+
+    Expected format:
+      conditionalFormatting:
+        dataPoint.fill:
+          mode: measure
+          source: Table.Measure
+        values.fontColor:
+          mode: gradient
+          source: Table.Field
+          min: { color: "#FF0000", value: 0 }
+          max: { color: "#00FF00", value: 100 }
+    """
+    from pbi.formatting import (
+        GradientStop,
+        build_gradient_format,
+        build_measure_format,
+        set_conditional_format,
+    )
+
+    for prop_path, config in cf_spec.items():
+        if not isinstance(config, dict):
+            result.errors.append(f"{context}: conditionalFormatting.{prop_path} must be a mapping.")
+            continue
+
+        dot = prop_path.find(".")
+        if dot == -1:
+            result.errors.append(f"{context}: conditionalFormatting key must be object.prop: {prop_path}")
+            continue
+        obj_name = prop_path[:dot]
+        prop_name = prop_path[dot + 1:]
+
+        mode = config.get("mode", "measure")
+        source = config.get("source", "")
+        src_dot = source.find(".")
+        if src_dot == -1:
+            result.errors.append(f"{context}: conditionalFormatting source must be Table.Field: {source}")
+            continue
+        src_entity = source[:src_dot]
+        src_prop = source[src_dot + 1:]
+
+        if dry_run:
+            result.properties_set += 1
+            continue
+
+        if mode == "measure":
+            value = build_measure_format(src_entity, src_prop)
+        elif mode == "gradient":
+            min_spec = config.get("min", {})
+            max_spec = config.get("max", {})
+            mid_spec = config.get("mid")
+            min_stop = GradientStop(str(min_spec.get("color", "#FF0000")), float(min_spec.get("value", 0)))
+            max_stop = GradientStop(str(max_spec.get("color", "#00FF00")), float(max_spec.get("value", 100)))
+            mid_stop = GradientStop(str(mid_spec.get("color", "")), float(mid_spec.get("value", 50))) if mid_spec else None
+            value = build_gradient_format(src_entity, src_prop, min_stop, max_stop, mid_stop)
+        else:
+            result.errors.append(f"{context}: conditionalFormatting mode must be 'measure' or 'gradient': {mode}")
+            continue
+
+        set_conditional_format(data, obj_name, prop_name, value)
+        result.properties_set += 1
+
+
+def _apply_bookmarks(
+    project: Project,
+    bookmarks_spec: list,
+    result: ApplyResult,
+    *,
+    dry_run: bool,
+) -> None:
+    """Apply bookmark definitions from the YAML spec."""
+    from pbi.bookmarks import create_bookmark
+
+    for entry in bookmarks_spec:
+        if not isinstance(entry, dict):
+            result.errors.append("Bookmark must be a mapping.")
+            continue
+
+        name = entry.get("name", "")
+        page_ref = entry.get("page", "")
+        if not name or not page_ref:
+            result.errors.append("Bookmark requires 'name' and 'page'.")
+            continue
+
+        hide = entry.get("hide", [])
+        show = entry.get("show")  # unused for create, but documents intent
+        target = entry.get("target")
+
+        if dry_run:
+            result.properties_set += 1
+            continue
+
+        try:
+            page = project.find_page(page_ref)
+            visuals = project.get_visuals(page)
+            create_bookmark(
+                project,
+                display_name=name,
+                page=page,
+                visuals=visuals,
+                hidden_visuals=hide if hide else None,
+                target_visuals=target if target else None,
+            )
+            result.properties_set += 1
+        except (ValueError, FileNotFoundError) as e:
+            result.errors.append(f"Bookmark \"{name}\": {e}")
+
+
+def _apply_interactions(
+    project: Project,
+    page: Page,
+    interactions_spec: list,
+    result: ApplyResult,
+    *,
+    context: str,
+    dry_run: bool,
+) -> None:
+    """Apply interaction definitions from the YAML spec."""
+    from pbi.interactions import set_interaction
+
+    for entry in interactions_spec:
+        if not isinstance(entry, dict):
+            result.errors.append(f"{context}: interaction must be a mapping.")
+            continue
+
+        source = entry.get("source", "")
+        target = entry.get("target", "")
+        itype = entry.get("type", "DataFilter")
+
+        if not source or not target:
+            result.errors.append(f"{context}: interaction requires 'source' and 'target'.")
+            continue
+
+        if dry_run:
+            result.properties_set += 1
+            continue
+
+        # Resolve visual names to handle friendly names
+        try:
+            src_vis = project.find_visual(page, source)
+            tgt_vis = project.find_visual(page, target)
+            set_interaction(page, src_vis.name, tgt_vis.name, itype)
+            result.properties_set += 1
+        except ValueError as e:
+            result.errors.append(f"{context}: interaction {source}->{target}: {e}")
 
 
 def _parse_number(value: Any) -> int | float:

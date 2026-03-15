@@ -72,6 +72,9 @@ def validate_project(project: Project) -> list[ValidationIssue]:
                             "error", "Visual directory exists but visual.json is missing"
                         ))
 
+    # Validate visual layout (overlaps, out-of-bounds, zero sizes)
+    issues.extend(_validate_layout(project))
+
     # Validate cross-table relationships in visual bindings
     issues.extend(_validate_visual_relationships(project))
 
@@ -451,6 +454,67 @@ def _validate_filter_config(
                     "RelativeDate filter uses unsupported Condition.RelativeDate payload; the published PBIR semanticQuery schema does not define it",
                     path=filter_path,
                 ))
+
+    return issues
+
+
+def _validate_layout(project: Project) -> list[ValidationIssue]:
+    """Check visual positions for overlaps, out-of-bounds, and zero sizes."""
+    issues: list[ValidationIssue] = []
+
+    for page in project.get_pages():
+        visuals = project.get_visuals(page)
+        page_w = page.width
+        page_h = page.height
+
+        rects: list[tuple[str, str, int, int, int, int]] = []  # (name, rel, x, y, w, h)
+
+        for vis in visuals:
+            if "visualGroup" in vis.data:
+                continue
+            pos = vis.position
+            x = int(pos.get("x", 0))
+            y = int(pos.get("y", 0))
+            w = int(pos.get("width", 0))
+            h = int(pos.get("height", 0))
+            rel = f"pages/{page.folder.name}/visuals/{vis.folder.name}/visual.json"
+
+            # Zero/negative dimensions
+            if w <= 0 or h <= 0:
+                issues.append(ValidationIssue(
+                    rel, "warning",
+                    f'Visual "{vis.name}" has invalid size: {w}x{h}',
+                ))
+                continue
+
+            # Out of bounds
+            if x + w > page_w + 5:  # 5px tolerance
+                issues.append(ValidationIssue(
+                    rel, "warning",
+                    f'Visual "{vis.name}" extends {x + w - page_w}px past right edge '
+                    f'(x={x}, w={w}, page={page_w})',
+                ))
+            if y + h > page_h + 5:
+                issues.append(ValidationIssue(
+                    rel, "warning",
+                    f'Visual "{vis.name}" extends {y + h - page_h}px past bottom edge '
+                    f'(y={y}, h={h}, page={page_h})',
+                ))
+
+            rects.append((vis.name, rel, x, y, w, h))
+
+        # Check overlaps (only report significant ones > 10px in both axes)
+        for i in range(len(rects)):
+            for j in range(i + 1, len(rects)):
+                n1, r1, x1, y1, w1, h1 = rects[i]
+                n2, _r2, x2, y2, w2, h2 = rects[j]
+                ox = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+                oy = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+                if ox > 10 and oy > 10:
+                    issues.append(ValidationIssue(
+                        r1, "warning",
+                        f'Visual "{n1}" overlaps "{n2}" by {ox}x{oy}px',
+                    ))
 
     return issues
 

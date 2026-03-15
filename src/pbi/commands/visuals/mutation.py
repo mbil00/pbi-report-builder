@@ -50,6 +50,7 @@ def visual_set_all(
     page: Annotated[str | None, typer.Option("--page", help="Page name, display name, or index.")] = None,
     visual_type: Annotated[str | None, typer.Option("--visual-type", help="Only apply to visuals of this type (e.g. slicer, cardVisual, tableEx).")] = None,
     all_pages: Annotated[bool, typer.Option("--all-pages", help="Apply to all pages.")] = False,
+    where: Annotated[str | None, typer.Option("--where", help="Only apply to visuals where prop=value matches (e.g. border.color=#EDEBE9).")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and show what would change without saving.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -85,12 +86,27 @@ def visual_set_all(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    # Parse --where condition
+    where_prop: str | None = None
+    where_value: str | None = None
+    if where:
+        if "=" not in where:
+            console.print("[red]Error:[/red] --where must be in prop=value format.")
+            raise typer.Exit(1)
+        where_prop, where_value = where.split("=", 1)
+
     prepared: list[tuple[object, dict, list[tuple[str, object, object]]]] = []
     for pg in target_pages:
         visuals = proj.get_visuals(pg)
         if visual_type:
             visuals = [vis for vis in visuals if vis.visual_type == visual_type]
         visuals = [vis for vis in visuals if "visualGroup" not in vis.data]
+        if where_prop is not None:
+            from pbi.properties import VISUAL_PROPERTIES, get_property
+            visuals = [
+                vis for vis in visuals
+                if str(get_property(vis.data, where_prop, VISUAL_PROPERTIES) or "").lower() == (where_value or "").lower()
+            ]
         for vis in visuals:
             try:
                 updated, changes = prepare_visual_property_updates(vis.data, pairs)

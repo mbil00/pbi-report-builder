@@ -225,6 +225,7 @@ def visual_get(
     props: Annotated[list[str] | None, typer.Argument(help="Property or properties to read (omit for overview).")] = None,
     all_props: Annotated[bool, typer.Option("--all-props", help="Show all explicit registered and object properties.")] = False,
     defaults: Annotated[bool, typer.Option("--defaults", help="Show effective values using explicit values plus known defaults.")] = False,
+    full: Annotated[bool, typer.Option("--full", help="Show everything: properties, chart objects, columns, bindings, filters, sort.")] = False,
     raw: Annotated[bool, typer.Option("--raw", "-r", help="Show raw JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -243,6 +244,61 @@ def visual_get(
     if props and all_props:
         console.print("[red]Error:[/red] Explicit properties cannot be combined with --all-props.")
         raise typer.Exit(1)
+
+    if full:
+        from pbi.columns import get_columns
+        from pbi.filters import get_filters, parse_filter
+
+        # Header
+        pos = vis.position
+        console.print(f"[bold]{vis.name}[/bold] ({vis.visual_type})")
+        console.print(f"  [dim]Position:[/dim] {pos.get('x', 0)}, {pos.get('y', 0)}  [dim]Size:[/dim] {pos.get('width', 0)} x {pos.get('height', 0)}  [dim]Z:[/dim] {pos.get('z', 0)}")
+        if vis.data.get("isHidden"):
+            console.print("  [yellow](hidden)[/yellow]")
+
+        # Properties
+        prop_rows = collect_visual_property_rows(vis.data, include_core=False)
+        if prop_rows:
+            console.print("\n[bold]Properties[/bold]")
+            for prop_name, value in prop_rows:
+                console.print(f"  [cyan]{prop_name}[/cyan]: {value}")
+
+        # Chart objects
+        chart_objects = get_visual_objects(vis.data)
+        if chart_objects:
+            console.print("\n[bold]Chart Objects[/bold]")
+            for obj_key in sorted(chart_objects):
+                obj_props = chart_objects[obj_key]
+                for p_name, p_value in sorted(obj_props.items()):
+                    console.print(f"  [cyan]{obj_key}.{p_name}[/cyan]: {p_value}")
+
+        # Columns/bindings
+        columns = get_columns(vis)
+        if columns:
+            console.print("\n[bold]Columns[/bold]")
+            for col in columns:
+                display = col.display_name or col.prop
+                width_str = f" w={int(col.width)}" if col.width else ""
+                console.print(f"  [cyan]{col.entity}.{col.prop}[/cyan] ({col.role}) → {display}{width_str}")
+
+        # Sort
+        sorts = proj.get_sort(vis)
+        if sorts:
+            console.print("\n[bold]Sort[/bold]")
+            for entity, sort_prop, ftype, direction in sorts:
+                kind = " (measure)" if ftype == "measure" else ""
+                console.print(f"  {entity}.{sort_prop}{kind} {direction}")
+
+        # Filters
+        filters = get_filters(vis.data)
+        if filters:
+            console.print("\n[bold]Filters[/bold]")
+            for f in filters:
+                info = parse_filter(f)
+                vals = f" = {', '.join(str(v) for v in info.values)}" if info.values else ""
+                console.print(f"  [cyan]{info.field_entity}.{info.field_prop}[/cyan] ({info.filter_type}){vals}")
+
+        return
 
     if raw:
         import json

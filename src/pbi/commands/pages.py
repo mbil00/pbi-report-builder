@@ -185,6 +185,8 @@ def page_get(
         console.print(table)
         return
 
+    proj = get_project(project)
+
     table = Table(title=pg.display_name, box=box.SIMPLE)
     table.add_column("Property", style="cyan")
     table.add_column("Value")
@@ -198,6 +200,30 @@ def page_get(
 
     if pg.data.get("type"):
         table.add_row("Type", pg.data["type"])
+
+    # Background color
+    bg_color = get_property(pg.data, "background.color", PAGE_PROPERTIES)
+    if bg_color:
+        table.add_row("Background", str(bg_color))
+
+    # Visual count
+    visuals = proj.get_visuals(pg)
+    table.add_row("Visuals", str(len(visuals)))
+
+    # Drillthrough/tooltip info
+    page_binding = pg.data.get("pageBinding")
+    if page_binding:
+        binding_type = page_binding.get("type", "")
+        table.add_row("Binding Type", binding_type)
+        data_fields = page_binding.get("dataFields", [])
+        if data_fields:
+            refs = []
+            for df in data_fields:
+                col = df.get("Column", {})
+                entity = col.get("Entity", "?")
+                prop = col.get("Property", "?")
+                refs.append(f"{entity}.{prop}")
+            table.add_row("Binding Fields", ", ".join(refs))
 
     console.print(table)
 
