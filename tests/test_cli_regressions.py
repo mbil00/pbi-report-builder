@@ -2313,6 +2313,132 @@ class TestValidateMeasuresOnlyTable(unittest.TestCase):
             self.assertEqual(len(warnings), 1, f"Expected 1 warning, got: {warnings}")
 
 
+class TestBug026FillRuleInput(unittest.TestCase):
+    """BUG-026: FillRule Input must use SelectRef, not Measure/Column expression."""
+
+    def test_gradient_uses_select_ref_not_measure(self):
+        from pbi.formatting import GradientStop, build_gradient_format
+
+        value = build_gradient_format(
+            "Measures Table", "Total Devices",
+            GradientStop("#FFFFFF", 0), GradientStop("#B83B3B", 90),
+        )
+        fill_rule = value["solid"]["color"]["expr"]["FillRule"]
+        input_node = fill_rule["Input"]
+
+        # Must use SelectRef, NOT Measure
+        self.assertIn("SelectRef", input_node)
+        self.assertNotIn("Measure", input_node)
+        self.assertNotIn("Column", input_node)
+        self.assertEqual(
+            input_node["SelectRef"]["ExpressionName"],
+            "Measures Table.Total Devices",
+        )
+
+    def test_gradient_stop_values_use_integer_format(self):
+        from pbi.formatting import GradientStop, build_gradient_format
+
+        value = build_gradient_format(
+            "T", "F",
+            GradientStop("#FFF", 0), GradientStop("#000", 90),
+        )
+        gradient = value["solid"]["color"]["expr"]["FillRule"]["FillRule"]["linearGradient2"]
+
+        # Must be "0D" not "0.0D"
+        min_val = gradient["min"]["value"]["expr"]["Literal"]["Value"]
+        max_val = gradient["max"]["value"]["expr"]["Literal"]["Value"]
+        self.assertEqual(min_val, "0D")
+        self.assertEqual(max_val, "90D")
+
+    def test_gradient_stop_values_preserve_decimals(self):
+        from pbi.formatting import GradientStop, build_gradient_format
+
+        value = build_gradient_format(
+            "T", "F",
+            GradientStop("#FFF", 0.5), GradientStop("#000", 99.9),
+        )
+        gradient = value["solid"]["color"]["expr"]["FillRule"]["FillRule"]["linearGradient2"]
+        min_val = gradient["min"]["value"]["expr"]["Literal"]["Value"]
+        max_val = gradient["max"]["value"]["expr"]["Literal"]["Value"]
+        self.assertEqual(min_val, "0.5D")
+        self.assertEqual(max_val, "99.9D")
+
+    def test_per_column_selector_uses_matching_option_1(self):
+        from pbi.formatting import GradientStop, build_gradient_format, set_conditional_format
+
+        data: dict = {}
+        value = build_gradient_format(
+            "T", "F",
+            GradientStop("#FFF", 0), GradientStop("#000", 100),
+        )
+        set_conditional_format(data, "values", "backColor", value, column="T.F")
+
+        entries = data["visual"]["objects"]["values"]
+        selector = entries[0]["selector"]
+        # Per-column must use matchingOption 1
+        self.assertEqual(selector["data"][0]["dataViewWildcard"]["matchingOption"], 1)
+        self.assertEqual(selector["metadata"], "T.F")
+
+    def test_per_column_writes_column_formatting_marker(self):
+        from pbi.formatting import GradientStop, build_gradient_format, set_conditional_format
+
+        data: dict = {}
+        value = build_gradient_format(
+            "T", "F",
+            GradientStop("#FFF", 0), GradientStop("#000", 100),
+        )
+        set_conditional_format(data, "values", "backColor", value, column="T.F")
+
+        # Must register in columnFormatting marker
+        cf = data["visual"]["objects"].get("columnFormatting", [])
+        self.assertEqual(len(cf), 1)
+        self.assertEqual(cf[0]["selector"]["metadata"], "T.F")
+
+    def test_all_columns_selector_uses_matching_option_0(self):
+        from pbi.formatting import GradientStop, build_gradient_format, set_conditional_format
+
+        data: dict = {}
+        value = build_gradient_format(
+            "T", "F",
+            GradientStop("#FFF", 0), GradientStop("#000", 100),
+        )
+        set_conditional_format(data, "values", "backColor", value)
+
+        entries = data["visual"]["objects"]["values"]
+        selector = entries[0]["selector"]
+        # All-columns uses matchingOption 0, no metadata
+        self.assertEqual(selector["data"][0]["dataViewWildcard"]["matchingOption"], 0)
+        self.assertNotIn("metadata", selector)
+
+    def test_null_strategy_in_gradient(self):
+        from pbi.formatting import GradientStop, build_gradient_format
+
+        value = build_gradient_format(
+            "T", "F",
+            GradientStop("#FFF", 0), GradientStop("#000", 100),
+            null_strategy="asZero",
+        )
+        gradient = value["solid"]["color"]["expr"]["FillRule"]["FillRule"]["linearGradient2"]
+        self.assertIn("nullColoringStrategy", gradient)
+        strategy = gradient["nullColoringStrategy"]["strategy"]["Literal"]["Value"]
+        self.assertEqual(strategy, "'asZero'")
+
+    def test_parse_select_ref_input(self):
+        from pbi.formatting import get_conditional_formats, set_conditional_format, GradientStop, build_gradient_format
+
+        data: dict = {}
+        value = build_gradient_format(
+            "Measures Table", "Total Devices",
+            GradientStop("#FFF", 0), GradientStop("#000", 100),
+        )
+        set_conditional_format(data, "values", "backColor", value)
+
+        formats = get_conditional_formats(data)
+        self.assertEqual(len(formats), 1)
+        self.assertEqual(formats[0].field_ref, "Measures Table.Total Devices")
+        self.assertEqual(formats[0].format_type, "gradient2")
+
+
 class TestConditionalFormattingListSyntaxGuard(unittest.TestCase):
     """List-syntax conditionalFormatting should produce a clear error, not crash."""
 

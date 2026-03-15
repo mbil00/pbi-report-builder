@@ -70,26 +70,50 @@ def build_measure_format(entity: str, prop: str) -> dict:
     }
 
 
+def _select_ref(entity: str, prop: str) -> dict:
+    """Build a SelectRef expression node for FillRule Input.
+
+    FillRule Input must reference the visual's data view via SelectRef,
+    not the raw model via Measure/Column.  The ExpressionName must match
+    the projection's queryRef value (Table.Field).
+    """
+    return {"SelectRef": {"ExpressionName": f"{entity}.{prop}"}}
+
+
+def _format_stop_value(value: float) -> str:
+    """Format a gradient stop value as a PBI literal (e.g. '0D', '30.5D').
+
+    Whole numbers must be formatted without decimals ('0D' not '0.0D')
+    to avoid silent report corruption.
+    """
+    if value == int(value):
+        return f"{int(value)}D"
+    return f"{value}D"
+
+
 def build_gradient_format(
     input_entity: str,
     input_prop: str,
     min_stop: GradientStop,
     max_stop: GradientStop,
     mid_stop: GradientStop | None = None,
+    *,
+    null_strategy: str | None = None,
 ) -> dict:
     """Build a FillRule gradient conditional formatting value.
 
     If mid_stop is provided, uses linearGradient3; otherwise linearGradient2.
+    null_strategy can be 'asZero' or 'asBlank' (controls null data handling).
     """
     def _stop(stop: GradientStop) -> dict:
         color = stop.color if stop.color.startswith("#") else f"#{stop.color}"
         return {
             "color": {"expr": _literal_expr(f"'{color}'")},
-            "value": {"expr": _literal_expr(f"{stop.value}D")},
+            "value": {"expr": _literal_expr(_format_stop_value(stop.value))},
         }
 
     if mid_stop is not None:
-        gradient = {
+        gradient: dict = {
             "linearGradient3": {
                 "min": _stop(min_stop),
                 "mid": _stop(mid_stop),
@@ -104,12 +128,19 @@ def build_gradient_format(
             }
         }
 
+    # Add null coloring strategy if specified
+    if null_strategy:
+        key = "linearGradient3" if mid_stop else "linearGradient2"
+        gradient[key]["nullColoringStrategy"] = {
+            "strategy": _literal_expr(f"'{null_strategy}'")
+        }
+
     return {
         "solid": {
             "color": {
                 "expr": {
                     "FillRule": {
-                        "Input": _measure_expr(input_entity, input_prop),
+                        "Input": _select_ref(input_entity, input_prop),
                         "FillRule": gradient,
                     }
                 }
@@ -163,9 +194,13 @@ def build_rules_format(
 
 
 def _column_selector(column_ref: str) -> dict:
-    """Build a per-column selector targeting a specific field."""
+    """Build a per-column selector targeting a specific field.
+
+    matchingOption 1 = specific column only (per-column targeting).
+    matchingOption 0 = all data rows (used by _wildcard_selector).
+    """
     return {
-        "data": [{"dataViewWildcard": {"matchingOption": 0}}],
+        "data": [{"dataViewWildcard": {"matchingOption": 1}}],
         "metadata": column_ref,
     }
 
@@ -259,14 +294,22 @@ def _parse_conditional_value(
     if "FillRule" in expr:
         fr = expr["FillRule"]
         input_expr = fr.get("Input", {})
-        # Input can be Measure or Column
-        for key in ("Measure", "Column"):
-            if key in input_expr:
-                entity = input_expr[key].get("Expression", {}).get("SourceRef", {}).get("Entity", "?")
-                prop = input_expr[key].get("Property", "?")
-                break
+        # Input can be SelectRef (correct), Measure, or Column (legacy)
+        if "SelectRef" in input_expr:
+            expr_name = input_expr["SelectRef"].get("ExpressionName", "?")
+            dot = expr_name.find(".")
+            if dot > 0:
+                entity, prop = expr_name[:dot], expr_name[dot + 1:]
+            else:
+                entity, prop = expr_name, "?"
         else:
-            entity, prop = "?", "?"
+            for key in ("Measure", "Column"):
+                if key in input_expr:
+                    entity = input_expr[key].get("Expression", {}).get("SourceRef", {}).get("Entity", "?")
+                    prop = input_expr[key].get("Property", "?")
+                    break
+            else:
+                entity, prop = "?", "?"
 
         rule = fr.get("FillRule", {})
         if "linearGradient3" in rule:
@@ -360,6 +403,13 @@ def set_conditional_format(
         entries.append(target)
 
     target.setdefault("properties", {})[property_name] = value
+
+    # Register per-column formatting in the columnFormatting marker
+    if column:
+        cf_entries = objects.setdefault("columnFormatting", [])
+        existing_meta = {e.get("selector", {}).get("metadata") for e in cf_entries}
+        if column not in existing_meta:
+            cf_entries.append({"selector": {"metadata": column}})
 
 
 def clear_conditional_format(

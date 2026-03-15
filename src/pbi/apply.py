@@ -734,7 +734,8 @@ def _apply_conditional_formatting(
             min_stop = GradientStop(str(min_spec.get("color", "#FF0000")), float(min_spec.get("value", 0)))
             max_stop = GradientStop(str(max_spec.get("color", "#00FF00")), float(max_spec.get("value", 100)))
             mid_stop = GradientStop(str(mid_spec.get("color", "")), float(mid_spec.get("value", 50))) if mid_spec else None
-            value = build_gradient_format(src_entity, src_prop, min_stop, max_stop, mid_stop)
+            null_strategy = config.get("nullStrategy")
+            value = build_gradient_format(src_entity, src_prop, min_stop, max_stop, mid_stop, null_strategy=null_strategy)
         elif mode == "rules":
             rules_list = config.get("rules", [])
             if not isinstance(rules_list, list) or not rules_list:
