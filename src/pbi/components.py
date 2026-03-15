@@ -238,11 +238,11 @@ def _load_component_file(path: Path, name: str, *, scope: str) -> Component:
 
 
 def _parse_size(s: str) -> tuple[int, int]:
-    """Parse '229 x 184' into (229, 184)."""
+    """Parse '229 x 184' or '214.5 x 93.0' into (229, 184)."""
     parts = s.lower().split("x")
     if len(parts) == 2:
         try:
-            return int(parts[0].strip()), int(parts[1].strip())
+            return round(float(parts[0].strip())), round(float(parts[1].strip()))
         except ValueError:
             pass
     return 0, 0
@@ -456,11 +456,11 @@ def apply_component_row(
 
 
 def _parse_position(s: str) -> tuple[int, int]:
-    """Parse '16, 200' into (16, 200)."""
+    """Parse '16, 200' or '7.47, 6.96' into (16, 200) or (7, 7)."""
     parts = s.split(",")
     if len(parts) == 2:
         try:
-            return int(parts[0].strip()), int(parts[1].strip())
+            return round(float(parts[0].strip())), round(float(parts[1].strip()))
         except ValueError:
             pass
     return 0, 0
