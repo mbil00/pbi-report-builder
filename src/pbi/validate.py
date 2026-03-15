@@ -560,6 +560,14 @@ def _validate_visual_relationships(project: Project) -> list[ValidationIssue]:
                 for j in range(i + 1, len(table_list)):
                     path = model.find_path(table_list[i], table_list[j])
                     if path is None:
+                        # Measures-only tables don't need relationships
+                        try:
+                            t1 = model.find_table(table_list[i])
+                            t2 = model.find_table(table_list[j])
+                            if not t1.columns or not t2.columns:
+                                continue
+                        except ValueError:
+                            pass
                         rel = f"pages/{page.folder.name}/visuals/{visual.folder.name}/visual.json"
                         issues.append(ValidationIssue(
                             rel,

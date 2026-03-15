@@ -319,12 +319,25 @@ def page_create(
     width: Annotated[int, typer.Option(help="Page width in pixels.")] = 1280,
     height: Annotated[int, typer.Option(help="Page height in pixels.")] = 720,
     display_option: Annotated[str, typer.Option("--display-option", help="FitToPage, FitToWidth, or ActualSize.")] = "FitToPage",
+    from_template: Annotated[str | None, typer.Option("--from-template", help="Apply a saved template after creating the page.")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Create a new page."""
     proj = get_project(project)
     pg = proj.create_page(name, width=width, height=height, display_option=display_option)
     console.print(f'Created page "[cyan]{pg.display_name}[/cyan]" ({pg.name})')
+
+    if from_template:
+        from pbi.templates import apply_template
+
+        try:
+            created = apply_template(proj, pg, from_template)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+        console.print(
+            f'Applied template "[cyan]{from_template}[/cyan]" ({len(created)} visuals created)'
+        )
 
 
 @page_app.command("copy")

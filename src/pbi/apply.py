@@ -688,8 +688,15 @@ def _apply_conditional_formatting(
         GradientStop,
         build_gradient_format,
         build_measure_format,
+        build_rules_format,
         set_conditional_format,
     )
+
+    if not isinstance(cf_spec, dict):
+        result.errors.append(
+            f"{context}: conditionalFormatting must be a mapping of property -> config, not a {type(cf_spec).__name__}."
+        )
+        return
 
     for prop_path, config in cf_spec.items():
         if not isinstance(config, dict):
@@ -716,6 +723,8 @@ def _apply_conditional_formatting(
             result.properties_set += 1
             continue
 
+        column_ref = config.get("column")
+
         if mode == "measure":
             value = build_measure_format(src_entity, src_prop)
         elif mode == "gradient":
@@ -726,11 +735,37 @@ def _apply_conditional_formatting(
             max_stop = GradientStop(str(max_spec.get("color", "#00FF00")), float(max_spec.get("value", 100)))
             mid_stop = GradientStop(str(mid_spec.get("color", "")), float(mid_spec.get("value", 50))) if mid_spec else None
             value = build_gradient_format(src_entity, src_prop, min_stop, max_stop, mid_stop)
+        elif mode == "rules":
+            rules_list = config.get("rules", [])
+            if not isinstance(rules_list, list) or not rules_list:
+                result.errors.append(f"{context}: conditionalFormatting rules mode requires a non-empty 'rules' list.")
+                continue
+            else_spec = config.get("else")
+            else_color = None
+            if isinstance(else_spec, dict):
+                else_color = else_spec.get("color")
+            elif isinstance(else_spec, str):
+                else_color = else_spec
+            parsed_rules = []
+            for rule in rules_list:
+                if not isinstance(rule, dict):
+                    result.errors.append(f"{context}: each rule must be a mapping with 'if' and 'color' keys.")
+                    break
+                rule_value = rule.get("if")
+                rule_color = rule.get("color")
+                if rule_value is None or rule_color is None:
+                    result.errors.append(f"{context}: each rule must have 'if' and 'color' keys.")
+                    break
+                parsed_rules.append({"value": str(rule_value), "color": str(rule_color)})
+            else:
+                value = build_rules_format(src_entity, src_prop, parsed_rules, else_color=else_color)
+            if len(parsed_rules) != len(rules_list):
+                continue
         else:
-            result.errors.append(f"{context}: conditionalFormatting mode must be 'measure' or 'gradient': {mode}")
+            result.errors.append(f"{context}: conditionalFormatting mode must be 'measure', 'gradient', or 'rules': {mode}")
             continue
 
-        set_conditional_format(data, obj_name, prop_name, value)
+        set_conditional_format(data, obj_name, prop_name, value, column=column_ref)
         result.properties_set += 1
 
 

@@ -32,9 +32,10 @@ def visual_format_get(
     table.add_column("Property", style="cyan")
     table.add_column("Mode")
     table.add_column("Source", style="bold")
+    table.add_column("Column", style="dim")
     table.add_column("Details", style="dim")
     for fmt in formats:
-        table.add_row(f"{fmt.object_name}.{fmt.property_name}", fmt.format_type, fmt.field_ref, fmt.details)
+        table.add_row(f"{fmt.object_name}.{fmt.property_name}", fmt.format_type, fmt.field_ref, fmt.column or "(all)", fmt.details)
     console.print(table)
 
 
@@ -43,7 +44,7 @@ def visual_format_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name or index.")],
     prop: Annotated[str, typer.Argument(help="Property as object.prop (e.g. dataPoint.fill).")],
-    mode: Annotated[str, typer.Option("--mode", help="Formatting mode: measure or gradient.")],
+    mode: Annotated[str, typer.Option("--mode", help="Formatting mode: measure, gradient, or rules.")],
     source: Annotated[str, typer.Option("--source", help="Source field: Table.Measure for measure mode, Table.Field for gradient mode.")],
     min_color: Annotated[str | None, typer.Option("--min-color", help="Gradient minimum color (#hex).")] = None,
     min_value: Annotated[float | None, typer.Option("--min-value", help="Gradient minimum value.")] = None,
@@ -64,8 +65,8 @@ def visual_format_set(
         raise typer.Exit(1)
     obj_name, prop_name = prop[:dot], prop[dot + 1 :]
 
-    if mode not in {"measure", "gradient"}:
-        console.print("[red]Error:[/red] --mode must be 'measure' or 'gradient'.")
+    if mode not in {"measure", "gradient", "rules"}:
+        console.print("[red]Error:[/red] --mode must be 'measure', 'gradient', or 'rules'.")
         raise typer.Exit(1)
 
     if mode == "measure":

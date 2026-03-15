@@ -633,5 +633,98 @@ def validate(
         raise typer.Exit(1)
 
 
+# ── Layout calculator ─────────────────────────────────────────
+
+calc_app = typer.Typer(help="Layout position calculators for YAML authoring.", no_args_is_help=True)
+app.add_typer(calc_app, name="calc")
+
+
+@calc_app.command("row")
+def calc_row(
+    count: Annotated[int, typer.Argument(help="Number of items in the row.")],
+    width: Annotated[int, typer.Option("--width", "-w", help="Page width in pixels.")] = 1280,
+    margin: Annotated[int, typer.Option("--margin", "-m", help="Left/right margin in pixels.")] = 0,
+    gap: Annotated[int, typer.Option("--gap", "-g", help="Gap between items in pixels.")] = 8,
+    height: Annotated[int | None, typer.Option("--height", help="Item height (for copy-paste into YAML).")] = None,
+    y: Annotated[int | None, typer.Option("--y", help="Y position (for copy-paste into YAML).")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+) -> None:
+    """Calculate evenly-spaced positions for a horizontal row of items."""
+    import json as json_mod
+
+    if count < 1:
+        console.print("[red]Error:[/red] Count must be at least 1.")
+        raise typer.Exit(1)
+
+    usable = width - 2 * margin
+    total_gaps = gap * (count - 1) if count > 1 else 0
+    item_width = (usable - total_gaps) / count
+
+    if item_width <= 0:
+        console.print("[red]Error:[/red] Not enough space for the requested items.")
+        raise typer.Exit(1)
+
+    items = []
+    for i in range(count):
+        x = margin + i * (item_width + gap)
+        items.append({"index": i + 1, "x": round(x), "width": round(item_width)})
+
+    if as_json:
+        console.print_json(json_mod.dumps(items, indent=2))
+        return
+
+    console.print(f"[bold]Row layout:[/bold] {count} items, {round(item_width)}px each, gap={gap}")
+    for item in items:
+        pos = f"position: {item['x']}, {y if y is not None else 0}"
+        size = f"size: {item['width']} x {height if height is not None else '?'}"
+        console.print(f"  [dim]#{item['index']}[/dim]  {pos}  |  {size}")
+
+
+@calc_app.command("grid")
+def calc_grid(
+    count: Annotated[int, typer.Argument(help="Total number of items.")],
+    columns: Annotated[int, typer.Option("--columns", "-c", help="Number of columns.")] = 3,
+    width: Annotated[int, typer.Option("--width", "-w", help="Page width in pixels.")] = 1280,
+    margin: Annotated[int, typer.Option("--margin", "-m", help="Left/right/top margin in pixels.")] = 0,
+    gap: Annotated[int, typer.Option("--gap", "-g", help="Gap between items in pixels.")] = 8,
+    item_height: Annotated[int, typer.Option("--item-height", help="Height of each item.")] = 200,
+    y: Annotated[int, typer.Option("--y", help="Starting Y position.")] = 0,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+) -> None:
+    """Calculate positions for a grid layout of items."""
+    import json as json_mod
+
+    if count < 1 or columns < 1:
+        console.print("[red]Error:[/red] Count and columns must be at least 1.")
+        raise typer.Exit(1)
+
+    usable = width - 2 * margin
+    col_gaps = gap * (columns - 1) if columns > 1 else 0
+    item_width = (usable - col_gaps) / columns
+
+    if item_width <= 0:
+        console.print("[red]Error:[/red] Not enough space for the requested columns.")
+        raise typer.Exit(1)
+
+    items = []
+    for i in range(count):
+        col = i % columns
+        row = i // columns
+        x = margin + col * (item_width + gap)
+        iy = y + row * (item_height + gap)
+        items.append({"index": i + 1, "x": round(x), "y": round(iy), "width": round(item_width), "height": item_height})
+
+    if as_json:
+        console.print_json(json_mod.dumps(items, indent=2))
+        return
+
+    rows = (count + columns - 1) // columns
+    console.print(f"[bold]Grid layout:[/bold] {count} items, {columns} cols x {rows} rows, {round(item_width)}px wide")
+    for item in items:
+        pos = f"position: {item['x']}, {item['y']}"
+        size = f"size: {item['width']} x {item['height']}"
+        console.print(f"  [dim]#{item['index']}[/dim]  {pos}  |  {size}")
+
+
 if __name__ == "__main__":
     app()

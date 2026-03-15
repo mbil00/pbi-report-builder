@@ -243,6 +243,8 @@ def extract_style_properties(visual_spec: Mapping[str, Any]) -> dict[str, Any]:
             "style",
         },
     ):
+        if value is None:
+            continue
         result[normalize_property_name(prop_name, VISUAL_PROPERTIES)] = value
     return result
 
@@ -291,6 +293,8 @@ def _style_path(project: Project, style_name: str) -> Path:
 def _normalize_style_properties(properties: Mapping[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for raw_name, raw_value in properties.items():
+        if raw_value is None:
+            continue
         if not isinstance(raw_name, str) or not raw_name.strip():
             raise ValueError("Style property names must be non-empty strings.")
         prop_name = normalize_property_name(raw_name, VISUAL_PROPERTIES)

@@ -149,6 +149,47 @@ def model_measures(
     console.print(table)
 
 
+@model_app.command("search")
+def model_search(
+    keyword: Annotated[str, typer.Argument(help="Keyword to search for across all tables, columns, and measures.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Search for fields and measures by keyword across all tables."""
+    _, model = _get_model(project)
+    keyword_lower = keyword.lower()
+
+    matches: list[dict[str, str]] = []
+    for sem_table in model.tables:
+        if keyword_lower in sem_table.name.lower():
+            matches.append({"ref": sem_table.name, "type": "table", "details": f"{len(sem_table.columns)} cols, {len(sem_table.measures)} measures"})
+        for column in sem_table.columns:
+            if keyword_lower in column.name.lower():
+                matches.append({"ref": f"{sem_table.name}.{column.name}", "type": "column", "details": column.data_type})
+        for measure in sem_table.measures:
+            if keyword_lower in measure.name.lower():
+                expr = measure.expression[:40] + "..." if len(measure.expression) > 40 else measure.expression
+                matches.append({"ref": f"{sem_table.name}.{measure.name}", "type": "measure", "details": expr})
+
+    if not matches:
+        console.print(f'[yellow]No fields matching "{keyword}". Try a broader search.[/yellow]')
+        raise typer.Exit(0)
+
+    if as_json:
+        import json
+
+        console.print_json(json.dumps(matches, indent=2))
+        return
+
+    table = Table(title=f'Search: "{keyword}"', box=box.SIMPLE)
+    table.add_column("Reference", style="cyan")
+    table.add_column("Type")
+    table.add_column("Details", style="dim")
+    for match in matches:
+        table.add_row(match["ref"], match["type"], match["details"])
+    console.print(table)
+
+
 @model_app.command("apply")
 def model_apply(
     yaml_file: Annotated[Path, typer.Argument(help="YAML file describing model changes.")],
