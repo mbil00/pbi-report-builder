@@ -20,6 +20,7 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 | Semantic model and data binding | model introspection, field formatting, column visibility, measure/calculated-column CRUD, declarative `model apply`, bind/unbind, bindings list | no higher-level query builder, no field parameter workflow |
 | Filters | categorical, include, exclude, tuple, range, Top N, and relative date/time filters at report/page/visual scope | no Passthrough examples yet; public support still depends on exact exported shapes |
 | Bookmarks and interactions | bookmark CRUD, interaction CRUD | no bookmark groups, no dedicated action/navigation command surface |
+| Authoring accelerators | `pbi apply`, page export, templates, style presets | no report scaffold wizard, no layout generators, no semantic-model-driven starter flow |
 | Themes and report resources | theme list/apply/export/remove | no broader resource package management, no theme authoring workflow |
 | Report-level metadata | `report get`, `report set`, `report properties` for core metadata/settings | no resource package editor, no annotations editor, no report objects editor |
 
