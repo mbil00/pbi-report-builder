@@ -10,6 +10,7 @@ from rich.table import Table
 
 from pbi.properties import (
     VISUAL_PROPERTIES,
+    decode_pbi_value,
     get_property,
     get_visual_objects,
     list_properties,
@@ -163,6 +164,161 @@ def visual_objects(
 
     console.print(table)
     console.print(f"\n[dim]Set with: pbi visual set {page} {visual} chart:<object>.<prop>=<value>[/dim]")
+
+
+@visual_app.command("inspect")
+def visual_inspect(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
+    search: Annotated[str | None, typer.Option("--search", "-s", help="Filter output to entries matching keyword.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Deep inspection of every object property on a visual.
+
+    Shows all entries in visual.objects and visualContainerObjects with
+    full selector context.  Use --search to find specific properties.
+    Useful for reverse-engineering visuals built in Power BI Desktop.
+    """
+    _proj, _pg, vis = resolve_visual_target(project, page, visual)
+
+    sections = _collect_inspect_sections(vis.data)
+
+    if search:
+        kw = search.lower()
+        sections = {
+            obj: [e for e in entries if _entry_matches(e, kw)]
+            for obj, entries in sections.items()
+        }
+        sections = {k: v for k, v in sections.items() if v}
+
+    if not sections:
+        if search:
+            console.print(f'[yellow]No properties matching "{search}".[/yellow]')
+        else:
+            console.print(f'[dim]No object properties on {vis.visual_type} "{vis.name}".[/dim]')
+        return
+
+    if as_json:
+        import json as json_mod
+        console.print_json(json_mod.dumps(sections, indent=2, default=str))
+        return
+
+    console.print(f"[bold]{vis.name}[/bold] ({vis.visual_type})\n")
+
+    for obj_name in sorted(sections):
+        entries = sections[obj_name]
+        console.print(f"[bold cyan]{obj_name}[/bold cyan]")
+        for entry in entries:
+            sel_str = entry.get("_selector_display", "")
+            if sel_str:
+                # Escape Rich markup brackets in selector display
+                escaped = sel_str.replace("[", "\\[")
+                console.print(f"  [dim]{escaped}[/dim]")
+            for prop_name, prop_value in sorted(entry.get("properties", {}).items()):
+                val_str = str(prop_value).replace("[", "\\[")
+                console.print(f"    {prop_name} = [green]{val_str}[/green]")
+        console.print()
+
+    total_objects = sum(len(v) for v in sections.values())
+    total_props = sum(
+        len(e.get("properties", {}))
+        for entries in sections.values()
+        for e in entries
+    )
+    console.print(f"[dim]{total_objects} entries across {len(sections)} objects, {total_props} properties total[/dim]")
+    console.print(f"[dim]Set with: pbi visual set {page} {visual} chart:<object>.<prop>=<value>[/dim]")
+
+
+def _collect_inspect_sections(data: dict) -> dict[str, list[dict]]:
+    """Collect all object entries from both objects and visualContainerObjects."""
+    sections: dict[str, list[dict]] = {}
+    vis = data.get("visual", {})
+
+    for source_key, prefix in [("objects", ""), ("visualContainerObjects", "container:")]:
+        objects = vis.get(source_key, {})
+        for obj_name, entries in objects.items():
+            if not isinstance(entries, list):
+                continue
+            display_name = f"{prefix}{obj_name}" if prefix else obj_name
+            parsed: list[dict] = []
+            for entry in entries:
+                selector = entry.get("selector")
+                raw_props = entry.get("properties", {})
+                decoded_props = {}
+                for prop_name, raw_val in raw_props.items():
+                    decoded = decode_pbi_value(raw_val)
+                    # For complex values that didn't decode to a scalar, summarize
+                    if isinstance(decoded, dict):
+                        decoded = _summarize_complex_value(decoded)
+                    decoded_props[prop_name] = decoded
+                parsed.append({
+                    "_selector_display": _format_selector(selector),
+                    "selector": selector,
+                    "properties": decoded_props,
+                })
+            if parsed:
+                sections[display_name] = parsed
+
+    return sections
+
+
+def _format_selector(selector: dict | None) -> str:
+    """Format a selector into a readable string."""
+    if selector is None:
+        return ""
+    parts = []
+    if "id" in selector:
+        parts.append(f"id={selector['id']}")
+    if "metadata" in selector:
+        parts.append(f"metadata={selector['metadata']}")
+    if "order" in selector:
+        parts.append(f"order={selector['order']}")
+    data = selector.get("data", [])
+    for d in data:
+        if "dataViewWildcard" in d:
+            mo = d["dataViewWildcard"].get("matchingOption", 0)
+            parts.append(f"wildcard={mo}")
+    if not parts:
+        return "[no selector]"
+    return f"[{', '.join(parts)}]"
+
+
+def _summarize_complex_value(val: dict) -> str:
+    """Summarize a complex decoded value that couldn't be flattened to a scalar."""
+    # Measure expression
+    if "Measure" in val:
+        m = val["Measure"]
+        entity = m.get("Expression", {}).get("SourceRef", {}).get("Entity", "?")
+        prop = m.get("Property", "?")
+        return f"Measure({entity}.{prop})"
+    # SelectRef
+    if "SelectRef" in val:
+        return f"SelectRef({val['SelectRef'].get('ExpressionName', '?')})"
+    # FillRule
+    if "FillRule" in val:
+        return "<FillRule gradient>"
+    # Conditional
+    if "Conditional" in val:
+        n = len(val["Conditional"].get("Cases", []))
+        return f"<Conditional {n} rules>"
+    # Fallback: abbreviated JSON
+    import json
+    s = json.dumps(val, separators=(",", ":"))
+    if len(s) > 60:
+        return s[:57] + "..."
+    return s
+
+
+def _entry_matches(entry: dict, keyword: str) -> bool:
+    """Check if any property name or value contains the keyword."""
+    for prop_name, prop_value in entry.get("properties", {}).items():
+        if keyword in prop_name.lower() or keyword in str(prop_value).lower():
+            return True
+    sel = entry.get("_selector_display", "")
+    if keyword in sel.lower():
+        return True
+    return False
 
 
 @visual_app.command("list")

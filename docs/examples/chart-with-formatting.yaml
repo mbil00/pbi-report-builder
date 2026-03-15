@@ -1,0 +1,51 @@
+# Styled Bar Chart — Chart with legend, axis labels, and data colors
+#
+# A bar chart with explicit chart-level formatting using the chart: prefix.
+# These properties live in visual.objects and control the chart's appearance
+# beyond the container-level properties (title, border, background).
+#
+# Discovery tip: build a chart in Desktop, then run:
+#   pbi visual inspect "Page" "Visual"
+# to see every object property and its value.
+#
+# Usage: pbi apply chart-with-formatting.yaml
+
+version: 1
+pages:
+- name: Analysis
+  visuals:
+  - name: revenueByRegion
+    type: barChart
+    position: 16, 300
+    size: 900 x 450
+
+    title:
+      show: true
+      text: Revenue by Region
+      fontSize: 14
+
+    background:
+      color: '#FFFFFF'
+
+    border:
+      show: true
+      color: '#E2E2E2'
+      radius: 8
+
+    # Chart-specific formatting (visual.objects)
+    chart:legend.show: true
+    chart:legend.position: Right
+    chart:categoryAxis.show: true
+    chart:categoryAxis.fontSize: 10
+    chart:valueAxis.show: true
+    chart:valueAxis.fontSize: 10
+    chart:valueAxis.gridlineShow: true
+    chart:valueAxis.gridlineColor: '#F0F0F0'
+    chart:labels.show: true
+    chart:labels.fontSize: 9
+
+    bindings:
+      Category: Regions.RegionName
+      Y: Measures Table.Total Revenue
+
+    sort: Measures Table.Total Revenue Descending

@@ -1,0 +1,51 @@
+# Slicer Row — Horizontal strip of dropdown slicers
+#
+# A row of consistently-styled slicers for page-level filtering.
+# Use `pbi calc row` to compute positions:
+#   pbi calc row 4 --width 1888 --margin 16 --gap 8
+#
+# Usage: pbi apply slicer-row.yaml
+
+version: 1
+pages:
+- name: Dashboard
+  visuals:
+  - name: slicerCountry
+    type: slicer
+    position: 16, 8
+    size: 460 x 65
+    title:
+      show: true
+      text: Country
+    bindings:
+      Values: Devices.Country
+
+  - name: slicerOS
+    type: slicer
+    position: 484, 8
+    size: 460 x 65
+    title:
+      show: true
+      text: Operating System
+    bindings:
+      Values: Devices.OS
+
+  - name: slicerCompliance
+    type: slicer
+    position: 952, 8
+    size: 460 x 65
+    title:
+      show: true
+      text: Compliance State
+    bindings:
+      Values: Devices.ComplianceState
+
+  - name: slicerOwnership
+    type: slicer
+    position: 1420, 8
+    size: 460 x 65
+    title:
+      show: true
+      text: Ownership
+    bindings:
+      Values: Devices.ManagedBy

@@ -1,0 +1,56 @@
+# Styled Data Table — Table with conditional formatting and column config
+#
+# A data table with per-column gradient formatting, custom column widths,
+# display names, and reusable style reference. Shows the full table
+# authoring workflow.
+#
+# Prerequisites:
+#   pbi style create prestige-table border.show=true border.color="#DDD6CC" \
+#     background.color="#FAFAF8" title.show=true title.fontColor="#4A4A48"
+#
+# Usage: pbi apply styled-table.yaml
+
+version: 1
+pages:
+- name: Device Detail
+  visuals:
+  - name: deviceTable
+    type: tableEx
+    position: 16, 300
+    size: 1888 x 600
+    style: prestige-table
+
+    title:
+      text: Device Inventory
+
+    bindings:
+      Values:
+      - field: Devices.DeviceName
+        displayName: Device
+        width: 250
+      - field: Devices.OS
+        displayName: Operating System
+        width: 180
+      - field: Devices.ComplianceState
+        displayName: Compliance
+        width: 130
+      - field: Devices.LastSyncDateTime
+        displayName: Last Sync
+        width: 160
+      - field: Devices.DaysSinceLastSync
+        displayName: Days Stale
+        width: 120
+
+    # Gradient only on the Days Stale column
+    conditionalFormatting:
+      values.backColor:
+        mode: gradient
+        source: Devices.DaysSinceLastSync
+        column: Devices.DaysSinceLastSync
+        min: { color: '#FFFFFF', value: 0 }
+        mid: { color: '#FFF3E0', value: 30 }
+        max: { color: '#B83B3B', value: 90 }
+        nullStrategy: asZero
+
+    # Rules-based coloring on the Compliance column
+    # (use a second conditionalFormatting block via pbir: for multi-column CF)

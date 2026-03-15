@@ -1,0 +1,65 @@
+# KPI Strip — 3 KPI tiles with accent bars and reference labels
+#
+# A horizontal strip of KPI cards showing headline numbers with
+# secondary metrics. Common at the top of executive dashboards.
+#
+# Usage: pbi apply kpi-strip.yaml
+
+version: 1
+pages:
+- name: Dashboard
+  visuals:
+  - name: kpiStrip
+    type: cardVisual
+    position: 16, 16
+    size: 1888 x 280
+
+    # Grid layout: 3 evenly-spaced tiles
+    layout:
+      columns: 3
+      calloutSize: 35
+      alignment: middle
+      dividers: true
+      cellPadding: 8
+
+    # Accent bars across the top of each tile
+    accentBar:
+      show: true
+      position: Top
+      width: 5
+
+    # Reference labels to the right of the main number
+    referenceLabelLayout:
+      position: right
+      arrangement: rows
+      verticalAlignment: top
+
+    kpis:
+    - measure: Measures Table.Total Devices
+      displayUnits: 1
+      accentColor: '#1A6B7D'
+      tileBackground: '#F0F9FA'
+      referenceLabels:
+      - measure: Measures Table.Managed Devices
+        title: Managed
+        displayUnits: 1
+      - measure: Measures Table.Unmanaged Devices
+        title: Unmanaged
+        displayUnits: 1
+
+    - measure: Measures Table.Compliance Rate
+      accentColor: '#2B7A4B'
+      tileBackground: '#F0F7F2'
+      referenceLabels:
+      - measure: Measures Table.Encrypted Devices
+        title: Encrypted
+        displayUnits: 1
+
+    - measure: Measures Table.Stale Devices 30d
+      displayUnits: 1
+      accentColor: '#C4882E'
+      tileBackground: '#FDF8F0'
+      referenceLabels:
+      - measure: Measures Table.Stale Devices 90d
+        title: Critical (90d)
+        displayUnits: 1

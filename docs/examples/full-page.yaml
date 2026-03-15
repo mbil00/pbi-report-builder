@@ -1,0 +1,135 @@
+# Full Dashboard Page — Complete page with slicers, KPIs, chart, and table
+#
+# Demonstrates composing multiple visual types into a cohesive page layout.
+# This is the pattern described in the workflow assessment: slicers at top,
+# KPI strip below, then charts and detail tables.
+#
+# Recommended workflow:
+#   1. pbi apply full-page.yaml
+#   2. Open in Desktop, fine-tune styling
+#   3. pbi visual inspect "Executive Overview" <visual> --search <keyword>
+#   4. pbi style create my-style --from-visual "Executive Overview" <visual>
+#   5. Iterate
+#
+# Usage: pbi apply full-page.yaml
+
+version: 1
+pages:
+- name: Executive Overview
+  width: 1920
+  height: 1400
+
+  # Page background
+  background:
+    color: '#F5F3EF'
+
+  visuals:
+  # ── Row 1: Slicers (y=8) ──────────────────────────────────
+  - name: slicerRegion
+    type: slicer
+    position: 16, 8
+    size: 460 x 65
+    title: { show: true, text: Region }
+    bindings:
+      Values: Regions.RegionName
+
+  - name: slicerCategory
+    type: slicer
+    position: 484, 8
+    size: 460 x 65
+    title: { show: true, text: Category }
+    bindings:
+      Values: Products.Category
+
+  # ── Row 2: KPI Strip (y=90) ───────────────────────────────
+  - name: kpiStrip
+    type: cardVisual
+    position: 16, 90
+    size: 1888 x 250
+
+    layout:
+      columns: 4
+      calloutSize: 32
+      alignment: middle
+      dividers: true
+
+    accentBar:
+      show: true
+      position: Top
+      width: 4
+
+    referenceLabelLayout:
+      position: right
+      arrangement: rows
+
+    kpis:
+    - measure: Measures Table.Total Revenue
+      displayUnits: 1000000
+      accentColor: '#2B6CB0'
+      tileBackground: '#EBF8FF'
+
+    - measure: Measures Table.Total Orders
+      displayUnits: 1000
+      accentColor: '#2B7A4B'
+      tileBackground: '#F0F7F2'
+
+    - measure: Measures Table.Avg Order Value
+      accentColor: '#9B2C2C'
+      tileBackground: '#FFF5F5'
+
+    - measure: Measures Table.Customer Count
+      displayUnits: 1000
+      accentColor: '#6B46C1'
+      tileBackground: '#FAF5FF'
+
+  # ── Row 3: Charts side by side (y=360) ────────────────────
+  - name: revenueByRegion
+    type: barChart
+    position: 16, 360
+    size: 930 x 400
+    title: { show: true, text: Revenue by Region }
+    border: { show: true, color: '#E2E2E2', radius: 8 }
+    background: { color: '#FFFFFF' }
+    chart:legend.show: false
+    chart:labels.show: true
+    bindings:
+      Category: Regions.RegionName
+      Y: Measures Table.Total Revenue
+    sort: Measures Table.Total Revenue Descending
+
+  - name: revenueByCategory
+    type: donutChart
+    position: 974, 360
+    size: 930 x 400
+    title: { show: true, text: Revenue by Category }
+    border: { show: true, color: '#E2E2E2', radius: 8 }
+    background: { color: '#FFFFFF' }
+    chart:legend.show: true
+    chart:legend.position: Right
+    chart:labels.show: true
+    bindings:
+      Category: Products.Category
+      Y: Measures Table.Total Revenue
+
+  # ── Row 4: Detail table (y=780) ───────────────────────────
+  - name: orderDetail
+    type: tableEx
+    position: 16, 780
+    size: 1888 x 600
+    title: { show: true, text: Order Details }
+    border: { show: true, color: '#E2E2E2', radius: 8 }
+    background: { color: '#FFFFFF' }
+    bindings:
+      Values:
+      - field: Products.ProductName
+        displayName: Product
+        width: 300
+      - field: Regions.RegionName
+        displayName: Region
+        width: 180
+      - field: Measures Table.Total Revenue
+        displayName: Revenue
+        width: 150
+      - field: Measures Table.Total Orders
+        displayName: Orders
+        width: 120

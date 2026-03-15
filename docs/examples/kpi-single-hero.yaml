@@ -1,0 +1,36 @@
+# Hero KPI Card — Single large metric with bold styling
+#
+# A single, prominent KPI card for the hero metric on a page.
+# Uses large font, custom color, and a subtitle label.
+#
+# Usage: pbi apply kpi-single-hero.yaml
+
+version: 1
+pages:
+- name: Overview
+  visuals:
+  - name: heroCard
+    type: cardVisual
+    position: 16, 16
+    size: 450 x 200
+
+    layout:
+      columns: 1
+      calloutSize: 60
+      alignment: middle
+
+    accentBar:
+      show: true
+      position: Left
+      width: 8
+
+    kpis:
+    - measure: Measures Table.Total Revenue
+      displayUnits: 1000000
+      fontSize: 60
+      fontColor: '#1A365D'
+      bold: true
+      label: Total Revenue (YTD)
+      labelPosition: belowValue
+      accentColor: '#2B6CB0'
+      tileBackground: '#EBF8FF'

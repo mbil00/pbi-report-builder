@@ -2749,6 +2749,82 @@ class TestPageCreateFromTemplate(unittest.TestCase):
             self.assertIn("2 visuals created", result.stdout)
 
 
+class TestVisualInspect(unittest.TestCase):
+    """pbi visual inspect deep dump command."""
+
+    def test_inspect_shows_object_properties(self):
+        from pbi.formatting import GradientStop, build_gradient_format, set_conditional_format
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Test")
+            visual = project.create_visual(page, "tableEx")
+
+            # Set some chart objects
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.text", "My Table", VISUAL_PROPERTIES)
+
+            # Add conditional formatting to create objects
+            value = build_gradient_format(
+                "T", "F", GradientStop("#FFF", 0), GradientStop("#000", 100),
+            )
+            set_conditional_format(visual.data, "values", "backColor", value, column="T.F")
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["visual", "inspect", "Test", "1", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("values", result.stdout)
+            self.assertIn("backColor", result.stdout)
+            self.assertIn("metadata=T.F", result.stdout)
+
+    def test_inspect_search_filters(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Test")
+            visual = project.create_visual(page, "card")
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.text", "Hello", VISUAL_PROPERTIES)
+            set_property(visual.data, "border.show", "true", VISUAL_PROPERTIES)
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["visual", "inspect", "Test", "1", "--search", "title",
+                 "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            # Should show title properties but not border
+            self.assertIn("title", result.stdout.lower())
+
+    def test_inspect_json_output(self):
+        import json
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Test")
+            visual = project.create_visual(page, "card")
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["visual", "inspect", "Test", "1", "--json",
+                 "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            data = json.loads(result.stdout)
+            self.assertIsInstance(data, dict)
+
+
 class TestKpisShorthand(unittest.TestCase):
     """kpis: shorthand for cardVisual authoring."""
 
