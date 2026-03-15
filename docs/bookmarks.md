@@ -17,6 +17,16 @@ pbi bookmark set "Minimal View" --show detailTable --show filterPanel
 pbi bookmark delete "Minimal View" --force
 ```
 
+Bookmarks also integrate directly with reusable page templates and `pbi nav`:
+
+```bash
+# Save bookmarks with a reusable page template
+pbi page save-template "Executive Intro" corp-intro --global
+
+# Wire a button to a bookmark
+pbi nav set-bookmark "Sales Overview" toggleBtn "Minimal View"
+```
+
 ## Capture Flags
 
 Bookmark creation uses paired boolean flags:
@@ -26,3 +36,7 @@ Bookmark creation uses paired boolean flags:
 - `--capture-page/--no-capture-page`
 
 This matches the rest of the CLI's boolean convention.
+
+## Template / YAML Notes
+
+Bookmarks can be declared in apply-compatible YAML and are preserved when saving a page template. Page template application rewrites bookmark page references to the target page automatically.

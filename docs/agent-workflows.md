@@ -9,6 +9,7 @@ Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative 
 | Build a new page | Write YAML + `pbi apply` |
 | Restyle / restructure a page | `pbi page export` → edit YAML → `pbi apply` |
 | Redesign a page completely | `pbi page export` → edit YAML → `pbi apply --overwrite` |
+| Reuse a standard intro/info/detail page | `pbi page apply-template` |
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
 | Apply consistent formatting | `pbi style apply` or `style:` in YAML |
 | Change a theme's colors everywhere | `pbi theme migrate old.json new.json` |
@@ -155,6 +156,36 @@ pbi style list                                  # shows both scopes
 
 Style resolution: project-scoped styles take priority, global styles are the fallback.
 
+## Page Templates (Reusable Full Pages)
+
+Page templates now store full apply-compatible page YAML, not just stripped layout shells. Use them for intro pages, landing pages, info pages, repeated detail layouts, and other reusable report sections.
+
+```bash
+# Save one page as a reusable template
+pbi page save-template "Executive Intro" corp-intro --global --description "Shared intro page"
+
+# Discover available templates
+pbi page templates
+pbi page templates --global
+pbi page templates --json
+pbi page template-get corp-intro --global
+
+# Reuse a template on a new or existing page
+pbi page create "Intro" --from-template corp-intro --template-global
+pbi page apply-template "Overview" corp-intro --global
+pbi page apply-template "Overview" corp-intro --global --overwrite
+```
+
+Template resolution matches styles: project templates win, global templates are the fallback.
+
+Templates can carry:
+- page size and page properties
+- visuals and bindings
+- filters and interactions
+- page-local bookmarks
+
+Use `--overwrite` on `page apply-template` when the target page should be reconciled exactly to the template.
+
 ## Bulk Operations
 
 ```bash
@@ -181,6 +212,8 @@ pbi visual resize "Sales" chart --width 940 --height 400
 pbi visual bind "Sales" chart Values Sales.Revenue
 pbi visual align "Sales" s1 s2 s3 s4 --distribute horizontal --margin 16
 pbi visual align "Sales" chart1 chart2 --align top --match-height
+pbi nav set-page "Sales" nextBtn "Details"
+pbi nav set-bookmark "Sales" toggleBtn "Minimal View"
 ```
 
 ## Validation

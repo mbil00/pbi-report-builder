@@ -36,6 +36,8 @@ pbi page reorder "Sales Overview"   # moves Sales Overview to front, others keep
 
 ```bash
 pbi page create "Sales Overview" --width 1440 --height 900 --display-option FitToWidth
+pbi page create "Overview" --from-template intro-page
+pbi page create "Overview" --from-template corp-intro --template-global
 pbi page copy "Sales Overview" "Sales Overview Copy"
 pbi page delete "Sales Overview" --force
 ```
@@ -70,10 +72,33 @@ Key apply behaviors:
 
 ```bash
 pbi page save-template "Sales Overview" sales-layout
-pbi page apply-template "Q2 Sales" sales-layout
+pbi page save-template "Executive Intro" corp-intro --global --description "Shared intro page"
+
 pbi page templates
+pbi page templates --global
+pbi page templates --json
+pbi page template-get sales-layout
+pbi page template-get corp-intro --global
+
+pbi page apply-template "Q2 Sales" sales-layout
+pbi page apply-template "Landing" corp-intro --global --overwrite
+pbi page apply-template "Landing" corp-intro --global --dry-run
+
+pbi page template-clone corp-intro --to-project
+pbi page template-clone sales-layout --to-global
+
 pbi page delete-template sales-layout
+pbi page delete-template corp-intro --global
 ```
+
+Page templates are now full reusable page definitions backed by apply-compatible YAML.
+
+Key template behaviors:
+- Project templates live under `.pbi-templates/`
+- Global templates live under `~/.config/pbi/templates/`
+- Resolution is project first, then global fallback
+- Applying a template updates the target page to match the template; use `--overwrite` to remove visuals not present in the template
+- Templates can include visuals, bindings, filters, interactions, and page-local bookmarks
 
 ## Drillthrough
 

@@ -15,7 +15,23 @@ pbi interaction clear "Sales Overview" regionSlicer
 
 ## Button Actions
 
-Button actions are configured through `pbi visual set`:
+Use the first-class `pbi nav` helpers for button and shape actions:
+
+```bash
+pbi nav set-back "Sales Overview" navButton
+pbi nav set-page "Sales Overview" navButton "Overview"
+pbi nav set-bookmark "Sales Overview" toggleBtn "Show Details"
+pbi nav set-url "Sales Overview" helpBtn "https://docs.example.com"
+pbi nav clear "Sales Overview" helpBtn
+```
+
+Optional tooltips can be attached during setup:
+
+```bash
+pbi nav set-page "Sales Overview" navButton "Overview" --tooltip "Go to overview"
+```
+
+The underlying action properties are still available through `pbi visual set` when you need lower-level control:
 
 ```bash
 pbi visual set "Sales Overview" navButton action.show=true action.type=Back

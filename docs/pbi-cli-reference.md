@@ -78,6 +78,21 @@ pbi style apply "Device Intel" --visual-type cardVisual --style card-style
 pbi style list                     # project + global styles
 pbi style clone card-style --to-global
 
+# Page templates (reusable full-page YAML)
+pbi page save-template "Sales Overview" sales-layout
+pbi page save-template "Executive Intro" corp-intro --global
+pbi page templates --json
+pbi page template-get corp-intro --global
+pbi page apply-template "Landing" corp-intro --global --overwrite
+pbi page template-clone corp-intro --to-project
+
+# Navigation helpers
+pbi nav set-page "Sales Overview" navButton "Executive Summary"
+pbi nav set-bookmark "Sales Overview" toggleBtn "Show Details"
+pbi nav set-back "Drillthrough" backButton
+pbi nav set-url "Sales Overview" helpBtn "https://docs.example.com"
+pbi nav clear "Sales Overview" helpBtn
+
 # Layout
 pbi visual align "Sales" s1 s2 s3 --distribute horizontal --margin 16
 pbi visual align "Sales" chart1 chart2 --align top --match-height

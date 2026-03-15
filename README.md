@@ -23,6 +23,7 @@ pbi validate                                      # Check structural integrity
 | `pbi report` | Report metadata and settings |
 | `pbi page` | Page CRUD, reorder, templates, drillthrough, tooltip |
 | `pbi visual` | Visual CRUD, styling, grouping, sorting, conditional formatting |
+| `pbi nav` | First-class page, bookmark, back, and URL actions |
 | `pbi model` | Semantic model tables, columns, measures, DAX |
 | `pbi filter` | Report/page/visual filters (categorical, range, Top N, relative date) |
 | `pbi theme` | Theme apply/export/delete |
@@ -59,6 +60,8 @@ pbi apply sales.yaml --overwrite                  # Apply with full reconciliati
 ```
 
 YAML-driven commands also accept stdin. Use `-` or pipe content directly into `pbi apply`, `pbi diff`, or `pbi model apply`.
+
+Reusable page templates now support full-page YAML capture plus project/global storage, and button actions have first-class `pbi nav` commands.
 
 See [docs/agent-workflows.md](docs/agent-workflows.md) for detailed patterns.
 
