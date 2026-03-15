@@ -304,6 +304,77 @@ def model_measure_delete(
     console.print(f'{prefix}Deleted measure [cyan]{table}.{name}[/cyan]')
 
 
+@model_app.command("relationships")
+def model_relationships(
+    from_table: Annotated[str | None, typer.Option("--from", help="Filter by table name.")] = None,
+    to_table: Annotated[str | None, typer.Option("--to", help="Filter by table name.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List relationships in the semantic model."""
+    _, model = _get_model(project)
+
+    rels = model.find_relationships(from_table=from_table, to_table=to_table)
+
+    if not rels:
+        console.print("[yellow]No relationships found.[/yellow]")
+        raise typer.Exit(0)
+
+    if as_json:
+        import json
+
+        rows = [{
+            "from": f"{r.from_table}.{r.from_column}",
+            "to": f"{r.to_table}.{r.to_column}",
+            "properties": r.properties,
+        } for r in rels]
+        console.print_json(json.dumps(rows, indent=2))
+        return
+
+    table = Table(title="Model Relationships", box=box.SIMPLE)
+    table.add_column("From", style="cyan")
+    table.add_column("", style="dim", width=2)
+    table.add_column("To", style="cyan")
+    table.add_column("Properties", style="dim")
+
+    for r in rels:
+        props = ", ".join(f"{k}={v}" for k, v in r.properties.items()) if r.properties else ""
+        table.add_row(
+            f"{r.from_table}.{r.from_column}",
+            "→",
+            f"{r.to_table}.{r.to_column}",
+            props,
+        )
+    console.print(table)
+
+
+@model_app.command("path")
+def model_path(
+    from_table: Annotated[str, typer.Argument(help="Source table name.")],
+    to_table: Annotated[str, typer.Argument(help="Target table name.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Show the relationship path between two tables."""
+    _, model = _get_model(project)
+
+    path = model.find_path(from_table, to_table)
+    if path is None:
+        console.print(f'[yellow]No relationship path found between "{from_table}" and "{to_table}".[/yellow]')
+        raise typer.Exit(1)
+
+    if not path:
+        console.print(f'[dim]"{from_table}" and "{to_table}" are the same table.[/dim]')
+        return
+
+    steps = []
+    for rel in path:
+        steps.append(f"{rel.from_table}.{rel.from_column} [dim]→[/dim] {rel.to_table}.{rel.to_column}")
+
+    console.print(f"[bold]Path ({len(path)} hop{'s' if len(path) != 1 else ''}):[/bold]")
+    for step in steps:
+        console.print(f"  {step}")
+
+
 @model_app.command("fields")
 def model_fields(
     table_name: Annotated[str, typer.Argument(help="Table name.")],

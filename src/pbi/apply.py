@@ -606,6 +606,41 @@ def _apply_filters(
                         is_locked=is_locked,
                     )
                 result.filters_added += 1
+        elif filter_type.lower() == "topn":
+            from pbi.filters import add_topn_filter
+
+            count = f_spec.get("count", 10)
+            by_ref = f_spec.get("by", "")
+            direction = f_spec.get("direction", "Top")
+            by_dot = by_ref.find(".")
+            if by_dot == -1:
+                result.errors.append(f"{context}: topN filter 'by' must be Table.Field format: {by_ref}")
+                continue
+            by_entity = by_ref[:by_dot]
+            by_prop = by_ref[by_dot + 1:]
+            add_topn_filter(
+                data, entity, prop,
+                n=int(count),
+                order_entity=by_entity,
+                order_prop=by_prop,
+                direction=direction.capitalize(),
+                is_hidden=is_hidden,
+                is_locked=is_locked,
+            )
+            result.filters_added += 1
+        elif filter_type.lower() == "range":
+            from pbi.filters import add_range_filter
+
+            min_val = f_spec.get("min")
+            max_val = f_spec.get("max")
+            add_range_filter(
+                data, entity, prop,
+                min_val=str(min_val) if min_val is not None else None,
+                max_val=str(max_val) if max_val is not None else None,
+                is_hidden=is_hidden,
+                is_locked=is_locked,
+            )
+            result.filters_added += 1
         else:
             result.warnings.append(
                 f"{context}: filter type '{filter_type}' not yet supported in apply."

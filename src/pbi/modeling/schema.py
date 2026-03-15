@@ -69,14 +69,27 @@ class SemanticTable:
 
 
 @dataclass
+class Relationship:
+    """A model relationship between two columns."""
+
+    id: str
+    from_table: str
+    from_column: str
+    to_table: str
+    to_column: str
+    properties: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class SemanticModel:
     folder: Path
     tables: list[SemanticTable] = field(default_factory=list)
+    relationships: list[Relationship] = field(default_factory=list)
 
     @classmethod
     def load(cls, project_root: Path) -> SemanticModel:
         """Find and load the semantic model from a project root."""
-        from .parser import _parse_table_tmdl
+        from .parser import _parse_relationships_tmdl, _parse_table_tmdl
 
         sm_folders = list(project_root.glob("*.SemanticModel"))
         if not sm_folders:
@@ -91,7 +104,59 @@ class SemanticModel:
                 if table:
                     model.tables.append(table)
 
+        rel_file = sm_folder / "definition" / "relationships.tmdl"
+        if rel_file.exists():
+            model.relationships = _parse_relationships_tmdl(rel_file)
+
         return model
+
+    def find_relationships(
+        self,
+        *,
+        from_table: str | None = None,
+        to_table: str | None = None,
+    ) -> list[Relationship]:
+        """Filter relationships by from/to table (case-insensitive)."""
+        results = self.relationships
+        if from_table:
+            ft = from_table.lower()
+            results = [r for r in results if r.from_table.lower() == ft or r.to_table.lower() == ft]
+        if to_table:
+            tt = to_table.lower()
+            results = [r for r in results if r.from_table.lower() == tt or r.to_table.lower() == tt]
+        return results
+
+    def find_path(self, from_table: str, to_table: str) -> list[Relationship] | None:
+        """Find the shortest relationship path between two tables using BFS."""
+        from collections import deque
+
+        ft = from_table.lower()
+        tt = to_table.lower()
+        if ft == tt:
+            return []
+
+        # Build adjacency list
+        adj: dict[str, list[tuple[str, Relationship]]] = {}
+        for rel in self.relationships:
+            f_lower = rel.from_table.lower()
+            t_lower = rel.to_table.lower()
+            adj.setdefault(f_lower, []).append((t_lower, rel))
+            adj.setdefault(t_lower, []).append((f_lower, rel))
+
+        # BFS
+        queue: deque[tuple[str, list[Relationship]]] = deque([(ft, [])])
+        visited: set[str] = {ft}
+        while queue:
+            current, path = queue.popleft()
+            for neighbor, rel in adj.get(current, []):
+                if neighbor in visited:
+                    continue
+                new_path = path + [rel]
+                if neighbor == tt:
+                    return new_path
+                visited.add(neighbor)
+                queue.append((neighbor, new_path))
+        return None
 
     def find_table(self, name: str) -> SemanticTable:
         """Find a table by name (case-insensitive, partial match)."""

@@ -1,4 +1,4 @@
-"""Project-scoped visual style preset storage and validation."""
+"""Visual style preset storage and validation (project-scoped and global)."""
 
 from __future__ import annotations
 
@@ -26,21 +26,34 @@ class StylePreset:
     path: Path
     properties: dict[str, Any]
     description: str | None = None
+    scope: str = "project"  # "project" or "global"
+
+
+def _global_styles_dir() -> Path:
+    """Return the global styles directory (~/.config/pbi/styles/)."""
+    return Path.home() / ".config" / "pbi" / "styles"
 
 
 def create_style(
-    project: Project,
+    project: Project | None,
     style_name: str,
     properties: Mapping[str, Any],
     *,
     description: str | None = None,
     overwrite: bool = False,
+    global_scope: bool = False,
 ) -> Path:
-    """Create a style preset file under .pbi-styles/."""
+    """Create a style preset file under .pbi-styles/ or ~/.config/pbi/styles/."""
     if not properties:
         raise ValueError("Style must include at least one property.")
 
-    path = _style_path(project, style_name)
+    if global_scope:
+        path = _global_styles_dir() / f"{_validate_style_name(style_name)}.yaml"
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped styles.")
+        path = _style_path(project, style_name)
+
     if path.exists() and not overwrite:
         raise FileExistsError(
             f'Style "{style_name}" already exists. Use --force to replace it.'
@@ -67,12 +80,32 @@ def create_style(
     return path
 
 
-def get_style(project: Project, style_name: str) -> StylePreset:
-    """Load and validate one saved style preset."""
-    path = _style_path(project, style_name)
-    if not path.exists():
-        raise FileNotFoundError(f'Style "{style_name}" not found')
+def get_style(project: Project | None, style_name: str, *, global_scope: bool = False) -> StylePreset:
+    """Load and validate one saved style preset.
 
+    Resolution order (when global_scope is False): project → global fallback.
+    """
+    if global_scope:
+        path = _global_styles_dir() / f"{_validate_style_name(style_name)}.yaml"
+        if not path.exists():
+            raise FileNotFoundError(f'Global style "{style_name}" not found')
+        return _load_style_file(path, style_name, scope="global")
+
+    # Try project first, then global fallback
+    if project is not None:
+        path = _style_path(project, style_name)
+        if path.exists():
+            return _load_style_file(path, style_name, scope="project")
+
+    global_path = _global_styles_dir() / f"{_validate_style_name(style_name)}.yaml"
+    if global_path.exists():
+        return _load_style_file(global_path, style_name, scope="global")
+
+    raise FileNotFoundError(f'Style "{style_name}" not found')
+
+
+def _load_style_file(path: Path, style_name: str, *, scope: str = "project") -> StylePreset:
+    """Load and validate a style preset from a file path."""
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     except yaml.YAMLError as e:
@@ -98,31 +131,81 @@ def get_style(project: Project, style_name: str) -> StylePreset:
         path=path,
         description=description,
         properties=_normalize_style_properties(raw_properties),
+        scope=scope,
     )
 
 
-def list_styles(project: Project) -> list[StylePreset]:
-    """List all valid saved style presets."""
-    styles_dir = _styles_dir(project)
-    if not styles_dir.exists():
-        return []
-
+def list_styles(project: Project | None, *, global_scope: bool = False) -> list[StylePreset]:
+    """List saved style presets. Merges project + global unless scoped."""
     presets: list[StylePreset] = []
-    for path in sorted(styles_dir.glob("*.yaml")):
-        try:
-            presets.append(get_style(project, path.stem))
-        except (FileNotFoundError, ValueError):
-            continue
+    seen_names: set[str] = set()
+
+    if not global_scope and project is not None:
+        styles_dir = _styles_dir(project)
+        if styles_dir.exists():
+            for path in sorted(styles_dir.glob("*.yaml")):
+                try:
+                    preset = _load_style_file(path, path.stem, scope="project")
+                    presets.append(preset)
+                    seen_names.add(preset.name)
+                except (FileNotFoundError, ValueError):
+                    continue
+
+    global_dir = _global_styles_dir()
+    if global_dir.exists():
+        for path in sorted(global_dir.glob("*.yaml")):
+            try:
+                preset = _load_style_file(path, path.stem, scope="global")
+                if preset.name not in seen_names:
+                    presets.append(preset)
+                    seen_names.add(preset.name)
+            except (FileNotFoundError, ValueError):
+                continue
+
     return presets
 
 
-def delete_style(project: Project, style_name: str) -> bool:
+def delete_style(project: Project | None, style_name: str, *, global_scope: bool = False) -> bool:
     """Delete a saved style preset."""
-    path = _style_path(project, style_name)
+    if global_scope:
+        path = _global_styles_dir() / f"{_validate_style_name(style_name)}.yaml"
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped styles.")
+        path = _style_path(project, style_name)
     if not path.exists():
         return False
     path.unlink()
     return True
+
+
+def clone_style(
+    project: Project,
+    style_name: str,
+    *,
+    to_global: bool = False,
+    new_name: str | None = None,
+    overwrite: bool = False,
+) -> Path:
+    """Clone a style between project and global scope."""
+    target_name = new_name or style_name
+
+    if to_global:
+        source = get_style(project, style_name, global_scope=False)
+        if source.scope != "project":
+            # Try loading project-only
+            path = _style_path(project, style_name)
+            if not path.exists():
+                raise FileNotFoundError(f'Project style "{style_name}" not found')
+            source = _load_style_file(path, style_name, scope="project")
+        return create_style(None, target_name, source.properties,
+                            description=source.description, overwrite=overwrite,
+                            global_scope=True)
+    else:
+        source = get_style(project, style_name, global_scope=True)
+        return create_style(project, target_name, source.properties,
+                            description=source.description, overwrite=overwrite,
+                            global_scope=False)
 
 
 def dump_style(style: StylePreset) -> str:

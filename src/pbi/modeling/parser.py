@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .schema import Column, Measure, SemanticTable
+from .schema import Column, Measure, Relationship, SemanticTable
 
 
 def _parse_tmdl_name(text: str) -> str:
@@ -138,3 +138,50 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         return None
 
     return SemanticTable(name=table_name, columns=columns, measures=measures, definition_path=path)
+
+
+def _parse_relationships_tmdl(path: Path) -> list[Relationship]:
+    """Parse a relationships.tmdl file into Relationship objects."""
+    content = path.read_text(encoding="utf-8-sig")
+    lines = content.splitlines()
+    relationships: list[Relationship] = []
+
+    current_id: str | None = None
+    current_props: dict[str, str] = {}
+
+    def _flush() -> None:
+        nonlocal current_id, current_props
+        if current_id is not None:
+            from_ref = current_props.get("fromColumn", "")
+            to_ref = current_props.get("toColumn", "")
+            from_dot = from_ref.find(".")
+            to_dot = to_ref.find(".")
+            if from_dot > 0 and to_dot > 0:
+                relationships.append(Relationship(
+                    id=current_id,
+                    from_table=from_ref[:from_dot],
+                    from_column=from_ref[from_dot + 1:],
+                    to_table=to_ref[:to_dot],
+                    to_column=to_ref[to_dot + 1:],
+                    properties={k: v for k, v in current_props.items()
+                                if k not in ("fromColumn", "toColumn")},
+                ))
+        current_id = None
+        current_props = {}
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if stripped.startswith("relationship "):
+            _flush()
+            current_id = stripped[len("relationship "):].strip()
+            continue
+
+        if current_id is not None and ":" in stripped:
+            key, _, val = stripped.partition(":")
+            current_props[key.strip()] = val.strip()
+
+    _flush()
+    return relationships

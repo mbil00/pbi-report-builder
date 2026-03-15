@@ -361,6 +361,75 @@ def visual_get_page(
     console.print(table)
 
 
+@visual_app.command("page-diff")
+def page_diff(
+    left_page: Annotated[str, typer.Argument(help="First page name, display name, or index.")],
+    right_page: Annotated[str, typer.Argument(help="Second page name, display name, or index.")],
+    all_props: Annotated[bool, typer.Option("--all-props", help="Include core properties like position.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Compare two pages: visual counts, types, and property differences."""
+    from pbi.export import export_visual_spec
+
+    proj, left_pg = resolve_page_target(project, left_page)
+    try:
+        right_pg = proj.find_page(right_page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    left_visuals = proj.get_visuals(left_pg)
+    right_visuals = proj.get_visuals(right_pg)
+
+    # Summary
+    console.print(f'[bold]{left_pg.display_name}[/bold]: {len(left_visuals)} visuals')
+    console.print(f'[bold]{right_pg.display_name}[/bold]: {len(right_visuals)} visuals')
+
+    left_by_name = {v.name: v for v in left_visuals}
+    right_by_name = {v.name: v for v in right_visuals}
+    all_names = list(dict.fromkeys(list(left_by_name.keys()) + list(right_by_name.keys())))
+
+    only_left = [n for n in all_names if n in left_by_name and n not in right_by_name]
+    only_right = [n for n in all_names if n not in left_by_name and n in right_by_name]
+    common = [n for n in all_names if n in left_by_name and n in right_by_name]
+
+    if only_left:
+        console.print(f'\n[yellow]Only in "{left_pg.display_name}":[/yellow]')
+        for n in only_left:
+            console.print(f"  [cyan]{n}[/cyan] ({left_by_name[n].visual_type})")
+    if only_right:
+        console.print(f'\n[yellow]Only in "{right_pg.display_name}":[/yellow]')
+        for n in only_right:
+            console.print(f"  [cyan]{n}[/cyan] ({right_by_name[n].visual_type})")
+
+    if common:
+        diff_count = 0
+        for name in common:
+            left_spec = flatten_visual_diff_spec(export_visual_spec(proj, left_by_name[name]), include_core=all_props)
+            right_spec = flatten_visual_diff_spec(export_visual_spec(proj, right_by_name[name]), include_core=all_props)
+            diffs = []
+            all_keys = list(dict.fromkeys(list(left_spec.keys()) + list(right_spec.keys())))
+            for key in all_keys:
+                lv = left_spec.get(key, "")
+                rv = right_spec.get(key, "")
+                if lv != rv:
+                    diffs.append((key, lv, rv))
+            if diffs:
+                diff_count += 1
+                table = Table(title=f"Differences: {name}", box=box.SIMPLE)
+                table.add_column("Property", style="cyan")
+                table.add_column(left_pg.display_name)
+                table.add_column(right_pg.display_name)
+                for prop_name, lv, rv in diffs:
+                    table.add_row(prop_name, str(lv), str(rv))
+                console.print(table)
+
+        if diff_count == 0 and not only_left and not only_right:
+            console.print("\n[dim]Pages are identical.[/dim]")
+        elif diff_count == 0:
+            console.print(f"\n[dim]{len(common)} shared visuals have no property differences.[/dim]")
+
+
 @visual_app.command("diff")
 def visual_diff(
     left_page: Annotated[str, typer.Argument(help="Source page name, display name, or index.")],

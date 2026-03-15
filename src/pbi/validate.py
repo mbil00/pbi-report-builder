@@ -72,6 +72,9 @@ def validate_project(project: Project) -> list[ValidationIssue]:
                             "error", "Visual directory exists but visual.json is missing"
                         ))
 
+    # Validate cross-table relationships in visual bindings
+    issues.extend(_validate_visual_relationships(project))
+
     # Validate bookmarks
     bookmarks_dir = project.definition_folder / "bookmarks"
     if bookmarks_dir.exists():
@@ -448,5 +451,58 @@ def _validate_filter_config(
                     "RelativeDate filter uses unsupported Condition.RelativeDate payload; the published PBIR semanticQuery schema does not define it",
                     path=filter_path,
                 ))
+
+    return issues
+
+
+def _validate_visual_relationships(project: Project) -> list[ValidationIssue]:
+    """Check visual bindings for cross-table fields without relationship paths."""
+    issues: list[ValidationIssue] = []
+
+    try:
+        from pbi.modeling.schema import SemanticModel
+        model = SemanticModel.load(project.root)
+    except (FileNotFoundError, Exception):
+        return issues  # No model or can't load — skip
+
+    if not model.relationships:
+        return issues  # No relationships to validate against
+
+    table_names = {t.name.lower() for t in model.tables}
+
+    for page in project.get_pages():
+        for visual in project.get_visuals(page):
+            query_state = visual.data.get("visual", {}).get("query", {}).get("queryState", {})
+            if not query_state:
+                continue
+
+            # Collect all tables referenced by this visual
+            tables_used: set[str] = set()
+            for _role, config in query_state.items():
+                for proj in config.get("projections", []):
+                    ref = proj.get("queryRef", "")
+                    dot = ref.find(".")
+                    if dot > 0:
+                        table = ref[:dot]
+                        if table.lower() in table_names:
+                            tables_used.add(table)
+
+            if len(tables_used) < 2:
+                continue
+
+            # Check that every pair of tables has a relationship path
+            table_list = sorted(tables_used)
+            for i in range(len(table_list)):
+                for j in range(i + 1, len(table_list)):
+                    path = model.find_path(table_list[i], table_list[j])
+                    if path is None:
+                        rel = f"pages/{page.folder.name}/visuals/{visual.folder.name}/visual.json"
+                        issues.append(ValidationIssue(
+                            rel,
+                            "warning",
+                            f'Visual "{visual.name}" references tables '
+                            f'"{table_list[i]}" and "{table_list[j]}" '
+                            f'which have no relationship path',
+                        ))
 
     return issues

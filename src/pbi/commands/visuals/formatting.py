@@ -156,6 +156,7 @@ def visual_column(
     precision: Annotated[int | None, typer.Option("--precision", help="Decimal places.")] = None,
     clear_width: Annotated[bool, typer.Option("--clear-width", help="Remove column width override.")] = False,
     clear_format: Annotated[bool, typer.Option("--clear-format", help="Remove per-column formatting.")] = False,
+    all_pages: Annotated[bool, typer.Option("--all-pages", help="Apply across all pages (requires --rename or --width with a column field).")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """List, resize, rename, or format projection-backed visual fields."""
@@ -168,6 +169,41 @@ def visual_column(
         set_column_format,
         set_column_width,
     )
+
+    if all_pages:
+        if not column:
+            console.print("[red]Error:[/red] --all-pages requires a column field reference.")
+            raise typer.Exit(1)
+        if not rename and width is None:
+            console.print("[red]Error:[/red] --all-pages requires --rename or --width.")
+            raise typer.Exit(1)
+
+        proj = get_project(project)
+        total = 0
+        for pg in proj.get_pages():
+            for vis in proj.get_visuals(pg):
+                try:
+                    col = find_column(vis, column)
+                except ValueError:
+                    continue
+                if rename is not None:
+                    rename_column(vis, col.query_ref, rename)
+                if width is not None:
+                    set_column_width(vis, col.query_ref, width)
+                vis.save()
+                total += 1
+                parts = []
+                if rename:
+                    parts.append(f"rename={rename}")
+                if width is not None:
+                    parts.append(f"width={int(width)}")
+                console.print(f'[dim]{pg.display_name}/{vis.name}:[/dim] {col.entity}.{col.prop} → {", ".join(parts)}')
+
+        if total == 0:
+            console.print(f'[yellow]Column "{column}" not found on any visual.[/yellow]')
+        else:
+            console.print(f"Updated [cyan]{total}[/cyan] visual(s) across all pages.")
+        return
 
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
 
