@@ -526,10 +526,10 @@ def _build_calculated_column_expression_lines(column_name: str, expression: str)
 
     name = _format_tmdl_name(column_name)
     if len(expr_lines) == 1:
-        return [f"\tcalculatedColumn {name} = {expr_lines[0].strip()}"]
+        return [f"\tcolumn {name} = {expr_lines[0].strip()}"]
 
-    lines = [f"\tcalculatedColumn {name} ="]
-    lines.extend(f"\t\t{line}" for line in expr_lines)
+    lines = [f"\tcolumn {name} ="]
+    lines.extend(f"\t\t\t{line}" for line in expr_lines)
     return lines
 
 
