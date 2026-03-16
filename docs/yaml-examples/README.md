@@ -15,6 +15,7 @@ Reference snippets for `pbi apply`. Each file demonstrates a specific feature. A
 | [filters.yaml](filters.yaml) | Filter types: categorical, include, exclude, range, topN |
 | [formatting.yaml](formatting.yaml) | Properties, chart objects, styles, per-measure formatting |
 | [conditional-formatting.yaml](conditional-formatting.yaml) | Conditional formatting: measure, gradient, rules |
+| [kpis.yaml](kpis.yaml) | KPI card shorthand: multi-metric cards, reference labels, accent bars |
 | [interactions-bookmarks.yaml](interactions-bookmarks.yaml) | Visual interactions and bookmark definitions |
 | [page-types.yaml](page-types.yaml) | Tooltip pages, drillthrough pages, hidden pages |
 

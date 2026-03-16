@@ -1,0 +1,106 @@
+# KPI card shorthand — build multi-metric cardVisual layouts in YAML.
+# The `kpis` key expands into full queryState projections and formatting objects.
+# Only works with type: cardVisual.
+
+pages:
+- name: KPI Examples
+  visuals:
+
+  # --- Simple: three KPIs in a row ---
+  - name: kpiStrip
+    type: cardVisual
+    position: 16, 16
+    size: 900 x 120
+    border: { show: true, radius: 8 }
+    layout:
+      columns: 3
+    kpis:
+    - measure: Measures.TotalRevenue
+      label: Revenue
+      fontSize: 28
+      fontColor: "#1A3C5E"
+    - measure: Measures.GrossMargin
+      label: Margin
+      fontSize: 28
+      fontColor: "#1A3C5E"
+    - measure: Measures.UnitsSold
+      label: Units
+      fontSize: 28
+      fontColor: "#1A3C5E"
+
+  # --- With reference labels (comparison values) ---
+  - name: kpiWithComparisons
+    type: cardVisual
+    position: 16, 160
+    size: 900 x 180
+    border: { show: true, radius: 8 }
+    background: { show: true, color: "#FFFFFF" }
+    layout:
+      columns: 3
+      calloutSize: 36
+      dividers: true
+    referenceLabelLayout:
+      position: Below
+      arrangement: Sequential
+    kpis:
+    - measure: Measures.TotalRevenue
+      label: Revenue
+      fontSize: 32
+      fontColor: "#002C77"
+      bold: true
+      referenceLabels:
+      - measure: Measures.RevenueLY
+        title: vs Last Year
+        fontColor: "#888888"
+      - measure: Measures.RevenueTarget
+        title: Target
+        fontColor: "#333333"
+    - measure: Measures.GrossMargin
+      label: Margin %
+      fontSize: 32
+      fontColor: "#002C77"
+      bold: true
+      referenceLabels:
+      - measure: Measures.MarginLY
+        title: vs Last Year
+        fontColor: "#888888"
+    - measure: Measures.UnitsSold
+      label: Units Sold
+      fontSize: 32
+      fontColor: "#002C77"
+      displayUnits: 1000
+
+  # --- Styled with accent bars and tile backgrounds ---
+  - name: kpiAccented
+    type: cardVisual
+    position: 16, 370
+    size: 900 x 160
+    border: { show: true, radius: 8 }
+    layout:
+      columns: 4
+      cellPadding: 8
+    accentBar:
+      show: true
+      position: Top
+      width: 4
+    kpis:
+    - measure: Measures.TotalRevenue
+      label: Revenue
+      fontSize: 24
+      accentColor: "#0078D4"
+      tileBackground: "#F0F6FF"
+    - measure: Measures.GrossMargin
+      label: Margin
+      fontSize: 24
+      accentColor: "#388E3C"
+      tileBackground: "#F0FFF0"
+    - measure: Measures.UnitsSold
+      label: Units
+      fontSize: 24
+      accentColor: "#F57C00"
+      tileBackground: "#FFF8F0"
+    - measure: Measures.CustomerCount
+      label: Customers
+      fontSize: 24
+      accentColor: "#7B1FA2"
+      tileBackground: "#F8F0FF"
