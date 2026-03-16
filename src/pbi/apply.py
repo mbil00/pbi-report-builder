@@ -48,6 +48,7 @@ class ApplyResult:
     filters_added: int = 0
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    rolled_back: bool = False
 
     @property
     def has_changes(self) -> bool:
@@ -133,10 +134,12 @@ def apply_yaml(
         except Exception:
             if snapshot_dir is not None:
                 _restore_definition_snapshot(project, snapshot_dir)
+                result.rolled_back = True
             raise
 
         if result.errors and snapshot_dir is not None:
             _restore_definition_snapshot(project, snapshot_dir)
+            result.rolled_back = True
 
         return result
     finally:
@@ -228,11 +231,6 @@ def _apply_page(
             _apply_filters(page.data, page_spec["filters"], result,
                            context=f"Page {page_name}", dry_run=dry_run)
 
-        # Apply interactions
-        if "interactions" in page_spec:
-            _apply_interactions(project, page, page_spec["interactions"], result,
-                                context=f"Page {page_name}", dry_run=dry_run)
-
         if not dry_run and len(result.errors) == page_error_count:
             page.save()
 
@@ -267,6 +265,13 @@ def _apply_page(
                 result.visuals_deleted.append((page_name, visual.name))
                 if not dry_run:
                     project.delete_visual(visual)
+
+    # Apply interactions AFTER visuals so newly created visuals can be resolved
+    if not (dry_run and page_is_new) and "interactions" in page_spec:
+        _apply_interactions(project, page, page_spec["interactions"], result,
+                            context=f"Page {page_name}", dry_run=dry_run)
+        if not dry_run and len(result.errors) == page_error_count:
+            page.save()
 
 
 def _apply_visual(
@@ -388,10 +393,15 @@ def _apply_visual(
         visual.data["position"]["height"] = h
         result.properties_set += 2
 
+    # Textbox content
+    if "text" in vis_spec and visual_type == "textbox":
+        _apply_textbox_content(visual, vis_spec, result)
+
     # Apply visual properties (nested objects become dot-separated props)
     exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
                      "filters", "conditionalFormatting", "isHidden", "pbir", "style",
-                     "kpis", "layout", "accentBar", "referenceLabelLayout"}
+                     "kpis", "layout", "accentBar", "referenceLabelLayout",
+                     "text", "textStyle"}
     _apply_nested_properties(
         visual.data, vis_spec,
         exclude_keys=exclude_keys,
@@ -509,6 +519,42 @@ def _raw_object_roots(raw_pbir: dict) -> set[str]:
     })
     roots.discard("")
     return roots
+
+
+def _apply_textbox_content(
+    visual: Visual,
+    vis_spec: dict,
+    result: ApplyResult,
+) -> None:
+    """Apply plain text content to a textbox visual."""
+    text = str(vis_spec.get("text", ""))
+    style = vis_spec.get("textStyle", {})
+    if not isinstance(style, dict):
+        style = {}
+
+    text_style: dict[str, Any] = {}
+    if "fontFamily" in style:
+        text_style["fontFamily"] = f"'{style['fontFamily']}'"
+    if "fontSize" in style:
+        text_style["fontSize"] = f"'{style['fontSize']}pt'"
+    if "fontColor" in style:
+        text_style["color"] = {"expr": {"Literal": {"Value": f"'{style['fontColor']}'"}}}
+    if "bold" in style:
+        text_style["fontWeight"] = "'bold'" if style["bold"] else "'normal'"
+
+    text_run: dict[str, Any] = {"value": f"'{text}'"}
+    if text_style:
+        text_run["textStyle"] = text_style
+
+    paragraphs = [{"textRuns": [text_run]}]
+    visual.data.setdefault("visual", {})["objects"] = {
+        "general": [{
+            "properties": {
+                "paragraphs": paragraphs,
+            },
+        }],
+    }
+    result.properties_set += 1
 
 
 def _apply_bindings(

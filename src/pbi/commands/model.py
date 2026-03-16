@@ -86,6 +86,7 @@ def model_columns(
 
         rows = [{
             "name": c.name,
+            "kind": c.kind,
             "dataType": c.data_type,
             "format": c.format_string,
             "hidden": c.is_hidden,
@@ -96,14 +97,17 @@ def model_columns(
 
     table = Table(title=f'Columns in "{sem_table.name}"', box=box.SIMPLE)
     table.add_column("Column", style="cyan")
+    table.add_column("Kind", style="dim")
     table.add_column("Data Type", style="dim")
     table.add_column("Format", style="dim")
     table.add_column("Hidden", style="dim", justify="center")
     table.add_column("Source Column", style="dim")
 
     for column in columns:
+        kind_label = "calculated" if column.kind == "calculatedColumn" else ""
         table.add_row(
             column.name,
+            kind_label,
             column.data_type,
             column.format_string,
             "yes" if column.is_hidden else "",
@@ -119,6 +123,7 @@ def model_columns(
 @model_app.command("measures")
 def model_measures(
     table_name: Annotated[str, typer.Argument(help="Table name.")],
+    full: Annotated[bool, typer.Option("--full", help="Show complete expressions without truncation.")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -139,11 +144,17 @@ def model_measures(
 
     table = Table(title=f'Measures in "{sem_table.name}"', box=box.SIMPLE)
     table.add_column("Measure", style="cyan")
-    table.add_column("Expression", max_width=60)
+    if full:
+        table.add_column("Expression")
+    else:
+        table.add_column("Expression", max_width=60)
     table.add_column("Format", style="dim")
 
     for measure in sem_table.measures:
-        expr = measure.expression[:57] + "..." if len(measure.expression) > 60 else measure.expression
+        if full:
+            expr = measure.expression
+        else:
+            expr = measure.expression[:57] + "..." if len(measure.expression) > 60 else measure.expression
         table.add_row(measure.name, expr, measure.format_string)
 
     console.print(table)
@@ -639,17 +650,19 @@ def model_column_delete(
 
 @model_column_app.command("get")
 def model_column_get(
-    field: Annotated[str, typer.Argument(help="Column reference as Table.Column.")],
+    field: Annotated[str, typer.Argument(help="Column reference as Table.Column, or table name when column_name is provided.")],
+    column_name: Annotated[str | None, typer.Argument(help="Column name (optional, use with table name as first arg).")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Show the full definition of one column."""
+    ref = f"{field}.{column_name}" if column_name else field
     _, model = _get_model(project)
     try:
-        table_name, column_name, field_type = model.resolve_field(field)
+        table_name, column_name_resolved, field_type = model.resolve_field(ref)
         if field_type != "column":
-            raise ValueError(f'Field "{field}" resolves to a {field_type}, not a column.')
+            raise ValueError(f'Field "{ref}" resolves to a {field_type}, not a column.')
         table = model.find_table(table_name)
-        column = table.find_column(column_name)
+        column = table.find_column(column_name_resolved)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

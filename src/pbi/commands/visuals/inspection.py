@@ -56,6 +56,26 @@ def visual_types(
             console.print(table)
             console.print(f"[dim]Status:[/dim] {info.status}")
             console.print(f"[dim]{info.note}[/dim]")
+
+            # Show KPI shorthand documentation for cardVisual
+            if info.visual_type == "cardVisual":
+                console.print()
+                console.print("[bold]KPI Shorthand (CLI extension):[/bold]")
+                console.print("[dim]Instead of bindings, cardVisual supports a kpis: shorthand:[/dim]")
+                console.print("""
+  layout: { columns: N, cellPadding: N }
+  accentBar: { show: true, position: Top|Left, width: N }
+  kpis:
+  - measure: Table.Measure
+    label: Display Label
+    fontSize: N
+    fontColor: "#hex"
+    bold: true
+    accentColor: "#hex"
+    tileBackground: "#hex"
+    referenceLabels:
+    - measure: Table.OtherMeasure
+      title: Label""", highlight=False)
         return
 
     table = Table(title="Visual Types & Data Roles", box=box.SIMPLE)

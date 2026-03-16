@@ -1767,7 +1767,7 @@ table Devices
             )
             self.assertEqual(create_result.exit_code, 0, create_result.stdout)
             content = path.read_text(encoding="utf-8")
-            self.assertIn("\tcolumn StorageUsedPct = DIVIDE([TotalStorageGB], 100, 0)", content)
+            self.assertIn("\tcalculatedColumn StorageUsedPct = DIVIDE([TotalStorageGB], 100, 0)", content)
             self.assertIn("\t\tdataType: double", content)
             self.assertIn("\t\tformatString: 0.0%", content)
             self.assertIn("\t\tsummarizeBy: none", content)
@@ -1809,7 +1809,7 @@ table Devices
             )
             self.assertEqual(edit_result.exit_code, 0, edit_result.stdout)
             content = path.read_text(encoding="utf-8")
-            self.assertIn("\tcolumn StorageUsedPct =", content)
+            self.assertIn("\tcalculatedColumn StorageUsedPct =", content)
             self.assertIn("DIVIDE(", content)
             self.assertIn("[TotalStorageGB] - 10,", content)
 
@@ -1974,7 +1974,7 @@ table Devices
             self.assertIn("\t\tformatString: dd/mm/yyyy", sales_content)
 
             devices_content = devices_path.read_text(encoding="utf-8")
-            self.assertIn("\tcolumn StorageUsedPct = DIVIDE([TotalStorageGB], 100, 0)", devices_content)
+            self.assertIn("\tcalculatedColumn StorageUsedPct = DIVIDE([TotalStorageGB], 100, 0)", devices_content)
             self.assertIn("\t\tformatString: 0.0%", devices_content)
             self.assertIn("\t\tisHidden", devices_content)
             self.assertIn("\tcolumn AzureADDeviceId", devices_content)

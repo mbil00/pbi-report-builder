@@ -6,6 +6,17 @@ from pathlib import Path
 
 from .schema import Column, Measure, Relationship, SemanticTable
 
+# Known TMDL property names that can appear inside column/measure blocks.
+# Used to distinguish metadata lines from DAX expression continuation.
+_TMDL_PROPERTY_NAMES = frozenset({
+    "dataType", "formatString", "lineageTag", "summarizeBy",
+    "sourceColumn", "isDefaultLabel", "isKey", "isNameInferred",
+    "isDataTypeInferred", "sortByColumn", "changedProperties",
+    "displayFolder", "description", "dataCategory", "expression",
+    "isAvailableInMdx", "isDefaultImage", "isDefaultMeasure",
+    "isUnique", "defaultValue",
+})
+
 
 def _parse_tmdl_name(text: str) -> str:
     """Parse a TMDL name, handling quoted and unquoted identifiers."""
@@ -124,9 +135,17 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         if current_type and indent >= 2:
             if stripped == "isHidden":
                 current_props["isHidden"] = "true"
+            elif stripped.startswith(("annotation ", "variation ")):
+                pass  # skip nested blocks
             elif ":" in stripped and not stripped.startswith("```"):
-                key, _, val = stripped.partition(":")
-                current_props[key.strip()] = val.strip()
+                key = stripped.partition(":")[0].strip()
+                if key in _TMDL_PROPERTY_NAMES:
+                    _, _, val = stripped.partition(":")
+                    current_props[key] = val.strip()
+                elif current_type == "measure" or (
+                    current_type == "column" and current_props.get("__kind") == "calculatedColumn"
+                ):
+                    current_expr += "\n" + stripped
             elif current_type == "measure" or (
                 current_type == "column" and current_props.get("__kind") == "calculatedColumn"
             ):

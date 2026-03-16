@@ -170,6 +170,12 @@ def _export_visual(project: Project, visual: Visual) -> dict:
             )
         )
 
+    # Textbox content
+    if visual.visual_type == "textbox":
+        text_spec = _export_textbox_content(visual.data)
+        if text_spec:
+            result.update(text_spec)
+
     # Data bindings
     bindings = export_bindings(visual.data)
     if bindings:
@@ -196,6 +202,59 @@ def _export_visual(project: Project, visual: Visual) -> dict:
     matched_style = match_style_preset(project, result)
     if matched_style is not None:
         result = apply_style_reference(result, matched_style.name)
+
+    return result
+
+
+def _export_textbox_content(visual_data: dict) -> dict[str, Any] | None:
+    """Export textbox paragraphs into text/textStyle shorthand."""
+    paragraphs = (
+        visual_data
+        .get("visual", {})
+        .get("objects", {})
+        .get("general", [{}])[0]
+        .get("properties", {})
+        .get("paragraphs", [])
+    )
+    if not paragraphs:
+        return None
+
+    # Extract text from first paragraph's first text run
+    first_para = paragraphs[0] if paragraphs else {}
+    text_runs = first_para.get("textRuns", [])
+    if not text_runs:
+        return None
+
+    run = text_runs[0]
+    raw_text = run.get("value", "")
+    # Strip surrounding quotes from PBI literal format
+    text = raw_text.strip("'") if raw_text.startswith("'") and raw_text.endswith("'") else raw_text
+    if not text:
+        return None
+
+    result: dict[str, Any] = {"text": text}
+    style = run.get("textStyle", {})
+    if style:
+        text_style: dict[str, Any] = {}
+        font_family = style.get("fontFamily", "")
+        if isinstance(font_family, str) and font_family.strip("'"):
+            text_style["fontFamily"] = font_family.strip("'")
+        font_size = style.get("fontSize", "")
+        if isinstance(font_size, str) and font_size.strip("'").rstrip("pt"):
+            text_style["fontSize"] = int(font_size.strip("'").rstrip("pt"))
+        color = style.get("color")
+        if isinstance(color, dict):
+            from pbi.properties import decode_pbi_value
+            decoded = decode_pbi_value(color)
+            if decoded:
+                text_style["fontColor"] = decoded
+        elif isinstance(color, str):
+            text_style["fontColor"] = color.strip("'")
+        font_weight = style.get("fontWeight", "")
+        if isinstance(font_weight, str) and "bold" in font_weight.lower():
+            text_style["bold"] = True
+        if text_style:
+            result["textStyle"] = text_style
 
     return result
 

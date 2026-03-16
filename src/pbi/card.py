@@ -108,10 +108,23 @@ def expand_kpis(
     projections: list[dict] = []
     for kpi in kpis:
         ref = kpi["measure"]
-        projections.append({"queryRef": ref, "active": True})
+        entity, prop = _split_ref(ref)
+        projections.append({
+            "field": _measure_expr(entity, prop),
+            "queryRef": ref,
+            "nativeQueryRef": prop,
+            "active": True,
+        })
 
         for rl in kpi.get("referenceLabels", []):
-            projections.append({"queryRef": rl["measure"], "active": True})
+            rl_ref = rl["measure"]
+            rl_entity, rl_prop = _split_ref(rl_ref)
+            projections.append({
+                "field": _measure_expr(rl_entity, rl_prop),
+                "queryRef": rl_ref,
+                "nativeQueryRef": rl_prop,
+                "active": True,
+            })
 
     query_state["Data"] = {"projections": projections}
     props_set += len(projections)

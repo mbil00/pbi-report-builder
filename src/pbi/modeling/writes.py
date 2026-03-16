@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-from .parser import _parse_tmdl_name
+from .parser import _TMDL_PROPERTY_NAMES, _parse_tmdl_name
 from .schema import SemanticModel
 
 
@@ -490,8 +490,12 @@ def _measure_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if _indent_level(lines[idx]) < 2:
             continue
-        if stripped == "isHidden" or ":" in stripped or stripped.startswith("annotation "):
+        if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
             return idx
+        if ":" in stripped:
+            key = stripped.partition(":")[0].strip()
+            if key in _TMDL_PROPERTY_NAMES:
+                return idx
     return end
 
 
@@ -522,9 +526,9 @@ def _build_calculated_column_expression_lines(column_name: str, expression: str)
 
     name = _format_tmdl_name(column_name)
     if len(expr_lines) == 1:
-        return [f"\tcolumn {name} = {expr_lines[0].strip()}"]
+        return [f"\tcalculatedColumn {name} = {expr_lines[0].strip()}"]
 
-    lines = [f"\tcolumn {name} ="]
+    lines = [f"\tcalculatedColumn {name} ="]
     lines.extend(f"\t\t{line}" for line in expr_lines)
     return lines
 
@@ -537,8 +541,12 @@ def _column_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if _indent_level(lines[idx]) < 2:
             continue
-        if stripped == "isHidden" or ":" in stripped or stripped.startswith(("annotation ", "variation ")):
+        if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
             return idx
+        if ":" in stripped:
+            key = stripped.partition(":")[0].strip()
+            if key in _TMDL_PROPERTY_NAMES:
+                return idx
     return end
 
 
