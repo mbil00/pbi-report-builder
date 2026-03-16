@@ -1,0 +1,114 @@
+# Complete page example — demonstrates the full YAML structure.
+# Adjust Table.Field references to match your semantic model.
+# Apply with: pbi apply complete-page.yaml
+
+pages:
+- name: Sales Dashboard
+  width: 1280
+  height: 720
+
+  # Page-level properties
+  background: { color: "#F5F5F5" }
+
+  # Page-level filters
+  filters:
+  - field: Calendar.Year
+    type: range
+    min: 2024
+    max: 2025
+
+  # Visual interactions
+  interactions:
+  - source: regionSlicer
+    target: revenueChart
+    type: DataFilter
+  - source: regionSlicer
+    target: topProducts
+    type: DataFilter
+  - source: regionSlicer
+    target: kpiRevenue
+    type: NoFilter
+
+  visuals:
+
+  # --- Header shape (background container) ---
+  - name: headerBg
+    type: shape
+    position: 0, 0
+    size: 1280 x 60
+    style: section-bg
+    isHidden: false
+
+  # --- KPI card ---
+  - name: kpiRevenue
+    type: cardVisual
+    position: 16, 80
+    size: 280 x 120
+    title: { show: true, text: Total Revenue }
+    border: { show: true, radius: 8, color: "#E0E0E0" }
+    background: { show: true, color: "#FFFFFF" }
+    bindings:
+      Data: Sales.TotalRevenue
+
+  # --- Bar chart ---
+  - name: revenueChart
+    type: clusteredBarChart
+    position: 16, 220
+    size: 600 x 400
+    title: { show: true, text: Revenue by Region }
+    border: { show: true, radius: 8 }
+    chart:legend.show: false
+    chart:categoryAxis.show: true
+    chart:valueAxis.show: true
+    chart:labels.show: true
+    bindings:
+      Category: Sales.Region
+      Y: Sales.TotalRevenue
+
+  # --- Table with column formatting ---
+  - name: topProducts
+    type: tableEx
+    position: 640, 220
+    size: 620 x 400
+    title: { show: true, text: Top Products }
+    border: { show: true, radius: 8 }
+    bindings:
+      Values:
+      - field: Product.Name
+        displayName: Product
+        width: 200
+      - field: Sales.TotalRevenue
+        displayName: Revenue
+        width: 120
+      - field: Sales.GrossMargin
+        displayName: Margin %
+        width: 100
+    sort: Sales.TotalRevenue (measure) Descending
+    filters:
+    - field: Product.Category
+      type: topN
+      count: 20
+      by: Sales.TotalRevenue
+    conditionalFormatting:
+      values.fontColor:
+        mode: gradient
+        source: Sales.GrossMargin
+        min: { color: "#D32F2F", value: 0 }
+        mid: { color: "#FFA000", value: 0.3 }
+        max: { color: "#388E3C", value: 0.6 }
+
+  # --- Slicer ---
+  - name: regionSlicer
+    type: slicer
+    position: 640, 80
+    size: 300 x 120
+    title: { show: true, text: Region }
+    border: { show: true, radius: 8 }
+    bindings:
+      Field: Sales.Region
+
+# Bookmarks (report-level)
+bookmarks:
+- name: Summary View
+  page: Sales Dashboard
+  hide: [topProducts]

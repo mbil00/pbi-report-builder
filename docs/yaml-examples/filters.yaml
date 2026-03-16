@@ -1,0 +1,59 @@
+# Filter types — all supported modes.
+# Filters can be set at page level or visual level.
+
+pages:
+- name: Filter Examples
+
+  # --- Page-level filters (apply to all visuals on the page) ---
+  filters:
+
+  # Categorical: exact match on specific values
+  - field: Sales.Region
+    type: categorical
+    values: [East, West, North]
+
+  # Include: whitelist values
+  - field: Product.Category
+    type: include
+    values: [Bikes, Accessories]
+
+  # Exclude: blacklist values
+  - field: Product.Status
+    type: exclude
+    values: [Discontinued]
+
+  # Range: numeric or date bounds
+  - field: Calendar.Year
+    type: range
+    min: 2023
+    max: 2025
+
+  # Top N: keep only the top/bottom N by a measure
+  - field: Product.Name
+    type: topN
+    count: 10
+    by: Sales.TotalRevenue
+    direction: Top
+
+  # Hidden + locked filters (not visible or editable by report viewers)
+  - field: Sales.Channel
+    type: categorical
+    values: [Online]
+    hidden: true
+    locked: true
+
+  visuals:
+
+  - name: filteredChart
+    type: clusteredBarChart
+    position: 16, 16
+    size: 600 x 400
+    bindings:
+      Category: Product.Name
+      Y: Sales.TotalRevenue
+
+    # --- Visual-level filters (apply only to this visual) ---
+    filters:
+    - field: Sales.TotalRevenue
+      type: range
+      min: 1000

@@ -1,0 +1,76 @@
+# Special page types: tooltip, drillthrough, hidden pages.
+
+pages:
+
+# --- Standard page (default) ---
+- name: Sales Overview
+  width: 1280
+  height: 720
+  visuals:
+  - name: mainChart
+    type: clusteredBarChart
+    position: 16, 16
+    size: 600 x 400
+    bindings:
+      Category: Sales.Region
+      Y: Sales.TotalRevenue
+
+# --- Tooltip page ---
+# Custom tooltip shown when hovering over visuals.
+# Automatically set to hidden + tooltip type.
+- name: Revenue Tooltip
+  width: 320
+  height: 240
+  tooltip: true
+  visuals:
+  - name: tooltipCard
+    type: cardVisual
+    position: 8, 8
+    size: 304 x 100
+    bindings:
+      Data: Sales.TotalRevenue
+
+# Tooltip with auto-match fields (shown only when these fields are in context)
+# - name: Region Tooltip
+#   width: 320
+#   height: 240
+#   tooltip:
+#   - Sales.Region
+#   - Sales.Category
+
+# --- Drillthrough page ---
+# Navigated to from other pages via right-click drillthrough.
+# Automatically set to hidden + drillthrough type with filter fields.
+- name: Product Detail
+  width: 1280
+  height: 720
+  drillthrough:
+  - Product.Name
+  visuals:
+  - name: productTable
+    type: tableEx
+    position: 16, 16
+    size: 800 x 600
+    bindings:
+      Values:
+      - Product.Name
+      - Product.Category
+      - Sales.TotalRevenue
+      - Sales.GrossMargin
+
+# Drillthrough with cross-report enabled
+# - name: Cross-Report Detail
+#   drillthrough:
+#     fields:
+#     - Sales.Region
+#     crossReport: true
+
+# --- Hidden page ---
+# Visible in edit mode but hidden from report viewers.
+- name: Hidden Config Page
+  visibility: HiddenInViewMode
+  visuals:
+  - name: configNote
+    type: textbox
+    position: 16, 16
+    size: 400 x 100

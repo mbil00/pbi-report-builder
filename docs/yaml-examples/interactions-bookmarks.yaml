@@ -1,0 +1,73 @@
+# Interactions and bookmarks.
+
+pages:
+- name: Interactive Dashboard
+  visuals:
+
+  - name: regionSlicer
+    type: slicer
+    position: 16, 16
+    size: 200 x 120
+    bindings:
+      Field: Sales.Region
+
+  - name: revenueChart
+    type: clusteredBarChart
+    position: 240, 16
+    size: 500 x 300
+    bindings:
+      Category: Product.Category
+      Y: Sales.TotalRevenue
+
+  - name: detailTable
+    type: tableEx
+    position: 240, 340
+    size: 500 x 300
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.TotalRevenue
+
+  - name: kpiCard
+    type: cardVisual
+    position: 16, 160
+    size: 200 x 100
+    bindings:
+      Data: Sales.TotalRevenue
+
+  # --- Interactions ---
+  # Control how visuals cross-filter each other.
+  # Types: DataFilter (default), Highlight, NoFilter
+  interactions:
+
+  # Slicer filters chart and table (default behavior, explicit here)
+  - source: regionSlicer
+    target: revenueChart
+    type: DataFilter
+  - source: regionSlicer
+    target: detailTable
+    type: DataFilter
+
+  # Slicer does NOT affect KPI card
+  - source: regionSlicer
+    target: kpiCard
+    type: NoFilter
+
+  # Chart highlights table (instead of filtering)
+  - source: revenueChart
+    target: detailTable
+    type: Highlight
+
+# --- Bookmarks (report-level, outside pages) ---
+# Control which visuals are shown/hidden per bookmark.
+bookmarks:
+
+# Hide the detail table for a summary view
+- name: Summary View
+  page: Interactive Dashboard
+  hide: [detailTable]
+
+# Show everything
+- name: Full View
+  page: Interactive Dashboard
+  hide: []

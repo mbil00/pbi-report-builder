@@ -33,6 +33,7 @@ def generate_map(
     lines.append(f"# Report:  {project.report_folder.name}")
     lines.append(f"# Generated: {date.today().isoformat()}")
     lines.append("# Regenerate: pbi map")
+    lines.append("# Edit a page: pbi page export \"Page Name\" -o page.yaml")
     lines.append("")
 
     # Semantic model

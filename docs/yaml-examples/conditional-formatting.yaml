@@ -1,0 +1,79 @@
+# Conditional formatting — apply-only (not produced by pbi page export).
+# Three modes: measure (DAX-driven color), gradient (color scale), rules (value matching).
+
+pages:
+- name: CF Examples
+  visuals:
+
+  # --- Mode: measure ---
+  # A DAX measure returns a color string directly
+  - name: measureCF
+    type: tableEx
+    position: 16, 16
+    size: 600 x 400
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.TotalRevenue
+      - Sales.ComplianceStatus
+    conditionalFormatting:
+      dataPoint.fill:
+        mode: measure
+        source: Measures.StatusColor
+
+  # --- Mode: gradient (2-stop) ---
+  # Color scale between min and max values
+  - name: gradient2
+    type: tableEx
+    position: 640, 16
+    size: 600 x 400
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.TotalRevenue
+    conditionalFormatting:
+      values.fontColor:
+        mode: gradient
+        source: Sales.TotalRevenue
+        min: { color: "#D32F2F", value: 0 }
+        max: { color: "#388E3C", value: 100000 }
+
+  # --- Mode: gradient (3-stop with midpoint) ---
+  - name: gradient3
+    type: tableEx
+    position: 16, 440
+    size: 600 x 250
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.GrossMargin
+    conditionalFormatting:
+      values.background:
+        mode: gradient
+        source: Sales.GrossMargin
+        min: { color: "#FFCDD2", value: 0 }
+        mid: { color: "#FFF9C4", value: 0.3 }
+        max: { color: "#C8E6C9", value: 0.6 }
+
+  # --- Mode: rules (value-based color) ---
+  - name: rulesCF
+    type: tableEx
+    position: 640, 440
+    size: 600 x 250
+    bindings:
+      Values:
+      - Product.Name
+      - Product.Category
+      - Sales.TotalRevenue
+    conditionalFormatting:
+      values.fontColor:
+        mode: rules
+        source: Product.Category
+        rules:
+        - if: Electronics
+          color: "#0078D4"
+        - if: Clothing
+          color: "#E74C3C"
+        - if: Food
+          color: "#388E3C"
+        else: "#666666"

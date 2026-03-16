@@ -1,0 +1,108 @@
+# Basic visual types — common starting points.
+# Each visual shows the minimal setup for its type.
+
+pages:
+- name: Visual Types Demo
+  width: 1280
+  height: 720
+  visuals:
+
+  # --- Bar / Column charts ---
+  # Roles: Category, Y (multi), Series, Tooltips (multi)
+  - name: barChart1
+    type: clusteredBarChart
+    position: 16, 16
+    size: 400 x 300
+    bindings:
+      Category: Sales.Region
+      Y: Sales.TotalRevenue
+
+  - name: columnChart1
+    type: clusteredColumnChart
+    position: 440, 16
+    size: 400 x 300
+    bindings:
+      Category: Sales.Region
+      Y:
+      - Sales.TotalRevenue
+      - Sales.TotalCost
+
+  # --- Line chart ---
+  # Roles: Category, Y (multi), Series, Tooltips (multi)
+  - name: lineChart1
+    type: lineChart
+    position: 16, 340
+    size: 400 x 300
+    bindings:
+      Category: Calendar.Month
+      Y: Sales.TotalRevenue
+      Series: Sales.Region
+
+  # --- Pie / Donut ---
+  # Roles: Category, Y, Tooltips (multi)
+  - name: donut1
+    type: donutChart
+    position: 440, 340
+    size: 300 x 300
+    bindings:
+      Category: Product.Category
+      Y: Sales.TotalRevenue
+
+  # --- Card (new cardVisual) ---
+  # Roles: Data (multi), Rows, Tooltips (multi)
+  - name: kpiCard
+    type: cardVisual
+    position: 860, 16
+    size: 200 x 100
+    bindings:
+      Data: Sales.TotalRevenue
+
+  # --- Table ---
+  # Roles: Values (multi)
+  - name: salesTable
+    type: tableEx
+    position: 860, 140
+    size: 400 x 250
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.TotalRevenue
+      - Sales.GrossMargin
+
+  # --- Matrix (pivot table) ---
+  # Roles: Rows (multi), Columns (multi), Values (multi)
+  # - name: salesMatrix
+  #   type: pivotTable
+  #   position: 860, 400
+  #   size: 400 x 280
+  #   bindings:
+  #     Rows: Product.Category
+  #     Columns: Calendar.Year
+  #     Values: Sales.TotalRevenue
+
+  # --- Slicer ---
+  # Roles: Field (alias for Values)
+  - name: regionSlicer
+    type: slicer
+    position: 860, 410
+    size: 200 x 120
+    bindings:
+      Field: Sales.Region
+
+  # --- Shape (background container) ---
+  # No data roles
+  - name: bgShape
+    type: shape
+    position: 0, 0
+    size: 1280 x 60
+    border: { show: false }
+    background: { show: true, color: "#002C77" }
+
+  # --- Textbox ---
+  # No data roles — text is set via chart objects
+  - name: pageTitle
+    type: textbox
+    position: 16, 8
+    size: 400 x 44
+    border: { show: false }
+    background: { show: false }

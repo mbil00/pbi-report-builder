@@ -1,0 +1,81 @@
+# Visual formatting — properties, chart objects, styles, per-measure.
+
+pages:
+- name: Formatting Examples
+  visuals:
+
+  # --- Container properties (border, background, title, shadow) ---
+  - name: styledCard
+    type: cardVisual
+    position: 16, 16
+    size: 280 x 120
+    title:
+      show: true
+      text: Revenue
+      fontSize: 14
+      fontColor: "#333333"
+    border:
+      show: true
+      radius: 8
+      color: "#E0E0E0"
+    background:
+      show: true
+      color: "#FFFFFF"
+    shadow:
+      show: true
+      color: "#00000020"
+    bindings:
+      Data: Sales.TotalRevenue
+
+  # --- Chart object properties (chart: prefix) ---
+  - name: formattedChart
+    type: clusteredColumnChart
+    position: 16, 160
+    size: 600 x 400
+    title: { show: true, text: Revenue by Region }
+    border: { show: true, radius: 8 }
+    # Chart-level formatting uses the chart: prefix
+    chart:legend.show: true
+    chart:legend.position: Bottom
+    chart:categoryAxis.show: true
+    chart:valueAxis.show: false
+    chart:labels.show: true
+    chart:labels.color: "#666666"
+    chart:labels.fontSize: 10
+    bindings:
+      Category: Sales.Region
+      Y: Sales.TotalRevenue
+
+  # --- Style reference (reuse a saved preset) ---
+  # Styles are created with: pbi style create <name> ...
+  # List available: pbi style list / pbi style list --bundled
+  - name: presetCard
+    type: cardVisual
+    position: 320, 16
+    size: 280 x 120
+    style: card-style
+    bindings:
+      Data: Sales.GrossMargin
+
+  # Multiple styles (applied in order, later overrides earlier)
+  # - name: multiStyleCard
+  #   type: cardVisual
+  #   style:
+  #   - base-card
+  #   - dark-override
+
+  # --- Per-measure formatting (bracket selector) ---
+  # Targets a specific measure within a multi-measure visual
+  - name: perMeasureTable
+    type: tableEx
+    position: 640, 160
+    size: 620 x 400
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.TotalRevenue
+      - Sales.GrossMargin
+    # Different font size for each measure column
+    value.fontSize [Sales.TotalRevenue]: 14
+    value.fontSize [Sales.GrossMargin]: 12
+    value.fontColor [Sales.GrossMargin]: "#006600"

@@ -1,0 +1,78 @@
+# Data binding syntax — all supported formats.
+
+pages:
+- name: Binding Examples
+  visuals:
+
+  # --- Simple string binding (one field per role) ---
+  - name: simpleChart
+    type: clusteredBarChart
+    position: 16, 16
+    size: 400 x 300
+    bindings:
+      Category: Sales.Region
+      Y: Sales.TotalRevenue
+
+  # --- Measure binding (explicit suffix) ---
+  # Use (measure) when the field is a DAX measure
+  - name: measureChart
+    type: clusteredBarChart
+    position: 440, 16
+    size: 400 x 300
+    bindings:
+      Category: Sales.Region
+      Y: Measures.GrossMarginPct (measure)
+
+  # --- Multi-field role (list of strings) ---
+  - name: multiFieldChart
+    type: clusteredColumnChart
+    position: 16, 340
+    size: 400 x 300
+    bindings:
+      Category: Calendar.Month
+      Y:
+      - Sales.TotalRevenue
+      - Sales.TotalCost
+      - Sales.GrossMargin
+
+  # --- Binding with display name and column width ---
+  # Pipe syntax: "Table.Field | Display Name | Width"
+  - name: pipeTable
+    type: tableEx
+    position: 440, 340
+    size: 400 x 300
+    bindings:
+      Values:
+      - "Product.Name | Product | 200"
+      - "Sales.TotalRevenue | Revenue | 120"
+      - "Sales.GrossMargin | Margin % | 100"
+
+  # --- Object syntax (explicit keys) ---
+  - name: objectTable
+    type: tableEx
+    position: 860, 16
+    size: 400 x 300
+    bindings:
+      Values:
+      - field: Product.Name
+        displayName: Product
+        width: 200
+      - field: Sales.TotalRevenue
+        displayName: Revenue
+        width: 120
+      - field: Sales.GrossMargin
+        displayName: Margin %
+        width: 100
+
+  # --- Sort ---
+  # Format: "Table.Field [direction]"
+  # Direction: Ascending/asc or Descending/desc (default: Descending)
+  - name: sortedTable
+    type: tableEx
+    position: 860, 340
+    size: 400 x 300
+    bindings:
+      Values:
+      - Product.Name
+      - Sales.TotalRevenue
+    sort: Sales.TotalRevenue (measure) Descending
