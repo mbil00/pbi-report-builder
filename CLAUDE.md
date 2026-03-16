@@ -97,6 +97,7 @@ if not force:
 - `src/pbi/presets/` — bundled shape style presets (rounded-container, section-bg, separator, card-frame)
 - `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)
 - `docs/cheatsheet.md` — complete CLI cheatsheet with patterns and examples for every command
+- `docs/design-guidelines.md` — visual design rules: slicer configuration, sizing, layout patterns, common pitfalls
 
 ## YAML Apply Features
 
