@@ -71,24 +71,24 @@ Key apply behaviors:
 ## Templates
 
 ```bash
-pbi page save-template "Sales Overview" sales-layout
-pbi page save-template "Executive Intro" corp-intro --global --description "Shared intro page"
+pbi page template create "Sales Overview" sales-layout
+pbi page template create "Executive Intro" corp-intro --global --description "Shared intro page"
 
-pbi page templates
-pbi page templates --global
-pbi page templates --json
-pbi page template-get sales-layout
-pbi page template-get corp-intro --global
+pbi page template list
+pbi page template list --global
+pbi page template list --json
+pbi page template get sales-layout
+pbi page template get corp-intro --global
 
-pbi page apply-template "Q2 Sales" sales-layout
-pbi page apply-template "Landing" corp-intro --global --overwrite
-pbi page apply-template "Landing" corp-intro --global --dry-run
+pbi page template apply "Q2 Sales" sales-layout
+pbi page template apply "Landing" corp-intro --global --overwrite
+pbi page template apply "Landing" corp-intro --global --dry-run
 
-pbi page template-clone corp-intro --to-project
-pbi page template-clone sales-layout --to-global
+pbi page template clone corp-intro --to-project
+pbi page template clone sales-layout --to-global
 
-pbi page delete-template sales-layout
-pbi page delete-template corp-intro --global
+pbi page template delete sales-layout
+pbi page template delete corp-intro --global
 ```
 
 Page templates are now full reusable page definitions backed by apply-compatible YAML.

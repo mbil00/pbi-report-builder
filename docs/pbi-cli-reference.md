@@ -79,15 +79,15 @@ pbi style list                     # project + global styles
 pbi style clone card-style --to-global
 
 # Page templates (reusable full-page YAML)
-pbi page save-template "Sales Overview" sales-layout
-pbi page save-template "Executive Intro" corp-intro --global
-pbi page templates --json
-pbi page template-get corp-intro --global
-pbi page apply-template "Landing" corp-intro --global --overwrite
-pbi page template-clone corp-intro --to-project
+pbi page template create "Sales Overview" sales-layout
+pbi page template create "Executive Intro" corp-intro --global
+pbi page template list --json
+pbi page template get corp-intro --global
+pbi page template apply "Landing" corp-intro --global --overwrite
+pbi page template clone corp-intro --to-project
 
 # Components (reusable grouped widgets)
-pbi component save "Dashboard" "KPI Group" --name kpi-card
+pbi component create "Dashboard" "KPI Group" --name kpi-card
 pbi component list
 pbi component get kpi-card
 pbi component apply "Dashboard" kpi-card --x 16 --y 200 --set title=Revenue
@@ -103,7 +103,7 @@ pbi page section create "Dashboard" "Market / Sell" --x 221 --y 130 --width 512 
 pbi page section list "Dashboard"
 
 # Image resources
-pbi image add ./logo.png
+pbi image create ./logo.png
 pbi image list
 pbi image prune --force
 
@@ -119,8 +119,8 @@ pbi nav set-url "Sales Overview" helpBtn "https://docs.example.com"
 pbi nav clear "Sales Overview" helpBtn
 
 # Layout
-pbi visual align "Sales" s1 s2 s3 --distribute horizontal --margin 16
-pbi visual align "Sales" chart1 chart2 --align top --match-height
+pbi visual arrange align "Sales" s1 s2 s3 --distribute horizontal --margin 16
+pbi visual arrange align "Sales" chart1 chart2 --align top --match-height
 
 # Stateful operations
 pbi visual sort set "Sales Overview" revenueChart Sales.Revenue --direction desc
@@ -141,11 +141,11 @@ pbi filter list --page "Sales Overview" --visual revenueChart
 ```
 
 ```bash
-pbi filter add Product.Category --mode include --value Bikes --value Accessories
-pbi filter add Sales.Revenue --page "Sales Overview" --mode range --min 1000 --max 50000
-pbi filter add Customers.Region --page "Sales Overview" --visual revenueChart --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction top
-pbi filter add Date.Date --mode relative --operator InLast --count 7 --unit Days
-pbi filter add --page "Sales Overview" --mode tuple --row "Product.Color=Red,Product.Size=Large"
+pbi filter create Product.Category --mode include --value Bikes --value Accessories
+pbi filter create Sales.Revenue --page "Sales Overview" --mode range --min 1000 --max 50000
+pbi filter create Customers.Region --page "Sales Overview" --visual revenueChart --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction top
+pbi filter create Date.Date --mode relative --operator InLast --count 7 --unit Days
+pbi filter create --page "Sales Overview" --mode tuple --row "Product.Color=Red,Product.Size=Large"
 ```
 
 ```bash

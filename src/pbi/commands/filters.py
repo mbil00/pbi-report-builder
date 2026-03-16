@@ -135,8 +135,8 @@ def filter_list(
     console.print(table)
 
 
-@filter_app.command("add")
-def filter_add(
+@filter_app.command("create")
+def filter_create(
     field: Annotated[str | None, typer.Argument(help="Filter field as Table.Field (omit for --mode tuple).")] = None,
     page_opt: Annotated[str | None, typer.Option("--page", help="Page name (narrows to page scope).")] = None,
     visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
@@ -163,7 +163,7 @@ def filter_add(
     row: Annotated[list[str] | None, typer.Option("--row", help="Tuple row as comma-separated Field=Value pairs. Repeatable.")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Add a filter. Defaults to report level; use --page/--visual to narrow scope."""
+    """Create a filter. Defaults to report level; use --page/--visual to narrow scope."""
     from pbi.filters import (
         TupleField,
         add_categorical_filter,
@@ -419,7 +419,7 @@ def filter_delete(
     visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Remove a filter by field reference or filter name."""
+    """Delete a filter by field reference or filter name."""
     from pbi.filters import load_level_data, remove_filter, save_level_data
 
     proj = get_project(project)
@@ -433,6 +433,6 @@ def filter_delete(
     removed = remove_filter(data, field)
     if removed:
         save_level_data(data, target)
-        console.print(f'Removed {removed} filter(s) matching "{field}" at {level} level')
+        console.print(f'Deleted {removed} filter(s) matching "{field}" at {level} level')
     else:
         console.print(f'[yellow]No filter matching "{field}" found at {level} level.[/yellow]')

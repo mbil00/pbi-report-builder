@@ -84,10 +84,10 @@ pbi visual arrange grid "Sales Overview" card1 card2 card3 card4 --columns 2 --x
 ## Alignment
 
 ```bash
-pbi visual align "Sales Overview" s1 s2 s3 s4 --distribute horizontal --margin 16
-pbi visual align "Sales Overview" chart1 chart2 --align top
-pbi visual align "Sales Overview" chart1 chart2 --align left --match-height
-pbi visual align "Sales Overview" card1 card2 card3 --align center-x
+pbi visual arrange align "Sales Overview" s1 s2 s3 s4 --distribute horizontal --margin 16
+pbi visual arrange align "Sales Overview" chart1 chart2 --align top
+pbi visual arrange align "Sales Overview" chart1 chart2 --align left --match-height
+pbi visual arrange align "Sales Overview" card1 card2 card3 --align center-x
 ```
 
 Options: `--align` (left, right, top, bottom, center-x, center-y), `--distribute` (horizontal, vertical), `--match-width`, `--match-height`, `--margin`.

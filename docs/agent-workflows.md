@@ -9,15 +9,15 @@ Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative 
 | Build a new page | Write YAML + `pbi apply` |
 | Restyle / restructure a page | `pbi page export` → edit YAML → `pbi apply` |
 | Redesign a page completely | `pbi page export` → edit YAML → `pbi apply --overwrite` |
-| Reuse a standard intro/info/detail page | `pbi page apply-template` |
-| Stamp repeated composite widgets | `pbi component save` → `pbi component apply --row N` |
+| Reuse a standard intro/info/detail page | `pbi page template apply` |
+| Stamp repeated composite widgets | `pbi component create` → `pbi component apply --row N` |
 | Import a page from another project | `pbi page import --from-project ... --page ...` |
 | Add page section backgrounds | `pbi page section create` |
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
 | Apply consistent formatting | `pbi style apply` or `style:` in YAML |
 | Apply a built-in shape preset | `pbi style apply --style rounded-container` |
 | Change a theme's colors everywhere | `pbi theme migrate old.json new.json` |
-| Manage embedded images | `pbi image add` / `pbi image prune` |
+| Manage embedded images | `pbi image create` / `pbi image prune` |
 | Understand group hierarchy | `pbi visual tree "Page"` |
 | Preview a page layout visually | `pbi render "Page" --screenshot` |
 
@@ -170,18 +170,18 @@ Page templates now store full apply-compatible page YAML, not just stripped layo
 
 ```bash
 # Save one page as a reusable template
-pbi page save-template "Executive Intro" corp-intro --global --description "Shared intro page"
+pbi page template create "Executive Intro" corp-intro --global --description "Shared intro page"
 
 # Discover available templates
-pbi page templates
-pbi page templates --global
-pbi page templates --json
-pbi page template-get corp-intro --global
+pbi page template list
+pbi page template list --global
+pbi page template list --json
+pbi page template get corp-intro --global
 
 # Reuse a template on a new or existing page
 pbi page create "Intro" --from-template corp-intro --template-global
-pbi page apply-template "Overview" corp-intro --global
-pbi page apply-template "Overview" corp-intro --global --overwrite
+pbi page template apply "Overview" corp-intro --global
+pbi page template apply "Overview" corp-intro --global --overwrite
 ```
 
 Template resolution matches styles: project templates win, global templates are the fallback.
@@ -192,7 +192,7 @@ Templates can carry:
 - filters and interactions
 - page-local bookmarks
 
-Use `--overwrite` on `page apply-template` when the target page should be reconciled exactly to the template.
+Use `--overwrite` on `page template apply` when the target page should be reconciled exactly to the template.
 
 ## Components (Reusable Grouped Widgets)
 
@@ -201,7 +201,7 @@ Components sit between styles (one visual) and templates (entire page). They cap
 ### Save a component from an existing group
 
 ```bash
-pbi component save "Dashboard" "KPI: Revenue" --name kpi-card-with-py \
+pbi component create "Dashboard" "KPI: Revenue" --name kpi-card-with-py \
   --description "KPI gauge with prior year value and rounded container"
 # Saves 4 visuals with auto-detected parameters (title, filters)
 ```
@@ -267,7 +267,7 @@ Import regenerates all visual IDs and fixes group references automatically.
 Manage embedded images (logos, banners) in `RegisteredResources/`:
 
 ```bash
-pbi image add ./company-logo.png           # register an image file
+pbi image create ./company-logo.png        # register an image file
 pbi image list                              # list with sizes and reference counts
 pbi image prune --force                     # remove unreferenced images
 ```
@@ -320,8 +320,8 @@ pbi visual set "Sales" chart title.text="Q2 Revenue" border.radius=8
 pbi visual move "Sales" chart --x 16 --y 200
 pbi visual resize "Sales" chart --width 940 --height 400
 pbi visual bind "Sales" chart Values Sales.Revenue
-pbi visual align "Sales" s1 s2 s3 s4 --distribute horizontal --margin 16
-pbi visual align "Sales" chart1 chart2 --align top --match-height
+pbi visual arrange align "Sales" s1 s2 s3 s4 --distribute horizontal --margin 16
+pbi visual arrange align "Sales" chart1 chart2 --align top --match-height
 pbi nav set-page "Sales" nextBtn "Details"
 pbi nav set-bookmark "Sales" toggleBtn "Minimal View"
 ```

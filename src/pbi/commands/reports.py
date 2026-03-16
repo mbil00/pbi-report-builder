@@ -80,6 +80,7 @@ def report_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    changed = False
     for prop, value in pairs:
         old = get_property(data, prop, REPORT_PROPERTIES)
         try:
@@ -88,9 +89,14 @@ def report_set(
             console.print(f"[red]Error:[/red] {prop}: {e}")
             raise typer.Exit(1)
         new = get_property(data, prop, REPORT_PROPERTIES)
-        console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")
+        if str(old) == str(new):
+            console.print(f"[dim]No change:[/dim] [cyan]{prop}[/cyan] is already {new}")
+        else:
+            console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")
+            changed = True
 
-    _write_json(proj.definition_folder / "report.json", data)
+    if changed:
+        _write_json(proj.definition_folder / "report.json", data)
 
 
 @report_app.command("properties")

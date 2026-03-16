@@ -630,7 +630,7 @@ class TemplateRegressionTests(unittest.TestCase):
 
                 result = runner.invoke(
                     app,
-                    ["page", "templates", "--json", "--project", str(root / "Sample.pbip")],
+                    ["page", "template", "list", "--json", "--project", str(root / "Sample.pbip")],
                 )
 
                 self.assertEqual(result.exit_code, 0, result.stdout)
@@ -1331,7 +1331,7 @@ class FilterModelRegressionTests(unittest.TestCase):
     def test_parse_tmdl_name_handles_escaped_apostrophes(self) -> None:
         self.assertEqual(_parse_tmdl_name("'Bob''s Revenue' ="), "Bob's Revenue")
 
-    def test_filter_add_uses_named_scope_and_repeatable_values(self) -> None:
+    def test_filter_create_uses_named_scope_and_repeatable_values(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1342,7 +1342,7 @@ class FilterModelRegressionTests(unittest.TestCase):
                 app,
                 [
                     "filter",
-                    "add",
+                    "create",
                     "Product.Category",
                     "--mode",
                     "include",
@@ -2503,7 +2503,8 @@ class VisualSetRegressionTests(unittest.TestCase):
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Would set background.show", result.stdout)
+            self.assertIn("(dry run)", result.stdout)
+            self.assertIn("background.show", result.stdout)
             restored = Project.find(root / "Sample.pbip")
             page = restored.find_page("Demo")
             for visual in restored.get_visuals(page):

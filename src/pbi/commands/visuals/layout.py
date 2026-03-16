@@ -7,7 +7,7 @@ from typing import Annotated
 import typer
 
 from ..common import ProjectOpt, console, get_project
-from .app import visual_app, visual_arrange_app
+from .app import visual_arrange_app
 
 
 @visual_arrange_app.command("row")
@@ -135,7 +135,7 @@ def visual_arrange_column(
     )
 
 
-@visual_app.command("align")
+@visual_arrange_app.command("align")
 def visual_align(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visuals: Annotated[list[str], typer.Argument(help="Visuals to align.")],

@@ -14,8 +14,8 @@ from .common import ProjectOpt, console, get_project
 image_app = typer.Typer(help="Image resource operations.", no_args_is_help=True)
 
 
-@image_app.command("add")
-def image_add(
+@image_app.command("create")
+def image_create(
     image_path: Annotated[str, typer.Argument(help="Path to the image file to register.")],
     project: ProjectOpt = None,
 ) -> None:
@@ -48,7 +48,7 @@ def image_list(
     images = list_images(proj)
 
     if not images:
-        console.print("[yellow]No registered images. Use `pbi image add` to register one.[/yellow]")
+        console.print("[yellow]No registered images. Use `pbi image create` to register one.[/yellow]")
         raise typer.Exit(0)
 
     if as_json:

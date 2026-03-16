@@ -13,8 +13,8 @@ from .common import ProjectOpt, console, get_project
 component_app = typer.Typer(help="Reusable visual component operations.", no_args_is_help=True)
 
 
-@component_app.command("save")
-def component_save(
+@component_app.command("create")
+def component_create(
     page: Annotated[str, typer.Argument(help="Page containing the group.")],
     group: Annotated[str, typer.Argument(help="Group visual name or index.")],
     name: Annotated[str, typer.Option("--name", "-n", help="Component name.")] = "",
@@ -83,7 +83,7 @@ def component_list(
     components = list_components(proj, global_scope=global_scope)
 
     if not components:
-        console.print("[yellow]No components saved. Use `pbi component save` to create one.[/yellow]")
+        console.print("[yellow]No components saved. Use `pbi component create` to create one.[/yellow]")
         raise typer.Exit(0)
 
     if as_json:

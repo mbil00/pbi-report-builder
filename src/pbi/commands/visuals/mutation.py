@@ -32,8 +32,11 @@ def visual_set(
 
     for prop, old, new in changes:
         label = f"{prop} ({for_measure})" if for_measure else prop
+        if str(old) == str(new):
+            console.print(f"[dim]No change:[/dim] [cyan]{label}[/cyan] is already {new}")
+            continue
         if dry_run:
-            console.print(f"Would set {label}: {old} [dim]->[/dim] {new}")
+            console.print(f"[dim](dry run)[/dim] [dim]{label}:[/dim] {old} [dim]->[/dim] {new}")
         else:
             console.print(f"[dim]{label}:[/dim] {old} [dim]->[/dim] {new}")
 
@@ -130,7 +133,7 @@ def visual_set_all(
             console.print("[dim]No changes would be applied.[/dim]")
             return
         for prop, count in totals.items():
-            console.print(f"Would set {prop} on [cyan]{count}[/cyan] visual(s)")
+            console.print(f"[dim](dry run)[/dim] {prop} on [cyan]{count}[/cyan] visual(s)")
         return
 
     count_done = 0

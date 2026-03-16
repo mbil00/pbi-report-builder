@@ -386,7 +386,11 @@ def style_apply(
         raise typer.Exit(1)
 
     if visual:
-        targets = [proj.find_visual(pg, visual)]
+        try:
+            targets = [proj.find_visual(pg, visual)]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
     else:
         targets = [v for v in proj.get_visuals(pg) if v.visual_type == visual_type]
         if not targets:
@@ -509,7 +513,7 @@ def diff_cmd(
                 has_diffs = True
                 console.print(f'\n[bold]{page_name}/{existing.name}[/bold]')
                 for prop, old, new in diffs:
-                    console.print(f"  [cyan]{prop}[/cyan]: {old or '(none)'} [dim]→[/dim] {new}")
+                    console.print(f"  [cyan]{prop}[/cyan]: {old or '(none)'} [dim]->[/dim] {new}")
 
     if not has_diffs:
         console.print("[dim]No differences found.[/dim]")

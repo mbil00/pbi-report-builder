@@ -31,8 +31,8 @@ def interaction_list(
 
     interactions = get_interactions(pg)
     if not interactions:
-        console.print("[dim]No custom interactions (all using default behavior).[/dim]")
-        return
+        console.print("[yellow]No custom interactions (all using default behavior).[/yellow]")
+        raise typer.Exit(0)
 
     if as_json:
         import json

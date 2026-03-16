@@ -44,38 +44,38 @@ pbi filter list --page "Sales Overview" --visual chart1 # visual level
 ### Categorical / Include / Exclude
 
 ```bash
-pbi filter add Product.Category --mode categorical --value Bikes
-pbi filter add Product.Category --mode include --value Bikes --value Accessories
-pbi filter add Product.Category --page "Sales Overview" --mode exclude --value Obsolete
+pbi filter create Product.Category --mode categorical --value Bikes
+pbi filter create Product.Category --mode include --value Bikes --value Accessories
+pbi filter create Product.Category --page "Sales Overview" --mode exclude --value Obsolete
 ```
 
 ### Range
 
 ```bash
-pbi filter add Sales.Revenue --mode range --min 1000 --max 50000
-pbi filter add Sales.OrderDate --page "Sales Overview" --mode range --min "2024-01-01" --max "2024-12-31"
+pbi filter create Sales.Revenue --mode range --min 1000 --max 50000
+pbi filter create Sales.OrderDate --page "Sales Overview" --mode range --min "2024-01-01" --max "2024-12-31"
 ```
 
 ### Top N
 
 ```bash
-pbi filter add Customers.Region --mode topn --topn 7 --topn-by Sales.TotalRevenue --direction top
-pbi filter add Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction bottom
+pbi filter create Customers.Region --mode topn --topn 7 --topn-by Sales.TotalRevenue --direction top
+pbi filter create Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction bottom
 ```
 
 ### Relative Date / Time
 
 ```bash
-pbi filter add Date.Date --mode relative --operator InLast --count 7 --unit Days
-pbi filter add Date.Date --mode relative --operator InNext --count 1 --unit Quarters --no-include-today
-pbi filter add Date.DateTime --mode relative --operator InLast --count 15 --unit Minutes
+pbi filter create Date.Date --mode relative --operator InLast --count 7 --unit Days
+pbi filter create Date.Date --mode relative --operator InNext --count 1 --unit Quarters --no-include-today
+pbi filter create Date.DateTime --mode relative --operator InLast --count 15 --unit Minutes
 ```
 
 ### Tuple
 
 ```bash
-pbi filter add --mode tuple --row "Product.Color=Red,Product.Size=Large"
-pbi filter add --page "Sales Overview" --mode tuple \
+pbi filter create --mode tuple --row "Product.Color=Red,Product.Size=Large"
+pbi filter create --page "Sales Overview" --mode tuple \
   --row "Product.Color=Red,Product.Size=Large" \
   --row "Product.Color=Blue,Product.Size=Medium"
 ```

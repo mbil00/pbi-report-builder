@@ -91,8 +91,8 @@ if not force:
 - `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
 - `src/pbi/styles.py` — style presets (project + global + bundled), capture from visual, apply to visuals
 - `src/pbi/themes.py` — theme apply/export/delete/migrate, color migration
-- `src/pbi/components.py` — reusable visual components (save/apply/stamp), parameter detection, `{{ }}` substitution
-- `src/pbi/images.py` — image resource management (add/list/prune for RegisteredResources)
+- `src/pbi/components.py` — reusable visual components (create/apply/stamp), parameter detection, `{{ }}` substitution
+- `src/pbi/images.py` — image resource management (create/list/prune for RegisteredResources)
 - `src/pbi/mapper.py` — `pbi map` with `--page`/`--pages`/`--model` filters
 - `src/pbi/presets/` — bundled shape style presets (rounded-container, section-bg, separator, card-frame)
 - `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)

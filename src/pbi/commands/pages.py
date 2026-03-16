@@ -24,9 +24,11 @@ page_app = typer.Typer(help="Page operations.", no_args_is_help=True)
 page_drillthrough_app = typer.Typer(help="Page drillthrough operations.", no_args_is_help=True)
 page_tooltip_app = typer.Typer(help="Page tooltip operations.", no_args_is_help=True)
 page_section_app = typer.Typer(help="Page section operations.", no_args_is_help=True)
+page_template_app = typer.Typer(help="Page template operations.", no_args_is_help=True)
 page_app.add_typer(page_drillthrough_app, name="drillthrough")
 page_app.add_typer(page_tooltip_app, name="tooltip")
 page_app.add_typer(page_section_app, name="section")
+page_app.add_typer(page_template_app, name="template")
 
 
 def _get_page(project: Path | None, page: str):
@@ -252,6 +254,7 @@ def page_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    changed = False
     for prop, value in pairs:
         old = get_property(pg.data, prop, PAGE_PROPERTIES)
         try:
@@ -260,9 +263,14 @@ def page_set(
             console.print(f"[red]Error:[/red] {prop}: {e}")
             raise typer.Exit(1)
         new = get_property(pg.data, prop, PAGE_PROPERTIES)
-        console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")
+        if str(old) == str(new):
+            console.print(f"[dim]No change:[/dim] [cyan]{prop}[/cyan] is already {new}")
+        else:
+            console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")
+            changed = True
 
-    pg.save()
+    if changed:
+        pg.save()
 
 
 @page_app.command("set-all")
@@ -419,8 +427,8 @@ def page_export(
         typer.echo(content, nl=False)
 
 
-@page_app.command("save-template")
-def page_save_template(
+@page_template_app.command("create")
+def page_template_create(
     page: Annotated[str, typer.Argument(help="Page to save as template.")],
     template_name: Annotated[str, typer.Argument(help="Name for the template.")],
     description: Annotated[str | None, typer.Option("--description", help="Optional template description.")] = None,
@@ -452,8 +460,8 @@ def page_save_template(
     )
 
 
-@page_app.command("apply-template")
-def page_apply_template(
+@page_template_app.command("apply")
+def page_template_apply(
     page: Annotated[str, typer.Argument(help="Target page to apply template to.")],
     template_name: Annotated[str, typer.Argument(help="Template name to apply.")],
     global_scope: Annotated[bool, typer.Option("--global", "-g", help="Resolve from global templates only.")] = False,
@@ -493,8 +501,8 @@ def page_apply_template(
         console.print(f'{prefix}Deleted [cyan]{len(result.visuals_deleted)}[/cyan] visual(s) not in template')
 
 
-@page_app.command("templates")
-def page_templates(
+@page_template_app.command("list")
+def page_template_list(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     global_scope: Annotated[bool, typer.Option("--global", "-g", help="Show only global templates.")] = False,
     project: ProjectOpt = None,
@@ -506,7 +514,7 @@ def page_templates(
     templates = list_templates(proj, global_scope=global_scope)
 
     if not templates:
-        console.print("[yellow]No templates saved. Use `pbi page save-template` to create one.[/yellow]")
+        console.print("[yellow]No templates saved. Use `pbi page template create` to create one.[/yellow]")
         raise typer.Exit(0)
 
     if as_json:
@@ -540,7 +548,7 @@ def page_templates(
     console.print(table)
 
 
-@page_app.command("template-get")
+@page_template_app.command("get")
 def page_template_get(
     template_name: Annotated[str, typer.Argument(help="Template name to inspect.")],
     global_scope: Annotated[bool, typer.Option("--global", "-g", help="Look up in global templates only.")] = False,
@@ -559,7 +567,7 @@ def page_template_get(
     console.print(dump_template(template), highlight=False, end="")
 
 
-@page_app.command("template-clone")
+@page_template_app.command("clone")
 def page_template_clone(
     template_name: Annotated[str, typer.Argument(help="Template to clone.")],
     new_name: Annotated[str | None, typer.Option("--name", "-n", help="New name for the cloned template.")] = None,
@@ -596,9 +604,10 @@ def page_template_clone(
     console.print(f'Cloned template "[cyan]{template_name}[/cyan]" -> {direction} as "[cyan]{target_name}[/cyan]" -> {path}')
 
 
-@page_app.command("delete-template")
-def page_delete_template(
+@page_template_app.command("delete")
+def page_template_delete(
     template_name: Annotated[str, typer.Argument(help="Template name to delete.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     global_scope: Annotated[bool, typer.Option("--global", "-g", help="Delete from global templates.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -606,6 +615,12 @@ def page_delete_template(
     from pbi.templates import delete_template
 
     proj = get_project(project)
+
+    if not force:
+        confirm = typer.confirm(f'Delete template "{template_name}"?')
+        if not confirm:
+            raise typer.Abort()
+
     try:
         deleted = delete_template(proj, template_name, global_scope=global_scope)
     except ValueError as e:

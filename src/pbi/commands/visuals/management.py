@@ -105,7 +105,7 @@ def visual_rename(
     old_name = vis.name
     vis.data["name"] = name
     vis.save()
-    console.print(f'Renamed "{old_name}" -> "[cyan]{name}[/cyan]"')
+    console.print(f'Renamed "{old_name}" [dim]->[/dim] "[cyan]{name}[/cyan]"')
 
 
 @visual_app.command("delete")

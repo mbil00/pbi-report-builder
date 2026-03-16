@@ -94,7 +94,7 @@ def visual_bindings(
         return
 
     table = Table(title=f"Bindings on {vis.visual_type}", box=box.SIMPLE)
-    table.add_column("Role", style="bold")
+    table.add_column("Role", style="cyan")
     table.add_column("Table", style="cyan")
     table.add_column("Field")
     table.add_column("Type", style="dim")

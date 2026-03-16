@@ -93,12 +93,19 @@ def theme_export(
 
 @theme_app.command("delete")
 def theme_delete(
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Remove the custom theme from the project (reverts to base theme)."""
     from pbi.themes import remove_theme
 
     proj = get_project(project)
+
+    if not force:
+        confirm = typer.confirm("Delete the custom theme?")
+        if not confirm:
+            raise typer.Abort()
+
     try:
         name = remove_theme(proj)
     except ValueError as e:
@@ -106,7 +113,7 @@ def theme_delete(
         raise typer.Exit(1)
 
     if name:
-        console.print(f'Removed custom theme "[cyan]{name}[/cyan]"')
+        console.print(f'Deleted custom theme "[cyan]{name}[/cyan]"')
     else:
         console.print("[yellow]No custom theme to remove.[/yellow]")
 

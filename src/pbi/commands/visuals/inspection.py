@@ -43,7 +43,7 @@ def visual_types(
         all_types = list_visual_type_info()
         matches = [info for info in all_types if normalized.lower() in info.visual_type.lower()]
         if not matches:
-            console.print(f'[red]Unknown visual type "{visual_type}".[/red]')
+            console.print(f'[red]Error:[/red] Unknown visual type "{visual_type}".')
             console.print("[dim]Use 'pbi visual types' to see all known types.[/dim]")
             raise typer.Exit(1)
         for info in matches:
@@ -333,6 +333,10 @@ def visual_list(
     proj, pg = resolve_page_target(project, page)
     visuals = proj.get_visuals(pg)
 
+    if not visuals and not as_json:
+        console.print(f'[yellow]No visuals on "{pg.display_name}". Use `pbi visual create` to add one.[/yellow]')
+        raise typer.Exit(0)
+
     if as_json:
         import json
 
@@ -514,7 +518,7 @@ def visual_get(
     table.add_row("Position", f'{pos.get("x", 0)}, {pos.get("y", 0)}')
     table.add_row("Size", f'{pos.get("width", 0)} x {pos.get("height", 0)}')
     table.add_row("Z-Order", str(pos.get("z", 0)))
-    table.add_row("Hidden", str(vis.data.get("isHidden", False)))
+    table.add_row("Hidden", "yes" if vis.data.get("isHidden") else "")
 
     object_rows = collect_visual_property_rows(vis.data, include_core=False)
     if object_rows:
