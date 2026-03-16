@@ -1,30 +1,56 @@
 """Focused semantic-model submodules."""
 
 from .parser import _parse_tmdl_name
-from .schema import Column, Measure, SemanticModel, SemanticTable
+from .schema import Column, Hierarchy, HierarchyLevel, Measure, SemanticModel, SemanticTable
 from .writes import (
     create_calculated_column,
+    create_calculated_table,
+    create_hierarchy,
     create_measure,
+    create_relationship,
     delete_calculated_column,
+    delete_hierarchy,
     delete_measure,
+    delete_relationship,
     edit_calculated_column_expression,
     edit_measure_expression,
+    find_field_dependents,
+    find_field_references,
+    rename_column,
+    rename_measure,
     set_column_hidden,
     set_field_format,
+    set_member_property,
+    set_relationship_property,
+    validate_relationships,
 )
 
 __all__ = [
     "Column",
+    "Hierarchy",
+    "HierarchyLevel",
     "Measure",
     "SemanticModel",
     "SemanticTable",
     "_parse_tmdl_name",
     "create_calculated_column",
+    "create_calculated_table",
+    "create_hierarchy",
     "create_measure",
+    "create_relationship",
     "delete_calculated_column",
+    "delete_hierarchy",
     "delete_measure",
+    "delete_relationship",
     "edit_calculated_column_expression",
     "edit_measure_expression",
+    "find_field_dependents",
+    "find_field_references",
+    "rename_column",
+    "rename_measure",
     "set_column_hidden",
     "set_field_format",
+    "set_member_property",
+    "set_relationship_property",
+    "validate_relationships",
 ]

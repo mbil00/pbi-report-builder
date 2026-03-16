@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .schema import Column, Measure, Relationship, SemanticTable
+from .schema import Column, Hierarchy, HierarchyLevel, Measure, Relationship, SemanticTable
 
 # Known TMDL property names that can appear inside column/measure blocks.
 # Used to distinguish metadata lines from DAX expression continuation.
@@ -46,14 +46,34 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     table_name = None
     columns: list[Column] = []
     measures: list[Measure] = []
+    hierarchies: list[Hierarchy] = []
 
     current_type: str | None = None
     current_name = ""
     current_props: dict[str, str] = {}
     current_expr = ""
 
+    # Hierarchy parsing state
+    current_levels: list[HierarchyLevel] = []
+    current_level_name: str | None = None
+    current_level_props: dict[str, str] = {}
+
+    def _flush_level() -> None:
+        nonlocal current_level_name, current_level_props
+        if current_level_name is not None:
+            current_levels.append(
+                HierarchyLevel(
+                    name=current_level_name,
+                    column=current_level_props.get("column", current_level_name),
+                    lineage_tag=current_level_props.get("lineageTag", ""),
+                )
+            )
+        current_level_name = None
+        current_level_props = {}
+
     def _flush() -> None:
         nonlocal current_type, current_name, current_props, current_expr
+        nonlocal current_levels
         if current_type == "column" and table_name:
             columns.append(
                 Column(
@@ -68,6 +88,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     lineage_tag=current_props.get("lineageTag", ""),
                     definition_path=path,
                     kind=current_props.get("__kind", "column"),
+                    description=current_props.get("description", ""),
+                    display_folder=current_props.get("displayFolder", ""),
+                    sort_by_column=current_props.get("sortByColumn", ""),
+                    data_category=current_props.get("dataCategory", ""),
                 )
             )
         elif current_type == "measure" and table_name:
@@ -79,8 +103,22 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     format_string=current_props.get("formatString", ""),
                     lineage_tag=current_props.get("lineageTag", ""),
                     definition_path=path,
+                    description=current_props.get("description", ""),
+                    display_folder=current_props.get("displayFolder", ""),
                 )
             )
+        elif current_type == "hierarchy" and table_name:
+            _flush_level()
+            hierarchies.append(
+                Hierarchy(
+                    name=current_name,
+                    table=table_name,
+                    levels=list(current_levels),
+                    lineage_tag=current_props.get("lineageTag", ""),
+                    definition_path=path,
+                )
+            )
+            current_levels = []
         current_type = None
         current_name = ""
         current_props = {}
@@ -127,10 +165,34 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 if eq_pos >= 0:
                     current_expr = rest[eq_pos + 1 :].strip()
                 continue
-            if stripped.startswith(("partition ", "hierarchy ", "annotation ")):
+            if stripped.startswith("hierarchy "):
+                _flush()
+                current_type = "hierarchy"
+                current_name = _parse_tmdl_name(stripped[10:])
+                current_levels = []
+                continue
+            if stripped.startswith(("partition ", "annotation ")):
                 _flush()
                 current_type = None
                 continue
+
+        if current_type == "hierarchy" and indent >= 2:
+            if indent == 2:
+                if stripped.startswith("level "):
+                    _flush_level()
+                    current_level_name = _parse_tmdl_name(stripped[6:])
+                elif ":" in stripped:
+                    key, _, val = stripped.partition(":")
+                    key = key.strip()
+                    if key == "lineageTag":
+                        current_props["lineageTag"] = val.strip()
+            elif indent >= 3:
+                if ":" in stripped:
+                    key, _, val = stripped.partition(":")
+                    key = key.strip()
+                    if key in ("column", "lineageTag"):
+                        current_level_props[key] = val.strip()
+            continue
 
         if current_type and indent >= 2:
             if stripped == "isHidden":
@@ -156,7 +218,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     if table_name is None:
         return None
 
-    return SemanticTable(name=table_name, columns=columns, measures=measures, definition_path=path)
+    return SemanticTable(
+        name=table_name, columns=columns, measures=measures,
+        hierarchies=hierarchies, definition_path=path,
+    )
 
 
 def _parse_relationships_tmdl(path: Path) -> list[Relationship]:

@@ -87,7 +87,9 @@ if not force:
 - `src/pbi/project.py` — `Project` class, page/visual CRUD, find with fuzzy suggestions
 - `src/pbi/properties.py` — `VISUAL_PROPERTIES`, `PAGE_PROPERTIES`, `get_property()`, `set_property()`
 - `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`
-- `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, `Relationship`, field resolution, BFS path finding
+- `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, `Relationship`, `Hierarchy`, `HierarchyLevel`, field resolution, BFS path finding
+- `src/pbi/modeling/dax_refs.py` — DAX reference scanner: `extract_refs()`, `replace_refs()`, `find_dependents()` for dependency analysis and cascading renames
+- `src/pbi/model_export.py` — `export_model_yaml()` for YAML round-trip of model definitions
 - `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
 - `src/pbi/styles.py` — style presets (project + global + bundled), capture from visual, apply to visuals
 - `src/pbi/themes.py` — theme apply/export/delete/migrate, color migration
@@ -98,6 +100,40 @@ if not force:
 - `docs/agent-workflows.md` — recommended agent patterns (export → edit → apply)
 - `docs/cheatsheet.md` — complete CLI cheatsheet with patterns and examples for every command
 - `docs/design-guidelines.md` — visual design rules: slicer configuration, sizing, layout patterns, common pitfalls
+
+## Model Commands
+
+All model subgroups follow the standard CLI verb pattern: `list`, `get`, `set`, `create`, `delete`, `rename`.
+
+**Table:** `model table list`, `model table create <name> <DAX>` (calculated tables)
+
+**Column:** `model column list <table>`, `model column get <Table.Column>`, `model column set <Table.Column> key=value...`, `model column create`, `model column edit`, `model column delete`, `model column rename <table> <old> <new>`, `model column hide`, `model column unhide`
+- Writable properties via `set`: `description`, `displayFolder`, `sortByColumn`, `summarizeBy`, `dataCategory`, `formatString`
+- `hide`/`unhide` accept `Table.Column` args or `--table <table> --pattern <regex>` for bulk operations (e.g. `--pattern "ID$"`)
+
+**Measure:** `model measure list <table>`, `model measure get`, `model measure set <Table.Measure> key=value...`, `model measure create`, `model measure edit`, `model measure delete`, `model measure rename <table> <old> <new>`
+- `rename` cascades through all `[OldName]` and `Table[OldName]` DAX references across the model
+
+**Relationship:** `model relationship list`, `model relationship create <from> <to>` (with `--cross-filter`, `--inactive`), `model relationship delete <from> <to>`, `model relationship set <from> <to> key=value...`
+
+**Hierarchy:** `model hierarchy list <table>`, `model hierarchy create <table> <name> <columns...>`, `model hierarchy delete <table> <name>`
+
+**Other model commands:**
+- `model export [-o file.yaml]` — YAML round-trip through `model apply`
+- `model apply <yaml>` — declarative model changes
+- `model deps <Table.Field>` — forward/reverse dependency analysis
+- `model check` — validate relationships (bidirectional cross-filters, auto-detected, missing)
+- `model search <keyword>` — cross-table field search
+- `model path <from_table> <to_table>` — BFS relationship path
+- `model fields <table>` — columns + measures for visual binding
+
+## Model Apply YAML Sections
+
+The `model apply` engine supports these top-level sections:
+- **measures:** table-keyed list with `name`, `expression`, `format`, `description`, `displayFolder`
+- **columns:** table-keyed mapping with `format`, `hidden`, `type`, `expression`, `dataType`, `description`, `displayFolder`, `sortByColumn`, `summarizeBy`, `dataCategory`
+- **relationships:** list of `{from, to, crossFilteringBehavior, isActive, ...}` — creates or updates
+- **hierarchies:** table-keyed list of `{name, levels: [col1, col2]}` — creates or delete-and-recreates if levels differ
 
 ## YAML Apply Features
 

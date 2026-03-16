@@ -20,6 +20,10 @@ class Column:
     lineage_tag: str = ""
     definition_path: Path | None = None
     kind: str = "column"
+    description: str = ""
+    display_folder: str = ""
+    sort_by_column: str = ""
+    data_category: str = ""
 
 
 @dataclass
@@ -30,6 +34,24 @@ class Measure:
     format_string: str = ""
     lineage_tag: str = ""
     definition_path: Path | None = None
+    description: str = ""
+    display_folder: str = ""
+
+
+@dataclass
+class HierarchyLevel:
+    name: str
+    column: str
+    lineage_tag: str = ""
+
+
+@dataclass
+class Hierarchy:
+    name: str
+    table: str
+    levels: list[HierarchyLevel] = field(default_factory=list)
+    lineage_tag: str = ""
+    definition_path: Path | None = None
 
 
 @dataclass
@@ -37,6 +59,7 @@ class SemanticTable:
     name: str
     columns: list[Column] = field(default_factory=list)
     measures: list[Measure] = field(default_factory=list)
+    hierarchies: list[Hierarchy] = field(default_factory=list)
     definition_path: Path | None = None
 
     def find_column(self, name: str) -> Column:
@@ -52,6 +75,20 @@ class SemanticTable:
             raise ValueError(f'Column "{name}" not found in table "{self.name}". Did you mean: {suggestion}?')
         available = ", ".join(f'"{n}"' for n in col_names)
         raise ValueError(f'Column "{name}" not found in table "{self.name}". Available: {available}')
+
+    def find_hierarchy(self, name: str) -> Hierarchy:
+        """Find a hierarchy by name (case-insensitive)."""
+        name_lower = name.lower()
+        for hierarchy in self.hierarchies:
+            if hierarchy.name.lower() == name_lower:
+                return hierarchy
+        hier_names = [h.name for h in self.hierarchies]
+        close = difflib.get_close_matches(name, hier_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(f'Hierarchy "{name}" not found in table "{self.name}". Did you mean: {suggestion}?')
+        available = ", ".join(f'"{n}"' for n in hier_names)
+        raise ValueError(f'Hierarchy "{name}" not found in table "{self.name}". Available: {available}')
 
     def find_measure(self, name: str) -> Measure:
         """Find a measure by name (case-insensitive)."""

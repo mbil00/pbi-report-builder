@@ -91,6 +91,10 @@ def _write_model_section(lines: list[str], project: Project) -> None:
             lines.append(f"    hidden:  [{', '.join(_ys(c) for c in hidden_cols)}]")
         if table.measures:
             lines.append(f"    measures: [{', '.join(_ys(m.name) for m in table.measures)}]")
+        if table.hierarchies:
+            for h in table.hierarchies:
+                levels_str = " > ".join(lv.column for lv in h.levels)
+                lines.append(f"    hierarchy {_ys(h.name)}: [{levels_str}]")
     lines.append("")
 
 

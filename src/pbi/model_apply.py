@@ -13,11 +13,16 @@ from pbi.model import (
     Measure,
     SemanticModel,
     create_calculated_column,
+    create_hierarchy,
     create_measure,
+    create_relationship,
+    delete_hierarchy,
     edit_calculated_column_expression,
     edit_measure_expression,
     set_column_hidden,
     set_field_format,
+    set_member_property,
+    set_relationship_property,
 )
 
 
@@ -29,6 +34,10 @@ class ModelApplyResult:
     measures_updated: list[str] = field(default_factory=list)
     columns_created: list[str] = field(default_factory=list)
     columns_updated: list[str] = field(default_factory=list)
+    relationships_created: list[str] = field(default_factory=list)
+    relationships_updated: list[str] = field(default_factory=list)
+    hierarchies_created: list[str] = field(default_factory=list)
+    hierarchies_updated: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -38,6 +47,10 @@ class ModelApplyResult:
             or self.measures_updated
             or self.columns_created
             or self.columns_updated
+            or self.relationships_created
+            or self.relationships_updated
+            or self.hierarchies_created
+            or self.hierarchies_updated
         )
 
 
@@ -74,8 +87,17 @@ def apply_model_yaml(
     if columns_spec is not None:
         _apply_columns(project_root, columns_spec, result, dry_run=dry_run, model=model)
 
-    if measures_spec is None and columns_spec is None:
-        result.errors.append("YAML must include 'measures' and/or 'columns'.")
+    relationships_spec = spec.get("relationships")
+    if relationships_spec is not None:
+        _apply_relationships(project_root, relationships_spec, result, dry_run=dry_run, model=model)
+
+    hierarchies_spec = spec.get("hierarchies")
+    if hierarchies_spec is not None:
+        _apply_hierarchies(project_root, hierarchies_spec, result, dry_run=dry_run, model=model)
+
+    known_keys = {"measures", "columns", "relationships", "hierarchies"}
+    if not known_keys.intersection(spec.keys()):
+        result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
 
     return result
 
@@ -160,8 +182,17 @@ def _apply_measures(
                     changed = changed or fmt_changed
                     if fmt_changed and not dry_run:
                         existing.format_string = fmt
+                ref = f"{table_name_resolved}.{measure_name}"
+                for meta_key, tmdl_key in (("description", "description"), ("displayFolder", "displayFolder")):
+                    meta_val = entry.get(meta_key)
+                    if isinstance(meta_val, str):
+                        _, _, _, meta_changed = set_member_property(
+                            project_root, ref, tmdl_key, meta_val,
+                            dry_run=dry_run, model=model,
+                        )
+                        changed = changed or meta_changed
                 if changed:
-                    result.measures_updated.append(f"{table_name_resolved}.{measure_name}")
+                    result.measures_updated.append(ref)
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"measures.{table_name}.{name}: {e}")
 
@@ -293,10 +324,11 @@ def _apply_column_entry(
         if existing is None:
             raise ValueError("source columns are not created by model apply.")
 
+    ref = f"{table.name}.{column_name}"
     if isinstance(fmt, str):
         _, _, _, fmt_changed = set_field_format(
             project_root,
-            f"{table.name}.{column_name}",
+            ref,
             fmt,
             dry_run=dry_run,
             model=model,
@@ -307,7 +339,7 @@ def _apply_column_entry(
     if isinstance(hidden, bool):
         _, _, hidden_changed = set_column_hidden(
             project_root,
-            f"{table.name}.{column_name}",
+            ref,
             hidden,
             dry_run=dry_run,
             model=model,
@@ -315,8 +347,22 @@ def _apply_column_entry(
         changed = changed or hidden_changed
         if hidden_changed and not dry_run and existing is not None:
             existing.is_hidden = hidden
+    for meta_key, tmdl_key in (
+        ("description", "description"),
+        ("displayFolder", "displayFolder"),
+        ("sortByColumn", "sortByColumn"),
+        ("summarizeBy", "summarizeBy"),
+        ("dataCategory", "dataCategory"),
+    ):
+        meta_val = entry.get(meta_key)
+        if isinstance(meta_val, str):
+            _, _, _, meta_changed = set_member_property(
+                project_root, ref, tmdl_key, meta_val,
+                dry_run=dry_run, model=model,
+            )
+            changed = changed or meta_changed
     if changed:
-        result.columns_updated.append(f"{table.name}.{column_name}")
+        result.columns_updated.append(ref)
 
 
 def _find_measure(table, name: str):
@@ -333,3 +379,137 @@ def _find_column(table, name: str):
         if column.name.lower() == name.lower():
             return column
     return None
+
+
+def _apply_relationships(
+    project_root: Path,
+    relationships_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+) -> None:
+    """Apply declarative relationship changes."""
+    if not isinstance(relationships_spec, list):
+        result.errors.append("'relationships' must be a list.")
+        return
+
+    for entry in relationships_spec:
+        if not isinstance(entry, dict):
+            result.errors.append("Each relationship must be a mapping with 'from' and 'to'.")
+            continue
+        from_ref = entry.get("from")
+        to_ref = entry.get("to")
+        if not isinstance(from_ref, str) or not isinstance(to_ref, str):
+            result.errors.append("Each relationship requires 'from' and 'to' as Table.Column strings.")
+            continue
+
+        try:
+            # Check if relationship already exists
+            from pbi.modeling.schema import _parse_field_ref
+
+            from_table, from_col = _parse_field_ref(from_ref)
+            to_table, to_col = _parse_field_ref(to_ref)
+
+            existing = None
+            for rel in model.relationships:
+                if (rel.from_table.lower() == from_table.lower()
+                        and rel.from_column.lower() == from_col.lower()
+                        and rel.to_table.lower() == to_table.lower()
+                        and rel.to_column.lower() == to_col.lower()):
+                    existing = rel
+                    break
+
+            # Collect non-key properties
+            prop_keys = {k for k in entry if k not in ("from", "to")}
+            label = f"{from_ref} -> {to_ref}"
+
+            if existing is None:
+                props = {k: str(entry[k]) for k in prop_keys}
+                create_relationship(
+                    project_root, from_ref, to_ref,
+                    properties=props if props else None,
+                    dry_run=dry_run, model=model,
+                )
+                result.relationships_created.append(label)
+            else:
+                changed = False
+                for key in prop_keys:
+                    val = str(entry[key])
+                    if existing.properties.get(key) != val:
+                        set_relationship_property(
+                            project_root, from_ref, to_ref, key, val,
+                            dry_run=dry_run, model=model,
+                        )
+                        changed = True
+                if changed:
+                    result.relationships_updated.append(label)
+        except (FileNotFoundError, ValueError) as e:
+            result.errors.append(f"relationships ({from_ref} -> {to_ref}): {e}")
+
+
+def _apply_hierarchies(
+    project_root: Path,
+    hierarchies_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+) -> None:
+    """Apply declarative hierarchy changes."""
+    if not isinstance(hierarchies_spec, dict):
+        result.errors.append("'hierarchies' must be a mapping of table name to hierarchy list.")
+        return
+
+    for table_name, entries in hierarchies_spec.items():
+        if not isinstance(entries, list):
+            result.errors.append(f"hierarchies.{table_name}: expected a list of hierarchy specs.")
+            continue
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                result.errors.append(f"hierarchies.{table_name}: each entry must be a mapping.")
+                continue
+            name = entry.get("name")
+            levels = entry.get("levels")
+            if not isinstance(name, str) or not name.strip():
+                result.errors.append(f"hierarchies.{table_name}: entry missing non-empty 'name'.")
+                continue
+            if not isinstance(levels, list) or not levels:
+                result.errors.append(f"hierarchies.{table_name}.{name}: missing non-empty 'levels' list.")
+                continue
+
+            try:
+                table = model.find_table(str(table_name))
+                level_cols = [str(lv) for lv in levels]
+
+                # Check if hierarchy exists
+                existing = None
+                for h in table.hierarchies:
+                    if h.name.lower() == name.lower():
+                        existing = h
+                        break
+
+                label = f"{table.name}.{name}"
+                if existing is None:
+                    create_hierarchy(
+                        project_root, table.name, name, level_cols,
+                        dry_run=dry_run, model=model,
+                    )
+                    result.hierarchies_created.append(label)
+                else:
+                    existing_cols = [lv.column for lv in existing.levels]
+                    if existing_cols != level_cols:
+                        delete_hierarchy(
+                            project_root, table.name, existing.name,
+                            dry_run=dry_run, model=model,
+                        )
+                        # Remove from in-memory model so create doesn't see duplicate
+                        table.hierarchies = [h for h in table.hierarchies if h.name.lower() != name.lower()]
+                        create_hierarchy(
+                            project_root, table.name, name, level_cols,
+                            dry_run=dry_run, model=model,
+                        )
+                        result.hierarchies_updated.append(label)
+            except (FileNotFoundError, ValueError) as e:
+                result.errors.append(f"hierarchies.{table_name}.{name}: {e}")
