@@ -13,6 +13,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_PROPERTY_ALIAS_CACHE: dict[int, tuple[int, dict[str, str]]] = {}
+
 
 @dataclass
 class PropertyDef:
@@ -1974,6 +1976,12 @@ def canonical_object_property_name(
 
 def _property_alias_map(registry: dict[str, PropertyDef]) -> dict[str, str]:
     """Build a map of accepted aliases to canonical registry keys."""
+    cache_key = id(registry)
+    registry_size = len(registry)
+    cached = _PROPERTY_ALIAS_CACHE.get(cache_key)
+    if cached is not None and cached[0] == registry_size:
+        return cached[1]
+
     aliases: dict[str, str] = {}
     for canonical, prop_def in registry.items():
         if prop_def.container_key and prop_def.container_prop:
@@ -1993,6 +2001,7 @@ def _property_alias_map(registry: dict[str, PropertyDef]) -> dict[str, str]:
     ):
         if full in registry:
             aliases.setdefault(short, full)
+    _PROPERTY_ALIAS_CACHE[cache_key] = (registry_size, aliases)
     return aliases
 
 

@@ -7,7 +7,7 @@ import json
 import re
 import secrets
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pbi.schema_refs import (
@@ -100,6 +100,8 @@ class Project:
     pbip_file: Path
     report_folder: Path
     definition_folder: Path
+    _pages_cache: list[Page] | None = field(default=None, init=False, repr=False)
+    _visuals_cache: dict[Path, list[Visual]] = field(default_factory=dict, init=False, repr=False)
 
     @classmethod
     def find(cls, path: str | Path | None = None) -> Project:
@@ -166,6 +168,78 @@ class Project:
     def project_name(self) -> str:
         return self.pbip_file.stem
 
+    def _invalidate_pages_cache(self) -> None:
+        self._pages_cache = None
+
+    def clear_caches(self) -> None:
+        """Drop any loaded page/visual state so subsequent reads hit disk."""
+        self._pages_cache = None
+        self._visuals_cache.clear()
+
+    def _visual_cache_key(self, page: Page | Path) -> Path:
+        return page.folder if isinstance(page, Page) else page
+
+    def _invalidate_visuals_cache(self, page: Page | Path) -> None:
+        self._visuals_cache.pop(self._visual_cache_key(page), None)
+
+    def _get_pages_cached(self) -> list[Page]:
+        if self._pages_cache is not None:
+            return self._pages_cache
+
+        pages_dir = self.definition_folder / "pages"
+        if not pages_dir.exists():
+            self._pages_cache = []
+            return self._pages_cache
+
+        pages = []
+        for page_dir in pages_dir.iterdir():
+            if not page_dir.is_dir():
+                continue
+            page_json = page_dir / "page.json"
+            if page_json.exists():
+                pages.append(Page(folder=page_dir, data=_read_json(page_json)))
+
+        meta = self.get_pages_meta()
+        order = meta.get("pageOrder", [])
+        if order:
+            order_map = {name: i for i, name in enumerate(order)}
+            pages.sort(key=lambda p: order_map.get(p.name, 999))
+        else:
+            pages.sort(key=lambda p: p.name)
+
+        self._pages_cache = pages
+        return self._pages_cache
+
+    def _get_visuals_cached(self, page: Page) -> list[Visual]:
+        key = self._visual_cache_key(page)
+        cached = self._visuals_cache.get(key)
+        if cached is not None:
+            return cached
+
+        visuals_dir = page.folder / "visuals"
+        if not visuals_dir.exists():
+            self._visuals_cache[key] = []
+            return self._visuals_cache[key]
+
+        visuals = []
+        for visual_dir in visuals_dir.iterdir():
+            if not visual_dir.is_dir():
+                continue
+            visual_json = visual_dir / "visual.json"
+            if visual_json.exists():
+                visuals.append(
+                    Visual(folder=visual_dir, data=_read_json(visual_json))
+                )
+
+        visuals.sort(
+            key=lambda v: (
+                v.position.get("y", 0),
+                v.position.get("x", 0),
+            )
+        )
+        self._visuals_cache[key] = visuals
+        return self._visuals_cache[key]
+
     def get_report_meta(self) -> dict:
         """Read the report-level metadata (definition/report.json)."""
         path = self.definition_folder / "report.json"
@@ -182,32 +256,11 @@ class Project:
 
     def get_pages(self) -> list[Page]:
         """Get all pages, ordered by page order if available."""
-        pages_dir = self.definition_folder / "pages"
-        if not pages_dir.exists():
-            return []
-
-        pages = []
-        for page_dir in pages_dir.iterdir():
-            if not page_dir.is_dir():
-                continue
-            page_json = page_dir / "page.json"
-            if page_json.exists():
-                pages.append(Page(folder=page_dir, data=_read_json(page_json)))
-
-        # Sort by page order from pages.json
-        meta = self.get_pages_meta()
-        order = meta.get("pageOrder", [])
-        if order:
-            order_map = {name: i for i, name in enumerate(order)}
-            pages.sort(key=lambda p: order_map.get(p.name, 999))
-        else:
-            pages.sort(key=lambda p: p.name)
-
-        return pages
+        return list(self._get_pages_cached())
 
     def find_page(self, identifier: str) -> Page:
         """Find a page by display name, folder name, or partial match."""
-        pages = self.get_pages()
+        pages = self._get_pages_cached()
 
         # Exact folder name
         for page in pages:
@@ -248,32 +301,11 @@ class Project:
 
     def get_visuals(self, page: Page) -> list[Visual]:
         """Get all visuals on a page."""
-        visuals_dir = page.folder / "visuals"
-        if not visuals_dir.exists():
-            return []
-
-        visuals = []
-        for visual_dir in visuals_dir.iterdir():
-            if not visual_dir.is_dir():
-                continue
-            visual_json = visual_dir / "visual.json"
-            if visual_json.exists():
-                visuals.append(
-                    Visual(folder=visual_dir, data=_read_json(visual_json))
-                )
-
-        # Sort by z-order, then by position
-        visuals.sort(
-            key=lambda v: (
-                v.position.get("y", 0),
-                v.position.get("x", 0),
-            )
-        )
-        return visuals
+        return list(self._get_visuals_cached(page))
 
     def find_visual(self, page: Page, identifier: str) -> Visual:
         """Find a visual by name, type, folder name, or index."""
-        visuals = self.get_visuals(page)
+        visuals = self._get_visuals_cached(page)
         raw_identifier = identifier
         if identifier.startswith(("#", "@")):
             identifier = identifier[1:]
@@ -358,7 +390,9 @@ class Project:
         }
         _write_json(page_dir / "page.json", data)
         self._add_to_page_order(page_id)
-        return Page(folder=page_dir, data=data)
+        page = Page(folder=page_dir, data=data)
+        self._visuals_cache[page_dir] = []
+        return page
 
     def copy_page(self, source: Page, new_name: str) -> Page:
         """Deep-copy a page and all its visuals."""
@@ -395,11 +429,13 @@ class Project:
                     _write_json(visual_json, vdata)
 
         self._add_to_page_order(new_id)
-        return Page(folder=new_dir, data=_read_json(new_dir / "page.json"))
+        self._invalidate_visuals_cache(new_dir)
+        return Page(folder=new_dir, data=new_data)
 
     def delete_page(self, page: Page) -> None:
         """Delete a page and all its visuals."""
         shutil.rmtree(page.folder)
+        self._invalidate_visuals_cache(page)
         self._remove_from_page_order(page.name)
 
     def _add_to_page_order(self, page_id: str) -> None:
@@ -412,6 +448,7 @@ class Project:
             }
         meta.setdefault("pageOrder", []).append(page_id)
         _write_json(meta_path, meta)
+        self._invalidate_pages_cache()
 
     def _remove_from_page_order(self, page_id: str) -> None:
         meta_path = self.definition_folder / "pages" / "pages.json"
@@ -426,6 +463,7 @@ class Project:
         if meta.get("activePageName") == page_id and order:
             meta["activePageName"] = order[0]
         _write_json(meta_path, meta)
+        self._invalidate_pages_cache()
 
     def set_page_order(self, page_ids: list[str]) -> None:
         """Overwrite the page order with a new sequence of page folder IDs."""
@@ -433,6 +471,7 @@ class Project:
         meta = _read_json(meta_path) if meta_path.exists() else {"$schema": PAGES_METADATA_SCHEMA}
         meta["pageOrder"] = page_ids
         _write_json(meta_path, meta)
+        self._invalidate_pages_cache()
 
     def set_active_page(self, page_id: str) -> None:
         """Set the active (default-open) page by folder ID."""
@@ -460,7 +499,7 @@ class Project:
         visual_dir.mkdir(parents=True, exist_ok=True)
 
         # Determine z-order (above existing visuals)
-        existing = self.get_visuals(page)
+        existing = self._get_visuals_cached(page)
         max_z = max((v.position.get("z", 0) for v in existing), default=0)
 
         # Scaffold queryState with empty role projections for the visual type
@@ -487,7 +526,15 @@ class Project:
             },
         }
         _write_json(visual_dir / "visual.json", data)
-        return Visual(folder=visual_dir, data=data)
+        visual = Visual(folder=visual_dir, data=data)
+        existing.append(visual)
+        existing.sort(
+            key=lambda v: (
+                v.position.get("y", 0),
+                v.position.get("x", 0),
+            )
+        )
+        return visual
 
     def copy_visual(
         self,
@@ -503,10 +550,12 @@ class Project:
         new_data = _read_json(new_dir / "visual.json")
         new_data["name"] = sanitize_visual_name(new_name) if new_name else new_id
         _write_json(new_dir / "visual.json", new_data)
+        self._invalidate_visuals_cache(target_page)
         return Visual(folder=new_dir, data=new_data)
 
     def delete_visual(self, visual: Visual) -> None:
         """Delete a visual."""
+        self._invalidate_visuals_cache(visual.folder.parent.parent)
         shutil.rmtree(visual.folder)
 
     # ── Visual grouping ─────────────────────────────────────────
@@ -580,6 +629,7 @@ class Project:
             v.data["parentGroupName"] = group_name
             v.save()
 
+        self._invalidate_visuals_cache(page)
         return Visual(folder=group_dir, data=group_data)
 
     def ungroup(self, page: Page, group: Visual) -> list[Visual]:
@@ -597,6 +647,7 @@ class Project:
 
         # Delete the group container
         self.delete_visual(group)
+        self._invalidate_visuals_cache(page)
         return children
 
     # ── Data bindings ──────────────────────────────────────────

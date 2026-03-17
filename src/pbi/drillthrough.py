@@ -220,14 +220,18 @@ def build_tooltip_payload(fields: list[tuple[str, str, str]] | None = None) -> d
 def parse_tooltip_shorthand(
     project_root: Path,
     tooltip_spec: Any,
+    *,
+    model: Any = None,
 ) -> list[tuple[str, str, str]]:
     """Parse tooltip shorthand into resolved field tuples."""
-    return _parse_binding_field_list(project_root, tooltip_spec, allow_empty=True)
+    return _parse_binding_field_list(project_root, tooltip_spec, allow_empty=True, model=model)
 
 
 def parse_drillthrough_shorthand(
     project_root: Path,
     drillthrough_spec: Any,
+    *,
+    model: Any = None,
 ) -> tuple[list[tuple[str, str, str]], bool]:
     """Parse drillthrough shorthand into resolved field tuples plus cross-report flag."""
     cross_report = False
@@ -245,7 +249,7 @@ def parse_drillthrough_shorthand(
             drillthrough_spec.get("crossReport", drillthrough_spec.get("cross-report", False))
         )
 
-    fields = _parse_binding_field_list(project_root, field_spec, allow_empty=False)
+    fields = _parse_binding_field_list(project_root, field_spec, allow_empty=False, model=model)
     if not fields:
         raise ValueError("drillthrough requires at least one field.")
     return fields, cross_report
@@ -256,6 +260,7 @@ def _parse_binding_field_list(
     field_spec: Any,
     *,
     allow_empty: bool,
+    model: Any = None,
 ) -> list[tuple[str, str, str]]:
     """Parse one-or-many shorthand field refs into resolved binding tuples."""
     if field_spec in (None, True):
@@ -271,19 +276,29 @@ def _parse_binding_field_list(
             raise ValueError(
                 f"tooltip supports only {', '.join(sorted(allowed_keys))}; got {', '.join(sorted(unknown))}."
             )
-        return _parse_binding_field_list(project_root, field_spec.get("fields"), allow_empty=allow_empty)
+        return _parse_binding_field_list(
+            project_root,
+            field_spec.get("fields"),
+            allow_empty=allow_empty,
+            model=model,
+        )
     else:
         kind = type(field_spec).__name__
         raise ValueError(f"field shorthand must be a string, list of strings, or mapping, got {kind}.")
 
     fields: list[tuple[str, str, str]] = []
     for ref in refs:
-        entity, prop, field_type = _resolve_field_ref(project_root, ref)
+        entity, prop, field_type = _resolve_field_ref(project_root, ref, model=model)
         fields.append((entity, prop, field_type))
     return fields
 
 
-def _resolve_field_ref(project_root: Path, field_ref: str) -> tuple[str, str, str]:
+def _resolve_field_ref(
+    project_root: Path,
+    field_ref: str,
+    *,
+    model: Any = None,
+) -> tuple[str, str, str]:
     """Resolve a shorthand field ref to entity/prop/type."""
     is_measure = field_ref.endswith("(measure)")
     clean_ref = field_ref.replace("(measure)", "").strip()
@@ -296,10 +311,12 @@ def _resolve_field_ref(project_root: Path, field_ref: str) -> tuple[str, str, st
 
     if not is_measure:
         try:
-            from pbi.model import SemanticModel
+            loaded_model = model
+            if loaded_model is None:
+                from pbi.model import SemanticModel
 
-            model = SemanticModel.load(project_root)
-            entity, prop, field_type = model.resolve_field(clean_ref)
+                loaded_model = SemanticModel.load(project_root)
+            entity, prop, field_type = loaded_model.resolve_field(clean_ref)
         except (FileNotFoundError, ValueError, TypeError):
             pass
 

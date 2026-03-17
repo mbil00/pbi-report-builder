@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,7 +27,7 @@ from pbi.interactions import get_interactions, set_interaction
 from pbi.model_apply import apply_model_yaml
 from pbi.model import _parse_tmdl_name
 from pbi.project import Project, _read_json, _write_json
-from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
+from pbi.properties import VISUAL_PROPERTIES, _property_alias_map, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.styles import (
     create_style,
@@ -84,7 +85,97 @@ def write_model_table(root: Path, filename: str, content: str) -> Path:
     return path
 
 
+class ProjectCachingRegressionTests(unittest.TestCase):
+    def test_repeated_page_and_visual_lookups_reuse_cached_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            first = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            first.data["name"] = "card1"
+            first.save()
+            second = project.create_visual(page, "cardVisual", x=120, y=20, width=100, height=50)
+            second.data["name"] = "card2"
+            second.save()
+
+            with mock.patch("pbi.project._read_json", wraps=_read_json) as read_json:
+                cached_page = project.find_page("Demo")
+                visuals = project.get_visuals(cached_page)
+                project.find_visual(cached_page, "card1")
+                initial_reads = read_json.call_count
+
+                self.assertEqual(len(visuals), 2)
+
+                project.get_pages()
+                project.find_page("Demo")
+                project.get_visuals(cached_page)
+                project.find_visual(cached_page, "card2")
+
+                self.assertEqual(read_json.call_count, initial_reads)
+
+    def test_create_visual_updates_cached_page_visuals_without_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            visual.data["name"] = "card1"
+            visual.save()
+
+            cached_page = project.find_page("Demo")
+            self.assertEqual(len(project.get_visuals(cached_page)), 1)
+
+            with mock.patch("pbi.project._read_json", wraps=_read_json) as read_json:
+                created = project.create_visual(cached_page, "cardVisual", x=120, y=20, width=100, height=50)
+                created.data["name"] = "card2"
+                created.save()
+
+                visuals = project.get_visuals(cached_page)
+
+                self.assertEqual(read_json.call_count, 0)
+                self.assertEqual([v.name for v in visuals], ["card1", "card2"])
+
+
+class PropertyAliasCacheRegressionTests(unittest.TestCase):
+    def test_property_alias_map_is_cached_per_registry(self) -> None:
+        registry = {
+            "position.x": VISUAL_PROPERTIES["position.x"],
+            "title.text": VISUAL_PROPERTIES["title.text"],
+        }
+
+        first = _property_alias_map(registry)
+        second = _property_alias_map(registry)
+
+        self.assertIs(first, second)
+
+        registry["position.y"] = VISUAL_PROPERTIES["position.y"]
+        third = _property_alias_map(registry)
+
+        self.assertIsNot(first, third)
+        self.assertEqual(third["y"], "position.y")
+
+
 class ApplyWorkflowRegressionTests(unittest.TestCase):
+    def test_apply_name_only_page_spec_skips_definition_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [{"name": "Demo"}],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("pbi.apply.shutil.copytree", wraps=shutil.copytree) as copytree_mock:
+                result = apply_yaml(project, yaml_content)
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(copytree_mock.call_count, 0)
+
     def test_apply_accepts_stdin_with_dash(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -3159,6 +3250,90 @@ class TestModelApplyPerformance(unittest.TestCase):
 
             with mock.patch("pbi.modeling.schema.SemanticModel.load", wraps=SemanticModel.load) as load_mock:
                 result = apply_model_yaml(root, yaml_content, dry_run=False)
+
+            self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
+            self.assertEqual(load_mock.call_count, 1)
+
+
+class TestApplyPerformance(unittest.TestCase):
+    def test_apply_interactions_use_page_local_visual_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            source = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            source.data["name"] = "card1"
+            source.save()
+            target = project.create_visual(page, "cardVisual", x=120, y=20, width=100, height=50)
+            target.data["name"] = "card2"
+            target.save()
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {"name": "card1"},
+                                {"name": "card2"},
+                            ],
+                            "interactions": [
+                                {"source": "card1", "target": "card2", "type": "NoFilter"},
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch.object(project, "find_visual", wraps=project.find_visual) as find_visual_mock:
+                result = apply_yaml(project, yaml_content)
+
+            self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
+            self.assertEqual(find_visual_mock.call_count, 0)
+
+    def test_apply_reuses_semantic_model_for_bindings_and_filters(self) -> None:
+        from pbi.modeling.schema import SemanticModel
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root, with_model=True)
+            project.create_page("Demo")
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "table1",
+                                    "type": "tableEx",
+                                    "bindings": {
+                                        "Values": [
+                                            "Customers.Region",
+                                            "Customers.Region",
+                                        ]
+                                    },
+                                    "filters": [
+                                        {
+                                            "field": "Customers.Region",
+                                            "type": "Include",
+                                            "values": ["West"],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("pbi.modeling.schema.SemanticModel.load", wraps=SemanticModel.load) as load_mock:
+                result = apply_yaml(project, yaml_content)
 
             self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
             self.assertEqual(load_mock.call_count, 1)

@@ -7,6 +7,7 @@ updating pages and visuals as needed.
 from __future__ import annotations
 
 import copy
+import difflib
 import re
 import shutil
 import tempfile
@@ -59,6 +60,149 @@ class ApplyResult:
         )
 
 
+_MISSING_MODEL = object()
+
+
+@dataclass
+class _ApplySession:
+    """Per-run caches and rollback bookkeeping for apply."""
+
+    dry_run: bool
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    snapshot_dir: Path | None = None
+    model: Any = _MISSING_MODEL
+
+    def ensure_snapshot(self, project: Project) -> None:
+        """Create the definition snapshot lazily on the first write-intent path."""
+        if self.dry_run or self.snapshot_dir is not None:
+            return
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.snapshot_dir = Path(self.temp_dir.name) / "definition"
+        shutil.copytree(project.definition_folder, self.snapshot_dir)
+
+    def restore(self, project: Project) -> None:
+        if self.snapshot_dir is None:
+            return
+        _restore_definition_snapshot(project, self.snapshot_dir)
+        project.clear_caches()
+
+    def get_model(self, project: Project) -> Any | None:
+        """Load the semantic model once per apply run."""
+        if self.model is _MISSING_MODEL:
+            try:
+                from pbi.modeling.schema import SemanticModel
+
+                self.model = SemanticModel.load(project.root)
+            except Exception:
+                self.model = None
+        return self.model
+
+    def cleanup(self) -> None:
+        if self.temp_dir is not None:
+            self.temp_dir.cleanup()
+
+
+def _page_spec_may_mutate(page_spec: dict, *, overwrite: bool) -> bool:
+    """Return True when a page spec can lead to on-disk changes."""
+    if overwrite and "visuals" in page_spec:
+        return True
+    return any(key != "name" for key in page_spec)
+
+
+def _sort_visuals(visuals: list[Visual]) -> None:
+    visuals.sort(
+        key=lambda v: (
+            v.position.get("y", 0),
+            v.position.get("x", 0),
+        )
+    )
+
+
+@dataclass
+class _PageVisualState:
+    """Per-page visual state reused across one apply pass."""
+
+    page: Page
+    visuals: list[Visual]
+    _by_folder: dict[str, Visual] = field(default_factory=dict, init=False, repr=False)
+    _by_name: dict[str, Visual] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        _sort_visuals(self.visuals)
+        self._reindex()
+
+    def _reindex(self) -> None:
+        self._by_folder = {}
+        self._by_name = {}
+        for visual in self.visuals:
+            self._by_folder.setdefault(visual.folder.name, visual)
+            self._by_name.setdefault(visual.name, visual)
+
+    def add(self, visual: Visual) -> None:
+        self.visuals.append(visual)
+        _sort_visuals(self.visuals)
+        self._reindex()
+
+    def remove(self, visual: Visual) -> None:
+        self.visuals[:] = [candidate for candidate in self.visuals if candidate.folder != visual.folder]
+        self._reindex()
+
+    def refresh(self) -> None:
+        _sort_visuals(self.visuals)
+        self._reindex()
+
+    def find_visual(self, identifier: str) -> Visual:
+        raw_identifier = identifier
+        if identifier.startswith(("#", "@")):
+            identifier = identifier[1:]
+
+        visual = self._by_folder.get(identifier)
+        if visual is not None:
+            return visual
+
+        visual = self._by_name.get(identifier)
+        if visual is not None:
+            return visual
+
+        try:
+            idx = int(identifier) - 1
+            if 0 <= idx < len(self.visuals):
+                return self.visuals[idx]
+        except ValueError:
+            pass
+
+        id_lower = identifier.lower()
+        type_matches = [v for v in self.visuals if v.visual_type.lower() == id_lower]
+        if len(type_matches) == 1:
+            return type_matches[0]
+
+        matches = [v for v in self.visuals if id_lower in v.name.lower()]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            names = ", ".join(f'"{v.name}" ({v.visual_type})' for v in matches)
+            raise ValueError(
+                f'Ambiguous visual "{identifier}". Matches: {names}'
+            )
+
+        all_names = [v.name for v in self.visuals] + [v.visual_type for v in self.visuals]
+        close = difflib.get_close_matches(identifier, all_names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(
+                f'Visual "{raw_identifier}" not found on "{self.page.display_name}". '
+                f"Did you mean: {suggestion}?"
+            )
+        available = ", ".join(
+            f'{i+1}: {v.name} ({v.visual_type})'
+            for i, v in enumerate(self.visuals)
+        )
+        raise ValueError(
+            f'Visual "{raw_identifier}" not found on "{self.page.display_name}". '
+            f"Available: {available}"
+        )
+
+
 def apply_yaml(
     project: Project,
     yaml_content: str,
@@ -81,6 +225,7 @@ def apply_yaml(
     """
     result = ApplyResult()
     style_cache: dict[str, StylePreset] = {}
+    session = _ApplySession(dry_run=dry_run)
 
     try:
         spec = yaml.safe_load(yaml_content)
@@ -97,13 +242,6 @@ def apply_yaml(
         result.errors.append("'pages' must be a list.")
         return result
 
-    temp_dir: tempfile.TemporaryDirectory[str] | None = None
-    snapshot_dir: Path | None = None
-    if not dry_run:
-        temp_dir = tempfile.TemporaryDirectory()
-        snapshot_dir = Path(temp_dir.name) / "definition"
-        shutil.copytree(project.definition_folder, snapshot_dir)
-
     try:
         try:
             for page_spec in pages_spec:
@@ -119,6 +257,9 @@ def apply_yaml(
                 if page_filter and page_name.lower() != page_filter.lower():
                     continue
 
+                if _page_spec_may_mutate(page_spec, overwrite=overwrite):
+                    session.ensure_snapshot(project)
+
                 _apply_page(
                     project,
                     page_spec,
@@ -126,26 +267,27 @@ def apply_yaml(
                     dry_run=dry_run,
                     overwrite=overwrite,
                     style_cache=style_cache,
+                    session=session,
                 )
 
             # Apply bookmarks (top-level)
             bookmarks_spec = spec.get("bookmarks", [])
             if isinstance(bookmarks_spec, list) and bookmarks_spec:
-                _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run)
+                session.ensure_snapshot(project)
+                _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
         except Exception:
-            if snapshot_dir is not None:
-                _restore_definition_snapshot(project, snapshot_dir)
+            if session.snapshot_dir is not None:
+                session.restore(project)
                 result.rolled_back = True
             raise
 
-        if result.errors and snapshot_dir is not None and not continue_on_error:
-            _restore_definition_snapshot(project, snapshot_dir)
+        if result.errors and session.snapshot_dir is not None and not continue_on_error:
+            session.restore(project)
             result.rolled_back = True
 
         return result
     finally:
-        if temp_dir is not None:
-            temp_dir.cleanup()
+        session.cleanup()
 
 
 def _apply_page(
@@ -156,6 +298,7 @@ def _apply_page(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
+    session: _ApplySession,
 ) -> None:
     """Apply a single page specification."""
     page_name = page_spec["name"]
@@ -182,6 +325,8 @@ def _apply_page(
                 display_option=display_option,
             )
             result.pages_created.append(page_name)
+
+    page_state = None if (dry_run and page_is_new) else _PageVisualState(page=page, visuals=project.get_visuals(page))
 
     # Apply page properties (skip for dry-run on new pages — no page object)
     if not (dry_run and page_is_new):
@@ -212,6 +357,7 @@ def _apply_page(
                 page_spec,
                 project_root=project.root,
                 dry_run=dry_run,
+                model=session.get_model(project),
             )
         except ValueError as e:
             result.errors.append(f"Page {page_name}: {e}")
@@ -233,7 +379,7 @@ def _apply_page(
         if "filters" in page_spec:
             _apply_filters(page.data, page_spec["filters"], result,
                            context=f"Page {page_name}", dry_run=dry_run,
-                           project=project)
+                           project=project, session=session)
 
         if not dry_run and len(result.errors) == page_error_count:
             page.save()
@@ -261,19 +407,22 @@ def _apply_page(
                     dry_run=dry_run,
                     style_cache=style_cache,
                     keep_visual_ids=kept_visual_ids if overwrite else None,
+                    session=session,
+                    page_state=page_state,
                 )
 
-    if overwrite and not page_is_new:
-        for visual in list(project.get_visuals(page)):
+    if overwrite and not page_is_new and page_state is not None:
+        for visual in list(page_state.visuals):
             if visual.folder.name not in kept_visual_ids:
                 result.visuals_deleted.append((page_name, visual.name))
                 if not dry_run:
                     project.delete_visual(visual)
+                    page_state.remove(visual)
 
     # Apply interactions AFTER visuals so newly created visuals can be resolved
     if not (dry_run and page_is_new) and "interactions" in page_spec:
         _apply_interactions(project, page, page_spec["interactions"], result,
-                            context=f"Page {page_name}", dry_run=dry_run)
+                            context=f"Page {page_name}", dry_run=dry_run, session=session, page_state=page_state)
         if not dry_run and len(result.errors) == page_error_count:
             page.save()
 
@@ -287,6 +436,8 @@ def _apply_visual(
     dry_run: bool,
     style_cache: dict[str, StylePreset],
     keep_visual_ids: set[str] | None = None,
+    session: _ApplySession,
+    page_state: _PageVisualState,
 ) -> None:
     """Apply a single visual specification."""
     page_name = page.display_name
@@ -301,13 +452,10 @@ def _apply_visual(
     # Find existing visual
     visual: Visual | None = None
     if vis_id:
-        for candidate in project.get_visuals(page):
-            if candidate.folder.name == vis_id:
-                visual = candidate
-                break
+        visual = page_state._by_folder.get(vis_id)
     if vis_name:
         try:
-            visual = visual or project.find_visual(page, vis_name)
+            visual = visual or page_state.find_visual(vis_name)
         except ValueError:
             pass
 
@@ -321,10 +469,12 @@ def _apply_visual(
             result.visuals_created.append((page_name, vis_name or vis_type))
         else:
             project.delete_visual(visual)
+            page_state.remove(visual)
             visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
                 visual.data["name"] = sanitize_visual_name(vis_name)
                 visual.save()
+            page_state.add(visual)
             result.visuals_deleted.append((page_name, f"{vis_name or visual.name} ({old_type})"))
             result.visuals_created.append((page_name, vis_name or vis_type))
     elif visual is None and vis_type:
@@ -338,6 +488,7 @@ def _apply_visual(
             if vis_name:
                 visual.data["name"] = sanitize_visual_name(vis_name)
                 visual.save()
+            page_state.add(visual)
             result.visuals_created.append((page_name, vis_name or vis_type))
     elif visual is None:
         result.errors.append(
@@ -433,7 +584,7 @@ def _apply_visual(
 
     # Bindings
     if "bindings" in vis_spec:
-        _apply_bindings(project, visual, vis_spec["bindings"], result)
+        _apply_bindings(project, visual, vis_spec["bindings"], result, session=session)
 
     # Sort
     if "sort" in vis_spec:
@@ -444,7 +595,7 @@ def _apply_visual(
         _apply_filters(visual.data, vis_spec["filters"], result,
                        context=context,
                        dry_run=dry_run,
-                       project=project)
+                       project=project, session=session)
 
     # Conditional formatting
     if "conditionalFormatting" in vis_spec:
@@ -474,6 +625,7 @@ def _apply_visual(
         return
 
     visual.save()
+    page_state.refresh()
 
 
 def _apply_nested_properties(
@@ -578,6 +730,8 @@ def _apply_bindings(
     visual: Visual,
     bindings: dict,
     result: ApplyResult,
+    *,
+    session: _ApplySession,
 ) -> None:
     """Apply data bindings from the YAML spec."""
     from pbi.columns import set_column_width
@@ -595,7 +749,11 @@ def _apply_bindings(
             query_state.get(canonical_role, {}).get("projections", [])
         )
         try:
-            parsed_items = parse_binding_items(project.root, field_ref)
+            parsed_items = parse_binding_items(
+                project.root,
+                field_ref,
+                model=session.get_model(project),
+            )
         except ValueError as e:
             result.errors.append(f"Invalid binding: {e}")
             continue
@@ -668,6 +826,8 @@ def _apply_sort(
 def _resolve_apply_field(
     field_ref: str,
     project: Project,
+    *,
+    session: _ApplySession | None = None,
 ) -> tuple[str, str, str, str | None]:
     """Resolve a field reference to (entity, prop, field_type, data_type).
 
@@ -679,9 +839,11 @@ def _resolve_apply_field(
     prop = field_ref[dot + 1:]
 
     try:
-        from pbi.modeling.schema import SemanticModel
+        model = session.get_model(project) if session is not None else None
+        if model is None:
+            from pbi.modeling.schema import SemanticModel
 
-        model = SemanticModel.load(project.root)
+            model = SemanticModel.load(project.root)
         resolved_entity, resolved_prop, field_type = model.resolve_field(field_ref)
         data_type = None
         if field_type == "column":
@@ -706,6 +868,7 @@ def _apply_filters(
     context: str,
     dry_run: bool,
     project: Project | None = None,
+    session: _ApplySession | None = None,
 ) -> None:
     """Apply filters from the YAML spec."""
     if filters_spec and not dry_run:
@@ -782,7 +945,9 @@ def _apply_filters(
             # Resolve field types via model
             order_field_type = "measure"
             if project is not None:
-                _, _, order_field_type, _ = _resolve_apply_field(by_ref, project)
+                _, _, order_field_type, _ = _resolve_apply_field(
+                    by_ref, project, session=session
+                )
 
             add_topn_filter(
                 data, entity, prop,
@@ -806,7 +971,7 @@ def _apply_filters(
             data_type = None
             if project is not None:
                 entity, prop, field_type, data_type = _resolve_apply_field(
-                    field_ref, project
+                    field_ref, project, session=session
                 )
 
             add_range_filter(
@@ -938,6 +1103,7 @@ def _apply_bookmarks(
     result: ApplyResult,
     *,
     dry_run: bool,
+    session: _ApplySession,
 ) -> None:
     """Apply bookmark definitions from the YAML spec."""
     from pbi.bookmarks import create_bookmark
@@ -990,6 +1156,8 @@ def _apply_interactions(
     *,
     context: str,
     dry_run: bool,
+    session: _ApplySession,
+    page_state: _PageVisualState,
 ) -> None:
     """Apply interaction definitions from the YAML spec."""
     from pbi.interactions import set_interaction
@@ -1013,8 +1181,8 @@ def _apply_interactions(
 
         # Resolve visual names to handle friendly names
         try:
-            src_vis = project.find_visual(page, source)
-            tgt_vis = project.find_visual(page, target)
+            src_vis = page_state.find_visual(source)
+            tgt_vis = page_state.find_visual(target)
             set_interaction(page, src_vis.name, tgt_vis.name, itype)
             result.properties_set += 1
         except ValueError as e:

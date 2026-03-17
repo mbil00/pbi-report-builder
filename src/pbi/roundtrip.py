@@ -53,10 +53,11 @@ def apply_page_roundtrip_fields(
     *,
     project_root: Path,
     dry_run: bool,
+    model: Any = None,
 ) -> int:
     """Apply page-level round-trip metadata from YAML spec to page data."""
     changes = 0
-    shorthand = _compile_page_binding_shorthand(page_spec, project_root)
+    shorthand = _compile_page_binding_shorthand(page_spec, project_root, model=model)
     if shorthand:
         changes += len(shorthand)
         if dry_run:
@@ -90,6 +91,8 @@ def apply_page_roundtrip_fields(
 def _compile_page_binding_shorthand(
     page_spec: Mapping[str, Any],
     project_root: Path,
+    *,
+    model: Any = None,
 ) -> dict[str, Any] | None:
     """Compile tooltip/drillthrough shorthand into canonical page fields."""
     has_tooltip = "tooltip" in page_spec
@@ -105,14 +108,18 @@ def _compile_page_binding_shorthand(
         )
 
     if has_tooltip:
-        fields = parse_tooltip_shorthand(project_root, page_spec.get("tooltip"))
+        fields = parse_tooltip_shorthand(project_root, page_spec.get("tooltip"), model=model)
         return {
             "type": "Tooltip",
             "pageBinding": build_tooltip_payload(fields),
             "visibility": "HiddenInViewMode",
         }
 
-    fields, cross_report = parse_drillthrough_shorthand(project_root, page_spec.get("drillthrough"))
+    fields, cross_report = parse_drillthrough_shorthand(
+        project_root,
+        page_spec.get("drillthrough"),
+        model=model,
+    )
     binding, filters = build_drillthrough_payload(fields, cross_report=cross_report)
     return {
         "type": "Drillthrough",
@@ -170,13 +177,18 @@ def export_bindings(visual_data: Mapping[str, Any]) -> dict[str, Any]:
     return bindings
 
 
-def parse_binding_items(project_root: Path, binding_spec: Any) -> list[BindingItem]:
+def parse_binding_items(
+    project_root: Path,
+    binding_spec: Any,
+    *,
+    model: Any = None,
+) -> list[BindingItem]:
     """Parse one role's binding YAML into normalized binding items."""
     raw_items = binding_spec if isinstance(binding_spec, list) else [binding_spec]
-    return [_parse_binding_item(project_root, raw_item) for raw_item in raw_items]
+    return [_parse_binding_item(project_root, raw_item, model=model) for raw_item in raw_items]
 
 
-def _parse_binding_item(project_root: Path, binding_spec: Any) -> BindingItem:
+def _parse_binding_item(project_root: Path, binding_spec: Any, *, model: Any = None) -> BindingItem:
     """Parse a single binding item from string or object syntax."""
     display_name: str | None = None
     width: float | None = None
@@ -196,7 +208,7 @@ def _parse_binding_item(project_root: Path, binding_spec: Any) -> BindingItem:
     else:
         raise ValueError(f"unsupported binding item type {type(binding_spec).__name__}")
 
-    entity, prop, field_type = resolve_binding_ref(project_root, field_ref)
+    entity, prop, field_type = resolve_binding_ref(project_root, field_ref, model=model)
     return BindingItem(
         field_ref=field_ref,
         entity=entity,
@@ -228,7 +240,12 @@ def parse_binding_width(value: Any) -> float:
         raise ValueError(f"invalid width '{value}'") from e
 
 
-def resolve_binding_ref(project_root: Path, field_ref: str) -> tuple[str, str, str]:
+def resolve_binding_ref(
+    project_root: Path,
+    field_ref: str,
+    *,
+    model: Any = None,
+) -> tuple[str, str, str]:
     """Resolve a shorthand binding field ref to entity/prop/type."""
     is_measure = field_ref.endswith("(measure)")
     clean_ref = field_ref.replace("(measure)", "").strip()
@@ -241,10 +258,12 @@ def resolve_binding_ref(project_root: Path, field_ref: str) -> tuple[str, str, s
 
     if not is_measure:
         try:
-            from pbi.model import SemanticModel
+            loaded_model = model
+            if loaded_model is None:
+                from pbi.model import SemanticModel
 
-            model = SemanticModel.load(project_root)
-            entity, prop, field_type = model.resolve_field(clean_ref)
+                loaded_model = SemanticModel.load(project_root)
+            entity, prop, field_type = loaded_model.resolve_field(clean_ref)
         except (FileNotFoundError, ValueError, TypeError):
             pass
 
