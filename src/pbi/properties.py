@@ -2103,10 +2103,52 @@ def _set_container_prop(
     target.setdefault("properties", {})[prop_def.container_prop] = encoded
 
 
+def _resolve_value_type(
+    data: dict, obj_key: str, prop_key: str, value: str,
+) -> str:
+    """Determine the PBI value type using schema, falling back to inference.
+
+    Schema type mapping:
+      "bool"  → "boolean"  (encoded as true/false literal)
+      "num"   → "number"   (encoded as 42D float literal)
+      "int"   → "long"     (encoded as 42L integer literal)
+      "color" → "color"    (encoded as solid/color/expr structure)
+      "text"  → "enum"     (encoded as quoted string)
+      "fmt"   → "enum"     (encoded as quoted string)
+      list    → "enum"     (enum values, encoded as quoted string)
+    """
+    visual_type = data.get("visual", {}).get("visualType")
+    if visual_type:
+        try:
+            from pbi.visual_schema import get_property_type
+
+            schema_type = get_property_type(visual_type, obj_key, prop_key)
+            if schema_type is not None:
+                if isinstance(schema_type, list):
+                    return "enum"
+                mapping = {
+                    "bool": "boolean",
+                    "num": "number",
+                    "int": "long",
+                    "color": "color",
+                    "text": "enum",
+                    "fmt": "enum",
+                    "expr": "enum",
+                    "filter": "enum",
+                }
+                mapped = mapping.get(schema_type)
+                if mapped:
+                    return mapped
+        except Exception:
+            pass
+
+    return _infer_value_type(value)
+
+
 def _infer_value_type(value: str) -> str:
     """Infer PBI value type from a CLI string value.
 
-    Used by the chart: prefix to encode values without a PropertyDef.
+    Fallback when schema type is not available.
     """
     if value.startswith("#"):
         return "color"
@@ -2177,7 +2219,10 @@ def _get_dynamic_chart_prop(data: dict, prop_name: str) -> Any:
 
 
 def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> list[str]:
-    """Write a dynamic chart property to visual.objects with auto-inferred encoding.
+    """Write a dynamic chart property to visual.objects with schema-aware encoding.
+
+    Uses the schema to determine the correct PBI value type for encoding.
+    Falls back to heuristic inference when the schema type isn't available.
 
     Returns a list of schema validation warning strings (may be empty).
     """
@@ -2186,7 +2231,7 @@ def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> list[str]
     # Schema validation — warn on invalid objects/properties for this visual type
     schema_warnings = _schema_validate_chart_prop(data, obj_key, prop_key, value)
 
-    value_type = _infer_value_type(value)
+    value_type = _resolve_value_type(data, obj_key, prop_key, value)
     encoded = encode_pbi_value(value, value_type)
 
     objects = data.setdefault("visual", {}).setdefault("objects", {})

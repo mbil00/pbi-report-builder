@@ -304,6 +304,75 @@ class AutoResolveChartPropertyTests(unittest.TestCase):
             set_property(data, "zoom.show", "true", VISUAL_PROPERTIES)
 
 
+# ── Schema-aware type coercion ──────────────────────────────────────
+
+
+class SchemaTypeCoercionTests(unittest.TestCase):
+    """Verify _resolve_value_type uses schema types instead of guessing."""
+
+    def _bar_data(self) -> dict:
+        return {"visual": {"visualType": "clusteredBarChart"}}
+
+    def _card_data(self) -> dict:
+        return {"visual": {"visualType": "cardVisual"}}
+
+    def _get_raw(self, data: dict, obj: str, prop: str) -> dict:
+        return data["visual"]["objects"][obj][0]["properties"][prop]
+
+    def test_bool_property_encodes_1_as_true(self) -> None:
+        """'1' on a bool schema property should encode as bool, not number."""
+        data = self._bar_data()
+        set_property(data, "legend.show", "1", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "legend", "show")
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "true"}}})
+
+    def test_bool_property_encodes_0_as_false(self) -> None:
+        data = self._bar_data()
+        set_property(data, "legend.show", "0", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "legend", "show")
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "false"}}})
+
+    def test_number_property_encodes_as_float_literal(self) -> None:
+        data = self._bar_data()
+        set_property(data, "dataPoint.fillTransparency", "50", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "dataPoint", "fillTransparency")
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "50.0D"}}})
+
+    def test_integer_property_encodes_as_long_literal(self) -> None:
+        """Schema 'int' type should use L suffix (long), not D (double)."""
+        data = self._card_data()
+        set_property(data, "cardCalloutArea.paddingUniform", "10", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "cardCalloutArea", "paddingUniform")
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "10L"}}})
+
+    def test_color_property_encodes_as_solid_structure(self) -> None:
+        data = self._bar_data()
+        set_property(data, "dataPoint.defaultColor", "#FF0000", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "dataPoint", "defaultColor")
+        self.assertIn("solid", raw)
+
+    def test_enum_property_encodes_as_quoted_string(self) -> None:
+        data = self._bar_data()
+        set_property(data, "legend.position", "Top", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "legend", "position")
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "'Top'"}}})
+
+    def test_fallback_to_inference_without_visual_type(self) -> None:
+        """Without a visualType, inference is used (1 → number, not bool)."""
+        data = {"visual": {}}
+        set_property(data, "chart:legend.show", "1", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "legend", "show")
+        # Without schema, '1' is inferred as number → "1.0D"
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "1.0D"}}})
+
+    def test_schema_coercion_via_chart_prefix(self) -> None:
+        """chart: prefix also uses schema-aware coercion."""
+        data = self._bar_data()
+        set_property(data, "chart:legend.show", "1", VISUAL_PROPERTIES)
+        raw = self._get_raw(data, "legend", "show")
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "true"}}})
+
+
 # ── Schema-backed roles ────────────────────────────────────────────
 
 
