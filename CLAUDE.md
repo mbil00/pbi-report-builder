@@ -91,8 +91,11 @@ All visual `name` fields are sanitized via `sanitize_visual_name()` in `project.
 
 - `src/pbi/commands/common.py` — `ProjectOpt`, `console`, `get_project()`, `parse_property_assignments()`
 - `src/pbi/project.py` — `Project` class, page/visual CRUD, find with fuzzy suggestions
-- `src/pbi/properties.py` — `VISUAL_PROPERTIES`, `PAGE_PROPERTIES`, `get_property()`, `set_property()`
-- `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`
+- `src/pbi/properties.py` — `VISUAL_PROPERTIES`, `PAGE_PROPERTIES`, `get_property()`, `set_property()`, auto-resolve chart properties via schema
+- `src/pbi/roles.py` — visual type catalog, role definitions, `normalize_visual_type()`, schema-backed role fallback
+- `src/pbi/visual_schema.py` — schema-powered validation: `validate_object()`, `validate_property()`, `validate_value()`, `get_object_names()`, `get_property_type()`
+- `src/pbi/data/visual_capabilities.json` — extracted PBI Desktop capability schema (57 visual types, 611 objects, 7094 properties with types)
+- `src/pbi/validate.py` — project validation engine (`pbi validate`), structural checks, schema validation of visual objects
 - `src/pbi/modeling/schema.py` — `SemanticModel`, `SemanticTable`, `Relationship`, `Hierarchy`, `HierarchyLevel`, field resolution, BFS path finding
 - `src/pbi/modeling/dax_refs.py` — DAX reference scanner: `extract_refs()`, `replace_refs()`, `find_dependents()` for dependency analysis and cascading renames
 - `src/pbi/model_export.py` — `export_model_yaml()` for YAML round-trip of model definitions
@@ -146,8 +149,8 @@ The `model apply` engine supports these top-level sections:
 The apply engine supports these property syntaxes in YAML:
 - **Nested properties:** `title: { show: true, text: "Hello" }` → `title.show=true`
 - **Bracket selectors:** `value.fontSize [Measures Table.X]: 20` → per-measure formatting
-- **chart: prefix:** `chart:legend.show: true` → unregistered chart object properties
-- **chart: with selector:** `chart:icon.shapeType [default]: back`
+- **Chart object properties:** `legend.show: true` → auto-resolved via schema when the object+property is valid for the visual type. `chart:` prefix also supported explicitly.
+- **Chart with selector:** `legend.position [default]: Top` or `chart:icon.shapeType [default]: back`
 - **style: reference:** `style: card-style` → applies all properties from a saved style preset
 - **interactions:** page-level `interactions:` list with source/target/type
 - **bookmarks:** top-level `bookmarks:` list with name/page/hide
@@ -158,6 +161,17 @@ The apply engine supports these property syntaxes in YAML:
 - **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages
 - **Diff preview:** `pbi diff <yaml>` shows property-by-property changes before applying
 
+## Schema Validation
+
+All chart property writes are validated against the extracted PBI Desktop capability schema (`src/pbi/data/visual_capabilities.json`). The schema provides:
+- **Per-visual-type object validation** — catches invalid objects (e.g., `categoryAxis` on `cardVisual`)
+- **Property name validation** — catches typos with fuzzy suggestions (e.g., `showTitl` → `showTitle`)
+- **Type-aware encoding** — bool/int/number/color/enum properties are encoded correctly (prevents silent PBI Desktop failures)
+- **Auto-resolve** — YAML properties like `legend.show` transparently resolve to `chart:legend.show` when the schema confirms validity
+- **Role supplementation** — `get_visual_roles()` merges handcrafted descriptions with schema data roles
+
+Discovery: `pbi visual properties --visual-type <type>` shows all schema-derived properties. Regenerate with `schema-analysis/generate_compact_schema.py`.
+
 ## Engineering Rule
 
-New write paths must be validated against Microsoft's published PBIR schema or derived from a canonical exported PBIR sample with test coverage. No guessing JSON structures.
+New write paths must be validated against the extracted PBI Desktop schema or derived from a canonical exported PBIR sample with test coverage. No guessing JSON structures.

@@ -34,9 +34,9 @@ pbi page get "Page Name"              # page properties, background, visual coun
 pbi visual list "Page Name"           # visual table with positions and types
 pbi visual tree "Page Name"           # group hierarchy as a tree
 pbi visual get "Page" visual --full   # everything: props, objects, columns, filters, sort
-pbi model tables                      # semantic model tables
+pbi model table list                  # semantic model tables
 pbi model fields TableName            # columns + measures for binding
-pbi model relationships               # table relationships (verify cross-table joins)
+pbi model relationship list           # table relationships (verify cross-table joins)
 pbi model path TableA TableB          # relationship chain between two tables
 ```
 
@@ -352,6 +352,7 @@ Checks:
 - Bookmark schema compliance
 - **Layout issues** — overlapping visuals, out-of-bounds, zero-size
 - **Relationship gaps** — cross-table bindings without a relationship path
+- **Schema validation** — invalid object names or property names per visual type (with fuzzy suggestions)
 
 ## Naming Strategy
 

@@ -19,7 +19,7 @@ Name every visual you create (`name:` in YAML or `--name` on create). Unnamed vi
 | Task | Approach |
 |------|----------|
 | Understand the project | `pbi map` |
-| Understand the data model | `pbi model tables` then `pbi model fields <Table>` |
+| Understand the data model | `pbi model table list` then `pbi model fields <Table>` |
 | Check reusable assets before building | `pbi style list`, `pbi component list`, `pbi page template list` |
 | Build or restyle a page | `pbi page export` (or write YAML from scratch) then `pbi apply` |
 | Redesign a page completely | `pbi page export` then edit then `pbi apply --overwrite` |
@@ -211,7 +211,7 @@ pbi theme migrate old-theme.json new-theme.json
 | Visual properties | `pbi visual properties` | [visuals.md](visuals.md) |
 | Page properties | `pbi page properties` | [pages.md](pages.md) |
 | Data binding and filters | `pbi visual bind`, `pbi filter create` | [data.md](data.md) |
-| Model inspection | `pbi model tables/fields/search` | [model.md](model.md) |
+| Model inspection | `pbi model table list`, `pbi model fields`, `pbi model search` | [model.md](model.md) |
 | Themes | `pbi theme apply/migrate` | [themes.md](themes.md) |
 | Bookmarks | `pbi bookmark create/set` | [bookmarks.md](bookmarks.md) |
 | Interactions | `pbi interaction set` | [interactions.md](interactions.md) |

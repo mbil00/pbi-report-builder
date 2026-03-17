@@ -15,10 +15,10 @@ pbi visual bindings "Sales Overview" revenueChart
 ## Semantic Model
 
 ```bash
-pbi model tables
-pbi model columns Sales
-pbi model columns Sales --hidden
-pbi model measures Sales
+pbi model table list
+pbi model column list Sales
+pbi model column list Sales --hidden
+pbi model measure list Sales
 pbi model fields Sales
 ```
 

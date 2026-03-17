@@ -5,11 +5,11 @@ The CLI can inspect and edit the semantic model stored as TMDL in the PBIP proje
 ## Inspect the model
 
 ```bash
-pbi model tables
-pbi model columns Sales
-pbi model columns Sales --hidden
-pbi model columns Sales --hidden-only
-pbi model measures Sales
+pbi model table list
+pbi model column list Sales
+pbi model column list Sales --hidden
+pbi model column list Sales --hidden-only
+pbi model measure list Sales
 pbi model fields Sales
 ```
 
@@ -20,10 +20,10 @@ Use `pbi model fields <table>` when you need exact `Table.Field` references for 
 List all relationships in the semantic model, or filter by table:
 
 ```bash
-pbi model relationships
-pbi model relationships --from Sales
-pbi model relationships --to Customers
-pbi model relationships --json
+pbi model relationship list
+pbi model relationship list --from Sales
+pbi model relationship list --to Customers
+pbi model relationship list --json
 ```
 
 Find the shortest relationship path between two tables:
@@ -167,7 +167,7 @@ Rules:
 
 For one-off edits, use the imperative commands above. For several related changes, prefer:
 
-1. `pbi model tables` / `pbi model columns` / `pbi model measures`
+1. `pbi model table list` / `pbi model column list` / `pbi model measure list`
 2. prepare a YAML file or generate YAML to stdout
 3. `pbi model apply ./model-changes.yaml --dry-run` or pipe into `pbi model apply --dry-run`
 4. `pbi model apply ./model-changes.yaml` or pipe into `pbi model apply`

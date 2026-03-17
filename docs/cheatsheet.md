@@ -93,10 +93,15 @@ pbi visual set-all --page "Overview" border.show=false         # all visuals on 
 pbi visual set-all --all-pages background.color="#FFFFFF"      # entire report
 pbi visual set-all --all-pages title.fontSize=12 --where title.show=true  # conditional
 
-# Discover properties
-pbi visual properties                             # list all properties
-pbi visual properties --match "border"            # search by name
-pbi visual objects "Overview" myChart             # inspect chart-specific objects
+# Chart-specific properties — auto-resolved from PBI schema (no chart: prefix needed)
+pbi visual set "Overview" myChart legend.show=false legend.position=Top
+pbi visual set "Overview" myChart categoryAxis.show=true valueAxis.show=true
+
+# Discover properties — use --visual-type to see all schema-derived properties
+pbi visual properties                                         # list registered properties
+pbi visual properties --visual-type cardVisual                # all properties for card visuals
+pbi visual properties --visual-type clusteredBarChart --match "legend"  # search
+pbi visual objects "Overview" myChart                         # inspect current chart objects
 ```
 
 **Data bindings:**
@@ -156,12 +161,12 @@ pbi apply overview.yaml                       # 4. apply
 ## Semantic Model
 
 ```bash
-pbi model tables                              # list all tables
-pbi model columns Sales                       # list columns (shows calculated vs source)
-pbi model measures Facts                      # list measures (use --full for complete DAX)
+pbi model table list                          # list all tables
+pbi model column list Sales                   # list columns (shows calculated vs source)
+pbi model measure list Facts                  # list measures (use --full for complete DAX)
 pbi model fields Sales                        # list both columns and measures
 pbi model search "revenue"                    # search across all tables
-pbi model relationships                       # list relationships
+pbi model relationship list                   # list relationships
 pbi model path Sales Products                 # show join path between tables
 
 # Format — same command for columns and measures
@@ -299,7 +304,9 @@ pbi map --pages                  # pages and visuals only
 pbi map --model                  # model only
 pbi map --page "Overview"       # single page detail
 pbi info                         # quick project summary
-pbi validate                    # check for structural errors and warnings
+pbi validate                    # check for structural errors, schema violations, and warnings
 pbi render "Overview" -o page.html   # HTML mockup of page layout
 pbi capabilities                 # show what the CLI supports vs PBIR spec
 ```
+
+`pbi validate` checks JSON structure, page order, visual interactions, bookmarks, layout issues (overlaps, out-of-bounds), relationship gaps, and validates visual objects/properties against the PBI Desktop schema.

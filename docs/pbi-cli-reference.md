@@ -58,7 +58,7 @@ pbi visual column "any" "any" Sales.UPN --rename "User Principal Name" --all-pag
 pbi map --page "Sales Overview"    # single page detail
 pbi map --pages                    # pages only, no model
 pbi map --model                    # model only
-pbi model relationships            # table relationships
+pbi model relationship list         # table relationships
 pbi model path Sales Customers     # relationship chain
 
 # Diff and apply
