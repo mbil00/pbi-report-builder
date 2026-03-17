@@ -142,7 +142,7 @@ def visual_props(
             if current_group is not None:
                 table.add_section()
             current_group = prop_group
-        vals = ", ".join(enum_values) if enum_values else ""
+        vals = ", ".join(str(v) for v in enum_values) if enum_values else ""
         row = [name, vtype, prop_group or "", desc, vals]
         if show_aliases:
             aliases = property_aliases_for(name, VISUAL_PROPERTIES)
