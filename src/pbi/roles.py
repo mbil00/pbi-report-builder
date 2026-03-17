@@ -26,6 +26,7 @@ VISUAL_ROLE_ALIASES: dict[str, dict[str, str]] = {
     "listSlicer": {"Field": "Values"},
     "textSlicer": {"Field": "Values"},
     "treemap": {"Y": "Values"},
+    "kpi": {"TrendAxis": "TrendLine"},
 }
 
 
@@ -129,7 +130,7 @@ VISUAL_ROLES: dict[str, list[dict]] = {
     ],
     "kpi": [
         _role("Indicator", "KPI value"),
-        _role("TrendAxis", "Trend axis (date/time)"),
+        _role("TrendLine", "Trend axis (date/time)"),
         _role("Goal", "Target/goal value"),
     ],
     "scorecard": [],
@@ -298,25 +299,86 @@ class VisualTypeInfo:
     note: str
 
 
+def _schema_roles(visual_type: str) -> list[dict]:
+    """Build role list from schema data for a visual type.
+
+    Returns roles in _role() format with descriptions derived from
+    schema displayName and kind metadata.
+    """
+    try:
+        from pbi.visual_schema import get_data_roles
+    except Exception:
+        return []
+
+    schema = get_data_roles(visual_type)
+    if not schema:
+        return []
+
+    kind_desc = {0: "Grouping field", 1: "Measure field", 2: "Any field"}
+    roles = []
+    for name, info in schema.items():
+        display = info.get("displayName", name)
+        # Clean up localization keys (e.g. "Role_DisplayName_KPI_Indicator" → "Indicator")
+        if display.startswith("Role_"):
+            display = name
+        kind = info.get("kind", 2)
+        desc = f"{display} ({kind_desc.get(kind, 'field')})"
+        multi = kind == 1  # Measure roles typically accept multiple fields
+        roles.append(_role(name, desc, multi=multi))
+    return roles
+
+
+def _merge_roles(handcrafted: list[dict], schema: list[dict]) -> list[dict]:
+    """Merge handcrafted roles with schema roles, adding any missing ones."""
+    existing = {r["name"] for r in handcrafted}
+    merged = list(handcrafted)
+    for role in schema:
+        if role["name"] not in existing:
+            merged.append(role)
+    return merged
+
+
 def normalize_visual_type(name: str) -> str:
     """Normalize user-facing aliases to canonical PBIR visualType values."""
     return VISUAL_TYPE_ALIASES.get(name, name)
 
 
 def is_known_visual_type(name: str) -> bool:
-    """Return whether the visual type is known to the CLI catalog."""
-    return normalize_visual_type(name) in KNOWN_VISUAL_TYPES
+    """Return whether the visual type is known to the CLI catalog or schema."""
+    canonical = normalize_visual_type(name)
+    if canonical in KNOWN_VISUAL_TYPES:
+        return True
+    # Check schema as fallback
+    try:
+        from pbi.visual_schema import get_visual_schema
+        return get_visual_schema(canonical) is not None
+    except Exception:
+        return False
 
 
 def get_visual_roles(visual_type: str) -> list[dict]:
-    """Return role metadata for a visual type, if modeled."""
-    return VISUAL_ROLES.get(normalize_visual_type(visual_type), [])
+    """Return role metadata for a visual type.
+
+    Uses handcrafted roles when available, supplemented with any missing
+    roles from the schema. Falls back entirely to schema for types not
+    in the handcrafted catalog.
+    """
+    canonical = normalize_visual_type(visual_type)
+    handcrafted = VISUAL_ROLES.get(canonical, [])
+    schema = _schema_roles(canonical)
+
+    if handcrafted and schema:
+        return _merge_roles(handcrafted, schema)
+    if handcrafted:
+        return handcrafted
+    return schema
 
 
 def normalize_visual_role(visual_type: str, role: str) -> str:
     """Normalize a user-facing role name to the exported PBIR role name."""
     canonical_type = normalize_visual_type(visual_type)
-    known_roles = [entry["name"] for entry in VISUAL_ROLES.get(canonical_type, [])]
+    all_roles = get_visual_roles(canonical_type)
+    known_roles = [entry["name"] for entry in all_roles]
 
     for known_role in known_roles:
         if known_role.lower() == role.lower():
@@ -333,15 +395,22 @@ def normalize_visual_role(visual_type: str, role: str) -> str:
 def get_visual_type_info(visual_type: str) -> VisualTypeInfo | None:
     """Return catalog info for a known visual type."""
     canonical = normalize_visual_type(visual_type)
-    if canonical not in KNOWN_VISUAL_TYPES:
+    roles = get_visual_roles(canonical)
+    in_catalog = canonical in KNOWN_VISUAL_TYPES
+    in_schema = bool(_schema_roles(canonical))
+
+    if not in_catalog and not in_schema:
         return None
-    roles = VISUAL_ROLES.get(canonical, [])
+
     if roles:
+        if canonical in VISUAL_ROLES:
+            status = "role-backed"
+            note = "Roles are modeled and can be used with visual binding commands."
+        else:
+            status = "schema-backed"
+            note = "Roles derived from PBI Desktop schema."
         return VisualTypeInfo(
-            visual_type=canonical,
-            roles=roles,
-            status="role-backed",
-            note="Roles are modeled and can be used with visual binding commands.",
+            visual_type=canonical, roles=roles, status=status, note=note,
         )
     return VisualTypeInfo(
         visual_type=canonical,
@@ -353,4 +422,15 @@ def get_visual_type_info(visual_type: str) -> VisualTypeInfo | None:
 
 def list_visual_type_info() -> list[VisualTypeInfo]:
     """Return known visual types with support metadata."""
-    return [get_visual_type_info(vt) for vt in sorted(KNOWN_VISUAL_TYPES)]
+    try:
+        from pbi.visual_schema import get_visual_types
+        schema_types = set(get_visual_types())
+    except Exception:
+        schema_types = set()
+    all_types = KNOWN_VISUAL_TYPES | schema_types
+    result = []
+    for vt in sorted(all_types):
+        info = get_visual_type_info(vt)
+        if info is not None:
+            result.append(info)
+    return result

@@ -150,10 +150,16 @@ def visual_props(
         table.add_row(*row)
 
     console.print(table)
-    console.print(
-        "\n[dim]Use 'chart:<object>.<prop>' for unregistered chart properties. "
-        "Use --visual-type <visualType> to filter by chart type.[/dim]"
-    )
+    schema_count = sum(1 for _, _, desc, *_ in props if "(schema)" in desc)
+    if schema_count and visual_type:
+        console.print(
+            f"\n[dim]{schema_count} properties from PBI schema for {visual_type}. "
+            f"Schema properties can be set directly (e.g. 'legend.show') or via 'chart:' prefix.[/dim]"
+        )
+    else:
+        console.print(
+            "\n[dim]Use --visual-type <type> to see all schema-derived chart properties for a specific visual type.[/dim]"
+        )
 
 
 @visual_app.command("objects")

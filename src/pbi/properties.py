@@ -1873,6 +1873,15 @@ def set_property(
         coerced = _coerce_simple(value, prop_def.value_type)
         _set_by_path(data, prop_def.json_path, coerced)
     elif prop_def is None:
+        # Auto-resolve: if it looks like object.prop and schema confirms it's valid
+        # for this visual type, treat it as a chart: property transparently.
+        # Use prop_name (bracket-stripped) — selector re-attachment is below.
+        auto_chart = _try_auto_resolve_chart_property(data, prop_name)
+        if auto_chart:
+            if bracket_measure is not None and measure_ref is None:
+                auto_chart = f"{auto_chart} [{bracket_measure}]"
+            return _set_dynamic_chart_prop(data, auto_chart, value)
+
         suggestions = suggest_property_names(original_name, registry)
         hint_parts = []
         if suggestions:
@@ -2198,6 +2207,40 @@ def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> list[str]
     return schema_warnings
 
 
+def _try_auto_resolve_chart_property(data: dict, prop_name: str) -> str | None:
+    """Try to auto-resolve a dotted property name as a chart object property.
+
+    If prop_name is "legend.show" and the visual type's schema confirms
+    that "legend" is a valid object with a "show" property, returns
+    "chart:legend.show" so it can be handled by the chart property path.
+
+    Expects prop_name without bracket selectors (caller handles those).
+    Returns None if the property can't be resolved from the schema.
+    """
+    if "." not in prop_name or prop_name.startswith("chart:"):
+        return None
+
+    dot = prop_name.find(".")
+    obj_key = prop_name[:dot]
+    prop_key = prop_name[dot + 1:]
+
+    visual_type = data.get("visual", {}).get("visualType")
+    if not visual_type:
+        return None
+
+    from pbi.visual_schema import get_object_names, get_property_names
+
+    valid_objects = get_object_names(visual_type)
+    if valid_objects is None or obj_key not in valid_objects:
+        return None
+
+    valid_props = get_property_names(visual_type, obj_key)
+    if valid_props is None or prop_key not in valid_props:
+        return None
+
+    return f"chart:{obj_key}.{prop_key}"
+
+
 def _schema_validate_chart_prop(
     data: dict, obj_key: str, prop_key: str, value: Any,
 ) -> list[str]:
@@ -2288,9 +2331,14 @@ def list_properties(
     Filters:
       group — only properties in this group
       visual_type — only properties applicable to this visual type
+
+    When visual_type is set, also appends schema-derived chart object
+    properties that are valid for that type but not in the registry,
+    so users can discover all available properties.
     """
     display_type = lambda t: "color" if t == "page_color" else t
     result = []
+    registered_chart_keys: set[str] = set()
     for name, p in sorted(registry.items()):
         prop_group = _derive_group(name, p)
         if group and prop_group != group:
@@ -2304,6 +2352,73 @@ def list_properties(
             prop_group,
             p.enum_values,
         ))
+        # Track registered chart properties by their object.prop key
+        if p.container_key and p.objects_path == "objects":
+            registered_chart_keys.add(f"{p.container_key}.{p.container_prop}")
+
+    # Append schema-derived properties not already registered
+    if visual_type and (group is None or group == "chart"):
+        result.extend(
+            _schema_chart_properties(visual_type, registered_chart_keys)
+        )
+
+    return result
+
+
+# Map compact schema types to display types
+_SCHEMA_TYPE_MAP = {
+    "bool": "boolean",
+    "num": "number",
+    "int": "number",
+    "color": "color",
+    "text": "string",
+    "fmt": "string",
+    "expr": "string",
+    "any": "string",
+}
+
+
+def _schema_chart_properties(
+    visual_type: str,
+    registered_keys: set[str],
+) -> list[tuple[str, str, str, str | None, tuple[str, ...] | None]]:
+    """Return schema-derived chart properties not already in the registry.
+
+    These are properties the user can set via auto-resolve (object.property
+    syntax) or chart: prefix, but aren't individually registered.
+    """
+    try:
+        from pbi.visual_schema import get_visual_schema
+    except Exception:
+        return []
+
+    schema = get_visual_schema(visual_type)
+    if schema is None:
+        return []
+
+    result = []
+    for obj_name, props in sorted(schema["objects"].items()):
+        for prop_name, ptype in sorted(props.items()):
+            key = f"{obj_name}.{prop_name}"
+            if key in registered_keys:
+                continue  # Already registered with a friendly name
+
+            # Determine display type and enum values
+            if isinstance(ptype, list):
+                display_type = "enum"
+                enum_values = tuple(ptype)
+            else:
+                display_type = _SCHEMA_TYPE_MAP.get(ptype, "string")
+                enum_values = None
+
+            result.append((
+                key,
+                display_type,
+                f"(schema) {obj_name}",
+                "chart",
+                enum_values,
+            ))
+
     return result
 
 
