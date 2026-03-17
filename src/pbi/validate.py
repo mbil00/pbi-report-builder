@@ -337,6 +337,11 @@ def _validate_visual(path: Path, rel: str) -> list[ValidationIssue]:
                     f"visual.objects.{obj_name} must be an array, got {type(entries).__name__}"
                 ))
 
+        # Schema validation — check objects and properties against extracted PBI capabilities
+        visual_type = visual.get("visualType")
+        if visual_type and objects:
+            issues.extend(_validate_visual_schema(visual_type, objects, rel))
+
     # Validate parentGroupName is a string
     parent = data.get("parentGroupName")
     if parent is not None and not isinstance(parent, str):
@@ -655,5 +660,44 @@ def _validate_visual_relationships(project: Project) -> list[ValidationIssue]:
                             f'"{table_list[i]}" and "{table_list[j]}" '
                             f'which have no relationship path',
                         ))
+
+    return issues
+
+
+def _validate_visual_schema(
+    visual_type: str,
+    objects: dict,
+    rel: str,
+) -> list[ValidationIssue]:
+    """Validate visual.objects against the extracted PBI capability schema.
+
+    Checks that object names and property names are valid for the visual type.
+    """
+    from pbi.visual_schema import validate_object, validate_property
+
+    issues: list[ValidationIssue] = []
+
+    for obj_name, entries in objects.items():
+        obj_warning = validate_object(visual_type, obj_name)
+        if obj_warning is not None:
+            issues.append(ValidationIssue(
+                rel, "warning",
+                f"Schema: {obj_warning}",
+            ))
+            continue
+
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            props = entry.get("properties", {})
+            for prop_name in props:
+                prop_warning = validate_property(visual_type, obj_name, prop_name)
+                if prop_warning is not None:
+                    issues.append(ValidationIssue(
+                        rel, "warning",
+                        f"Schema: {prop_warning}",
+                    ))
 
     return issues

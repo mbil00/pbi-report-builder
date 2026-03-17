@@ -7,8 +7,11 @@ and the actual PBI JSON structure (nested visualContainerObjects with expr liter
 from __future__ import annotations
 
 import difflib
+import logging
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -1825,7 +1828,7 @@ def get_property(
 def set_property(
     data: dict, prop_name: str, value: str, registry: dict[str, PropertyDef],
     *, measure_ref: str | None = None,
-) -> None:
+) -> list[str]:
     """Set a property value in a JSON structure.
 
     If measure_ref is given, writes to a per-measure selector entry instead
@@ -1852,8 +1855,7 @@ def set_property(
         # Re-attach bracket selector for chart: properties (they handle it internally)
         if bracket_measure is not None and measure_ref is None:
             prop_name = f"{prop_name} [{bracket_measure}]"
-        _set_dynamic_chart_prop(data, prop_name, value)
-        return
+        return _set_dynamic_chart_prop(data, prop_name, value)
 
     prop_def = registry.get(prop_name)
 
@@ -1886,6 +1888,7 @@ def set_property(
             f"Use 'pbi visual props' or 'pbi page props' to see available properties, "
             f"or use 'chart:<object>.<prop>' for unregistered chart properties."
         )
+    return []
 
 
 def normalize_property_name(
@@ -2164,9 +2167,16 @@ def _get_dynamic_chart_prop(data: dict, prop_name: str) -> Any:
     return decode_pbi_value(raw)
 
 
-def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> None:
-    """Write a dynamic chart property to visual.objects with auto-inferred encoding."""
+def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> list[str]:
+    """Write a dynamic chart property to visual.objects with auto-inferred encoding.
+
+    Returns a list of schema validation warning strings (may be empty).
+    """
     obj_key, prop_key, selector = _parse_chart_prefix(prop_name)
+
+    # Schema validation — warn on invalid objects/properties for this visual type
+    schema_warnings = _schema_validate_chart_prop(data, obj_key, prop_key, value)
+
     value_type = _infer_value_type(value)
     encoded = encode_pbi_value(value, value_type)
 
@@ -2185,6 +2195,26 @@ def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> None:
             target["selector"] = {"metadata": selector}
         entries.append(target)
     target.setdefault("properties", {})[prop_key] = encoded
+    return schema_warnings
+
+
+def _schema_validate_chart_prop(
+    data: dict, obj_key: str, prop_key: str, value: Any,
+) -> list[str]:
+    """Run schema validation for a chart object property write.
+
+    Returns warning strings. Non-blocking — the write still happens.
+    """
+    from pbi.visual_schema import validate_chart_property
+
+    visual_type = data.get("visual", {}).get("visualType")
+    if not visual_type:
+        return []
+    warnings = validate_chart_property(visual_type, obj_key, prop_key, value)
+    result = [str(w) for w in warnings]
+    for msg in result:
+        logger.warning("Schema: %s", msg)
+    return result
 
 
 def get_visual_objects(data: dict) -> dict[str, dict[str, Any]]:

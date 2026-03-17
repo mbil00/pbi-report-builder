@@ -197,8 +197,10 @@ def _apply_page(
                 value = str(page_spec[yaml_key])
                 if not dry_run:
                     try:
-                        set_property(page.data, prop_name, value, PAGE_PROPERTIES)
+                        sw = set_property(page.data, prop_name, value, PAGE_PROPERTIES)
                         result.properties_set += 1
+                        for w in sw:
+                            result.warnings.append(f"Page {page_name}: {w}")
                     except ValueError as e:
                         result.errors.append(f"Page {page_name}: {prop_name}: {e}")
                 else:
@@ -372,8 +374,10 @@ def _apply_visual(
 
     for style_name, prop_name, value in style_assignments:
         try:
-            set_property(visual.data, prop_name, str(value), VISUAL_PROPERTIES)
+            sw = set_property(visual.data, prop_name, str(value), VISUAL_PROPERTIES)
             result.properties_set += 1
+            for w in sw:
+                result.warnings.append(f"{context}: {w}")
         except ValueError as e:
             result.errors.append(f'{context}: style "{style_name}" {prop_name}: {e}')
             return
@@ -500,8 +504,10 @@ def _apply_nested_properties(
             result.properties_set += 1
             continue
         try:
-            set_property(data, prop_name, str_value, registry)
+            sw = set_property(data, prop_name, str_value, registry)
             result.properties_set += 1
+            for w in sw:
+                result.warnings.append(f"{context}: {w}")
         except ValueError as e:
             if ignore_selector_errors and "[" in prop_name and "]" in prop_name:
                 continue
