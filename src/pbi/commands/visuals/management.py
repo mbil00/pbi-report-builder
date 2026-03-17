@@ -14,16 +14,17 @@ from .helpers import resolve_visual_target
 @visual_app.command("create")
 def visual_create(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    visual_type: Annotated[str, typer.Argument(help="Visual type (e.g. clusteredColumnChart, card, table, slicer).")],
+    visual_type: Annotated[str | None, typer.Argument(help="Visual type (e.g. clusteredColumnChart, card, table, slicer). Omit with --from.")] = None,
     x: Annotated[int, typer.Option(help="X position.")] = 0,
     y: Annotated[int, typer.Option(help="Y position.")] = 0,
-    width: Annotated[int, typer.Option("-W", "--width", help="Width.")] = 300,
-    height: Annotated[int, typer.Option("-H", "--height", help="Height.")] = 200,
+    width: Annotated[int | None, typer.Option("-W", "--width", help="Width.")] = None,
+    height: Annotated[int | None, typer.Option("-H", "--height", help="Height.")] = None,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Friendly name for the visual.")] = None,
     title: Annotated[str | None, typer.Option("--title", help="Set title text (also enables title.show).")] = None,
+    from_ref: Annotated[str | None, typer.Option("--from", help="Reference visual as 'page/visual' to copy type, style, and bindings from.")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Create a new visual on a page."""
+    """Create a new visual on a page. Use --from to clone from a reference visual."""
     from pbi.roles import get_visual_roles, is_known_visual_type, normalize_visual_type
 
     proj = get_project(project)
@@ -32,6 +33,43 @@ def visual_create(
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+    # --from: copy from reference visual
+    if from_ref:
+        if "/" not in from_ref:
+            console.print("[red]Error:[/red] --from must be 'page/visual' format.")
+            raise typer.Exit(1)
+        ref_page_name, ref_visual_name = from_ref.split("/", 1)
+        try:
+            ref_page = proj.find_page(ref_page_name)
+            ref_visual = proj.find_visual(ref_page, ref_visual_name)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+        ref_pos = ref_visual.position
+        w = width if width is not None else ref_pos.get("width", 300)
+        h = height if height is not None else ref_pos.get("height", 200)
+        new_vis = proj.copy_visual(ref_visual, pg, new_name=name)
+        # Override position
+        new_vis.data["position"]["x"] = x
+        new_vis.data["position"]["y"] = y
+        new_vis.data["position"]["width"] = w
+        new_vis.data["position"]["height"] = h
+        new_vis.save()
+        display = name or new_vis.name
+        console.print(
+            f'Created [cyan]{new_vis.visual_type}[/cyan] "{display}" on "{pg.display_name}" '
+            f'from "{ref_visual.name}" @ {x},{y} {w}x{h}'
+        )
+        return
+
+    if not visual_type:
+        console.print("[red]Error:[/red] Visual type is required (or use --from to clone).")
+        raise typer.Exit(1)
+
+    w = width if width is not None else 300
+    h = height if height is not None else 200
 
     canonical_visual_type = normalize_visual_type(visual_type)
     if visual_type != canonical_visual_type:
@@ -45,9 +83,10 @@ def visual_create(
             "Creating a raw visual container."
         )
 
-    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=width, height=height)
+    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h)
     if name:
-        vis.data["name"] = name
+        from pbi.project import sanitize_visual_name
+        vis.data["name"] = sanitize_visual_name(name)
 
     if title:
         from pbi.properties import VISUAL_PROPERTIES, set_property
@@ -61,7 +100,7 @@ def visual_create(
     display = name or vis.name
     console.print(
         f'Created [cyan]{canonical_visual_type}[/cyan] "{display}" on "{pg.display_name}" '
-        f"@ {x},{y} {width}x{height}"
+        f"@ {x},{y} {w}x{h}"
     )
 
     # Show scaffolded roles so the agent knows what to bind
@@ -102,10 +141,13 @@ def visual_rename(
     """Give a visual a friendly name for easier CLI reference."""
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
 
+    from pbi.project import sanitize_visual_name
+
     old_name = vis.name
-    vis.data["name"] = name
+    safe = sanitize_visual_name(name)
+    vis.data["name"] = safe
     vis.save()
-    console.print(f'Renamed "{old_name}" [dim]->[/dim] "[cyan]{name}[/cyan]"')
+    console.print(f'Renamed "{old_name}" [dim]->[/dim] "[cyan]{safe}[/cyan]"')
 
 
 @visual_app.command("delete")

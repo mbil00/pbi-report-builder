@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from pbi.project import Project, Page, Visual
+from pbi.project import Project, Page, Visual, sanitize_visual_name
 from pbi.properties import (
     VISUAL_PROPERTIES,
     PAGE_PROPERTIES,
@@ -66,6 +66,7 @@ def apply_yaml(
     page_filter: str | None = None,
     dry_run: bool = False,
     overwrite: bool = False,
+    continue_on_error: bool = False,
 ) -> ApplyResult:
     """Apply a YAML specification to the project.
 
@@ -137,7 +138,7 @@ def apply_yaml(
                 result.rolled_back = True
             raise
 
-        if result.errors and snapshot_dir is not None:
+        if result.errors and snapshot_dir is not None and not continue_on_error:
             _restore_definition_snapshot(project, snapshot_dir)
             result.rolled_back = True
 
@@ -319,7 +320,7 @@ def _apply_visual(
             project.delete_visual(visual)
             visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
-                visual.data["name"] = vis_name
+                visual.data["name"] = sanitize_visual_name(vis_name)
                 visual.save()
             result.visuals_deleted.append((page_name, f"{vis_name or visual.name} ({old_type})"))
             result.visuals_created.append((page_name, vis_name or vis_type))
@@ -332,7 +333,7 @@ def _apply_visual(
         else:
             visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
-                visual.data["name"] = vis_name
+                visual.data["name"] = sanitize_visual_name(vis_name)
                 visual.save()
             result.visuals_created.append((page_name, vis_name or vis_type))
     elif visual is None:
@@ -393,6 +394,13 @@ def _apply_visual(
         visual.data["position"]["height"] = h
         result.properties_set += 2
 
+    # Support x/y/width/height as direct keys (aliases for position/size)
+    pos = visual.data.setdefault("position", {})
+    for key in ("x", "y", "width", "height"):
+        if key in vis_spec and key not in ("position", "size"):
+            pos[key] = int(vis_spec[key])
+            result.properties_set += 1
+
     # Textbox content
     if "text" in vis_spec and visual_type == "textbox":
         _apply_textbox_content(visual, vis_spec, result)
@@ -401,7 +409,7 @@ def _apply_visual(
     exclude_keys = {"id", "name", "type", "position", "size", "bindings", "sort",
                      "filters", "conditionalFormatting", "isHidden", "pbir", "style",
                      "kpis", "layout", "accentBar", "referenceLabelLayout",
-                     "text", "textStyle"}
+                     "text", "textStyle", "x", "y", "width", "height"}
     _apply_nested_properties(
         visual.data, vis_spec,
         exclude_keys=exclude_keys,

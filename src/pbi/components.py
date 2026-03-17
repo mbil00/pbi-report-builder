@@ -397,7 +397,8 @@ def apply_component(
         # Apply name
         vis_name = spec.get("name")
         if vis_name:
-            vis.data["name"] = vis_name
+            from pbi.project import sanitize_visual_name
+            vis.data["name"] = sanitize_visual_name(vis_name)
 
         # Apply properties via the YAML apply engine approach
         _apply_spec_to_visual(project, vis, spec)

@@ -8,6 +8,7 @@ built-in checks for common errors.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -346,6 +347,84 @@ def _validate_visual(path: Path, rel: str) -> list[ValidationIssue]:
 
     issues.extend(_validate_filter_config(data.get("filterConfig"), rel, "filterConfig"))
 
+    # Check for crash-causing patterns
+    issues.extend(_validate_visual_name(data, rel))
+    if has_visual:
+        issues.extend(_validate_gradient_null_strategy(data["visual"], rel))
+        issues.extend(_validate_orphaned_column_metadata(data["visual"], rel))
+
+    return issues
+
+
+def _validate_visual_name(data: dict, rel: str) -> list[ValidationIssue]:
+    """Check that visual name uses only identifier-safe characters."""
+    issues: list[ValidationIssue] = []
+    name = data.get("name", "")
+    if name and re.search(r"[^a-zA-Z0-9_-]", name):
+        issues.append(ValidationIssue(
+            rel, "error",
+            f'Visual name "{name}" contains unsupported characters '
+            "(spaces, colons, etc.). Power BI will refuse to load the report.",
+            path="name",
+        ))
+    return issues
+
+
+def _validate_gradient_null_strategy(visual: dict, rel: str) -> list[ValidationIssue]:
+    """Check that linearGradient2/3 objects include nullColoringStrategy."""
+    issues: list[ValidationIssue] = []
+    objects = visual.get("objects", {})
+    for obj_key, entries in objects.items():
+        if not isinstance(entries, list):
+            continue
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            props = entry.get("properties", {})
+            for prop_name, prop_val in props.items():
+                if not isinstance(prop_val, dict):
+                    continue
+                fill_rule = (
+                    prop_val.get("solid", {}).get("color", {})
+                    .get("expr", {}).get("FillRule", {}).get("FillRule", {})
+                )
+                for grad_key in ("linearGradient2", "linearGradient3"):
+                    gradient = fill_rule.get(grad_key)
+                    if gradient and "nullColoringStrategy" not in gradient:
+                        issues.append(ValidationIssue(
+                            rel, "error",
+                            f"objects.{obj_key}[{i}].{prop_name}: {grad_key} is missing "
+                            "nullColoringStrategy — Power BI will crash.",
+                            path=f"objects.{obj_key}[{i}].properties.{prop_name}",
+                        ))
+    return issues
+
+
+def _validate_orphaned_column_metadata(visual: dict, rel: str) -> list[ValidationIssue]:
+    """Check for columnWidth/columnFormatting entries referencing unbound fields."""
+    issues: list[ValidationIssue] = []
+    query_state = visual.get("query", {}).get("queryState", {})
+    bound_refs: set[str] = set()
+    for _role, config in query_state.items():
+        for proj in config.get("projections", []):
+            ref = proj.get("queryRef", "")
+            if ref:
+                bound_refs.add(ref.lower())
+
+    objects = visual.get("objects", {})
+    for obj_key in ("columnWidth", "columnFormatting"):
+        entries = objects.get(obj_key, [])
+        if not isinstance(entries, list):
+            continue
+        for i, entry in enumerate(entries):
+            metadata = entry.get("selector", {}).get("metadata")
+            if metadata and metadata.lower() not in bound_refs:
+                issues.append(ValidationIssue(
+                    rel, "warning",
+                    f"objects.{obj_key}[{i}] references \"{metadata}\" "
+                    "which is not bound to any projection.",
+                    path=f"objects.{obj_key}[{i}]",
+                ))
     return issues
 
 

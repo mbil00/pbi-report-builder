@@ -112,7 +112,11 @@ def configure_tooltip_page(
 
 
 def clear_tooltip_page(page: Page) -> bool:
-    """Remove tooltip configuration from a page. Returns True if removed."""
+    """Remove tooltip configuration from a page. Returns True if removed.
+
+    Restores default report page size (1280x720) since tooltip pages
+    use a small size (e.g. 320x240) that would be wrong for a normal page.
+    """
     changed = False
 
     if page.data.get("type") == "Tooltip":
@@ -125,6 +129,11 @@ def clear_tooltip_page(page: Page) -> bool:
 
     if page.data.get("visibility") == "HiddenInViewMode":
         page.data["visibility"] = "AlwaysVisible"
+
+    # Restore default page size if still at tooltip dimensions
+    if changed and page.data.get("width", 0) <= 400 and page.data.get("height", 0) <= 300:
+        page.data["width"] = 1280
+        page.data["height"] = 720
 
     return changed
 

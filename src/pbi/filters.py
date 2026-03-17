@@ -159,6 +159,142 @@ def add_exclude_filter(
     )
 
 
+def add_empty_categorical_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+) -> dict:
+    """Add an empty categorical filter (field in filter pane, no pre-selections)."""
+    filter_name = f"Filter_{secrets.token_hex(8)}"
+    field_ref = _field_expr(entity, prop, field_type, entity)
+
+    filter_obj = {
+        "name": filter_name,
+        "type": "Categorical",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": "f", "Entity": entity, "Type": 0}],
+            "Where": [],
+        },
+        "field": field_ref,
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": is_locked,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
+
+
+def add_blank_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+) -> dict:
+    """Add a filter that shows only blank/null values."""
+    return _add_null_filter(
+        data, entity, prop,
+        field_type=field_type,
+        is_blank=True,
+        is_hidden=is_hidden,
+        is_locked=is_locked,
+    )
+
+
+def add_not_blank_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+) -> dict:
+    """Add a filter that hides blank/null values (show only non-blank)."""
+    return _add_null_filter(
+        data, entity, prop,
+        field_type=field_type,
+        is_blank=False,
+        is_hidden=is_hidden,
+        is_locked=is_locked,
+    )
+
+
+def _add_null_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    *,
+    field_type: str,
+    is_blank: bool,
+    is_hidden: bool,
+    is_locked: bool,
+) -> dict:
+    """Build an IsNull or Not/IsNull filter."""
+    filter_name = f"Filter_{secrets.token_hex(8)}"
+    field_ref = _field_expr(entity, prop, field_type, entity)
+    alias = "f"
+    col_expr = _field_expr(entity, prop, field_type, alias)
+
+    condition: dict
+    if is_blank:
+        # Show only nulls: Where IsNull(field)
+        condition = {"Comparison": {
+            "ComparisonKind": 0,  # Equal
+            "Left": col_expr,
+            "Right": {"Literal": {"Value": "null"}},
+        }}
+    else:
+        # Hide nulls: Where Not(IsNull(field))
+        condition = {"Not": {"Expression": {"Comparison": {
+            "ComparisonKind": 0,
+            "Left": col_expr,
+            "Right": {"Literal": {"Value": "null"}},
+        }}}}
+
+    filter_obj = {
+        "name": filter_name,
+        "type": "Advanced",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": alias, "Entity": entity, "Type": 0}],
+            "Where": [{"Condition": condition}],
+        },
+        "field": field_ref,
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": is_locked,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
+
+
+def _build_in_condition(
+    field_expr: dict,
+    pbi_values: list,
+    *,
+    exclude: bool = False,
+) -> dict:
+    """Build an In or Not/In condition for value filters."""
+    in_block = {
+        "In": {
+            "Expressions": [field_expr],
+            "Values": pbi_values,
+        }
+    }
+    if exclude:
+        return {"Not": in_block}
+    return in_block
+
+
 def _add_value_filter(
     data: dict,
     entity: str,
@@ -187,12 +323,11 @@ def _add_value_filter(
             "From": [{"Name": alias, "Entity": entity, "Type": 0}],
             "Where": [
                 {
-                    "Condition": {
-                        "In": {
-                            "Expressions": [_field_expr(entity, prop, field_type, alias)],
-                            "Values": pbi_values,
-                        }
-                    }
+                    "Condition": _build_in_condition(
+                        _field_expr(entity, prop, field_type, alias),
+                        pbi_values,
+                        exclude=(filter_type == "Exclude"),
+                    )
                 }
             ],
         },

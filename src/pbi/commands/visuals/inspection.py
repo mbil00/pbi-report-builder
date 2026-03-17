@@ -564,7 +564,46 @@ def visual_get(
             kind = " (measure)" if ftype == "measure" else ""
             table.add_row("[dim]Sort:[/dim]", f"{entity}.{sort_prop}{kind} {direction}")
 
+    # Filter summary
+    from pbi.filters import get_filters, parse_filter
+
+    filters = get_filters(vis.data)
+    if filters:
+        table.add_section()
+        for f in filters:
+            info = parse_filter(f)
+            vals = f" = {', '.join(str(v) for v in info.values)}" if info.values else ""
+            table.add_row("[dim]Filter:[/dim]", f"{info.field_entity}.{info.field_prop} ({info.filter_type}){vals}")
+
     console.print(table)
+
+
+@visual_app.command("export")
+def visual_export(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    visual: Annotated[str, typer.Argument(help="Visual name, type, or index.")],
+    output: Annotated[str | None, typer.Option("-o", "--output", help="Output file (default: stdout).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Export a single visual as YAML (apply-compatible format)."""
+    import yaml
+    from pbi.export import export_visual_spec
+
+    proj, _pg, vis = resolve_visual_target(project, page, visual)
+    spec = export_visual_spec(proj, vis)
+    yaml_str = yaml.dump(
+        spec,
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+        width=120,
+    )
+    if output:
+        from pathlib import Path
+        Path(output).write_text(yaml_str, encoding="utf-8")
+        console.print(f'Exported [cyan]{vis.name}[/cyan] to {output}')
+    else:
+        console.print(yaml_str, highlight=False)
 
 
 @visual_app.command("get-page")

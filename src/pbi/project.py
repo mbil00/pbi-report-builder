@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 import secrets
 import shutil
 from dataclasses import dataclass
@@ -14,6 +15,21 @@ from pbi.schema_refs import (
     PAGES_METADATA_SCHEMA,
     VISUAL_CONTAINER_SCHEMA,
 )
+
+
+_UNSAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def sanitize_visual_name(name: str) -> str:
+    """Sanitize a visual name to be identifier-safe for Power BI.
+
+    Replaces spaces, colons, and other non-alphanumeric characters with hyphens.
+    Returns kebab-case string safe for the ``name`` field in visual.json.
+    """
+    safe = _UNSAFE_NAME_RE.sub("-", name).strip("-")
+    # Collapse runs of hyphens
+    safe = re.sub(r"-{2,}", "-", safe)
+    return safe or name
 
 
 @dataclass
@@ -356,7 +372,7 @@ class Project:
         new_data["displayName"] = new_name
         _write_json(new_dir / "page.json", new_data)
 
-        # Give each visual a new unique name
+        # Give each visual a new unique folder but preserve friendly names
         visuals_dir = new_dir / "visuals"
         if visuals_dir.exists():
             for visual_dir in list(visuals_dir.iterdir()):
@@ -368,7 +384,14 @@ class Project:
                 visual_json = new_visual_dir / "visual.json"
                 if visual_json.exists():
                     vdata = _read_json(visual_json)
-                    vdata["name"] = new_visual_id
+                    # Preserve the original friendly name if it differs
+                    # from the old folder name (i.e. user set a custom name)
+                    old_name = vdata.get("name", "")
+                    old_folder = visual_dir.name
+                    if old_name == old_folder:
+                        # No custom name — use new ID
+                        vdata["name"] = new_visual_id
+                    # else: keep the existing friendly name
                     _write_json(visual_json, vdata)
 
         self._add_to_page_order(new_id)
@@ -478,7 +501,7 @@ class Project:
         shutil.copytree(source.folder, new_dir)
 
         new_data = _read_json(new_dir / "visual.json")
-        new_data["name"] = new_name or new_id
+        new_data["name"] = sanitize_visual_name(new_name) if new_name else new_id
         _write_json(new_dir / "visual.json", new_data)
         return Visual(folder=new_dir, data=new_data)
 
@@ -530,9 +553,11 @@ class Project:
         group_dir = page.folder / "visuals" / group_id
         group_dir.mkdir(parents=True, exist_ok=True)
 
+        safe_name = sanitize_visual_name(display_name) if display_name else group_id
+
         group_data = {
             "$schema": VISUAL_CONTAINER_SCHEMA,
-            "name": display_name or group_id,
+            "name": safe_name,
             "position": {
                 "x": min_x,
                 "y": min_y,
@@ -638,6 +663,12 @@ class Project:
 
         projections = query_state[role].get("projections", [])
         original_count = len(projections)
+        # Collect queryRefs being removed for metadata cleanup
+        removed_refs = [
+            p.get("queryRef", "")
+            for p in projections
+            if p.get("queryRef", "").lower() == field_ref.lower()
+        ]
         query_state[role]["projections"] = [
             p for p in projections
             if p.get("queryRef", "").lower() != field_ref.lower()
@@ -645,6 +676,12 @@ class Project:
         removed = original_count - len(query_state[role]["projections"])
         if not query_state[role]["projections"]:
             del query_state[role]
+        # Clean up orphaned column metadata (widths, formatting)
+        if removed_refs:
+            from pbi.columns import clear_column_width, clear_column_format
+            for ref in removed_refs:
+                clear_column_width(visual, ref)
+                clear_column_format(visual, ref)
         visual.save()
         return removed
 

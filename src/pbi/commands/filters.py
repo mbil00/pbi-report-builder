@@ -46,18 +46,29 @@ def _resolve_filter_field(
     mode = _normalize_field_type(field_type)
     if mode == "measure":
         return entity, prop, "measure", None
-    if mode == "column" or model is None:
-        return entity, prop, "column", None
+    if model is None:
+        return entity, prop, "column" if mode == "auto" else mode, None
 
-    resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(field)
+    # Resolve via model when available (for auto-detect and data type lookup)
+    try:
+        resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(field)
+    except (ValueError, KeyError):
+        return entity, prop, mode or "column", None
+
+    # Override resolved field type if user explicitly specified column/measure
+    effective_type = mode if mode in {"column", "measure"} else resolved_field_type
+
     data_type = None
-    if resolved_field_type == "column":
-        table = model.find_table(resolved_entity)
-        for column in table.columns:
-            if column.name == resolved_prop:
-                data_type = column.data_type
-                break
-    return resolved_entity, resolved_prop, resolved_field_type, data_type
+    if effective_type == "column":
+        try:
+            table = model.find_table(resolved_entity)
+            for column in table.columns:
+                if column.name == resolved_prop:
+                    data_type = column.data_type
+                    break
+        except (ValueError, KeyError):
+            pass
+    return resolved_entity, resolved_prop, effective_type, data_type
 
 
 def _resolve_scope(
@@ -166,9 +177,11 @@ def filter_create(
     """Create a filter. Defaults to report level; use --page/--visual to narrow scope."""
     from pbi.filters import (
         TupleField,
+        add_blank_filter,
         add_categorical_filter,
         add_exclude_filter,
         add_include_filter,
+        add_not_blank_filter,
         add_range_filter,
         add_relative_date_filter,
         add_relative_time_filter,
@@ -178,7 +191,7 @@ def filter_create(
         save_level_data,
     )
 
-    valid_modes = {"categorical", "include", "exclude", "range", "topn", "relative", "tuple"}
+    valid_modes = {"categorical", "include", "exclude", "range", "topn", "relative", "tuple", "blank", "not-blank"}
     if mode not in valid_modes:
         console.print(
             f"[red]Error:[/red] Invalid --mode '{mode}'. "
@@ -222,9 +235,25 @@ def filter_create(
 
     if mode in {"categorical", "include", "exclude"}:
         val_list = value or []
-        if not val_list:
-            console.print("[red]Error:[/red] Categorical/include/exclude filters require at least one --value.")
+        if not val_list and mode in {"include", "exclude"}:
+            console.print("[red]Error:[/red] Include/exclude filters require at least one --value.")
             raise typer.Exit(1)
+        if not val_list and mode == "categorical":
+            # Empty categorical: add field to filter pane with no selections
+            from pbi.filters import add_empty_categorical_filter
+            add_empty_categorical_filter(
+                data,
+                entity,
+                prop,
+                field_type=resolved_field_type,
+                is_hidden=hidden,
+                is_locked=locked,
+            )
+            save_level_data(data, target)
+            console.print(
+                f'Added empty categorical filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
+            )
+            return
         add_fn = {
             "categorical": add_categorical_filter,
             "include": add_include_filter,
@@ -242,9 +271,27 @@ def filter_create(
         )
         save_level_data(data, target)
         label = "categorical" if mode == "categorical" else mode
+        values_str = ", ".join(val_list)
         console.print(
             f'Added {label} filter on [cyan]{entity}.{prop}[/cyan] '
-            f'= [{", ".join(val_list)}] at {level} level'
+            f'= \\[{values_str}] at {level} level'
+        )
+        return
+
+    if mode in {"blank", "not-blank"}:
+        add_fn_null = add_blank_filter if mode == "blank" else add_not_blank_filter
+        add_fn_null(
+            data,
+            entity,
+            prop,
+            field_type=resolved_field_type,
+            is_hidden=hidden,
+            is_locked=locked,
+        )
+        save_level_data(data, target)
+        label = "blank" if mode == "blank" else "not-blank"
+        console.print(
+            f'Added {label} filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
         )
         return
 

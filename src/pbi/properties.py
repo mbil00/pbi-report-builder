@@ -1974,6 +1974,13 @@ def _property_alias_map(registry: dict[str, PropertyDef]) -> dict[str, str]:
         for canonical in registry:
             if canonical.startswith(target_prefix):
                 aliases.setdefault(source_prefix + canonical[len(target_prefix):], canonical)
+    # Shorthand aliases for position properties
+    for short, full in (
+        ("x", "position.x"), ("y", "position.y"),
+        ("width", "position.width"), ("height", "position.height"),
+    ):
+        if full in registry:
+            aliases.setdefault(short, full)
     return aliases
 
 

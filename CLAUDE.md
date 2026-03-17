@@ -27,6 +27,8 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 - `--where` — `visual set-all` (filter by current property value, e.g. `--where border.color=#EDEBE9`)
 - `--exclude` — `page set-all` (skip pages matching substring)
 - `--overwrite` — `apply` (full reconciliation, removes visuals not in YAML)
+- `--continue-on-error` — `apply` (apply what is possible, report errors without rollback)
+- `--from` — `visual create` (reference visual as 'page/visual' to clone type, style, bindings)
 - `--page` — `map` (filter to single page), `apply` (filter to single page), `visual set-all` (target page)
 - `--global, -g` — `style`, `component`, `template` commands (use global scope from ~/.config/pbi/)
 - `--bundled` — `style list` (include built-in shape presets)
@@ -79,7 +81,11 @@ if not force:
 
 ## Visual Creation
 
-`create_visual()` scaffolds `queryState` with empty role projections from the type's role catalog. The CLI command prints available roles after creation so agents know what to bind.
+`create_visual()` scaffolds `queryState` with empty role projections from the type's role catalog. The CLI command prints available roles after creation so agents know what to bind. Use `--from page/visual` to clone from a reference visual. `visual export` exports a single visual as apply-compatible YAML.
+
+## Name Sanitization
+
+All visual `name` fields are sanitized via `sanitize_visual_name()` in `project.py` — strips spaces, colons, and special characters to identifier-safe format. Applied in: `visual create`, `visual rename`, `visual copy`, `apply`, `component apply`, `create_group`.
 
 ## Key Files
 
@@ -146,7 +152,7 @@ The apply engine supports these property syntaxes in YAML:
 - **interactions:** page-level `interactions:` list with source/target/type
 - **bookmarks:** top-level `bookmarks:` list with name/page/hide
 - **conditionalFormatting:** `mode: measure` or `mode: gradient` with min/mid/max stops
-- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), plus categorical/include/exclude
+- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), categorical/include/exclude, `--mode blank`/`--mode not-blank` (null filtering)
 - **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
 - **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
 - **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages

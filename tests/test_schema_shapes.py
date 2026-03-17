@@ -271,14 +271,16 @@ class SchemaBackedAdvancedFilterTests(unittest.TestCase):
         self.assertEqual(filter_obj["howCreated"], "Include")
         self.assertIn("In", filter_obj["filter"]["Where"][0]["Condition"])
 
-    def test_exclude_filter_uses_schema_enum_and_in_expression(self) -> None:
+    def test_exclude_filter_uses_schema_enum_and_not_in_expression(self) -> None:
         data: dict = {}
         add_exclude_filter(data, "Product", "Category", ["Bikes"])
 
         filter_obj = data["filterConfig"]["filters"][0]
         self.assertEqual(filter_obj["type"], "Exclude")
         self.assertEqual(filter_obj["howCreated"], "Exclude")
-        self.assertIn("In", filter_obj["filter"]["Where"][0]["Condition"])
+        condition = filter_obj["filter"]["Where"][0]["Condition"]
+        self.assertIn("Not", condition)
+        self.assertIn("In", condition["Not"])
 
     def test_tuple_filter_uses_multi_expression_in_shape(self) -> None:
         data: dict = {}

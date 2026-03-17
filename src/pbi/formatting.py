@@ -128,12 +128,12 @@ def build_gradient_format(
             }
         }
 
-    # Add null coloring strategy if specified
-    if null_strategy:
-        key = "linearGradient3" if mid_stop else "linearGradient2"
-        gradient[key]["nullColoringStrategy"] = {
-            "strategy": _literal_expr(f"'{null_strategy}'")
-        }
+    # Always include null coloring strategy (PBI crashes without it)
+    key = "linearGradient3" if mid_stop else "linearGradient2"
+    strategy = null_strategy or "asZero"
+    gradient[key]["nullColoringStrategy"] = {
+        "strategy": _literal_expr(f"'{strategy}'")
+    }
 
     return {
         "solid": {
