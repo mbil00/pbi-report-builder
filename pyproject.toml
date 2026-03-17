@@ -1,6 +1,6 @@
 [project]
 name = "pbi-report-builder"
-version = "0.6.2"
+version = "0.7.0"
 description = "CLI tool for editing Power BI PBIP project files"
 requires-python = ">=3.11"
 dependencies = [
