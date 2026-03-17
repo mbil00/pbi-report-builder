@@ -70,14 +70,18 @@ def build_measure_format(entity: str, prop: str) -> dict:
     }
 
 
-def _select_ref(entity: str, prop: str) -> dict:
-    """Build a SelectRef expression node for FillRule Input.
+def _fill_rule_input(entity: str, prop: str) -> dict:
+    """Build a Measure expression node for FillRule Input.
 
-    FillRule Input must reference the visual's data view via SelectRef,
-    not the raw model via Measure/Column.  The ExpressionName must match
-    the projection's queryRef value (Table.Field).
+    FillRule Input must reference the measure via a Measure expression
+    with SourceRef pointing to the entity.
     """
-    return {"SelectRef": {"ExpressionName": f"{entity}.{prop}"}}
+    return {
+        "Measure": {
+            "Expression": {"SourceRef": {"Entity": entity}},
+            "Property": prop,
+        }
+    }
 
 
 def _format_stop_value(value: float) -> str:
@@ -108,8 +112,8 @@ def build_gradient_format(
     def _stop(stop: GradientStop) -> dict:
         color = stop.color if stop.color.startswith("#") else f"#{stop.color}"
         return {
-            "color": {"expr": _literal_expr(f"'{color}'")},
-            "value": {"expr": _literal_expr(_format_stop_value(stop.value))},
+            "color": _literal_expr(f"'{color}'"),
+            "value": _literal_expr(_format_stop_value(stop.value)),
         }
 
     if mid_stop is not None:
@@ -140,7 +144,7 @@ def build_gradient_format(
             "color": {
                 "expr": {
                     "FillRule": {
-                        "Input": _select_ref(input_entity, input_prop),
+                        "Input": _fill_rule_input(input_entity, input_prop),
                         "FillRule": gradient,
                     }
                 }
@@ -294,7 +298,7 @@ def _parse_conditional_value(
     if "FillRule" in expr:
         fr = expr["FillRule"]
         input_expr = fr.get("Input", {})
-        # Input can be SelectRef (correct), Measure, or Column (legacy)
+        # Input can be Measure (correct), SelectRef (legacy), or Column
         if "SelectRef" in input_expr:
             expr_name = input_expr["SelectRef"].get("ExpressionName", "?")
             dot = expr_name.find(".")

@@ -37,7 +37,7 @@ pages:
 
   # --- Interactions ---
   # Control how visuals cross-filter each other.
-  # Types: DataFilter (default), Highlight, NoFilter
+  # Types: DataFilter (default), HighlightFilter, NoFilter
   interactions:
 
   # Slicer filters chart and table (default behavior, explicit here)
@@ -56,7 +56,7 @@ pages:
   # Chart highlights table (instead of filtering)
   - source: revenueChart
     target: detailTable
-    type: Highlight
+    type: HighlightFilter
 
 # --- Bookmarks (report-level, outside pages) ---
 # Control which visuals are shown/hidden per bookmark.

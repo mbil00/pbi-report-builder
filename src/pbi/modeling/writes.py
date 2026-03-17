@@ -658,6 +658,9 @@ def _find_relationship_block(
     return None
 
 
+_TMDL_CFB_MAP = {"singledirection": "oneDirection", "single": "oneDirection"}
+
+
 def _build_relationship_block(
     rel_id: str,
     from_table: str,
@@ -672,6 +675,8 @@ def _build_relationship_block(
     if properties:
         for key, val in properties.items():
             if key not in ("fromColumn", "toColumn"):
+                if key == "crossFilteringBehavior":
+                    val = _TMDL_CFB_MAP.get(val.lower(), val)
                 lines.append(f"\t{key}: {val}")
     lines.append(f"\tfromColumn: {_format_tmdl_field_ref(from_table, from_column)}")
     lines.append(f"\ttoColumn: {_format_tmdl_field_ref(to_table, to_column)}")

@@ -21,6 +21,11 @@ VISUAL_ROLE_ALIASES: dict[str, dict[str, str]] = {
         "Values": "Data",
         "Value": "Data",
     },
+    "slicer": {"Field": "Values"},
+    "advancedSlicerVisual": {"Field": "Values"},
+    "listSlicer": {"Field": "Values"},
+    "textSlicer": {"Field": "Values"},
+    "treemap": {"Y": "Values"},
 }
 
 

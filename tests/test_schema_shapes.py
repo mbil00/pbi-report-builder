@@ -280,7 +280,8 @@ class SchemaBackedAdvancedFilterTests(unittest.TestCase):
         self.assertEqual(filter_obj["howCreated"], "Exclude")
         condition = filter_obj["filter"]["Where"][0]["Condition"]
         self.assertIn("Not", condition)
-        self.assertIn("In", condition["Not"])
+        self.assertIn("Expression", condition["Not"])
+        self.assertIn("In", condition["Not"]["Expression"])
 
     def test_tuple_filter_uses_multi_expression_in_shape(self) -> None:
         data: dict = {}

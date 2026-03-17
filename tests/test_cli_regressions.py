@@ -2780,9 +2780,9 @@ class TestValidateMeasuresOnlyTable(unittest.TestCase):
 
 
 class TestBug026FillRuleInput(unittest.TestCase):
-    """BUG-026: FillRule Input must use SelectRef, not Measure/Column expression."""
+    """BUG-026: FillRule Input must use Measure expression."""
 
-    def test_gradient_uses_select_ref_not_measure(self):
+    def test_gradient_uses_measure_expression(self):
         from pbi.formatting import GradientStop, build_gradient_format
 
         value = build_gradient_format(
@@ -2792,13 +2792,17 @@ class TestBug026FillRuleInput(unittest.TestCase):
         fill_rule = value["solid"]["color"]["expr"]["FillRule"]
         input_node = fill_rule["Input"]
 
-        # Must use SelectRef, NOT Measure
-        self.assertIn("SelectRef", input_node)
-        self.assertNotIn("Measure", input_node)
+        # Must use Measure expression
+        self.assertIn("Measure", input_node)
+        self.assertNotIn("SelectRef", input_node)
         self.assertNotIn("Column", input_node)
         self.assertEqual(
-            input_node["SelectRef"]["ExpressionName"],
-            "Measures Table.Total Devices",
+            input_node["Measure"]["Property"],
+            "Total Devices",
+        )
+        self.assertEqual(
+            input_node["Measure"]["Expression"]["SourceRef"]["Entity"],
+            "Measures Table",
         )
 
     def test_gradient_stop_values_use_integer_format(self):
@@ -2811,8 +2815,8 @@ class TestBug026FillRuleInput(unittest.TestCase):
         gradient = value["solid"]["color"]["expr"]["FillRule"]["FillRule"]["linearGradient2"]
 
         # Must be "0D" not "0.0D"
-        min_val = gradient["min"]["value"]["expr"]["Literal"]["Value"]
-        max_val = gradient["max"]["value"]["expr"]["Literal"]["Value"]
+        min_val = gradient["min"]["value"]["Literal"]["Value"]
+        max_val = gradient["max"]["value"]["Literal"]["Value"]
         self.assertEqual(min_val, "0D")
         self.assertEqual(max_val, "90D")
 
@@ -2824,8 +2828,8 @@ class TestBug026FillRuleInput(unittest.TestCase):
             GradientStop("#FFF", 0.5), GradientStop("#000", 99.9),
         )
         gradient = value["solid"]["color"]["expr"]["FillRule"]["FillRule"]["linearGradient2"]
-        min_val = gradient["min"]["value"]["expr"]["Literal"]["Value"]
-        max_val = gradient["max"]["value"]["expr"]["Literal"]["Value"]
+        min_val = gradient["min"]["value"]["Literal"]["Value"]
+        max_val = gradient["max"]["value"]["Literal"]["Value"]
         self.assertEqual(min_val, "0.5D")
         self.assertEqual(max_val, "99.9D")
 
@@ -2889,7 +2893,7 @@ class TestBug026FillRuleInput(unittest.TestCase):
         strategy = gradient["nullColoringStrategy"]["strategy"]["Literal"]["Value"]
         self.assertEqual(strategy, "'asZero'")
 
-    def test_parse_select_ref_input(self):
+    def test_parse_measure_input(self):
         from pbi.formatting import get_conditional_formats, set_conditional_format, GradientStop, build_gradient_format
 
         data: dict = {}

@@ -867,7 +867,7 @@ def _model_set_column_visibility_by_pattern(
 def model_relationship_create(
     from_field: Annotated[str, typer.Argument(help="From column as Table.Column.")],
     to_field: Annotated[str, typer.Argument(help="To column as Table.Column.")],
-    cross_filter: Annotated[str | None, typer.Option("--cross-filter", help="Cross-filter direction (singleDirection or bothDirections).")] = None,
+    cross_filter: Annotated[str | None, typer.Option("--cross-filter", help="Cross-filter direction (oneDirection or bothDirections).")] = None,
     inactive: Annotated[bool, typer.Option("--inactive", help="Create as inactive relationship.")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview the change without writing TMDL files.")] = False,
     project: ProjectOpt = None,
@@ -877,8 +877,11 @@ def model_relationship_create(
 
     proj = get_project(project)
     properties: dict[str, str] = {}
+    _CFB_MAP = {"singledirection": "oneDirection", "single": "oneDirection"}
     if cross_filter:
-        properties["crossFilteringBehavior"] = cross_filter
+        properties["crossFilteringBehavior"] = _CFB_MAP.get(
+            cross_filter.lower(), cross_filter
+        )
     if inactive:
         properties["isActive"] = "false"
 

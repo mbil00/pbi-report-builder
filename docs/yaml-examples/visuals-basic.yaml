@@ -99,10 +99,15 @@ pages:
     background: { show: true, color: "#002C77" }
 
   # --- Textbox ---
-  # No data roles — text is set via chart objects
+  # No data roles — text content set via text: and textStyle: properties
   - name: pageTitle
     type: textbox
     position: 16, 8
     size: 400 x 44
     border: { show: false }
     background: { show: false }
+    text: "Sales Dashboard"
+    textStyle:
+      fontSize: 24
+      fontWeight: bold
+      color: "#002C77"

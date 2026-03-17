@@ -230,7 +230,8 @@ def _apply_page(
         # Apply page-level filters
         if "filters" in page_spec:
             _apply_filters(page.data, page_spec["filters"], result,
-                           context=f"Page {page_name}", dry_run=dry_run)
+                           context=f"Page {page_name}", dry_run=dry_run,
+                           project=project)
 
         if not dry_run and len(result.errors) == page_error_count:
             page.save()
@@ -438,7 +439,8 @@ def _apply_visual(
     if "filters" in vis_spec:
         _apply_filters(visual.data, vis_spec["filters"], result,
                        context=context,
-                       dry_run=dry_run)
+                       dry_run=dry_run,
+                       project=project)
 
     # Conditional formatting
     if "conditionalFormatting" in vis_spec:
@@ -657,6 +659,39 @@ def _apply_sort(
     result.properties_set += 1
 
 
+def _resolve_apply_field(
+    field_ref: str,
+    project: Project,
+) -> tuple[str, str, str, str | None]:
+    """Resolve a field reference to (entity, prop, field_type, data_type).
+
+    Uses the semantic model when available to distinguish columns from
+    measures and to determine the data type for literal formatting.
+    """
+    dot = field_ref.find(".")
+    entity = field_ref[:dot]
+    prop = field_ref[dot + 1:]
+
+    try:
+        from pbi.modeling.schema import SemanticModel
+
+        model = SemanticModel.load(project.root)
+        resolved_entity, resolved_prop, field_type = model.resolve_field(field_ref)
+        data_type = None
+        if field_type == "column":
+            try:
+                table = model.find_table(resolved_entity)
+                for col in table.columns:
+                    if col.name == resolved_prop:
+                        data_type = col.data_type
+                        break
+            except (ValueError, KeyError):
+                pass
+        return resolved_entity, resolved_prop, field_type, data_type
+    except Exception:
+        return entity, prop, "column", None
+
+
 def _apply_filters(
     data: dict,
     filters_spec: list,
@@ -664,6 +699,7 @@ def _apply_filters(
     *,
     context: str,
     dry_run: bool,
+    project: Project | None = None,
 ) -> None:
     """Apply filters from the YAML spec."""
     if filters_spec and not dry_run:
@@ -736,11 +772,18 @@ def _apply_filters(
                 continue
             by_entity = by_ref[:by_dot]
             by_prop = by_ref[by_dot + 1:]
+
+            # Resolve field types via model
+            order_field_type = "measure"
+            if project is not None:
+                _, _, order_field_type, _ = _resolve_apply_field(by_ref, project)
+
             add_topn_filter(
                 data, entity, prop,
                 n=int(count),
                 order_entity=by_entity,
                 order_prop=by_prop,
+                order_field_type=order_field_type,
                 direction=direction.capitalize(),
                 is_hidden=is_hidden,
                 is_locked=is_locked,
@@ -751,12 +794,23 @@ def _apply_filters(
 
             min_val = f_spec.get("min")
             max_val = f_spec.get("max")
+
+            # Resolve field type and data type via model
+            field_type = "column"
+            data_type = None
+            if project is not None:
+                entity, prop, field_type, data_type = _resolve_apply_field(
+                    field_ref, project
+                )
+
             add_range_filter(
                 data, entity, prop,
                 min_val=str(min_val) if min_val is not None else None,
                 max_val=str(max_val) if max_val is not None else None,
+                field_type=field_type,
                 is_hidden=is_hidden,
                 is_locked=is_locked,
+                data_type=data_type,
             )
             result.filters_added += 1
         else:

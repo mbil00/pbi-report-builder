@@ -291,7 +291,7 @@ def _build_in_condition(
         }
     }
     if exclude:
-        return {"Not": in_block}
+        return {"Not": {"Expression": in_block}}
     return in_block
 
 
