@@ -101,7 +101,7 @@ def filter_list(
 
     filters = get_filters(data)
     if not filters:
-        console.print(f"[dim]No filters at {level} level.[/dim]")
+        console.print(f"[yellow]No filters at {level} level. Use `pbi filter create` to add one.[/yellow]")
         return
 
     if as_json:
@@ -251,7 +251,7 @@ def filter_create(
             )
             save_level_data(data, target)
             console.print(
-                f'Added empty categorical filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
+                f'Created empty categorical filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
             )
             return
         add_fn = {
@@ -273,7 +273,7 @@ def filter_create(
         label = "categorical" if mode == "categorical" else mode
         values_str = ", ".join(val_list)
         console.print(
-            f'Added {label} filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Created {label} filter on [cyan]{entity}.{prop}[/cyan] '
             f'= \\[{values_str}] at {level} level'
         )
         return
@@ -291,7 +291,7 @@ def filter_create(
         save_level_data(data, target)
         label = "blank" if mode == "blank" else "not-blank"
         console.print(
-            f'Added {label} filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
+            f'Created {label} filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
         )
         return
 
@@ -317,7 +317,7 @@ def filter_create(
         if max_val is not None:
             bounds.append(f"<= {max_val}")
         console.print(
-            f'Added range filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Created range filter on [cyan]{entity}.{prop}[/cyan] '
             f'{" and ".join(bounds)} at {level} level'
         )
         return
@@ -361,7 +361,7 @@ def filter_create(
             raise typer.Exit(1)
         save_level_data(data, target)
         console.print(
-            f'Added {direction_label} {topn} filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Created {direction_label} {topn} filter on [cyan]{entity}.{prop}[/cyan] '
             f'by {order_entity}.{order_prop} at {level} level'
         )
         return
@@ -409,7 +409,7 @@ def filter_create(
             raise typer.Exit(1)
         save_level_data(data, target)
         console.print(
-            f'Added relative filter on [cyan]{entity}.{prop}[/cyan] '
+            f'Created relative filter on [cyan]{entity}.{prop}[/cyan] '
             f'{operator.lower()} {count} {unit.lower()} at {level} level'
         )
         return
@@ -456,12 +456,12 @@ def filter_create(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
     save_level_data(data, target)
-    console.print(f'Added tuple filter with [cyan]{len(parsed_rows)}[/cyan] row(s) at {level} level')
+    console.print(f'Created tuple filter with [cyan]{len(parsed_rows)}[/cyan] row(s) at {level} level')
 
 
 @filter_app.command("delete")
 def filter_delete(
-    field: Annotated[str, typer.Argument(help="Filter field reference or name to remove.")],
+    field: Annotated[str, typer.Argument(help="Filter field reference or name to delete.")],
     page_opt: Annotated[str | None, typer.Option("--page", help="Page name (narrows to page scope).")] = None,
     visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
     project: ProjectOpt = None,

@@ -95,7 +95,7 @@ def interaction_clear(
     target: Annotated[str | None, typer.Argument(help="Target visual (omit to remove all from source).")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Remove custom interactions from a visual."""
+    """Clear custom interactions from a visual."""
     from pbi.interactions import remove_interaction
 
     proj = get_project(project)
@@ -111,6 +111,6 @@ def interaction_clear(
     if removed:
         pg.save()
         scope = f'-> "{tgt_vis.name}"' if tgt_vis else "(all targets)"
-        console.print(f'Removed {removed} interaction(s) from [cyan]{src_vis.name}[/cyan] {scope}')
+        console.print(f'Cleared {removed} interaction(s) from [cyan]{src_vis.name}[/cyan] {scope}')
     else:
         console.print("[yellow]No matching interactions found.[/yellow]")

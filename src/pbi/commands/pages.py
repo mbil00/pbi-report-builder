@@ -660,14 +660,14 @@ def page_clear_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     project: ProjectOpt = None,
 ) -> None:
-    """Remove drillthrough configuration from a page."""
+    """Clear drillthrough configuration from a page."""
     from pbi.drillthrough import clear_drillthrough
 
     _proj, pg = _get_page(project, page)
 
     if clear_drillthrough(pg):
         pg.save()
-        console.print(f'Removed drillthrough from "[cyan]{pg.display_name}[/cyan]"')
+        console.print(f'Cleared drillthrough from "[cyan]{pg.display_name}[/cyan]"')
     else:
         console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
 
@@ -690,7 +690,7 @@ def page_set_tooltip(
     pg.save()
 
     console.print(
-        f'Configured "[cyan]{pg.display_name}[/cyan]" as tooltip page ({width}x{height})'
+        f'Set "[cyan]{pg.display_name}[/cyan]" as tooltip page ({width}x{height})'
     )
 
 
@@ -699,14 +699,14 @@ def page_clear_tooltip(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     project: ProjectOpt = None,
 ) -> None:
-    """Remove tooltip configuration from a page."""
+    """Clear tooltip configuration from a page."""
     from pbi.drillthrough import clear_tooltip_page
 
     _proj, pg = _get_page(project, page)
 
     if clear_tooltip_page(pg):
         pg.save()
-        console.print(f'Removed tooltip config from "[cyan]{pg.display_name}[/cyan]"')
+        console.print(f'Cleared tooltip config from "[cyan]{pg.display_name}[/cyan]"')
     else:
         console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
 

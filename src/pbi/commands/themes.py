@@ -96,7 +96,7 @@ def theme_delete(
     force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Remove the custom theme from the project (reverts to base theme)."""
+    """Delete the custom theme from the project (reverts to base theme)."""
     from pbi.themes import remove_theme
 
     proj = get_project(project)
@@ -115,7 +115,7 @@ def theme_delete(
     if name:
         console.print(f'Deleted custom theme "[cyan]{name}[/cyan]"')
     else:
-        console.print("[yellow]No custom theme to remove.[/yellow]")
+        console.print("[yellow]No custom theme to delete.[/yellow]")
 
 
 @theme_app.command("migrate")

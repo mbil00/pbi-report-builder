@@ -53,7 +53,7 @@ def visual_sort_set(
 
     descending = direction == "desc"
     proj.set_sort(vis, entity, prop, field_type=resolved_field_type, descending=descending)
-    console.print(f'Sort set: [cyan]{entity}.{prop}[/cyan] {"Descending" if descending else "Ascending"}')
+    console.print(f'Set sort: [cyan]{entity}.{prop}[/cyan] {"Descending" if descending else "Ascending"}')
 
 
 @visual_sort_app.command("clear")
@@ -66,6 +66,6 @@ def visual_sort_clear(
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
     if proj.clear_sort(vis):
-        console.print("Sort definition removed.")
+        console.print("Cleared sort definition.")
     else:
-        console.print("[dim]No sort definition to remove.[/dim]")
+        console.print("[dim]No sort definition to clear.[/dim]")
