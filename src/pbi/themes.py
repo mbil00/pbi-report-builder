@@ -1,6 +1,6 @@
 """Theme management for PBI PBIP projects.
 
-Handles listing, applying, and exporting Power BI report themes.
+Handles listing, applying, exporting, creating, and editing Power BI report themes.
 Themes are JSON files stored in StaticResources/RegisteredResources/
 and referenced from report.json's themeCollection and resourcePackages.
 """
@@ -8,12 +8,575 @@ and referenced from report.json's themeCollection and resourcePackages.
 from __future__ import annotations
 
 import json
+import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from pbi.project import Project
 from pbi.schema_refs import REPORT_SCHEMA
+
+
+# ── Theme palette keys (ordered as in PBI Desktop) ──────────────────────
+
+THEME_PALETTE_KEYS: tuple[str, ...] = (
+    "foreground",
+    "foregroundDark",
+    "foregroundNeutralDark",
+    "foregroundNeutralSecondary",
+    "foregroundNeutralSecondaryAlt",
+    "foregroundNeutralSecondaryAlt2",
+    "foregroundNeutralTertiary",
+    "foregroundNeutralTertiaryAlt",
+    "foregroundNeutralLight",
+    "foregroundButton",
+    "foregroundSelected",
+    "background",
+    "backgroundLight",
+    "backgroundNeutral",
+    "backgroundDark",
+    "tableAccent",
+    "hyperlink",
+    "visitedHyperlink",
+    "good",
+    "neutral",
+    "bad",
+    "maximum",
+    "center",
+    "minimum",
+    "null",
+    "disabledText",
+    "shapeFill",
+    "shapeStroke",
+    "sentiment.negative",
+    "sentiment.neutral",
+    "sentiment.positive",
+    "kpiGood",
+    "kpiBad",
+    "kpiNeutral",
+)
+
+
+# ── Cascade rules (PBI Desktop JS) ──────────────────────────────────────
+
+THEME_CASCADE: dict[str, list[str]] = {
+    "foreground": [
+        "foregroundDark",
+        "foregroundNeutralDark",
+        "foregroundSelected",
+        "backgroundDark",
+    ],
+    "foregroundNeutralSecondary": [
+        "foregroundNeutralSecondaryAlt",
+        "foregroundNeutralSecondaryAlt2",
+        "foregroundButton",
+    ],
+    "backgroundLight": [
+        "foregroundNeutralLight",
+    ],
+    "foregroundNeutralTertiary": [
+        "disabledText",
+    ],
+    "backgroundNeutral": [
+        "foregroundNeutralTertiaryAlt",
+    ],
+}
+
+
+# ── Default text classes ─────────────────────────────────────────────────
+
+DEFAULT_TEXT_CLASSES: dict[str, dict[str, Any]] = {
+    "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": "#252423"},
+    "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": "#252423"},
+    "callout": {"fontSize": 24, "fontFace": "DIN", "color": "#252423"},
+    "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": "#252423"},
+}
+
+
+# ── Writable theme properties (for `theme properties`) ──────────────────
+
+THEME_PROPERTIES: list[tuple[str, str, str]] = [
+    # (dot_path, type, description)
+    ("foreground", "color", "Primary text color"),
+    ("foregroundNeutralSecondary", "color", "Secondary text color"),
+    ("foregroundNeutralTertiary", "color", "Tertiary/muted text color"),
+    ("background", "color", "Page background color"),
+    ("backgroundLight", "color", "Light background (cards, wells)"),
+    ("backgroundNeutral", "color", "Neutral background"),
+    ("tableAccent", "color", "Accent color (table headers, highlights)"),
+    ("hyperlink", "color", "Hyperlink color"),
+    ("visitedHyperlink", "color", "Visited hyperlink color"),
+    ("good", "color", "Positive/good sentiment color"),
+    ("neutral", "color", "Neutral sentiment color"),
+    ("bad", "color", "Negative/bad sentiment color"),
+    ("maximum", "color", "Maximum value color (conditional formatting)"),
+    ("center", "color", "Center value color (conditional formatting)"),
+    ("minimum", "color", "Minimum value color (conditional formatting)"),
+    ("null", "color", "Null value color"),
+    ("dataColors", "color[]", "Comma-separated data series colors"),
+    ("textClasses.title.fontSize", "number", "Title font size"),
+    ("textClasses.title.fontFace", "string", "Title font face"),
+    ("textClasses.title.color", "color", "Title text color"),
+    ("textClasses.header.fontSize", "number", "Header font size"),
+    ("textClasses.header.fontFace", "string", "Header font face"),
+    ("textClasses.header.color", "color", "Header text color"),
+    ("textClasses.callout.fontSize", "number", "Callout font size"),
+    ("textClasses.callout.fontFace", "string", "Callout font face"),
+    ("textClasses.callout.color", "color", "Callout text color"),
+    ("textClasses.label.fontSize", "number", "Label font size"),
+    ("textClasses.label.fontFace", "string", "Label font face"),
+    ("textClasses.label.color", "color", "Label text color"),
+]
+
+
+# ── Theme preset storage (project + global scope) ───────────────────────
+
+@dataclass(frozen=True)
+class ThemePreset:
+    """A saved theme preset."""
+
+    name: str
+    path: Path
+    data: dict[str, Any] = field(default_factory=dict)
+    description: str | None = None
+    scope: str = "project"  # "project" or "global"
+
+
+def _global_themes_dir() -> Path:
+    """Return the global themes directory (~/.config/pbi/themes/)."""
+    return Path.home() / ".config" / "pbi" / "themes"
+
+
+def _themes_dir(project: Project) -> Path:
+    return project.root / ".pbi-themes"
+
+
+def _validate_preset_name(name: str) -> str:
+    if not name or name in {".", ".."}:
+        raise ValueError("Theme preset name must be a non-empty file-safe name.")
+    if "/" in name or "\\" in name:
+        raise ValueError("Theme preset name may not contain path separators.")
+    if Path(name).is_absolute():
+        raise ValueError("Theme preset name may not be an absolute path.")
+    return name
+
+
+def _theme_preset_path(project: Project, name: str) -> Path:
+    safe = _validate_preset_name(name)
+    return _themes_dir(project) / f"{safe}.yaml"
+
+
+def _load_theme_preset(path: Path, name: str, *, scope: str = "project") -> ThemePreset:
+    """Load and validate a theme preset from a YAML file."""
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except yaml.YAMLError as e:
+        raise ValueError(f'Theme preset "{name}" is not valid YAML: {e}') from e
+
+    if not isinstance(raw, dict):
+        raise ValueError(f'Theme preset "{name}" must be a YAML mapping.')
+
+    preset_name = raw.get("name", name)
+    if not isinstance(preset_name, str) or not preset_name.strip():
+        raise ValueError(f'Theme preset "{name}" must have a non-empty string name.')
+
+    description = raw.get("description")
+    if description is not None and not isinstance(description, str):
+        raise ValueError(f'Theme preset "{name}" description must be a string.')
+
+    theme_data = raw.get("theme")
+    if not isinstance(theme_data, dict) or not theme_data:
+        raise ValueError(f'Theme preset "{name}" must define a non-empty theme mapping.')
+
+    return ThemePreset(
+        name=_validate_preset_name(preset_name),
+        path=path,
+        data=theme_data,
+        description=description,
+        scope=scope,
+    )
+
+
+def save_theme_preset(
+    project: Project | None,
+    name: str,
+    theme_data: dict[str, Any],
+    *,
+    description: str | None = None,
+    overwrite: bool = False,
+    global_scope: bool = False,
+) -> Path:
+    """Save a theme preset to .pbi-themes/ or ~/.config/pbi/themes/."""
+    if not theme_data:
+        raise ValueError("Theme data must be non-empty.")
+
+    if global_scope:
+        path = _global_themes_dir() / f"{_validate_preset_name(name)}.yaml"
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped theme presets.")
+        path = _theme_preset_path(project, name)
+
+    if path.exists() and not overwrite:
+        raise FileExistsError(
+            f'Theme preset "{name}" already exists. Use --force to replace it.'
+        )
+
+    payload: dict[str, Any] = {"name": _validate_preset_name(name)}
+    if description:
+        payload["description"] = description
+    payload["theme"] = theme_data
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True, width=120),
+        encoding="utf-8",
+    )
+    return path
+
+
+def get_theme_preset(
+    project: Project | None,
+    name: str,
+    *,
+    global_scope: bool = False,
+) -> ThemePreset:
+    """Load one saved theme preset. Resolution: project → global fallback."""
+    if global_scope:
+        path = _global_themes_dir() / f"{_validate_preset_name(name)}.yaml"
+        if not path.exists():
+            raise FileNotFoundError(f'Global theme preset "{name}" not found')
+        return _load_theme_preset(path, name, scope="global")
+
+    # Try project first, then global fallback
+    if project is not None:
+        path = _theme_preset_path(project, name)
+        if path.exists():
+            return _load_theme_preset(path, name, scope="project")
+
+    global_path = _global_themes_dir() / f"{_validate_preset_name(name)}.yaml"
+    if global_path.exists():
+        return _load_theme_preset(global_path, name, scope="global")
+
+    raise FileNotFoundError(f'Theme preset "{name}" not found')
+
+
+def list_theme_presets(
+    project: Project | None,
+    *,
+    global_scope: bool = False,
+) -> list[ThemePreset]:
+    """List saved theme presets. Merges project + global unless scoped."""
+    presets: list[ThemePreset] = []
+    seen_names: set[str] = set()
+
+    if not global_scope and project is not None:
+        themes_dir = _themes_dir(project)
+        if themes_dir.exists():
+            for path in sorted(themes_dir.glob("*.yaml")):
+                try:
+                    preset = _load_theme_preset(path, path.stem, scope="project")
+                    presets.append(preset)
+                    seen_names.add(preset.name)
+                except (FileNotFoundError, ValueError):
+                    continue
+
+    global_dir = _global_themes_dir()
+    if global_dir.exists():
+        for path in sorted(global_dir.glob("*.yaml")):
+            try:
+                preset = _load_theme_preset(path, path.stem, scope="global")
+                if preset.name not in seen_names:
+                    presets.append(preset)
+                    seen_names.add(preset.name)
+            except (FileNotFoundError, ValueError):
+                continue
+
+    return presets
+
+
+def delete_theme_preset(
+    project: Project | None,
+    name: str,
+    *,
+    global_scope: bool = False,
+) -> bool:
+    """Delete a saved theme preset. Returns True if deleted."""
+    if global_scope:
+        path = _global_themes_dir() / f"{_validate_preset_name(name)}.yaml"
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped theme presets.")
+        path = _theme_preset_path(project, name)
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
+def clone_theme_preset(
+    project: Project,
+    name: str,
+    *,
+    to_global: bool = False,
+    new_name: str | None = None,
+    overwrite: bool = False,
+) -> Path:
+    """Clone a theme preset between project and global scope."""
+    target_name = new_name or name
+
+    if to_global:
+        source = get_theme_preset(project, name, global_scope=False)
+        if source.scope != "project":
+            path = _theme_preset_path(project, name)
+            if not path.exists():
+                raise FileNotFoundError(f'Project theme preset "{name}" not found')
+            source = _load_theme_preset(path, name, scope="project")
+        return save_theme_preset(
+            None, target_name, source.data,
+            description=source.description, overwrite=overwrite,
+            global_scope=True,
+        )
+    else:
+        source = get_theme_preset(project, name, global_scope=True)
+        return save_theme_preset(
+            project, target_name, source.data,
+            description=source.description, overwrite=overwrite,
+            global_scope=False,
+        )
+
+
+def dump_theme_preset(preset: ThemePreset) -> str:
+    """Serialize a theme preset as YAML for CLI display."""
+    payload: dict[str, Any] = {"name": preset.name}
+    if preset.description:
+        payload["description"] = preset.description
+    payload["theme"] = preset.data
+    return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True, width=120)
+
+
+_HEX_RE = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
+def _validate_hex_color(value: str) -> str:
+    """Validate and normalize a hex color string. Returns uppercase #RRGGBB."""
+    v = value.strip()
+    if not _HEX_RE.match(v):
+        raise ValueError(f"Invalid hex color: '{value}'. Use #RGB, #RRGGBB, or #RRGGBBAA.")
+    # Expand shorthand #RGB → #RRGGBB
+    if len(v) == 4:
+        v = "#" + v[1] * 2 + v[2] * 2 + v[3] * 2
+    return v.upper()
+
+
+def get_theme_data(project: Project) -> dict:
+    """Load the active custom theme JSON. Raises FileNotFoundError if none."""
+    report = _read_report(project)
+    custom = report.get("themeCollection", {}).get("customTheme")
+    if not custom:
+        raise FileNotFoundError("No custom theme applied to this project")
+
+    theme_name = custom.get("name", "")
+    for candidate in _custom_theme_paths(project, report, theme_name):
+        if candidate.exists():
+            with open(candidate, encoding="utf-8-sig") as f:
+                return json.load(f)
+
+    raise FileNotFoundError(
+        f'Theme file for "{theme_name}" not found in RegisteredResources'
+    )
+
+
+def save_theme_data(project: Project, data: dict) -> None:
+    """Write modified theme JSON back to the active custom theme file."""
+    report = _read_report(project)
+    custom = report.get("themeCollection", {}).get("customTheme")
+    if not custom:
+        raise FileNotFoundError("No custom theme applied to this project")
+
+    theme_name = custom.get("name", "")
+    for candidate in _custom_theme_paths(project, report, theme_name):
+        if candidate.exists():
+            with open(candidate, "w", encoding="utf-8", newline="\r\n") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+            return
+
+    raise FileNotFoundError(
+        f'Theme file for "{theme_name}" not found in RegisteredResources'
+    )
+
+
+def get_theme_property(data: dict, prop_path: str) -> Any:
+    """Read a value from theme JSON using dot-path traversal."""
+    parts = prop_path.split(".")
+    current: Any = data
+    for part in parts:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def set_theme_property(
+    data: dict,
+    prop_path: str,
+    value: str,
+    *,
+    cascade: bool = True,
+) -> list[str]:
+    """Set a theme property value with optional cascade. Returns list of all keys set."""
+    changed: list[str] = []
+
+    # Special handling for dataColors (comma-separated hex list)
+    if prop_path == "dataColors":
+        colors = [_validate_hex_color(c.strip()) for c in value.split(",")]
+        data["dataColors"] = colors
+        changed.append("dataColors")
+        return changed
+
+    # Determine type from THEME_PROPERTIES
+    prop_type = "string"
+    for p_path, p_type, _desc in THEME_PROPERTIES:
+        if p_path == prop_path:
+            prop_type = p_type
+            break
+
+    coerced = _coerce_theme_value(value, prop_type)
+
+    # Set the value using dot-path
+    _set_nested(data, prop_path, coerced)
+    changed.append(prop_path)
+
+    # Apply cascade if the key is a cascade source
+    if cascade:
+        # Get the top-level key for cascade lookup
+        top_key = prop_path.split(".")[0]
+        for derived in THEME_CASCADE.get(top_key, []):
+            # Only cascade if we're setting the top-level key directly
+            if prop_path == top_key:
+                _set_nested(data, derived, coerced)
+                changed.append(derived)
+
+    return changed
+
+
+def create_theme(
+    name: str,
+    *,
+    foreground: str = "#252423",
+    background: str = "#FFFFFF",
+    accent: str = "#118DFF",
+    font: str | None = None,
+    data_colors: list[str] | None = None,
+    good: str | None = None,
+    bad: str | None = None,
+    neutral: str | None = None,
+) -> dict:
+    """Scaffold a complete theme dict from brand colors."""
+    fg = _validate_hex_color(foreground)
+    bg = _validate_hex_color(background)
+    ac = _validate_hex_color(accent)
+
+    theme: dict[str, Any] = {"name": name}
+
+    # Data colors
+    if data_colors:
+        theme["dataColors"] = [_validate_hex_color(c) for c in data_colors]
+    else:
+        theme["dataColors"] = [ac]
+
+    # Core palette
+    theme["foreground"] = fg
+    theme["foregroundNeutralSecondary"] = _blend(fg, bg, 0.6)
+    theme["foregroundNeutralTertiary"] = _blend(fg, bg, 0.3)
+    theme["background"] = bg
+    theme["backgroundLight"] = _blend(bg, fg, 0.95)
+    theme["backgroundNeutral"] = _blend(bg, fg, 0.78)
+    theme["tableAccent"] = ac
+
+    # Cascade derived colors
+    theme["foregroundDark"] = fg
+    theme["foregroundNeutralDark"] = fg
+    theme["foregroundSelected"] = fg
+    theme["backgroundDark"] = fg
+    theme["foregroundNeutralSecondaryAlt"] = theme["foregroundNeutralSecondary"]
+    theme["foregroundNeutralSecondaryAlt2"] = theme["foregroundNeutralSecondary"]
+    theme["foregroundButton"] = theme["foregroundNeutralSecondary"]
+    theme["foregroundNeutralLight"] = theme["backgroundLight"]
+    theme["disabledText"] = theme["foregroundNeutralTertiary"]
+    theme["foregroundNeutralTertiaryAlt"] = theme["backgroundNeutral"]
+
+    # Sentiment & conditional formatting
+    theme["good"] = _validate_hex_color(good) if good else "#1AAB40"
+    theme["neutral"] = _validate_hex_color(neutral) if neutral else "#D9B300"
+    theme["bad"] = _validate_hex_color(bad) if bad else "#D64554"
+    theme["maximum"] = ac
+    theme["center"] = theme["neutral"]
+    theme["minimum"] = _blend(ac, bg, 0.13)
+    theme["null"] = "#FF7F48"
+
+    # Hyperlinks
+    theme["hyperlink"] = ac
+    theme["visitedHyperlink"] = ac
+
+    # Text classes
+    base_font = font or "Segoe UI"
+    theme["textClasses"] = {
+        "title": {"fontSize": 12, "fontFace": f"{base_font} Semibold" if font else "Segoe UI Semibold", "color": fg},
+        "header": {"fontSize": 12, "fontFace": f"{base_font} Semibold" if font else "Segoe UI Semibold", "color": fg},
+        "callout": {"fontSize": 24, "fontFace": base_font if font else "DIN", "color": fg},
+        "label": {"fontSize": 10, "fontFace": base_font, "color": fg},
+    }
+
+    return theme
+
+
+# ── Internal helpers for theme authoring ─────────────────────────────────
+
+def _coerce_theme_value(value: str, prop_type: str) -> Any:
+    """Coerce a string value to the appropriate type for theme JSON."""
+    if prop_type == "color":
+        return _validate_hex_color(value)
+    if prop_type == "number":
+        try:
+            return int(value)
+        except ValueError:
+            return float(value)
+    return value
+
+
+def _set_nested(data: dict, dot_path: str, value: Any) -> None:
+    """Set a value in a nested dict using dot-path notation."""
+    parts = dot_path.split(".")
+    current = data
+    for part in parts[:-1]:
+        if part not in current or not isinstance(current[part], dict):
+            current[part] = {}
+        current = current[part]
+    current[parts[-1]] = value
+
+
+def _blend(color1: str, color2: str, ratio: float) -> str:
+    """Blend two hex colors. ratio=1.0 → all color1, ratio=0.0 → all color2."""
+    c1 = _hex_to_rgb(color1)
+    c2 = _hex_to_rgb(color2)
+    r = int(c1[0] * ratio + c2[0] * (1 - ratio))
+    g = int(c1[1] * ratio + c2[1] * (1 - ratio))
+    b = int(c1[2] * ratio + c2[2] * (1 - ratio))
+    return f"#{min(r, 255):02X}{min(g, 255):02X}{min(b, 255):02X}"
+
+
+def _hex_to_rgb(color: str) -> tuple[int, int, int]:
+    """Parse #RRGGBB to (r, g, b)."""
+    c = color.lstrip("#")
+    if len(c) == 3:
+        c = c[0] * 2 + c[1] * 2 + c[2] * 2
+    # For #RRGGBBAA, just take the RGB part
+    return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
 
 
 @dataclass

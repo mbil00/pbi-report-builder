@@ -30,7 +30,9 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 - `--continue-on-error` — `apply` (apply what is possible, report errors without rollback)
 - `--from` — `visual create` (reference visual as 'page/visual' to clone type, style, bindings)
 - `--page` — `map` (filter to single page), `apply` (filter to single page), `visual set-all` (target page)
-- `--global, -g` — `style`, `component`, `template` commands (use global scope from ~/.config/pbi/)
+- `--global, -g` — `style`, `component`, `template`, `theme save/load/preset` commands (use global scope from ~/.config/pbi/)
+- `--no-cascade` — `theme set` (don't cascade derived colors)
+- `--to-global` / `--to-project` — `theme preset clone` (clone between scopes)
 - `--bundled` — `style list` (include built-in shape presets)
 - `--from-project` — `page import` (source project path)
 - `--include-resources` — `page import` (also copy image files)
@@ -101,7 +103,7 @@ All visual `name` fields are sanitized via `sanitize_visual_name()` in `project.
 - `src/pbi/model_export.py` — `export_model_yaml()` for YAML round-trip of model definitions
 - `src/pbi/apply.py` / `src/pbi/export.py` — YAML round-trip (the star feature)
 - `src/pbi/styles.py` — style presets (project + global + bundled), capture from visual, apply to visuals
-- `src/pbi/themes.py` — theme apply/export/delete/migrate, color migration
+- `src/pbi/themes.py` — theme create/get/set/apply/export/delete/migrate, color cascade, brand scaffolding
 - `src/pbi/components.py` — reusable visual components (create/apply/stamp), parameter detection, `{{ }}` substitution
 - `src/pbi/images.py` — image resource management (create/list/prune for RegisteredResources)
 - `src/pbi/mapper.py` — `pbi map` with `--page`/`--pages`/`--model` filters

@@ -270,7 +270,33 @@ pbi page template list
 ## Themes & Images
 
 ```bash
-pbi theme apply corporate-theme.json        # apply custom theme
+# Create theme from brand colors
+pbi theme create "Corporate" --foreground=#333 --background=#FFF --accent=#0078D4 --font="Segoe UI"
+pbi theme create "Brand" --accent=#E94560 --data-colors=#E94560,#0078D4,#1AAB40 --dry-run
+
+# Inspect and edit active theme
+pbi theme get                                # overview: palette, text classes, data colors
+pbi theme get foreground                     # single property value
+pbi theme get foreground background accent   # multiple properties
+pbi theme get --raw                          # full JSON dump
+pbi theme set foreground=#111111             # modify with cascade to derived colors
+pbi theme set foreground=#111111 --no-cascade  # modify without cascade
+pbi theme set dataColors=#0078D4,#E94560     # replace data color palette
+pbi theme set textClasses.title.fontSize=14  # edit text class property
+pbi theme properties                         # list all writable properties
+
+# Save / load theme presets (project + global scope)
+pbi theme save "corporate"                  # save active theme as project preset
+pbi theme save "corporate" --global         # save as global preset (~/.config/pbi/themes/)
+pbi theme load "corporate"                  # apply saved preset to project
+pbi theme preset list                       # list saved presets (project + global)
+pbi theme preset get "corporate"            # show preset as YAML
+pbi theme preset delete "corporate" --force # delete a preset
+pbi theme preset clone "corporate" --to-global   # clone project → global
+pbi theme preset clone "corporate" --to-project  # clone global → project
+
+# Apply, export, delete, migrate
+pbi theme apply corporate-theme.json        # apply custom theme from file
 pbi theme export theme-backup.json          # export current theme
 pbi theme delete --force                    # revert to base theme
 pbi theme migrate old.json new.json --dry-run  # migrate color overrides to new theme

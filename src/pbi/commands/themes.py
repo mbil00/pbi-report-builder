@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich import box
 from rich.table import Table
 
-from .common import ProjectOpt, console, get_project, resolve_output_path
+from .common import ProjectOpt, console, get_project, parse_property_assignments, resolve_output_path
 
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
+theme_preset_app = typer.Typer(help="Saved theme preset operations.", no_args_is_help=True)
+theme_app.add_typer(theme_preset_app, name="preset")
 
 
 @theme_app.command("list")
@@ -167,3 +169,426 @@ def theme_migrate(
 
     if not result.total_changes:
         console.print("[dim]No matching color overrides found in visuals.[/dim]")
+
+
+@theme_app.command("create")
+def theme_create(
+    name: Annotated[str, typer.Argument(help="Theme name.")],
+    foreground: Annotated[Optional[str], typer.Option("--foreground", help="Primary text color (hex).")] = None,
+    background: Annotated[Optional[str], typer.Option("--background", help="Page background color (hex).")] = None,
+    accent: Annotated[Optional[str], typer.Option("--accent", help="Accent/tableAccent color (hex).")] = None,
+    font: Annotated[Optional[str], typer.Option("--font", help="Base font family.")] = None,
+    data_colors: Annotated[Optional[str], typer.Option("--data-colors", help="Comma-separated data series colors.")] = None,
+    good: Annotated[Optional[str], typer.Option("--good", help="Positive sentiment color (hex).")] = None,
+    bad: Annotated[Optional[str], typer.Option("--bad", help="Negative sentiment color (hex).")] = None,
+    neutral: Annotated[Optional[str], typer.Option("--neutral", help="Neutral sentiment color (hex).")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print theme JSON without applying.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Create and apply a theme from brand colors."""
+    import json
+    import tempfile
+
+    from pbi.themes import apply_theme, create_theme
+
+    kwargs: dict = {}
+    if foreground:
+        kwargs["foreground"] = foreground
+    if background:
+        kwargs["background"] = background
+    if accent:
+        kwargs["accent"] = accent
+    if font:
+        kwargs["font"] = font
+    if data_colors:
+        kwargs["data_colors"] = [c.strip() for c in data_colors.split(",")]
+    if good:
+        kwargs["good"] = good
+    if bad:
+        kwargs["bad"] = bad
+    if neutral:
+        kwargs["neutral"] = neutral
+
+    try:
+        theme_data = create_theme(name, **kwargs)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if dry_run:
+        console.print_json(json.dumps(theme_data, indent=2))
+        return
+
+    proj = get_project(project)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8",
+    ) as f:
+        json.dump(theme_data, f, indent=2, ensure_ascii=False)
+        tmp_path = Path(f.name)
+
+    try:
+        apply_theme(proj, tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    console.print(f'Created theme "[cyan]{name}[/cyan]"')
+
+
+@theme_app.command("get")
+def theme_get(
+    props: Annotated[Optional[list[str]], typer.Argument(help="Property or properties to read (omit for overview).")] = None,
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full theme JSON.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show theme properties or overview."""
+    import json
+
+    from pbi.themes import get_theme_data, get_theme_property
+
+    proj = get_project(project)
+
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if raw:
+        console.print_json(json.dumps(data, indent=2))
+        return
+
+    if props:
+        if as_json:
+            result = {}
+            for prop in props:
+                result[prop] = get_theme_property(data, prop)
+            console.print_json(json.dumps(result, indent=2))
+            return
+
+        if len(props) == 1:
+            value = get_theme_property(data, props[0])
+            if isinstance(value, (dict, list)):
+                console.print_json(json.dumps(value, indent=2))
+            else:
+                console.print(str(value) if value is not None else "[dim](none)[/dim]")
+            return
+
+        table = Table(title="Theme Properties", box=box.SIMPLE)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value")
+        for prop in props:
+            value = get_theme_property(data, prop)
+            display = str(value) if value is not None else ""
+            table.add_row(prop, display)
+        console.print(table)
+        return
+
+    # Overview: palette + text classes + data colors
+    if as_json:
+        overview: dict = {}
+        for key in ("foreground", "foregroundNeutralSecondary", "foregroundNeutralTertiary",
+                     "background", "backgroundLight", "backgroundNeutral",
+                     "tableAccent", "good", "neutral", "bad"):
+            overview[key] = data.get(key)
+        overview["dataColors"] = data.get("dataColors", [])
+        overview["textClasses"] = data.get("textClasses", {})
+        console.print_json(json.dumps(overview, indent=2))
+        return
+
+    # Palette table
+    table = Table(title=f"Theme: {data.get('name', '?')}", box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    for key in ("foreground", "foregroundNeutralSecondary", "foregroundNeutralTertiary",
+                "background", "backgroundLight", "backgroundNeutral",
+                "tableAccent", "hyperlink", "good", "neutral", "bad",
+                "maximum", "center", "minimum"):
+        val = data.get(key)
+        if val is not None:
+            table.add_row(key, str(val))
+    console.print(table)
+
+    # Data colors
+    colors = data.get("dataColors", [])
+    if colors:
+        console.print(f"\n[bold]Data Colors[/bold] ({len(colors)}): {', '.join(colors[:8])}{'...' if len(colors) > 8 else ''}")
+
+    # Text classes
+    tc = data.get("textClasses", {})
+    if tc:
+        tc_table = Table(title="Text Classes", box=box.SIMPLE)
+        tc_table.add_column("Class", style="cyan")
+        tc_table.add_column("Font")
+        tc_table.add_column("Size", style="dim")
+        tc_table.add_column("Color")
+        for cls_name in ("title", "header", "callout", "label"):
+            cls = tc.get(cls_name, {})
+            tc_table.add_row(
+                cls_name,
+                cls.get("fontFace", ""),
+                str(cls.get("fontSize", "")),
+                cls.get("color", ""),
+            )
+        console.print(tc_table)
+
+
+@theme_app.command("set")
+def theme_set(
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments: prop=value [prop=value ...].")],
+    no_cascade: Annotated[bool, typer.Option("--no-cascade", help="Don't cascade derived colors.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Modify properties of the active custom theme."""
+    from pbi.themes import (
+        get_theme_data,
+        get_theme_property,
+        save_theme_data,
+        set_theme_property,
+    )
+
+    proj = get_project(project)
+
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        pairs = parse_property_assignments(assignments)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    changed = False
+    for prop, value in pairs:
+        old = get_theme_property(data, prop)
+        try:
+            keys = set_theme_property(data, prop, value, cascade=not no_cascade)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {prop}: {e}")
+            raise typer.Exit(1)
+
+        new = get_theme_property(data, prop)
+        old_str = str(old) if old is not None else "(none)"
+        new_str = str(new) if new is not None else "(none)"
+        if old_str == new_str:
+            console.print(f"[dim]No change:[/dim] [cyan]{prop}[/cyan] is already {new_str}")
+        else:
+            console.print(f"[dim]{prop}:[/dim] {old_str} [dim]->[/dim] {new_str}")
+            changed = True
+            # Show cascaded keys
+            for key in keys[1:]:
+                console.print(f"  [dim]cascaded:[/dim] [cyan]{key}[/cyan]")
+
+    if changed:
+        save_theme_data(proj, data)
+
+
+@theme_app.command("properties")
+def theme_properties() -> None:
+    """List writable theme properties."""
+    from pbi.themes import THEME_PROPERTIES
+
+    table = Table(title="Theme Properties", box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Type", style="dim")
+    table.add_column("Description")
+
+    for prop_path, prop_type, desc in THEME_PROPERTIES:
+        table.add_row(prop_path, prop_type, desc)
+
+    console.print(table)
+
+
+@theme_app.command("save")
+def theme_save(
+    name: Annotated[str, typer.Argument(help="Preset name.")],
+    description: Annotated[Optional[str], typer.Option("--description", help="Preset description.")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite existing preset.")] = False,
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Save as global preset.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Save the active custom theme as a reusable preset."""
+    from pbi.themes import get_theme_data, save_theme_preset
+
+    proj = get_project(project)
+
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
+        path = save_theme_preset(
+            proj if not global_scope else None,
+            name, data,
+            description=description,
+            overwrite=force,
+            global_scope=global_scope,
+        )
+    except (FileExistsError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    scope = "global" if global_scope else "project"
+    console.print(f'Saved theme preset "[cyan]{name}[/cyan]" ({scope}) -> {path}')
+
+
+@theme_app.command("load")
+def theme_load(
+    name: Annotated[str, typer.Argument(help="Preset name to load.")],
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Load from global presets only.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Apply a saved theme preset to the project."""
+    import tempfile
+
+    from pbi.themes import apply_theme, get_theme_preset
+
+    proj = get_project(project)
+
+    try:
+        preset = get_theme_preset(
+            proj if not global_scope else None,
+            name,
+            global_scope=global_scope,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Write theme data to a temp file and apply via existing infrastructure
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8",
+    ) as f:
+        import json
+
+        json.dump(preset.data, f, indent=2, ensure_ascii=False)
+        tmp_path = Path(f.name)
+
+    try:
+        apply_theme(proj, tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    console.print(f'Loaded theme preset "[cyan]{preset.name}[/cyan]" ({preset.scope})')
+
+
+# ── Theme preset subcommands ────────────────────────────────────────────
+
+
+@theme_preset_app.command("list")
+def theme_preset_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Show only global presets.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List saved theme presets (project + global)."""
+    from pbi.themes import list_theme_presets
+
+    proj = get_project(project) if not global_scope else None
+    presets = list_theme_presets(proj, global_scope=global_scope)
+
+    if not presets:
+        console.print("[yellow]No theme presets saved. Use `pbi theme save` to save one.[/yellow]")
+        raise typer.Exit(0)
+
+    if as_json:
+        import json
+
+        rows = [
+            {"name": p.name, "scope": p.scope, "description": p.description or ""}
+            for p in presets
+        ]
+        console.print_json(json.dumps(rows, indent=2))
+        return
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Scope", style="dim")
+    table.add_column("Description", style="dim")
+    for preset in presets:
+        table.add_row(preset.name, preset.scope, preset.description or "")
+    console.print(table)
+
+
+@theme_preset_app.command("get")
+def theme_preset_get(
+    name: Annotated[str, typer.Argument(help="Preset name.")],
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Look up in global presets only.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show a saved theme preset as YAML."""
+    from pbi.themes import dump_theme_preset, get_theme_preset
+
+    proj = get_project(project) if not global_scope else None
+    try:
+        preset = get_theme_preset(proj, name, global_scope=global_scope)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    typer.echo(dump_theme_preset(preset), nl=False)
+
+
+@theme_preset_app.command("delete")
+def theme_preset_delete(
+    name: Annotated[str, typer.Argument(help="Preset name to delete.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Delete from global presets.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete a saved theme preset."""
+    from pbi.themes import delete_theme_preset
+
+    proj = get_project(project) if not global_scope else None
+    if not force:
+        confirm = typer.confirm(f'Delete theme preset "{name}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        deleted = delete_theme_preset(proj, name, global_scope=global_scope)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if deleted:
+        console.print(f'Deleted theme preset "[cyan]{name}[/cyan]"')
+    else:
+        console.print(f'[yellow]Theme preset "{name}" not found.[/yellow]')
+
+
+@theme_preset_app.command("clone")
+def theme_preset_clone(
+    name: Annotated[str, typer.Argument(help="Preset to clone.")],
+    new_name: Annotated[Optional[str], typer.Option("--name", "-n", help="New name for the clone.")] = None,
+    to_global: Annotated[bool, typer.Option("--to-global", help="Clone project → global.")] = False,
+    to_project: Annotated[bool, typer.Option("--to-project", help="Clone global → project.")] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite if exists.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Clone a theme preset between project and global scope."""
+    from pbi.themes import clone_theme_preset
+
+    if not to_global and not to_project:
+        console.print("[red]Error:[/red] Specify --to-global or --to-project.")
+        raise typer.Exit(1)
+    if to_global and to_project:
+        console.print("[red]Error:[/red] Use either --to-global or --to-project, not both.")
+        raise typer.Exit(1)
+
+    proj = get_project(project)
+    try:
+        path = clone_theme_preset(proj, name, to_global=to_global, new_name=new_name, overwrite=force)
+    except (FileExistsError, FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    target_name = new_name or name
+    direction = "global" if to_global else "project"
+    console.print(f'Cloned "[cyan]{name}[/cyan]" → {direction} as "[cyan]{target_name}[/cyan]" → {path}')
