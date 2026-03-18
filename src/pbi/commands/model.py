@@ -783,11 +783,17 @@ def _model_set_column_visibility(
     project,
 ) -> None:
     """Apply a hidden/shown state to one or more semantic-model columns."""
-    from pbi.model import set_column_hidden
+    from pbi.model import SemanticModel, TmdlEditSession, set_column_hidden
 
     proj = get_project(project)
     action = "Hidden" if hidden else "Shown"
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
+    try:
+        model = SemanticModel.load(proj.root)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    edit_session = TmdlEditSession()
 
     for field in fields:
         try:
@@ -796,6 +802,8 @@ def _model_set_column_visibility(
                 field,
                 hidden,
                 dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
             )
         except (FileNotFoundError, ValueError) as e:
             console.print(f"[red]Error:[/red] {e}")
@@ -810,6 +818,9 @@ def _model_set_column_visibility(
                 f'is already {current}'
             )
 
+    if not dry_run:
+        edit_session.flush()
+
 
 def _model_set_column_visibility_by_pattern(
     table_name: str,
@@ -822,7 +833,7 @@ def _model_set_column_visibility_by_pattern(
     """Hide/unhide columns matching a regex pattern in a table."""
     import re as re_mod
 
-    from pbi.model import SemanticModel, set_column_hidden
+    from pbi.model import SemanticModel, TmdlEditSession, set_column_hidden
 
     proj = get_project(project)
     try:
@@ -846,16 +857,25 @@ def _model_set_column_visibility_by_pattern(
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
     action = "Hidden" if hidden else "Shown"
     count = 0
+    edit_session = TmdlEditSession()
     for col in matching:
         try:
             _, _, changed = set_column_hidden(
-                proj.root, f"{table.name}.{col.name}", hidden, dry_run=dry_run, model=model,
+                proj.root,
+                f"{table.name}.{col.name}",
+                hidden,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
             )
             if changed:
                 console.print(f"{prefix}{action} [cyan]{table.name}.{col.name}[/cyan]")
                 count += 1
         except (FileNotFoundError, ValueError) as e:
             console.print(f"[red]Error:[/red] {e}")
+
+    if not dry_run:
+        edit_session.flush()
 
     console.print(f"[dim]{count} column(s) {'hidden' if hidden else 'shown'}.[/dim]")
 

@@ -1129,6 +1129,7 @@ def rename_measure(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, str, list[str]]:
     """Rename a measure and update all DAX references.
 
@@ -1137,6 +1138,9 @@ def rename_measure(
     from .dax_refs import replace_refs as dax_replace
 
     loaded_model = model or SemanticModel.load(project_root)
+    owns_edit_session = edit_session is None
+    if edit_session is None:
+        edit_session = TmdlEditSession()
     table = loaded_model.find_table(table_name)
     measure = table.find_measure(old_name)
     if table.definition_path is None:
@@ -1150,20 +1154,19 @@ def rename_measure(
     updated_refs: list[str] = []
 
     # 1. Rename the declaration in the source table
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, _end = _find_member_block(lines, member_kind="measure", member_name=measure.name)
     old_formatted = _format_tmdl_name(old_name)
     new_formatted = _format_tmdl_name(new_name)
     decl_line = lines[start]
     lines[start] = decl_line.replace(f"measure {old_formatted}", f"measure {new_formatted}", 1)
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
 
     # 2. Update all DAX references across the model
     for t in loaded_model.tables:
         if t.definition_path is None:
             continue
-        t_lines = t.definition_path.read_text(encoding="utf-8-sig").splitlines()
+        t_lines = _get_tmdl_lines(t.definition_path, edit_session)
         changed = False
 
         for idx, line in enumerate(t_lines):
@@ -1187,8 +1190,7 @@ def rename_measure(
                 changed = True
 
         if changed:
-            if not dry_run:
-                _write_tmdl_lines(t.definition_path, t_lines)
+            _commit_tmdl_lines(t.definition_path, t_lines, dry_run=dry_run, session=edit_session)
             # Find which members were affected
             for m in t.measures:
                 from .dax_refs import find_dependents
@@ -1197,6 +1199,9 @@ def rename_measure(
             for c in t.columns:
                 if c.expression and old_name.lower() in c.expression.lower():
                     updated_refs.append(f"{t.name}.{c.name}")
+
+    if owns_edit_session and not dry_run:
+        edit_session.flush()
 
     return table.name, old_name, new_name, updated_refs
 
@@ -1209,6 +1214,7 @@ def rename_column(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, str, list[str]]:
     """Rename a calculated column and update all DAX + relationship references.
 
@@ -1217,6 +1223,9 @@ def rename_column(
     from .dax_refs import replace_refs as dax_replace
 
     loaded_model = model or SemanticModel.load(project_root)
+    owns_edit_session = edit_session is None
+    if edit_session is None:
+        edit_session = TmdlEditSession()
     table = loaded_model.find_table(table_name)
     column = table.find_column(old_name)
     if column.kind != "calculatedColumn":
@@ -1235,7 +1244,7 @@ def rename_column(
     updated_refs: list[str] = []
 
     # 1. Rename the declaration
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, _end = _find_member_block(lines, member_kind="column", member_name=column.name)
     old_formatted = _format_tmdl_name(old_name)
     new_formatted = _format_tmdl_name(new_name)
@@ -1246,8 +1255,7 @@ def rename_column(
         if old_decl in decl_line:
             lines[start] = decl_line.replace(old_decl, f"{keyword} {new_formatted}", 1)
             break
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
 
     # 2. Update sortByColumn references in the same table
     for c in table.columns:
@@ -1259,6 +1267,7 @@ def rename_column(
                 property_name="sortByColumn",
                 property_value=new_name,
                 dry_run=dry_run,
+                edit_session=edit_session,
             )
             updated_refs.append(f"{table.name}.{c.name} (sortByColumn)")
 
@@ -1266,7 +1275,7 @@ def rename_column(
     for t in loaded_model.tables:
         if t.definition_path is None:
             continue
-        t_lines = t.definition_path.read_text(encoding="utf-8-sig").splitlines()
+        t_lines = _get_tmdl_lines(t.definition_path, edit_session)
         changed = False
 
         for idx, line in enumerate(t_lines):
@@ -1284,8 +1293,7 @@ def rename_column(
                 changed = True
 
         if changed:
-            if not dry_run:
-                _write_tmdl_lines(t.definition_path, t_lines)
+            _commit_tmdl_lines(t.definition_path, t_lines, dry_run=dry_run, session=edit_session)
             for m in t.measures:
                 if old_name.lower() in m.expression.lower():
                     updated_refs.append(f"{t.name}.{m.name}")
@@ -1296,7 +1304,7 @@ def rename_column(
     # 4. Update relationship references
     rel_path = _get_relationships_path(project_root, loaded_model)
     if rel_path.exists():
-        rel_lines = rel_path.read_text(encoding="utf-8-sig").splitlines()
+        rel_lines = _get_tmdl_lines(rel_path, edit_session)
         changed = False
         old_ref = _format_tmdl_field_ref(table.name, old_name)
         new_ref = _format_tmdl_field_ref(table.name, new_name)
@@ -1306,8 +1314,11 @@ def rename_column(
                 rel_lines[idx] = line.replace(old_ref, new_ref)
                 changed = True
                 updated_refs.append(f"relationship ({stripped.split(':')[0].strip()})")
-        if changed and not dry_run:
-            _write_tmdl_lines(rel_path, rel_lines)
+        if changed:
+            _commit_tmdl_lines(rel_path, rel_lines, dry_run=dry_run, session=edit_session)
+
+    if owns_edit_session and not dry_run:
+        edit_session.flush()
 
     return table.name, old_name, new_name, updated_refs
 

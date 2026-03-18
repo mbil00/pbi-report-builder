@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 from typer.testing import CliRunner
@@ -362,6 +363,35 @@ table Sales
             rename_measure(root, "Sales", "Revenue", "Total Revenue", dry_run=True)
             self.assertEqual(path.read_text(), original)
 
+    def test_rename_measure_batches_same_file_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m-1
+
+\tmeasure 'Avg Rev' = DIVIDE([Revenue], [Count])
+\t\tlineageTag: m-2
+
+\tmeasure Count = COUNTROWS(Sales)
+\t\tlineageTag: m-3
+
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            from pbi.modeling import writes as modeling_writes
+
+            original_write = modeling_writes._write_tmdl_lines
+            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
+                rename_measure(root, "Sales", "Revenue", "Total Revenue")
+
+            self.assertEqual(write_lines.call_count, 1)
+
 
 # ── Column Rename ───────────────────────────────────────────────
 
@@ -502,6 +532,54 @@ table Date
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("Renamed", result.stdout)
 
+    def test_rename_column_batches_per_file_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn YearKey = YEAR([DateCol])
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+
+\tcolumn Label
+\t\tdataType: string
+\t\tsortByColumn: YearKey
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: Label
+
+\tcolumn DateCol
+\t\tdataType: dateTime
+\t\tlineageTag: c-3
+\t\tsummarizeBy: none
+\t\tsourceColumn: DateCol
+""")
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tmeasure 'By Year' = COUNTROWS(FILTER(Sales, Date[YearKey] > 2020))
+\t\tlineageTag: m-1
+
+\tcolumn YearKey
+\t\tdataType: int64
+\t\tlineageTag: c-4
+\t\tsummarizeBy: none
+\t\tsourceColumn: YearKey
+""")
+            _write_relationships(root, """
+relationship abc-123
+\tfromColumn: Sales.YearKey
+\ttoColumn: Date.YearKey
+""")
+            from pbi.modeling import writes as modeling_writes
+
+            original_write = modeling_writes._write_tmdl_lines
+            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
+                rename_column(root, "Date", "YearKey", "CalYear")
+
+            self.assertEqual(write_lines.call_count, 3)
+
 
 # ── Bulk Hide/Unhide ────────────────────────────────────────────
 
@@ -596,6 +674,37 @@ table Sales
             ])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No visible columns", result.stdout)
+
+    def test_hide_matching_pattern_writes_table_once(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+
+\tcolumn ProductID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: ProductID
+""")
+            from pbi.modeling import writes as modeling_writes
+
+            original_write = modeling_writes._write_tmdl_lines
+            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
+                result = runner.invoke(app, [
+                    "model", "column", "hide", "--table", "Sales", "--pattern", "ID$",
+                    "--project", str(root / "Sample.pbip"),
+                ])
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertEqual(write_lines.call_count, 1)
 
 
 # ── Calculated Table Creation ────────────────────────────────────
