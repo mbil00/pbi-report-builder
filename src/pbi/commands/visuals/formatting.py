@@ -52,12 +52,15 @@ def visual_format_set(
     mid_value: Annotated[float | None, typer.Option("--mid-value", help="Gradient midpoint value.")] = None,
     max_color: Annotated[str | None, typer.Option("--max-color", help="Gradient maximum color (#hex).")] = None,
     max_value: Annotated[float | None, typer.Option("--max-value", help="Gradient maximum value.")] = None,
+    rule: Annotated[list[str] | None, typer.Option("--rule", help="Rules mode: value=color pair (repeatable). E.g. --rule Compliant=#2B7A4B")] = None,
+    else_color: Annotated[str | None, typer.Option("--else-color", help="Rules mode: fallback color when no rule matches.")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Set conditional formatting on a visual property."""
-    from pbi.formatting import GradientStop, build_gradient_format, build_measure_format, set_conditional_format
+    from pbi.formatting import GradientStop, build_gradient_format, build_measure_format, build_rules_format, set_conditional_format
+    from ..common import resolve_field_type
 
-    _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    proj, _pg, vis = resolve_visual_target(project, page, visual)
 
     dot = prop.find(".")
     if dot == -1:
@@ -81,15 +84,39 @@ def visual_format_set(
         console.print(f"Set [cyan]{prop}[/cyan] = measure [bold]{src_entity}.{src_prop}[/bold]")
         return
 
+    # Resolve source field for gradient and rules modes
+    src_dot = source.find(".")
+    if src_dot == -1:
+        console.print("[red]Error:[/red] --source must be Table.Field format.")
+        raise typer.Exit(1)
+    src_entity, src_prop, src_field_type = resolve_field_type(proj, source, "auto")
+
+    if mode == "rules":
+        if not rule:
+            console.print("[red]Error:[/red] Rules mode requires at least one --rule value=color pair.")
+            raise typer.Exit(1)
+        parsed_rules = []
+        for r in rule:
+            eq = r.find("=")
+            if eq == -1:
+                console.print(f'[red]Error:[/red] Invalid rule "{r}". Use value=color format (e.g. Compliant=#2B7A4B).')
+                raise typer.Exit(1)
+            parsed_rules.append({"value": r[:eq], "color": r[eq + 1:]})
+
+        value = build_rules_format(
+            src_entity, src_prop, parsed_rules,
+            else_color=else_color,
+            field_type=src_field_type,
+        )
+        set_conditional_format(vis.data, obj_name, prop_name, value)
+        vis.save()
+        console.print(f"Set [cyan]{prop}[/cyan] = rules by [bold]{src_entity}.{src_prop}[/bold] ({len(parsed_rules)} rules)")
+        return
+
+    # Gradient mode
     if min_color is None or min_value is None or max_color is None or max_value is None:
         console.print("[red]Error:[/red] Gradient mode requires --min-color, --min-value, --max-color, and --max-value.")
         raise typer.Exit(1)
-
-    src_dot = source.find(".")
-    if src_dot == -1:
-        console.print("[red]Error:[/red] --source must be Table.Field format for --mode gradient.")
-        raise typer.Exit(1)
-    src_entity, src_prop = source[:src_dot], source[src_dot + 1 :]
 
     min_c = min_color if min_color.startswith("#") else f"#{min_color}"
     max_c = max_color if max_color.startswith("#") else f"#{max_color}"
@@ -107,6 +134,7 @@ def visual_format_set(
         min_stop=GradientStop(min_c, min_value),
         max_stop=GradientStop(max_c, max_value),
         mid_stop=mid_stop,
+        field_type=src_field_type,
     )
     set_conditional_format(vis.data, obj_name, prop_name, value)
     vis.save()

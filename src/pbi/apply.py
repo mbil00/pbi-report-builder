@@ -634,7 +634,7 @@ def _apply_visual(
     # Conditional formatting
     if "conditionalFormatting" in vis_spec:
         _apply_conditional_formatting(visual.data, vis_spec["conditionalFormatting"],
-                                      result, context=context, dry_run=dry_run)
+                                      result, context=context, dry_run=dry_run, project=project)
 
     # KPI shorthand for cardVisual
     if "kpis" in vis_spec:
@@ -1077,6 +1077,7 @@ def _apply_conditional_formatting(
     *,
     context: str,
     dry_run: bool,
+    project: Project | None = None,
 ) -> None:
     """Apply conditional formatting from the YAML spec.
 
@@ -1126,6 +1127,15 @@ def _apply_conditional_formatting(
         src_entity = source[:src_dot]
         src_prop = source[src_dot + 1:]
 
+        # Resolve field type (column vs measure) from the semantic model
+        src_field_type = "measure"
+        if project is not None and mode != "measure":
+            try:
+                from pbi.commands.common import resolve_field_type
+                src_entity, src_prop, src_field_type = resolve_field_type(project, source, "auto")
+            except (ValueError, FileNotFoundError):
+                pass  # Fall back to measure
+
         if dry_run:
             result.properties_set += 1
             continue
@@ -1142,7 +1152,7 @@ def _apply_conditional_formatting(
             max_stop = GradientStop(str(max_spec.get("color", "#00FF00")), float(max_spec.get("value", 100)))
             mid_stop = GradientStop(str(mid_spec.get("color", "")), float(mid_spec.get("value", 50))) if mid_spec else None
             null_strategy = config.get("nullStrategy")
-            value = build_gradient_format(src_entity, src_prop, min_stop, max_stop, mid_stop, null_strategy=null_strategy)
+            value = build_gradient_format(src_entity, src_prop, min_stop, max_stop, mid_stop, null_strategy=null_strategy, field_type=src_field_type)
         elif mode == "rules":
             rules_list = config.get("rules", [])
             if not isinstance(rules_list, list) or not rules_list:
@@ -1166,7 +1176,7 @@ def _apply_conditional_formatting(
                     break
                 parsed_rules.append({"value": str(rule_value), "color": str(rule_color)})
             else:
-                value = build_rules_format(src_entity, src_prop, parsed_rules, else_color=else_color)
+                value = build_rules_format(src_entity, src_prop, parsed_rules, else_color=else_color, field_type=src_field_type)
             if len(parsed_rules) != len(rules_list):
                 continue
         else:

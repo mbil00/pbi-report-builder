@@ -982,7 +982,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         objects_path="objects", selector="default",
     ),
     "cardShape.tileShape": PropertyDef(
-        None, "boolean", "Use tile shape",
+        None, "enum", "Card tile shape",
         container_key="shapeCustomRectangle", container_prop="tileShape",
         objects_path="objects", selector="default",
     ),
@@ -1961,13 +1961,20 @@ def set_property(
     """
     original_name = prop_name
 
-    # Extract bracket selector if present (e.g. "value.fontSize [Measures.X]")
+    # Extract bracket selector if present (e.g. "value.fontSize [Measures.X]"
+    # or "value.fontSize[Measures.X]" without the space)
     # This enables per-measure formatting from YAML round-trip
     bracket_measure = measure_ref
-    if bracket_measure is None and " [" in prop_name and prop_name.endswith("]"):
-        base, selector_part = prop_name.rsplit(" [", 1)
-        bracket_measure = selector_part[:-1]
-        prop_name = base
+    if bracket_measure is None and prop_name.endswith("]"):
+        # Try space-separated first, then no-space
+        if " [" in prop_name:
+            base, selector_part = prop_name.rsplit(" [", 1)
+            bracket_measure = selector_part[:-1]
+            prop_name = base
+        elif "[" in prop_name:
+            base, selector_part = prop_name.rsplit("[", 1)
+            bracket_measure = selector_part[:-1]
+            prop_name = base
 
     prop_name = normalize_property_name(prop_name, registry)
 
@@ -2296,12 +2303,16 @@ def _infer_value_type(value: str) -> str:
 
 
 def _parse_chart_prefix(prop_name: str) -> tuple[str, str, str | None]:
-    """Parse 'chart:<objectKey>.<propName> [selector]' into parts."""
+    """Parse 'chart:<objectKey>.<propName> [selector]' or 'chart:<objectKey>.<propName>[selector]' into parts."""
     rest = prop_name[len("chart:"):]
     selector = None
-    if rest.endswith("]") and " [" in rest:
-        rest, selector_part = rest.rsplit(" [", 1)
-        selector = selector_part[:-1]
+    if rest.endswith("]"):
+        if " [" in rest:
+            rest, selector_part = rest.rsplit(" [", 1)
+            selector = selector_part[:-1]
+        elif "[" in rest:
+            rest, selector_part = rest.rsplit("[", 1)
+            selector = selector_part[:-1]
     dot = rest.find(".")
     if dot == -1:
         raise ValueError(
@@ -2369,6 +2380,9 @@ def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> list[str]
         if _match_chart_selector(entry, selector):
             target = entry
             break
+    # Fallback: when no selector specified, reuse the first entry (like _find_entry)
+    if target is None and selector is None and entries:
+        target = entries[0]
     if target is None:
         target = {"properties": {}}
         if selector == "default":

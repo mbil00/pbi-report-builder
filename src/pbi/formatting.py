@@ -33,14 +33,20 @@ class ConditionalFormatInfo:
 
 # ── JSON node builders ────────────────────────────────────────────
 
-def _measure_expr(entity: str, prop: str) -> dict:
-    """Build a PBI Measure expression node."""
+def _field_expr(entity: str, prop: str, field_type: str = "measure") -> dict:
+    """Build a PBI field expression node (Measure or Column)."""
+    key = "Column" if field_type == "column" else "Measure"
     return {
-        "Measure": {
+        key: {
             "Expression": {"SourceRef": {"Entity": entity}},
             "Property": prop,
         }
     }
+
+
+def _measure_expr(entity: str, prop: str) -> dict:
+    """Build a PBI Measure expression node."""
+    return _field_expr(entity, prop, "measure")
 
 
 def _literal_expr(value: str) -> dict:
@@ -70,18 +76,13 @@ def build_measure_format(entity: str, prop: str) -> dict:
     }
 
 
-def _fill_rule_input(entity: str, prop: str) -> dict:
-    """Build a Measure expression node for FillRule Input.
+def _fill_rule_input(entity: str, prop: str, field_type: str = "measure") -> dict:
+    """Build a field expression node for FillRule Input.
 
-    FillRule Input must reference the measure via a Measure expression
-    with SourceRef pointing to the entity.
+    Uses Measure or Column expression depending on whether the source
+    field is a measure or column in the semantic model.
     """
-    return {
-        "Measure": {
-            "Expression": {"SourceRef": {"Entity": entity}},
-            "Property": prop,
-        }
-    }
+    return _field_expr(entity, prop, field_type)
 
 
 def _format_stop_value(value: float) -> str:
@@ -103,6 +104,7 @@ def build_gradient_format(
     mid_stop: GradientStop | None = None,
     *,
     null_strategy: str | None = None,
+    field_type: str = "measure",
 ) -> dict:
     """Build a FillRule gradient conditional formatting value.
 
@@ -144,7 +146,7 @@ def build_gradient_format(
             "color": {
                 "expr": {
                     "FillRule": {
-                        "Input": _fill_rule_input(input_entity, input_prop),
+                        "Input": _fill_rule_input(input_entity, input_prop, field_type),
                         "FillRule": gradient,
                     }
                 }
@@ -159,6 +161,7 @@ def build_rules_format(
     rules: list[dict],
     *,
     else_color: str | None = None,
+    field_type: str = "measure",
 ) -> dict:
     """Build a rules-based conditional formatting value.
 
@@ -175,7 +178,7 @@ def build_rules_format(
             "Condition": {
                 "Comparison": {
                     "ComparisonKind": 0,
-                    "Left": _measure_expr(input_entity, input_prop),
+                    "Left": _field_expr(input_entity, input_prop, field_type),
                     "Right": _literal_expr(f"'{rule['value']}'"),
                 }
             },

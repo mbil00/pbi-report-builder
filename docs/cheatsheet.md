@@ -122,6 +122,21 @@ pbi visual column "Overview" myTable                          # list columns
 pbi visual column "Overview" myTable "Revenue" --width 120    # resize column
 pbi visual column "Overview" myTable "Revenue" --rename "Rev ($)" --align right
 
+# Conditional formatting
+pbi visual format get "Overview" myTable                     # show existing CF
+pbi visual format set "Overview" myTable values.fontColor \
+  --mode rules --source "Devices.ComplianceState" \
+  --rule "Compliant=#2B7A4B" --rule "NonCompliant=#B83B3B" --else-color "#605E5C"
+pbi visual format set "Overview" myTable values.backColor \
+  --mode gradient --source "Table.Score" \
+  --min-color "#FFFFFF" --min-value 0 --max-color "#FFEBEE" --max-value 100
+pbi visual format clear "Overview" myTable values.fontColor  # remove CF
+
+# Audit style consistency across pages
+pbi visual audit                                             # all types, all pages
+pbi visual audit --visual-type slicer                        # just slicers
+pbi visual audit --visual-type cardVisual --json             # machine-readable
+
 # Arrange visuals spatially
 pbi visual arrange row "Overview" card1 card2 card3 --gap 16    # horizontal row
 pbi visual arrange grid "Overview" card1 card2 card3 card4 --columns 2  # 2-col grid

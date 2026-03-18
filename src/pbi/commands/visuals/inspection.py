@@ -19,7 +19,7 @@ from pbi.properties import (
     property_aliases_for,
 )
 
-from ..common import ProjectOpt, console
+from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import (
     collect_effective_visual_property_rows,
@@ -610,6 +610,117 @@ def visual_export(
         console.print(f'Exported [cyan]{vis.name}[/cyan] to {output}')
     else:
         console.print(yaml_str, highlight=False)
+
+
+@visual_app.command("audit")
+def visual_audit(
+    visual_type: Annotated[str | None, typer.Option("--visual-type", help="Only audit visuals of this type.")] = None,
+    page: Annotated[str | None, typer.Option("--page", help="Audit a single page instead of all pages.")] = None,
+    match: Annotated[str | None, typer.Option("--match", help="Only show properties whose name contains this string.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Audit visual styling consistency across pages.
+
+    Groups visuals by type and reports which properties differ across instances.
+    Use --visual-type to focus on a specific type (e.g. slicer, cardVisual).
+    """
+    import json as json_mod
+    from collections import defaultdict
+
+    proj = get_project(project)
+
+    if page:
+        try:
+            target_pages = [proj.find_page(page)]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+    else:
+        target_pages = proj.get_pages()
+
+    # Collect: type -> prop -> { value -> [(page, visual)] }
+    type_props: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
+    )
+    type_counts: dict[str, int] = defaultdict(int)
+
+    for pg in target_pages:
+        visuals = proj.get_visuals(pg)
+        for vis in visuals:
+            if "visualGroup" in vis.data:
+                continue
+            vtype = vis.visual_type
+            if visual_type and vtype != visual_type:
+                continue
+            type_counts[vtype] += 1
+            for prop_name, value in collect_visual_property_rows(vis.data, include_core=False):
+                if match and match.lower() not in prop_name.lower():
+                    continue
+                type_props[vtype][prop_name][str(value)].append(
+                    (pg.display_name, vis.name)
+                )
+
+    if not type_props:
+        console.print("[yellow]No visuals matched the filters.[/yellow]")
+        raise typer.Exit(0)
+
+    if as_json:
+        output = {}
+        for vtype in sorted(type_props):
+            props = type_props[vtype]
+            type_entry: dict[str, dict] = {}
+            for prop_name in sorted(props):
+                values = props[prop_name]
+                type_entry[prop_name] = {
+                    "consistent": len(values) == 1,
+                    "values": {
+                        val: [f"{p}/{v}" for p, v in locs]
+                        for val, locs in values.items()
+                    },
+                }
+            output[vtype] = {"count": type_counts[vtype], "properties": type_entry}
+        console.print_json(json_mod.dumps(output, indent=2))
+        return
+
+    for vtype in sorted(type_props):
+        count = type_counts[vtype]
+        props = type_props[vtype]
+
+        # Split into consistent vs inconsistent
+        inconsistent = {p: v for p, v in props.items() if len(v) > 1}
+        consistent = {p: v for p, v in props.items() if len(v) == 1}
+
+        page_label = f' on "{target_pages[0].display_name}"' if len(target_pages) == 1 else f" across {len(target_pages)} pages"
+        console.print(f"\n[bold]{vtype}[/bold] [dim]({count} visuals{page_label})[/dim]")
+
+        if inconsistent:
+            for prop_name in sorted(inconsistent):
+                values = inconsistent[prop_name]
+                parts = []
+                for val, locs in sorted(values.items(), key=lambda x: -len(x[1])):
+                    parts.append(f"{val} ({len(locs)})")
+                console.print(f"  [yellow]VARIES[/yellow]  [cyan]{prop_name}[/cyan]: {', '.join(parts)}")
+
+        if consistent:
+            for prop_name in sorted(consistent):
+                val = next(iter(consistent[prop_name]))
+                n = len(consistent[prop_name][val])
+                console.print(f"  [green]OK[/green]      [cyan]{prop_name}[/cyan]: {val} [dim]({n})[/dim]")
+
+        if not inconsistent:
+            console.print(f"  [dim]All {len(consistent)} properties are consistent.[/dim]")
+
+    # Summary
+    total_types = len(type_props)
+    total_inconsistent = sum(
+        1 for props in type_props.values()
+        for v in props.values() if len(v) > 1
+    )
+    if total_inconsistent:
+        console.print(f"\n[yellow]{total_inconsistent} inconsistent properties across {total_types} visual types.[/yellow]")
+    else:
+        console.print(f"\n[dim]All properties consistent across {total_types} visual types.[/dim]")
 
 
 @visual_app.command("get-page")
