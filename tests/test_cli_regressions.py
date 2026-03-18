@@ -36,7 +36,7 @@ from pbi.styles import (
     _normalize_style_properties,
 )
 from pbi.templates import apply_template, save_template
-from pbi.validate import _validate_visual_relationships
+from pbi.validate import _validate_visual_relationships, validate_project
 
 
 def make_project(root: Path, *, with_model: bool = False) -> Project:
@@ -174,6 +174,57 @@ class ApplyWorkflowRegressionTests(unittest.TestCase):
                 result = apply_yaml(project, yaml_content)
 
             self.assertEqual(result.errors, [])
+            self.assertEqual(copytree_mock.call_count, 0)
+
+    def test_apply_noop_page_update_skips_definition_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo", width=1280, height=720)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "width": 1280,
+                            "height": 720,
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("pbi.apply.shutil.copytree", wraps=shutil.copytree) as copytree_mock:
+                result = apply_yaml(project, yaml_content)
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(copytree_mock.call_count, 0)
+
+    def test_apply_error_only_page_update_skips_definition_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "notARealProperty": {"bogus": True},
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("pbi.apply.shutil.copytree", wraps=shutil.copytree) as copytree_mock:
+                result = apply_yaml(project, yaml_content)
+
+            self.assertTrue(result.errors)
             self.assertEqual(copytree_mock.call_count, 0)
 
     def test_apply_accepts_stdin_with_dash(self) -> None:
@@ -407,6 +458,71 @@ pages:
             self.assertFalse((root / "outside.yaml").exists())
             backups = list(root.glob(".pbi-backup-*.yaml"))
             self.assertEqual(len(backups), 1)
+
+
+class ModelApplyPerformanceRegressionTests(unittest.TestCase):
+    def test_model_apply_batches_multiple_measure_edits_into_one_file_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            from pbi.modeling import writes as modeling_writes
+
+            table_path = write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tmeasure 'Total Revenue' = SUM ( Sales[Revenue] )
+\t\tformatString: 0
+\t\tlineageTag: m-1
+                """,
+            )
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "measures": {
+                        "Sales": [
+                            {
+                                "name": "Total Revenue",
+                                "expression": "SUM ( Sales[Revenue] ) + 1",
+                                "format": "#,0",
+                                "description": "'updated'",
+                                "displayFolder": "'KPIs'",
+                            }
+                        ]
+                    }
+                },
+                sort_keys=False,
+            )
+
+            original_write = modeling_writes._write_tmdl_lines
+            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
+                result = apply_model_yaml(root, yaml_content, dry_run=False)
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(write_lines.call_count, 1)
+            content = table_path.read_text(encoding="utf-8")
+            self.assertIn("SUM ( Sales[Revenue] ) + 1", content)
+            self.assertIn("formatString: #,0", content)
+            self.assertIn("description: 'updated'", content)
+            self.assertIn("displayFolder: 'KPIs'", content)
+
+
+class ValidationPerformanceRegressionTests(unittest.TestCase):
+    def test_validate_project_reuses_loaded_json_without_project_rescan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            visual.data["name"] = "card1"
+            visual.save()
+
+            with mock.patch.object(project, "get_pages", side_effect=AssertionError("unexpected project rescan")), \
+                 mock.patch.object(project, "get_visuals", side_effect=AssertionError("unexpected project rescan")):
+                issues = validate_project(project)
+
+            self.assertEqual(issues, [])
 
 
 class YamlStdinWorkflowRegressionTests(unittest.TestCase):

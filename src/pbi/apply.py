@@ -102,11 +102,34 @@ class _ApplySession:
             self.temp_dir.cleanup()
 
 
-def _page_spec_may_mutate(page_spec: dict, *, overwrite: bool) -> bool:
-    """Return True when a page spec can lead to on-disk changes."""
-    if overwrite and "visuals" in page_spec:
-        return True
-    return any(key != "name" for key in page_spec)
+def _save_page_if_changed(
+    project: Project,
+    page: Page,
+    *,
+    original_data: dict,
+    session: _ApplySession,
+) -> bool:
+    """Persist page changes only when the serialized content changed."""
+    if page.data == original_data:
+        return False
+    session.ensure_snapshot(project)
+    page.save()
+    return True
+
+
+def _save_visual_if_changed(
+    project: Project,
+    visual: Visual,
+    *,
+    original_data: dict,
+    session: _ApplySession,
+) -> bool:
+    """Persist visual changes only when the serialized content changed."""
+    if visual.data == original_data:
+        return False
+    session.ensure_snapshot(project)
+    visual.save()
+    return True
 
 
 def _sort_visuals(visuals: list[Visual]) -> None:
@@ -257,9 +280,6 @@ def apply_yaml(
                 if page_filter and page_name.lower() != page_filter.lower():
                     continue
 
-                if _page_spec_may_mutate(page_spec, overwrite=overwrite):
-                    session.ensure_snapshot(project)
-
                 _apply_page(
                     project,
                     page_spec,
@@ -273,7 +293,6 @@ def apply_yaml(
             # Apply bookmarks (top-level)
             bookmarks_spec = spec.get("bookmarks", [])
             if isinstance(bookmarks_spec, list) and bookmarks_spec:
-                session.ensure_snapshot(project)
                 _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
         except Exception:
             if session.snapshot_dir is not None:
@@ -302,11 +321,13 @@ def _apply_page(
 ) -> None:
     """Apply a single page specification."""
     page_name = page_spec["name"]
+    page_baseline: dict | None = None
 
     # Find or create page
     page_is_new = False
     try:
         page = project.find_page(page_name)
+        page_baseline = copy.deepcopy(page.data)
         result.pages_updated.append(page_name)
     except ValueError:
         # Page not found — create it
@@ -318,12 +339,14 @@ def _apply_page(
             result.pages_created.append(page_name)
             page = None  # type: ignore[assignment]
         else:
+            session.ensure_snapshot(project)
             page = project.create_page(
                 page_name,
                 width=width,
                 height=height,
                 display_option=display_option,
             )
+            page_baseline = copy.deepcopy(page.data)
             result.pages_created.append(page_name)
 
     page_state = None if (dry_run and page_is_new) else _PageVisualState(page=page, visuals=project.get_visuals(page))
@@ -381,8 +404,9 @@ def _apply_page(
                            context=f"Page {page_name}", dry_run=dry_run,
                            project=project, session=session)
 
-        if not dry_run and len(result.errors) == page_error_count:
-            page.save()
+        page_can_save = len(result.errors) == page_error_count
+    else:
+        page_can_save = False
 
     # Apply visuals
     visuals_spec = page_spec.get("visuals", [])
@@ -416,6 +440,7 @@ def _apply_page(
             if visual.folder.name not in kept_visual_ids:
                 result.visuals_deleted.append((page_name, visual.name))
                 if not dry_run:
+                    session.ensure_snapshot(project)
                     project.delete_visual(visual)
                     page_state.remove(visual)
 
@@ -423,8 +448,9 @@ def _apply_page(
     if not (dry_run and page_is_new) and "interactions" in page_spec:
         _apply_interactions(project, page, page_spec["interactions"], result,
                             context=f"Page {page_name}", dry_run=dry_run, session=session, page_state=page_state)
-        if not dry_run and len(result.errors) == page_error_count:
-            page.save()
+
+    if not dry_run and page_can_save and page_baseline is not None:
+        _save_page_if_changed(project, page, original_data=page_baseline, session=session)
 
 
 def _apply_visual(
@@ -444,6 +470,7 @@ def _apply_visual(
     vis_name = vis_spec.get("name")
     vis_id = vis_spec.get("id")
     vis_type = vis_spec.get("type")
+    visual_baseline: dict | None = None
 
     if not vis_name and not vis_type:
         result.errors.append(f"Page {page_name}: visual must have 'name' or 'type'.")
@@ -459,6 +486,9 @@ def _apply_visual(
         except ValueError:
             pass
 
+    if visual is not None:
+        visual_baseline = copy.deepcopy(visual.data)
+
     # Handle visual type conversion: existing visual with different type
     if visual is not None and vis_type and visual.visual_type != vis_type:
         old_type = visual.visual_type
@@ -468,12 +498,14 @@ def _apply_visual(
             result.visuals_deleted.append((page_name, vis_name or visual.name))
             result.visuals_created.append((page_name, vis_name or vis_type))
         else:
+            session.ensure_snapshot(project)
             project.delete_visual(visual)
             page_state.remove(visual)
             visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
                 visual.data["name"] = sanitize_visual_name(vis_name)
                 visual.save()
+            visual_baseline = copy.deepcopy(visual.data)
             page_state.add(visual)
             result.visuals_deleted.append((page_name, f"{vis_name or visual.name} ({old_type})"))
             result.visuals_created.append((page_name, vis_name or vis_type))
@@ -484,10 +516,12 @@ def _apply_visual(
         if dry_run:
             result.visuals_created.append((page_name, vis_name or vis_type))
         else:
+            session.ensure_snapshot(project)
             visual = project.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
                 visual.data["name"] = sanitize_visual_name(vis_name)
                 visual.save()
+            visual_baseline = copy.deepcopy(visual.data)
             page_state.add(visual)
             result.visuals_created.append((page_name, vis_name or vis_type))
     elif visual is None:
@@ -624,7 +658,8 @@ def _apply_visual(
     if len(result.errors) != visual_error_count:
         return
 
-    visual.save()
+    if visual_baseline is not None:
+        _save_visual_if_changed(project, visual, original_data=visual_baseline, session=session)
     page_state.refresh()
 
 
@@ -1132,6 +1167,7 @@ def _apply_bookmarks(
         try:
             page = project.find_page(page_ref)
             visuals = project.get_visuals(page)
+            session.ensure_snapshot(project)
             create_bookmark(
                 project,
                 display_name=name,

@@ -3,6 +3,7 @@
 from .parser import _parse_tmdl_name
 from .schema import Column, Hierarchy, HierarchyLevel, Measure, SemanticModel, SemanticTable
 from .writes import (
+    TmdlEditSession,
     create_calculated_column,
     create_calculated_table,
     create_hierarchy,
@@ -32,6 +33,7 @@ __all__ = [
     "Measure",
     "SemanticModel",
     "SemanticTable",
+    "TmdlEditSession",
     "_parse_tmdl_name",
     "create_calculated_column",
     "create_calculated_table",

@@ -28,6 +28,8 @@ class ValidationIssue:
 def validate_project(project: Project) -> list[ValidationIssue]:
     """Validate the entire project. Returns list of issues found."""
     issues: list[ValidationIssue] = []
+    loaded_pages: dict[str, dict] = {}
+    loaded_visuals: dict[str, list[tuple[str, dict]]] = {}
 
     # Validate report.json
     report_path = project.definition_folder / "report.json"
@@ -49,8 +51,12 @@ def validate_project(project: Project) -> list[ValidationIssue]:
             if not page_dir.is_dir():
                 continue
             page_json = page_dir / "page.json"
+            page_data: dict | None = None
+            page_visuals: list[tuple[str, dict]] = []
+            page_visual_names: set[str] = set()
             if page_json.exists():
-                issues.extend(_validate_page(page_json))
+                page_data, page_issues = _validate_json_file(page_json)
+                issues.extend(page_issues)
             else:
                 issues.append(ValidationIssue(
                     f"pages/{page_dir.name}/page.json", "error",
@@ -66,18 +72,34 @@ def validate_project(project: Project) -> list[ValidationIssue]:
                     visual_json = visual_dir / "visual.json"
                     if visual_json.exists():
                         rel = f"pages/{page_dir.name}/visuals/{visual_dir.name}/visual.json"
-                        issues.extend(_validate_visual(visual_json, rel))
+                        visual_data, visual_issues = _validate_json_file(visual_json)
+                        issues.extend(visual_issues)
+                        if visual_data is not None:
+                            issues.extend(_validate_visual_data(visual_data, rel))
+                            page_visuals.append((visual_dir.name, visual_data))
+                            page_visual_names.add(visual_data.get("name", visual_dir.name))
+                        else:
+                            page_visual_names.add(visual_dir.name)
                     else:
                         issues.append(ValidationIssue(
                             f"pages/{page_dir.name}/visuals/{visual_dir.name}/visual.json",
                             "error", "Visual directory exists but visual.json is missing"
                         ))
 
+            if page_data is not None:
+                loaded_pages[page_dir.name] = page_data
+                loaded_visuals[page_dir.name] = page_visuals
+                issues.extend(_validate_page_data(
+                    page_dir.name,
+                    page_data,
+                    visual_names=page_visual_names,
+                ))
+
     # Validate visual layout (overlaps, out-of-bounds, zero sizes)
-    issues.extend(_validate_layout(project))
+    issues.extend(_validate_layout(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
 
     # Validate cross-table relationships in visual bindings
-    issues.extend(_validate_visual_relationships(project))
+    issues.extend(_validate_visual_relationships(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
 
     # Validate bookmarks
     bookmarks_dir = project.definition_folder / "bookmarks"
@@ -179,7 +201,32 @@ def _validate_page(path: Path) -> list[ValidationIssue]:
     if data is None:
         return issues
 
-    page_name = path.parent.name
+    visual_names: set[str] = set()
+    visuals_dir = path.parent / "visuals"
+    if visuals_dir.exists():
+        for vdir in visuals_dir.iterdir():
+            if vdir.is_dir():
+                vjson = vdir / "visual.json"
+                if vjson.exists():
+                    try:
+                        vdata = _read_json(vjson)
+                        visual_names.add(vdata.get("name", vdir.name))
+                    except json.JSONDecodeError:
+                        visual_names.add(vdir.name)
+
+    issues.extend(_validate_page_data(path.parent.name, data, visual_names=visual_names))
+    return issues
+
+
+def _validate_page_data(
+    page_name: str,
+    data: dict,
+    *,
+    visual_names: set[str] | None = None,
+) -> list[ValidationIssue]:
+    """Validate loaded page.json data."""
+    issues: list[ValidationIssue] = []
+
     rel = f"pages/{page_name}/page.json"
 
     if "$schema" not in data:
@@ -215,18 +262,7 @@ def _validate_page(path: Path) -> list[ValidationIssue]:
     # Validate visual interactions reference existing visuals
     interactions = data.get("visualInteractions", [])
     if interactions:
-        visuals_dir = path.parent / "visuals"
-        visual_names = set()
-        if visuals_dir.exists():
-            for vdir in visuals_dir.iterdir():
-                if vdir.is_dir():
-                    vjson = vdir / "visual.json"
-                    if vjson.exists():
-                        try:
-                            vdata = _read_json(vjson)
-                            visual_names.add(vdata.get("name", vdir.name))
-                        except json.JSONDecodeError:
-                            visual_names.add(vdir.name)
+        visual_names = visual_names or set()
 
         for interaction in interactions:
             source = interaction.get("source", "")
@@ -270,6 +306,13 @@ def _validate_visual(path: Path, rel: str) -> list[ValidationIssue]:
     data, issues = _validate_json_file(path)
     if data is None:
         return issues
+    issues.extend(_validate_visual_data(data, rel))
+    return issues
+
+
+def _validate_visual_data(data: dict, rel: str) -> list[ValidationIssue]:
+    """Validate loaded visual.json data."""
+    issues: list[ValidationIssue] = []
 
     if "$schema" not in data:
         issues.append(ValidationIssue(rel, "warning", "Missing $schema field"))
@@ -542,32 +585,58 @@ def _validate_filter_config(
     return issues
 
 
-def _validate_layout(project: Project) -> list[ValidationIssue]:
+def _validate_layout(
+    project: Project,
+    *,
+    loaded_pages: dict[str, dict] | None = None,
+    loaded_visuals: dict[str, list[tuple[str, dict]]] | None = None,
+) -> list[ValidationIssue]:
     """Check visual positions for overlaps, out-of-bounds, and zero sizes."""
     issues: list[ValidationIssue] = []
 
-    for page in project.get_pages():
-        visuals = project.get_visuals(page)
-        page_w = page.width
-        page_h = page.height
+    if loaded_pages is None or loaded_visuals is None:
+        page_items = [
+            (
+                page.folder.name,
+                page.display_name,
+                page.width,
+                page.height,
+                [(visual.folder.name, visual.data) for visual in project.get_visuals(page)],
+            )
+            for page in project.get_pages()
+        ]
+    else:
+        page_items = [
+            (
+                page_name,
+                page_data.get("displayName", page_name),
+                int(page_data.get("width", 0)),
+                int(page_data.get("height", 0)),
+                loaded_visuals.get(page_name, []),
+            )
+            for page_name, page_data in loaded_pages.items()
+        ]
+
+    for page_name, _display_name, page_w, page_h, visuals in page_items:
 
         rects: list[tuple[str, str, int, int, int, int]] = []  # (name, rel, x, y, w, h)
 
-        for vis in visuals:
-            if "visualGroup" in vis.data:
+        for visual_id, visual_data in visuals:
+            if "visualGroup" in visual_data:
                 continue
-            pos = vis.position
+            pos = visual_data.get("position", {})
             x = int(pos.get("x", 0))
             y = int(pos.get("y", 0))
             w = int(pos.get("width", 0))
             h = int(pos.get("height", 0))
-            rel = f"pages/{page.folder.name}/visuals/{vis.folder.name}/visual.json"
+            vis_name = visual_data.get("name", visual_id)
+            rel = f"pages/{page_name}/visuals/{visual_id}/visual.json"
 
             # Zero/negative dimensions
             if w <= 0 or h <= 0:
                 issues.append(ValidationIssue(
                     rel, "warning",
-                    f'Visual "{vis.name}" has invalid size: {w}x{h}',
+                    f'Visual "{vis_name}" has invalid size: {w}x{h}',
                 ))
                 continue
 
@@ -575,17 +644,17 @@ def _validate_layout(project: Project) -> list[ValidationIssue]:
             if x + w > page_w + 5:  # 5px tolerance
                 issues.append(ValidationIssue(
                     rel, "warning",
-                    f'Visual "{vis.name}" extends {x + w - page_w}px past right edge '
+                    f'Visual "{vis_name}" extends {x + w - page_w}px past right edge '
                     f'(x={x}, w={w}, page={page_w})',
                 ))
             if y + h > page_h + 5:
                 issues.append(ValidationIssue(
                     rel, "warning",
-                    f'Visual "{vis.name}" extends {y + h - page_h}px past bottom edge '
+                    f'Visual "{vis_name}" extends {y + h - page_h}px past bottom edge '
                     f'(y={y}, h={h}, page={page_h})',
                 ))
 
-            rects.append((vis.name, rel, x, y, w, h))
+            rects.append((vis_name, rel, x, y, w, h))
 
         # Check overlaps (only report significant ones > 10px in both axes)
         for i in range(len(rects)):
@@ -603,7 +672,12 @@ def _validate_layout(project: Project) -> list[ValidationIssue]:
     return issues
 
 
-def _validate_visual_relationships(project: Project) -> list[ValidationIssue]:
+def _validate_visual_relationships(
+    project: Project,
+    *,
+    loaded_pages: dict[str, dict] | None = None,
+    loaded_visuals: dict[str, list[tuple[str, dict]]] | None = None,
+) -> list[ValidationIssue]:
     """Check visual bindings for cross-table fields without relationship paths."""
     issues: list[ValidationIssue] = []
 
@@ -618,9 +692,23 @@ def _validate_visual_relationships(project: Project) -> list[ValidationIssue]:
 
     table_names = {t.name.lower() for t in model.tables}
 
-    for page in project.get_pages():
-        for visual in project.get_visuals(page):
-            query_state = visual.data.get("visual", {}).get("query", {}).get("queryState", {})
+    if loaded_pages is None or loaded_visuals is None:
+        page_items = [
+            (
+                page.folder.name,
+                [(visual.folder.name, visual.data) for visual in project.get_visuals(page)],
+            )
+            for page in project.get_pages()
+        ]
+    else:
+        page_items = [
+            (page_name, loaded_visuals.get(page_name, []))
+            for page_name in loaded_pages
+        ]
+
+    for page_name, visuals in page_items:
+        for visual_id, visual_data in visuals:
+            query_state = visual_data.get("visual", {}).get("query", {}).get("queryState", {})
             if not query_state:
                 continue
 
@@ -652,11 +740,11 @@ def _validate_visual_relationships(project: Project) -> list[ValidationIssue]:
                                 continue
                         except ValueError:
                             pass
-                        rel = f"pages/{page.folder.name}/visuals/{visual.folder.name}/visual.json"
+                        rel = f"pages/{page_name}/visuals/{visual_id}/visual.json"
                         issues.append(ValidationIssue(
                             rel,
                             "warning",
-                            f'Visual "{visual.name}" references tables '
+                            f'Visual "{visual_data.get("name", visual_id)}" references tables '
                             f'"{table_list[i]}" and "{table_list[j]}" '
                             f'which have no relationship path',
                         ))

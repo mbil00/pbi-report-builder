@@ -12,6 +12,7 @@ from pbi.model import (
     Column,
     Measure,
     SemanticModel,
+    TmdlEditSession,
     create_calculated_column,
     create_hierarchy,
     create_measure,
@@ -62,6 +63,7 @@ def apply_model_yaml(
 ) -> ModelApplyResult:
     """Apply declarative model changes from YAML."""
     result = ModelApplyResult()
+    edit_session = TmdlEditSession()
 
     try:
         spec = yaml.safe_load(yaml_content)
@@ -81,23 +83,54 @@ def apply_model_yaml(
 
     measures_spec = spec.get("measures")
     if measures_spec is not None:
-        _apply_measures(project_root, measures_spec, result, dry_run=dry_run, model=model)
+        _apply_measures(
+            project_root,
+            measures_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
 
     columns_spec = spec.get("columns")
     if columns_spec is not None:
-        _apply_columns(project_root, columns_spec, result, dry_run=dry_run, model=model)
+        _apply_columns(
+            project_root,
+            columns_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
 
     relationships_spec = spec.get("relationships")
     if relationships_spec is not None:
-        _apply_relationships(project_root, relationships_spec, result, dry_run=dry_run, model=model)
+        _apply_relationships(
+            project_root,
+            relationships_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
 
     hierarchies_spec = spec.get("hierarchies")
     if hierarchies_spec is not None:
-        _apply_hierarchies(project_root, hierarchies_spec, result, dry_run=dry_run, model=model)
+        _apply_hierarchies(
+            project_root,
+            hierarchies_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
 
     known_keys = {"measures", "columns", "relationships", "hierarchies"}
     if not known_keys.intersection(spec.keys()):
         result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
+
+    if not dry_run:
+        edit_session.flush()
 
     return result
 
@@ -109,6 +142,7 @@ def _apply_measures(
     *,
     dry_run: bool,
     model: SemanticModel,
+    edit_session: TmdlEditSession,
 ) -> None:
     """Apply declarative measure changes."""
     if not isinstance(measures_spec, dict):
@@ -146,6 +180,7 @@ def _apply_measures(
                         format_string=fmt if isinstance(fmt, str) else None,
                         dry_run=dry_run,
                         model=model,
+                        edit_session=edit_session,
                     )
                     if not dry_run:
                         table.measures.append(
@@ -167,6 +202,7 @@ def _apply_measures(
                     expression,
                     dry_run=dry_run,
                     model=model,
+                    edit_session=edit_session,
                 )
                 changed = changed or expr_changed
                 if expr_changed and not dry_run:
@@ -178,6 +214,7 @@ def _apply_measures(
                         fmt,
                         dry_run=dry_run,
                         model=model,
+                        edit_session=edit_session,
                     )
                     changed = changed or fmt_changed
                     if fmt_changed and not dry_run:
@@ -188,7 +225,7 @@ def _apply_measures(
                     if isinstance(meta_val, str):
                         _, _, _, meta_changed = set_member_property(
                             project_root, ref, tmdl_key, meta_val,
-                            dry_run=dry_run, model=model,
+                            dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         changed = changed or meta_changed
                 if changed:
@@ -204,6 +241,7 @@ def _apply_columns(
     *,
     dry_run: bool,
     model: SemanticModel,
+    edit_session: TmdlEditSession,
 ) -> None:
     """Apply declarative column changes."""
     if not isinstance(columns_spec, dict):
@@ -227,6 +265,7 @@ def _apply_columns(
                     result,
                     dry_run=dry_run,
                     model=model,
+                    edit_session=edit_session,
                 )
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"columns.{table_name}.{column_name}: {e}")
@@ -241,6 +280,7 @@ def _apply_column_entry(
     *,
     dry_run: bool,
     model: SemanticModel,
+    edit_session: TmdlEditSession,
 ) -> None:
     """Apply one declarative column spec."""
     table = model.find_table(table_name)
@@ -274,6 +314,7 @@ def _apply_column_entry(
                 format_string=fmt if isinstance(fmt, str) else None,
                 dry_run=dry_run,
                 model=model,
+                edit_session=edit_session,
             )
             if not dry_run:
                 existing = Column(
@@ -299,6 +340,7 @@ def _apply_column_entry(
                         hidden,
                         dry_run=dry_run,
                         model=model,
+                        edit_session=edit_session,
                     )
                     if hidden_changed and existing is not None:
                         existing.is_hidden = hidden
@@ -316,6 +358,7 @@ def _apply_column_entry(
                 expression,
                 dry_run=dry_run,
                 model=model,
+                edit_session=edit_session,
             )
             changed = changed or expr_changed
             if expr_changed and not dry_run:
@@ -332,6 +375,7 @@ def _apply_column_entry(
             fmt,
             dry_run=dry_run,
             model=model,
+            edit_session=edit_session,
         )
         changed = changed or fmt_changed
         if fmt_changed and not dry_run and existing is not None:
@@ -343,6 +387,7 @@ def _apply_column_entry(
             hidden,
             dry_run=dry_run,
             model=model,
+            edit_session=edit_session,
         )
         changed = changed or hidden_changed
         if hidden_changed and not dry_run and existing is not None:
@@ -358,7 +403,7 @@ def _apply_column_entry(
         if isinstance(meta_val, str):
             _, _, _, meta_changed = set_member_property(
                 project_root, ref, tmdl_key, meta_val,
-                dry_run=dry_run, model=model,
+                dry_run=dry_run, model=model, edit_session=edit_session,
             )
             changed = changed or meta_changed
     if changed:
@@ -388,6 +433,7 @@ def _apply_relationships(
     *,
     dry_run: bool,
     model: SemanticModel,
+    edit_session: TmdlEditSession,
 ) -> None:
     """Apply declarative relationship changes."""
     if not isinstance(relationships_spec, list):
@@ -429,7 +475,7 @@ def _apply_relationships(
                 create_relationship(
                     project_root, from_ref, to_ref,
                     properties=props if props else None,
-                    dry_run=dry_run, model=model,
+                    dry_run=dry_run, model=model, edit_session=edit_session,
                 )
                 result.relationships_created.append(label)
             else:
@@ -439,7 +485,7 @@ def _apply_relationships(
                     if existing.properties.get(key) != val:
                         set_relationship_property(
                             project_root, from_ref, to_ref, key, val,
-                            dry_run=dry_run, model=model,
+                            dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         changed = True
                 if changed:
@@ -455,6 +501,7 @@ def _apply_hierarchies(
     *,
     dry_run: bool,
     model: SemanticModel,
+    edit_session: TmdlEditSession,
 ) -> None:
     """Apply declarative hierarchy changes."""
     if not isinstance(hierarchies_spec, dict):
@@ -494,7 +541,7 @@ def _apply_hierarchies(
                 if existing is None:
                     create_hierarchy(
                         project_root, table.name, name, level_cols,
-                        dry_run=dry_run, model=model,
+                        dry_run=dry_run, model=model, edit_session=edit_session,
                     )
                     result.hierarchies_created.append(label)
                 else:
@@ -502,13 +549,13 @@ def _apply_hierarchies(
                     if existing_cols != level_cols:
                         delete_hierarchy(
                             project_root, table.name, existing.name,
-                            dry_run=dry_run, model=model,
+                            dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         # Remove from in-memory model so create doesn't see duplicate
                         table.hierarchies = [h for h in table.hierarchies if h.name.lower() != name.lower()]
                         create_hierarchy(
                             project_root, table.name, name, level_cols,
-                            dry_run=dry_run, model=model,
+                            dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         result.hierarchies_updated.append(label)
             except (FileNotFoundError, ValueError) as e:

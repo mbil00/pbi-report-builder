@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import textwrap
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -18,6 +19,63 @@ _MEMBER_PROPERTY_WHITELIST = frozenset({
 })
 
 
+@dataclass
+class TmdlEditSession:
+    """Buffer repeated TMDL reads/writes across one logical command."""
+
+    _lines_by_path: dict[Path, list[str]] = field(default_factory=dict, init=False, repr=False)
+    _dirty_paths: set[Path] = field(default_factory=set, init=False, repr=False)
+
+    def get_lines(self, path: Path) -> list[str]:
+        """Return a mutable line buffer for a TMDL file, loading it once."""
+        lines = self._lines_by_path.get(path)
+        if lines is None:
+            if path.exists():
+                lines = path.read_text(encoding="utf-8-sig").splitlines()
+            else:
+                lines = []
+            self._lines_by_path[path] = lines
+        return lines
+
+    def mark_dirty(self, path: Path) -> None:
+        """Mark a buffered file as needing a final write."""
+        self._dirty_paths.add(path)
+
+    def flush(self) -> None:
+        """Write all dirty TMDL buffers back to disk once."""
+        for path in sorted(self._dirty_paths):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _write_tmdl_lines(path, self._lines_by_path[path])
+        self._dirty_paths.clear()
+
+
+def _get_tmdl_lines(path: Path, session: TmdlEditSession | None) -> list[str]:
+    """Read a TMDL file once, using the session cache when available."""
+    if session is not None:
+        return session.get_lines(path)
+    if path.exists():
+        return path.read_text(encoding="utf-8-sig").splitlines()
+    return []
+
+
+def _commit_tmdl_lines(
+    path: Path,
+    lines: list[str],
+    *,
+    dry_run: bool,
+    session: TmdlEditSession | None,
+) -> None:
+    """Persist modified TMDL lines immediately or defer via the session."""
+    if dry_run:
+        return
+    if session is not None:
+        session._lines_by_path[path] = lines
+        session.mark_dirty(path)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_tmdl_lines(path, lines)
+
+
 def set_member_property(
     project_root: Path,
     field_ref: str,
@@ -26,6 +84,7 @@ def set_member_property(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, str, bool]:
     """Set a metadata property on a column or measure.
 
@@ -50,6 +109,7 @@ def set_member_property(
         property_name=property_name,
         property_value=property_value,
         dry_run=dry_run,
+        edit_session=edit_session,
     )
     return table.name, field_name, field_type, updated
 
@@ -61,6 +121,7 @@ def set_field_format(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, str, bool]:
     """Set the format string on a column or measure."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -77,6 +138,7 @@ def set_field_format(
         property_name="formatString",
         property_value=format_string,
         dry_run=dry_run,
+        edit_session=edit_session,
     )
     return table.name, field_name, field_type, updated
 
@@ -88,6 +150,7 @@ def set_column_hidden(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Show or hide a column in TMDL."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -106,6 +169,7 @@ def set_column_hidden(
         flag_name="isHidden",
         present=hidden,
         dry_run=dry_run,
+        edit_session=edit_session,
     )
     return table.name, column.name, updated
 
@@ -119,6 +183,7 @@ def create_measure(
     format_string: str | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Create a new measure in a table TMDL file."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -128,7 +193,7 @@ def create_measure(
     if any(measure.name.lower() == measure_name.lower() for measure in table.measures):
         raise ValueError(f'Measure "{measure_name}" already exists in table "{table.name}".')
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     insert_at = _measure_insert_index(lines)
     block = _build_measure_block(
         measure_name,
@@ -137,8 +202,7 @@ def create_measure(
         lineage_tag=str(uuid.uuid4()),
     )
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, measure_name, True
 
 
@@ -150,6 +214,7 @@ def edit_measure_expression(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Replace a measure expression while preserving its metadata lines."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -158,7 +223,7 @@ def edit_measure_expression(
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_member_block(lines, member_kind="measure", member_name=measure.name)
     prop_start = _measure_property_start(lines, start, end)
     new_expression_lines = _build_measure_expression_lines(measure.name, expression)
@@ -166,8 +231,7 @@ def edit_measure_expression(
     if existing_expression_lines == new_expression_lines:
         return table.name, measure.name, False
     lines[start:prop_start] = new_expression_lines
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, measure.name, True
 
 
@@ -177,6 +241,7 @@ def delete_measure(
     measure_name: str,
     *,
     dry_run: bool = False,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Delete an existing measure from a table TMDL file."""
     model = SemanticModel.load(project_root)
@@ -185,15 +250,14 @@ def delete_measure(
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_member_block(lines, member_kind="measure", member_name=measure.name)
     del lines[start:end]
     while start < len(lines) and not lines[start].strip():
         del lines[start]
     if start > 0 and start < len(lines) and lines[start - 1].strip():
         lines.insert(start, "")
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, measure.name, True
 
 
@@ -207,6 +271,7 @@ def create_calculated_column(
     format_string: str | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Create a new calculated column in a table TMDL file."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -216,7 +281,7 @@ def create_calculated_column(
     if any(column.name.lower() == column_name.lower() for column in table.columns):
         raise ValueError(f'Column "{column_name}" already exists in table "{table.name}".')
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     insert_at = _column_insert_index(lines)
     block = _build_calculated_column_block(
         column_name,
@@ -226,8 +291,7 @@ def create_calculated_column(
         lineage_tag=str(uuid.uuid4()),
     )
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, column_name, True
 
 
@@ -239,6 +303,7 @@ def edit_calculated_column_expression(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Replace a calculated-column expression while preserving metadata lines."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -249,7 +314,7 @@ def edit_calculated_column_expression(
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_member_block(lines, member_kind="column", member_name=column.name)
     prop_start = _column_property_start(lines, start, end)
     new_expression_lines = _build_calculated_column_expression_lines(column.name, expression)
@@ -257,8 +322,7 @@ def edit_calculated_column_expression(
     if existing_expression_lines == new_expression_lines:
         return table.name, column.name, False
     lines[start:prop_start] = new_expression_lines
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, column.name, True
 
 
@@ -268,6 +332,7 @@ def delete_calculated_column(
     column_name: str,
     *,
     dry_run: bool = False,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Delete a calculated column. Refuses to delete source columns."""
     model = SemanticModel.load(project_root)
@@ -278,15 +343,14 @@ def delete_calculated_column(
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_member_block(lines, member_kind="column", member_name=column.name)
     del lines[start:end]
     while start < len(lines) and not lines[start].strip():
         del lines[start]
     if start > 0 and start < len(lines) and lines[start - 1].strip():
         lines.insert(start, "")
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, column.name, True
 
 
@@ -298,9 +362,10 @@ def _update_member_property(
     property_name: str,
     property_value: str,
     dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
 ) -> bool:
     """Set or insert a keyed property inside a column/measure block."""
-    lines = path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(path, edit_session)
     start, end = _find_member_block(lines, member_kind=member_kind, member_name=member_name)
 
     replacement = f"\t\t{property_name}: {property_value}"
@@ -309,14 +374,12 @@ def _update_member_property(
             if lines[idx] == replacement:
                 return False
             lines[idx] = replacement
-            if not dry_run:
-                _write_tmdl_lines(path, lines)
+            _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
             return True
 
     insert_at = _block_property_insert_index(lines, start, end)
     lines.insert(insert_at, replacement)
-    if not dry_run:
-        _write_tmdl_lines(path, lines)
+    _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
     return True
 
 
@@ -328,9 +391,10 @@ def _update_member_flag(
     flag_name: str,
     present: bool,
     dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
 ) -> bool:
     """Set or clear a boolean flag line inside a member block."""
-    lines = path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(path, edit_session)
     start, end = _find_member_block(lines, member_kind=member_kind, member_name=member_name)
 
     for idx in range(start + 1, end):
@@ -338,8 +402,7 @@ def _update_member_flag(
             if present:
                 return False
             del lines[idx]
-            if not dry_run:
-                _write_tmdl_lines(path, lines)
+            _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
             return True
 
     if not present:
@@ -347,8 +410,7 @@ def _update_member_flag(
 
     insert_at = _block_property_insert_index(lines, start, end)
     lines.insert(insert_at, f"\t\t{flag_name}")
-    if not dry_run:
-        _write_tmdl_lines(path, lines)
+    _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
     return True
 
 
@@ -691,6 +753,7 @@ def create_relationship(
     properties: dict[str, str] | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, str]:
     """Create a new relationship. Returns (rel_id, from_ref, to_ref)."""
     from .schema import _parse_field_ref
@@ -723,8 +786,7 @@ def create_relationship(
 
     rel_path = _get_relationships_path(project_root, loaded_model)
     if rel_path.exists():
-        content = rel_path.read_text(encoding="utf-8-sig")
-        lines = content.splitlines()
+        lines = _get_tmdl_lines(rel_path, edit_session)
         # Remove trailing empty lines then append
         while lines and not lines[-1].strip():
             lines.pop()
@@ -734,9 +796,7 @@ def create_relationship(
     else:
         lines = block + [""]
 
-    if not dry_run:
-        rel_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_tmdl_lines(rel_path, lines)
+    _commit_tmdl_lines(rel_path, lines, dry_run=dry_run, session=edit_session)
 
     from_ref = f"{ft.name}.{from_col}"
     to_ref = f"{tt.name}.{to_col}"
@@ -750,6 +810,7 @@ def delete_relationship(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str]:
     """Delete a relationship by from/to field refs. Returns (from_ref, to_ref)."""
     from .schema import _parse_field_ref
@@ -765,7 +826,7 @@ def delete_relationship(
     if not rel_path.exists():
         raise ValueError("No relationships.tmdl file found.")
 
-    lines = rel_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(rel_path, edit_session)
     result = _find_relationship_block(lines, ft.name, from_col, tt.name, to_col)
     if result is None:
         raise ValueError(
@@ -780,8 +841,7 @@ def delete_relationship(
     if start > 0 and start < len(lines) and lines[start - 1].strip():
         lines.insert(start, "")
 
-    if not dry_run:
-        _write_tmdl_lines(rel_path, lines)
+    _commit_tmdl_lines(rel_path, lines, dry_run=dry_run, session=edit_session)
 
     return f"{ft.name}.{from_col}", f"{tt.name}.{to_col}"
 
@@ -795,6 +855,7 @@ def set_relationship_property(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Set a property on an existing relationship. Returns (from_ref, to_ref, changed)."""
     from .schema import _parse_field_ref
@@ -810,7 +871,7 @@ def set_relationship_property(
     if not rel_path.exists():
         raise ValueError("No relationships.tmdl file found.")
 
-    lines = rel_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(rel_path, edit_session)
     result = _find_relationship_block(lines, ft.name, from_col, tt.name, to_col)
     if result is None:
         raise ValueError(
@@ -825,22 +886,19 @@ def set_relationship_property(
             if lines[idx] == replacement:
                 return f"{ft.name}.{from_col}", f"{tt.name}.{to_col}", False
             lines[idx] = replacement
-            if not dry_run:
-                _write_tmdl_lines(rel_path, lines)
+            _commit_tmdl_lines(rel_path, lines, dry_run=dry_run, session=edit_session)
             return f"{ft.name}.{from_col}", f"{tt.name}.{to_col}", True
 
     # Insert before fromColumn line
     for idx in range(start + 1, end):
         if lines[idx].strip().startswith("fromColumn:"):
             lines.insert(idx, replacement)
-            if not dry_run:
-                _write_tmdl_lines(rel_path, lines)
+            _commit_tmdl_lines(rel_path, lines, dry_run=dry_run, session=edit_session)
             return f"{ft.name}.{from_col}", f"{tt.name}.{to_col}", True
 
     # Fallback: insert after relationship declaration
     lines.insert(start + 1, replacement)
-    if not dry_run:
-        _write_tmdl_lines(rel_path, lines)
+    _commit_tmdl_lines(rel_path, lines, dry_run=dry_run, session=edit_session)
     return f"{ft.name}.{from_col}", f"{tt.name}.{to_col}", True
 
 
@@ -928,6 +986,7 @@ def create_hierarchy(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Create a new hierarchy in a table. Returns (table_name, hierarchy_name, created)."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -947,13 +1006,12 @@ def create_hierarchy(
     if not level_columns:
         raise ValueError("A hierarchy requires at least one level column.")
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     insert_at = _hierarchy_insert_index(lines)
     block = _build_hierarchy_block(hierarchy_name, level_columns)
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
 
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
 
     return table.name, hierarchy_name, True  # noqa: delete_hierarchy end
 
@@ -1413,6 +1471,7 @@ def delete_hierarchy(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, str, bool]:
     """Delete a hierarchy from a table. Returns (table_name, hierarchy_name, deleted)."""
     loaded_model = model or SemanticModel.load(project_root)
@@ -1423,7 +1482,7 @@ def delete_hierarchy(
     # Verify it exists
     table.find_hierarchy(hierarchy_name)
 
-    lines = table.definition_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
     result = _find_hierarchy_block(lines, hierarchy_name)
     if result is None:
         raise ValueError(f'Hierarchy "{hierarchy_name}" not found in TMDL.')
@@ -1435,7 +1494,6 @@ def delete_hierarchy(
     if start > 0 and start < len(lines) and lines[start - 1].strip():
         lines.insert(start, "")
 
-    if not dry_run:
-        _write_tmdl_lines(table.definition_path, lines)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
 
     return table.name, hierarchy_name, True
