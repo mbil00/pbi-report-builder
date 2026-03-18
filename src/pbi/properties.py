@@ -1731,6 +1731,125 @@ PAGE_PROPERTIES: dict[str, PropertyDef] = {
         container_key="outspace", container_prop="transparency",
         objects_path="objects", top_level=True,
     ),
+    # Display area
+    "verticalAlignment": PropertyDef(
+        None, "enum", "Page vertical alignment in viewport",
+        container_key="displayArea", container_prop="verticalAlignment",
+        objects_path="objects", top_level=True,
+        enum_values=("Top", "Middle"),
+    ),
+    # Filter pane (outspacePane)
+    "filterPane.visible": PropertyDef(
+        None, "boolean", "Show filter pane",
+        container_key="outspacePane", container_prop="visible",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.expanded": PropertyDef(
+        None, "boolean", "Expand filter pane",
+        container_key="outspacePane", container_prop="expanded",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.backgroundColor": PropertyDef(
+        None, "page_color", "Filter pane background color",
+        container_key="outspacePane", container_prop="backgroundColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.transparency": PropertyDef(
+        None, "number", "Filter pane background transparency",
+        container_key="outspacePane", container_prop="transparency",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.foregroundColor": PropertyDef(
+        None, "page_color", "Filter pane text/icon color",
+        container_key="outspacePane", container_prop="foregroundColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.fontFamily": PropertyDef(
+        None, "string", "Filter pane font family",
+        container_key="outspacePane", container_prop="fontFamily",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.titleSize": PropertyDef(
+        None, "long", "Filter pane title font size",
+        container_key="outspacePane", container_prop="titleSize",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.headerSize": PropertyDef(
+        None, "long", "Filter pane header font size",
+        container_key="outspacePane", container_prop="headerSize",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.width": PropertyDef(
+        None, "long", "Filter pane width in pixels",
+        container_key="outspacePane", container_prop="width",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.border": PropertyDef(
+        None, "boolean", "Show filter pane border",
+        container_key="outspacePane", container_prop="border",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.borderColor": PropertyDef(
+        None, "page_color", "Filter pane border color",
+        container_key="outspacePane", container_prop="borderColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.inputBoxColor": PropertyDef(
+        None, "page_color", "Filter pane input field background",
+        container_key="outspacePane", container_prop="inputBoxColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.checkboxAndApplyColor": PropertyDef(
+        None, "page_color", "Filter pane checkbox/apply button accent",
+        container_key="outspacePane", container_prop="checkboxAndApplyColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterPane.searchTextSize": PropertyDef(
+        None, "long", "Filter pane search text size",
+        container_key="outspacePane", container_prop="searchTextSize",
+        objects_path="objects", top_level=True,
+    ),
+    # Filter card styling
+    "filterCard.backgroundColor": PropertyDef(
+        None, "page_color", "Filter card background color",
+        container_key="filterCard", container_prop="backgroundColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.transparency": PropertyDef(
+        None, "number", "Filter card transparency",
+        container_key="filterCard", container_prop="transparency",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.foregroundColor": PropertyDef(
+        None, "page_color", "Filter card text color",
+        container_key="filterCard", container_prop="foregroundColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.border": PropertyDef(
+        None, "boolean", "Show filter card border",
+        container_key="filterCard", container_prop="border",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.borderColor": PropertyDef(
+        None, "page_color", "Filter card border color",
+        container_key="filterCard", container_prop="borderColor",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.textSize": PropertyDef(
+        None, "long", "Filter card text size",
+        container_key="filterCard", container_prop="textSize",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.fontFamily": PropertyDef(
+        None, "string", "Filter card font family",
+        container_key="filterCard", container_prop="fontFamily",
+        objects_path="objects", top_level=True,
+    ),
+    "filterCard.inputBoxColor": PropertyDef(
+        None, "page_color", "Filter card input field background",
+        container_key="filterCard", container_prop="inputBoxColor",
+        objects_path="objects", top_level=True,
+    ),
 }
 
 
