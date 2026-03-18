@@ -1483,15 +1483,15 @@ def _delete_theme_file(project: Project, theme_name: str) -> None:
 
 
 def _fix_theme_resource_path(report: dict, theme_name: str) -> bool:
-    """Ensure the CustomTheme resource item in report.json has a .json path.
+    """Ensure the CustomTheme resource item has the full filename in both name and path.
 
-    PBI Desktop may write resource items with `path` equal to the theme name
-    (without `.json` extension).  This silently breaks theme loading.
+    PBI Desktop requires both ``name`` and ``path`` to be the full filename
+    (e.g. ``IntunePrestige.json``), not just the stem.
 
     Searches both flat and wrapped (``resourcePackage``) package formats.
     Returns True if report was modified.
     """
-    expected_path = f"{theme_name}.json"
+    expected = f"{theme_name}.json"
     fixed = False
 
     for pkg in report.get("resourcePackages", []):
@@ -1502,14 +1502,16 @@ def _fix_theme_resource_path(report: dict, theme_name: str) -> bool:
         for item in inner.get("items", []):
             if not isinstance(item, dict):
                 continue
-            if item.get("name") != theme_name:
+            # Match by either old format (stem) or new format (filename)
+            item_name = item.get("name", "")
+            if item_name != theme_name and item_name != expected:
                 continue
-            cur_path = item.get("path", "")
-            if isinstance(cur_path, str) and cur_path and not cur_path.endswith(".json"):
-                item["path"] = expected_path
+            if item.get("name") != expected:
+                item["name"] = expected
                 fixed = True
-            elif not cur_path:
-                item["path"] = expected_path
+            cur_path = item.get("path", "")
+            if cur_path != expected:
+                item["path"] = expected
                 fixed = True
 
     return fixed
@@ -1558,19 +1560,22 @@ def _ensure_resource_entry(report: dict, theme_name: str) -> None:
 
     items = reg_pkg.setdefault("items", [])
 
-    expected_path = f"{theme_name}.json"
+    expected = f"{theme_name}.json"
 
-    # Check if theme already registered — fix path if extension is missing
+    # Check if theme already registered — fix name/path to full filename
     for item in items:
-        if item.get("name") == theme_name:
-            if item.get("path") != expected_path:
-                item["path"] = expected_path
+        item_name = item.get("name", "")
+        if item_name == theme_name or item_name == expected:
+            if item.get("name") != expected:
+                item["name"] = expected
+            if item.get("path") != expected:
+                item["path"] = expected
             return
 
     items.append({
         "type": "CustomTheme",
-        "name": theme_name,
-        "path": expected_path,
+        "name": expected,
+        "path": expected,
     })
 
 
@@ -1611,13 +1616,12 @@ def _normalize_resource_item(item: dict) -> dict:
         item.get("type"),
         path=item.get("path", ""),
     )
-    # Ensure CustomTheme items have .json extension in path
+    # Ensure CustomTheme items have full filename in both name and path
     if entry["type"] == "CustomTheme" and "name" in entry:
-        expected_path = f"{entry['name']}.json"
-        if entry.get("path", "") and not entry["path"].endswith(".json"):
-            entry["path"] = expected_path
-        elif not entry.get("path"):
-            entry["path"] = expected_path
+        name = entry["name"]
+        filename = name if name.endswith(".json") else f"{name}.json"
+        entry["name"] = filename
+        entry["path"] = filename
     return entry
 
 

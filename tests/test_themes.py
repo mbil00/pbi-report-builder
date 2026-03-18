@@ -84,7 +84,7 @@ def _scaffold_project(root: Path, *, theme_data: dict | None = None) -> Path:
             {
                 "name": "RegisteredResources",
                 "type": "RegisteredResources",
-                "items": [{"type": "CustomTheme", "name": theme_name, "path": f"{theme_name}.json"}],
+                "items": [{"type": "CustomTheme", "name": f"{theme_name}.json", "path": f"{theme_name}.json"}],
             }
         ]
 
@@ -1272,28 +1272,37 @@ class TestThemeAuditCommand(unittest.TestCase):
 
 
 class TestNormalizeResourceItemPreservesPath(unittest.TestCase):
-    """BUG-031: Ensure CustomTheme items always have .json extension in path."""
+    """BUG-031: Ensure CustomTheme items have full filename in both name and path."""
 
-    def test_preserves_json_extension(self) -> None:
+    def test_normalizes_name_and_path(self) -> None:
         item = {"name": "MyTheme", "path": "MyTheme.json", "type": "CustomTheme"}
         result = _normalize_resource_item(item)
+        self.assertEqual(result["name"], "MyTheme.json")
         self.assertEqual(result["path"], "MyTheme.json")
 
     def test_adds_json_extension_when_missing(self) -> None:
         item = {"name": "MyTheme", "path": "MyTheme", "type": 202}
         result = _normalize_resource_item(item)
+        self.assertEqual(result["name"], "MyTheme.json")
         self.assertEqual(result["path"], "MyTheme.json")
 
     def test_adds_path_when_absent(self) -> None:
         item = {"name": "MyTheme", "type": 202}
         result = _normalize_resource_item(item)
+        self.assertEqual(result["name"], "MyTheme.json")
+        self.assertEqual(result["path"], "MyTheme.json")
+
+    def test_already_correct(self) -> None:
+        item = {"name": "MyTheme.json", "path": "MyTheme.json", "type": "CustomTheme"}
+        result = _normalize_resource_item(item)
+        self.assertEqual(result["name"], "MyTheme.json")
         self.assertEqual(result["path"], "MyTheme.json")
 
 
 class TestEnsureResourceEntryFixesPath(unittest.TestCase):
-    """BUG-031: _ensure_resource_entry should fix path on existing items."""
+    """BUG-031: _ensure_resource_entry should fix both name and path."""
 
-    def test_fixes_missing_extension(self) -> None:
+    def test_fixes_stem_only_name_and_path(self) -> None:
         report: dict = {
             "resourcePackages": [{
                 "name": "RegisteredResources",
@@ -1303,23 +1312,36 @@ class TestEnsureResourceEntryFixesPath(unittest.TestCase):
         }
         _ensure_resource_entry(report, "MyTheme")
         item = report["resourcePackages"][0]["items"][0]
+        self.assertEqual(item["name"], "MyTheme.json")
         self.assertEqual(item["path"], "MyTheme.json")
 
-    def test_preserves_correct_path(self) -> None:
+    def test_no_duplicate_when_correct(self) -> None:
         report: dict = {
             "resourcePackages": [{
                 "name": "RegisteredResources",
                 "type": "RegisteredResources",
-                "items": [{"type": "CustomTheme", "name": "MyTheme", "path": "MyTheme.json"}],
+                "items": [{"type": "CustomTheme", "name": "MyTheme.json", "path": "MyTheme.json"}],
             }],
         }
         _ensure_resource_entry(report, "MyTheme")
         self.assertEqual(len(report["resourcePackages"][0]["items"]), 1)
-        self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+
+    def test_creates_with_full_filename(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "name": "RegisteredResources",
+                "type": "RegisteredResources",
+                "items": [],
+            }],
+        }
+        _ensure_resource_entry(report, "MyTheme")
+        item = report["resourcePackages"][0]["items"][0]
+        self.assertEqual(item["name"], "MyTheme.json")
+        self.assertEqual(item["path"], "MyTheme.json")
 
 
 class TestFixThemeResourcePath(unittest.TestCase):
-    """BUG-031: _fix_theme_resource_path repairs broken paths in both formats."""
+    """BUG-031: _fix_theme_resource_path repairs name and path in both formats."""
 
     def test_fixes_flat_format(self) -> None:
         report: dict = {
@@ -1330,7 +1352,9 @@ class TestFixThemeResourcePath(unittest.TestCase):
             }],
         }
         self.assertTrue(_fix_theme_resource_path(report, "MyTheme"))
-        self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+        item = report["resourcePackages"][0]["items"][0]
+        self.assertEqual(item["name"], "MyTheme.json")
+        self.assertEqual(item["path"], "MyTheme.json")
 
     def test_fixes_wrapped_format(self) -> None:
         report: dict = {
@@ -1344,6 +1368,7 @@ class TestFixThemeResourcePath(unittest.TestCase):
         }
         self.assertTrue(_fix_theme_resource_path(report, "MyTheme"))
         item = report["resourcePackages"][0]["resourcePackage"]["items"][0]
+        self.assertEqual(item["name"], "MyTheme.json")
         self.assertEqual(item["path"], "MyTheme.json")
 
     def test_no_change_when_correct(self) -> None:
@@ -1351,39 +1376,41 @@ class TestFixThemeResourcePath(unittest.TestCase):
             "resourcePackages": [{
                 "name": "RegisteredResources",
                 "type": "RegisteredResources",
-                "items": [{"name": "MyTheme", "path": "MyTheme.json", "type": "CustomTheme"}],
+                "items": [{"name": "MyTheme.json", "path": "MyTheme.json", "type": "CustomTheme"}],
             }],
         }
         self.assertFalse(_fix_theme_resource_path(report, "MyTheme"))
 
-    def test_fixes_empty_path(self) -> None:
+    def test_fixes_name_only(self) -> None:
+        """Path is correct but name is missing .json."""
         report: dict = {
             "resourcePackages": [{
                 "name": "RegisteredResources",
                 "type": "RegisteredResources",
-                "items": [{"name": "MyTheme", "path": "", "type": "CustomTheme"}],
+                "items": [{"name": "MyTheme", "path": "MyTheme.json", "type": "CustomTheme"}],
             }],
         }
         self.assertTrue(_fix_theme_resource_path(report, "MyTheme"))
-        self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+        item = report["resourcePackages"][0]["items"][0]
+        self.assertEqual(item["name"], "MyTheme.json")
 
 
 class TestSaveThemeDataRepairsPath(unittest.TestCase):
-    """BUG-031: save_theme_data should repair broken resource paths in report.json."""
+    """BUG-031: save_theme_data should repair broken resource name/path in report.json."""
 
-    def test_repairs_broken_path_on_save(self) -> None:
+    def test_repairs_broken_name_and_path_on_save(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             from pbi.project import Project
             from pbi.themes import get_theme_data, save_theme_data
 
-            # Scaffold project with broken path (no .json extension)
             root = Path(tmp)
             theme_data = create_theme("TestTheme")
             pbip = _scaffold_project(root, theme_data=theme_data)
 
-            # Corrupt the path in report.json
+            # Corrupt both name and path in report.json
             report_path = root / "Test.Report" / "definition" / "report.json"
             report = json.loads(report_path.read_text())
+            report["resourcePackages"][0]["items"][0]["name"] = "TestTheme"
             report["resourcePackages"][0]["items"][0]["path"] = "TestTheme"
             report_path.write_text(json.dumps(report, indent=2) + "\n")
 
@@ -1392,12 +1419,11 @@ class TestSaveThemeDataRepairsPath(unittest.TestCase):
             data = get_theme_data(proj)
             save_theme_data(proj, data)
 
-            # Verify path was repaired
+            # Verify both name and path were repaired
             after = json.loads(report_path.read_text())
-            self.assertEqual(
-                after["resourcePackages"][0]["items"][0]["path"],
-                "TestTheme.json",
-            )
+            item = after["resourcePackages"][0]["items"][0]
+            self.assertEqual(item["name"], "TestTheme.json")
+            self.assertEqual(item["path"], "TestTheme.json")
 
 
 # ── BUG-032: fontFamily must not be parsed as int ─────────────────────
