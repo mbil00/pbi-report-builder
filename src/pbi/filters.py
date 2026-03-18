@@ -1361,7 +1361,10 @@ def _format_literal(value: str, data_type: str | None = None) -> str:
         if re.fullmatch(r"-?\d+", raw):
             return f"{raw}L"
 
-    if normalized_type in {"double", "decimal", "currency", "number"}:
+    if normalized_type in {"decimal", "currency"}:
+        return f"{raw}M"
+
+    if normalized_type in {"double", "number"}:
         return f"{raw}D"
 
     escaped = raw.replace("'", "''")
@@ -1377,7 +1380,7 @@ def _decode_literal_expr(node: dict) -> str:
         return raw[len("datetime'"):-1]
     if raw.startswith("'") and raw.endswith("'"):
         return raw[1:-1].replace("''", "'")
-    if raw.endswith("D") or raw.endswith("L"):
+    if raw.endswith(("D", "L", "M")):
         return raw[:-1]
     return raw
 

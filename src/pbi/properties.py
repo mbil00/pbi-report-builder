@@ -1703,7 +1703,7 @@ PAGE_PROPERTIES: dict[str, PropertyDef] = {
     "height": PropertyDef("height", "number", "Page height in pixels"),
     "displayOption": PropertyDef(
         "displayOption", "enum", "Display option",
-        enum_values=("FitToPage", "FitToWidth", "ActualSize"),
+        enum_values=("Dynamic", "FitToPage", "FitToWidth", "ActualSize"),
     ),
     "visibility": PropertyDef(
         "visibility", "enum", "Page visibility",
@@ -1776,12 +1776,12 @@ def decode_pbi_value(raw: Any) -> Any:
 
 def _decode_literal(value: str) -> Any:
     """Decode a PBI literal string like '42D', 'true', or \"'text'\"."""
-    if value.endswith("D") or value.endswith("d"):
+    if value.endswith(("D", "d", "M", "m")):
         try:
             return float(value[:-1])
         except ValueError:
             pass
-    if value.endswith("L") or value.endswith("l"):
+    if value.endswith(("L", "l")):
         try:
             return int(value[:-1])
         except ValueError:
