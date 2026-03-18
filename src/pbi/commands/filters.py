@@ -8,16 +8,9 @@ import typer
 from rich import box
 from rich.table import Table
 
-from .common import ProjectOpt, console, get_project
+from .common import ProjectOpt, console, get_project, resolve_field_info
 
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
-
-
-def _normalize_field_type(field_type: str) -> str:
-    valid = {"auto", "column", "measure"}
-    if field_type not in valid:
-        raise ValueError(f"Invalid field type '{field_type}'. Use one of: auto, column, measure.")
-    return field_type
 
 
 def _load_filter_model(project):
@@ -32,43 +25,19 @@ def _load_filter_model(project):
 
 
 def _resolve_filter_field(
+    proj,
     field: str,
     *,
     field_type: str,
     model,
 ) -> tuple[str, str, str, str | None]:
     """Resolve a filter field into entity, prop, field_type, data_type."""
-    dot = field.find(".")
-    if dot == -1:
-        raise ValueError("Field must be Table.Field format.")
-
-    entity, prop = field[:dot], field[dot + 1 :]
-    mode = _normalize_field_type(field_type)
-    if mode == "measure":
-        return entity, prop, "measure", None
-    if model is None:
-        return entity, prop, "column" if mode == "auto" else mode, None
-
-    # Resolve via model when available (for auto-detect and data type lookup)
-    try:
-        resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(field)
-    except (ValueError, KeyError):
-        return entity, prop, mode or "column", None
-
-    # Override resolved field type if user explicitly specified column/measure
-    effective_type = mode if mode in {"column", "measure"} else resolved_field_type
-
-    data_type = None
-    if effective_type == "column":
-        try:
-            table = model.find_table(resolved_entity)
-            for column in table.columns:
-                if column.name == resolved_prop:
-                    data_type = column.data_type
-                    break
-        except (ValueError, KeyError):
-            pass
-    return resolved_entity, resolved_prop, effective_type, data_type
+    return resolve_field_info(
+        proj,
+        field,
+        field_type,
+        model=model,
+    )
 
 
 def _resolve_scope(
@@ -224,6 +193,7 @@ def filter_create(
             raise typer.Exit(1)
         try:
             entity, prop, resolved_field_type, data_type = _resolve_filter_field(
+                proj,
                 field,
                 field_type=field_type,
                 model=model,
@@ -399,6 +369,7 @@ def filter_create(
             raise typer.Exit(1)
         try:
             order_entity, order_prop, order_field_type, _ = _resolve_filter_field(
+                proj,
                 topn_by,
                 field_type="auto",
                 model=model,
@@ -497,6 +468,7 @@ def filter_create(
             literal = assignment[eq + 1 :].strip()
             try:
                 row_entity, row_prop, row_field_type, row_data_type = _resolve_filter_field(
+                    proj,
                     field_ref,
                     field_type="auto",
                     model=model,

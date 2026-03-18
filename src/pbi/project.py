@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import json
 import re
 import secrets
@@ -10,6 +9,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pbi.lookup import find_page_by_identifier, find_visual_by_identifier
 from pbi.schema_refs import (
     PAGE_SCHEMA,
     PAGES_METADATA_SCHEMA,
@@ -260,44 +260,12 @@ class Project:
 
     def find_page(self, identifier: str) -> Page:
         """Find a page by display name, folder name, or partial match."""
-        pages = self._get_pages_cached()
-
-        # Exact folder name
-        for page in pages:
-            if page.name == identifier:
-                return page
-
-        # Exact display name (case-insensitive)
-        id_lower = identifier.lower()
-        for page in pages:
-            if page.display_name.lower() == id_lower:
-                return page
-
-        # Partial display name match
-        matches = [p for p in pages if id_lower in p.display_name.lower()]
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            names = ", ".join(f'"{p.display_name}"' for p in matches)
-            raise ValueError(
-                f'Ambiguous page "{identifier}". Matches: {names}'
-            )
-
-        # Index-based access (1-based)
-        try:
-            idx = int(identifier) - 1
-            if 0 <= idx < len(pages):
-                return pages[idx]
-        except ValueError:
-            pass
-
-        names = [p.display_name for p in pages]
-        close = difflib.get_close_matches(identifier, names, n=3, cutoff=0.5)
-        if close:
-            suggestion = ", ".join(f'"{n}"' for n in close)
-            raise ValueError(f'Page "{identifier}" not found. Did you mean: {suggestion}?')
-        available = ", ".join(f'"{n}"' for n in names)
-        raise ValueError(f'Page "{identifier}" not found. Available: {available}')
+        return find_page_by_identifier(
+            self._get_pages_cached(),
+            identifier,
+            folder_name=lambda page: page.name,
+            display_name=lambda page: page.display_name,
+        )
 
     def get_visuals(self, page: Page) -> list[Visual]:
         """Get all visuals on a page."""
@@ -305,62 +273,13 @@ class Project:
 
     def find_visual(self, page: Page, identifier: str) -> Visual:
         """Find a visual by name, type, folder name, or index."""
-        visuals = self._get_visuals_cached(page)
-        raw_identifier = identifier
-        if identifier.startswith(("#", "@")):
-            identifier = identifier[1:]
-
-        # Exact folder name
-        for v in visuals:
-            if v.folder.name == identifier:
-                return v
-
-        # Exact internal name
-        for v in visuals:
-            if v.name == identifier:
-                return v
-
-        # Index-based (1-based). Prefer explicit numeric references before
-        # partial matching so the indices shown by `visual list` are usable.
-        try:
-            idx = int(identifier) - 1
-            if 0 <= idx < len(visuals):
-                return visuals[idx]
-        except ValueError:
-            pass
-
-        id_lower = identifier.lower()
-
-        # By visual type (if unique on page)
-        type_matches = [v for v in visuals if v.visual_type.lower() == id_lower]
-        if len(type_matches) == 1:
-            return type_matches[0]
-
-        # Partial name match
-        matches = [v for v in visuals if id_lower in v.name.lower()]
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            names = ", ".join(f'"{v.name}" ({v.visual_type})' for v in matches)
-            raise ValueError(
-                f'Ambiguous visual "{identifier}". Matches: {names}'
-            )
-
-        all_names = [v.name for v in visuals] + [v.visual_type for v in visuals]
-        close = difflib.get_close_matches(identifier, all_names, n=3, cutoff=0.5)
-        if close:
-            suggestion = ", ".join(f'"{n}"' for n in close)
-            raise ValueError(
-                f'Visual "{raw_identifier}" not found on "{page.display_name}". '
-                f"Did you mean: {suggestion}?"
-            )
-        available = ", ".join(
-            f'{i+1}: {v.name} ({v.visual_type})'
-            for i, v in enumerate(visuals)
-        )
-        raise ValueError(
-            f'Visual "{raw_identifier}" not found on "{page.display_name}". '
-            f"Available: {available}"
+        return find_visual_by_identifier(
+            self._get_visuals_cached(page),
+            identifier,
+            page_display_name=page.display_name,
+            folder_name=lambda visual: visual.folder.name,
+            visual_name=lambda visual: visual.name,
+            visual_type=lambda visual: visual.visual_type,
         )
 
 

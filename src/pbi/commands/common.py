@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 from rich.console import Console
@@ -42,21 +42,70 @@ def resolve_field_type(
     field_type: str,
 ) -> tuple[str, str, str]:
     """Resolve Table.Field to entity, prop, and concrete field type."""
+    entity, prop, resolved_type, _data_type = resolve_field_info(
+        proj,
+        field,
+        field_type,
+    )
+    return entity, prop, resolved_type
+
+
+def resolve_field_info(
+    proj: Project,
+    field: str,
+    field_type: str,
+    *,
+    model: Any | None = None,
+) -> tuple[str, str, str, str | None]:
+    """Resolve Table.Field to entity, prop, concrete field type, and data type.
+
+    Resolution rules:
+    - explicit `measure` returns the raw field ref as a measure
+    - explicit `column` keeps the requested type but still uses the model, when
+      available, to resolve the canonical entity/prop and column data type
+    - `auto` uses the semantic model when available and otherwise falls back to
+      treating the field as a column
+    """
     dot = field.find(".")
     if dot == -1:
         raise ValueError("Field must be Table.Field format.")
+
     entity, prop = field[:dot], field[dot + 1 :]
     mode = normalize_field_type(field_type)
-    if mode != "auto":
-        return entity, prop, mode
-    try:
-        from pbi.model import SemanticModel
 
-        model = SemanticModel.load(proj.root)
-        entity, prop, mode = model.resolve_field(field)
-    except (FileNotFoundError, ValueError):
-        mode = "column"
-    return entity, prop, mode
+    if mode == "measure":
+        return entity, prop, "measure", None
+
+    if model is None:
+        try:
+            from pbi.model import SemanticModel
+
+            model = SemanticModel.load(proj.root)
+        except (FileNotFoundError, ValueError):
+            model = None
+
+    if model is None:
+        return entity, prop, "column" if mode == "auto" else mode, None
+
+    try:
+        resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(field)
+    except (ValueError, KeyError):
+        return entity, prop, "column" if mode == "auto" else mode, None
+
+    effective_type = mode if mode in {"column", "measure"} else resolved_field_type
+
+    data_type = None
+    if effective_type == "column":
+        try:
+            table = model.find_table(resolved_entity)
+            for column in table.columns:
+                if column.name == resolved_prop:
+                    data_type = column.data_type
+                    break
+        except (ValueError, KeyError):
+            pass
+
+    return resolved_entity, resolved_prop, effective_type, data_type
 
 
 def parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:

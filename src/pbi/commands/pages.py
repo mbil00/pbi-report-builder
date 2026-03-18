@@ -726,119 +726,27 @@ def page_import(
     Copies all visuals and page structure. Use --include-resources to also
     copy image files from the source project's RegisteredResources.
     """
-    import json as json_mod
-    import secrets
-    import shutil
-
-    from pbi.project import Project as ProjClass
-    from pbi.project import _read_json, _write_json
+    from pbi.page_import import import_page as import_page_service
 
     target_proj = get_project(project)
     try:
-        source_proj = ProjClass.find(from_project)
+        result = import_page_service(
+            target_proj,
+            from_project=from_project,
+            page=page,
+            name=name,
+            include_resources=include_resources,
+        )
     except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]Error:[/red] Cannot open source project: {e}")
-        raise typer.Exit(1)
-
-    try:
-        source_page = source_proj.find_page(page)
-    except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    target_name = name or source_page.display_name
-
-    # Copy the page directory
-    new_id = secrets.token_hex(10)
-    new_dir = target_proj.definition_folder / "pages" / new_id
-    shutil.copytree(source_page.folder, new_dir)
-
-    # Update page identity
-    page_json_path = new_dir / "page.json"
-    new_data = _read_json(page_json_path)
-    new_data["name"] = new_id
-    new_data["displayName"] = target_name
-    _write_json(page_json_path, new_data)
-
-    # Rename all visual folders to new IDs (avoid conflicts)
-    visuals_dir = new_dir / "visuals"
-    old_to_new: dict[str, str] = {}
-    if visuals_dir.exists():
-        for visual_dir in list(visuals_dir.iterdir()):
-            if not visual_dir.is_dir():
-                continue
-            new_visual_id = secrets.token_hex(10)
-            new_visual_dir = visuals_dir / new_visual_id
-            visual_dir.rename(new_visual_dir)
-            old_name = visual_dir.name
-
-            visual_json = new_visual_dir / "visual.json"
-            if visual_json.exists():
-                vdata = _read_json(visual_json)
-                old_to_new[vdata.get("name", old_name)] = new_visual_id
-                vdata["name"] = new_visual_id
-                _write_json(visual_json, vdata)
-
-        # Fix parentGroupName references
-        for visual_dir in visuals_dir.iterdir():
-            if not visual_dir.is_dir():
-                continue
-            visual_json = visual_dir / "visual.json"
-            if not visual_json.exists():
-                continue
-            vdata = _read_json(visual_json)
-            parent = vdata.get("parentGroupName")
-            if parent and parent in old_to_new:
-                vdata["parentGroupName"] = old_to_new[parent]
-                _write_json(visual_json, vdata)
-
-    # Add to page order
-    target_proj._add_to_page_order(new_id)
-
-    # Copy image resources if requested
-    resource_count = 0
-    if include_resources:
-        source_res_dir = source_proj.report_folder / "StaticResources" / "RegisteredResources"
-        if source_res_dir.exists():
-            target_res_dir = target_proj.report_folder / "StaticResources" / "RegisteredResources"
-            target_res_dir.mkdir(parents=True, exist_ok=True)
-
-            # Find which images the source page uses
-            source_visuals = source_proj.get_visuals(source_page)
-            from pbi.images import _scan_for_resource_refs
-            refs: dict[str, list[str]] = {}
-            for vis in source_visuals:
-                content = (vis.folder / "visual.json").read_text(encoding="utf-8-sig")
-                if "ResourcePackageItem" in content:
-                    data = json_mod.loads(content)
-                    _scan_for_resource_refs(data, vis.name, refs)
-
-            for image_name in refs:
-                source_file = source_res_dir / image_name
-                target_file = target_res_dir / image_name
-                if source_file.exists() and not target_file.exists():
-                    shutil.copy2(source_file, target_file)
-                    # Register in target report.json
-                    from pbi.images import _get_resource_package, _save_report_json
-                    report_data, items = _get_resource_package(target_proj)
-                    # Check not already registered
-                    existing = {item.get("name") for item in items}
-                    if image_name not in existing:
-                        items.append({
-                            "type": 202,
-                            "name": image_name,
-                            "path": f"RegisteredResources/{image_name}",
-                        })
-                        _save_report_json(target_proj, report_data)
-                    resource_count += 1
-
-    visual_count = len(list(visuals_dir.iterdir())) if visuals_dir.exists() else 0
     console.print(
-        f'Imported "[cyan]{source_page.display_name}[/cyan]" from {source_proj.project_name} '
-        f'as "[cyan]{target_name}[/cyan]" ({visual_count} visuals)'
+        f'Imported "[cyan]{result.source_page_name}[/cyan]" from {result.source_project_name} '
+        f'as "[cyan]{result.target_page_name}[/cyan]" ({result.visual_count} visuals)'
     )
-    if resource_count:
-        console.print(f"[dim]Copied {resource_count} image resource(s)[/dim]")
+    if result.resource_count:
+        console.print(f"[dim]Copied {result.resource_count} image resource(s)[/dim]")
 
 
 # ── Page sections ──────────────────────────────────────────────
