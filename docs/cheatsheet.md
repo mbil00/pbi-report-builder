@@ -213,7 +213,7 @@ pbi filter create Sales.Region --value "North" "South"   # categorical (report-l
 pbi filter create Sales.Region --value "East" --page "Overview"       # page-level
 pbi filter create Sales.Revenue --min 100 --max 999      # range filter
 pbi filter create Sales.Category --topn 5 --topn-by Facts.Revenue    # top N
-pbi filter create Sales.OrderDate --mode relative --count 30 --unit days  # relative date
+pbi filter create Sales.OrderDate --mode relative --count 30 --unit Days  # relative date
 
 pbi filter delete Sales.Region                           # delete report filter
 pbi filter delete Sales.Region --page "Overview"         # delete page filter

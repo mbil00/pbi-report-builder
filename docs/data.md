@@ -67,7 +67,7 @@ pbi filter create Customers.Region --mode topn --topn 5 --topn-by Sales.TotalRev
 
 ```bash
 pbi filter create Date.Date --mode relative --operator InLast --count 7 --unit Days
-pbi filter create Date.Date --mode relative --operator InNext --count 1 --unit Quarters --no-include-today
+pbi filter create Date.Date --mode relative --operator InNext --count 3 --unit Months --no-include-today
 pbi filter create Date.DateTime --mode relative --operator InLast --count 15 --unit Minutes
 ```
 

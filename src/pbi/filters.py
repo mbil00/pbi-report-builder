@@ -37,14 +37,16 @@ class TupleField:
 DATE_UNIT_CODES = {
     "Days": 0,
     "Weeks": 1,
-    "Months": 2,
-    "Quarters": 3,
-    "Years": 4,
+    "CalendarWeeks": 2,
+    "Months": 3,
+    "CalendarMonths": 4,
+    "Years": 5,
+    "CalendarYears": 6,
 }
 
 TIME_UNIT_CODES = {
-    "Minutes": 6,
-    "Hours": 7,
+    "Minutes": 7,
+    "Hours": 8,
 }
 
 
@@ -590,7 +592,7 @@ def add_relative_date_filter(
         raise ValueError("Relative date filters require a positive time unit count.")
     if time_unit_type not in DATE_UNIT_CODES:
         raise ValueError(
-            "Relative date filters support Days, Weeks, Months, Quarters, and Years."
+            "Relative date filters support Days, Weeks, CalendarWeeks, Months, CalendarMonths, Years, and CalendarYears."
         )
 
     unit_code = DATE_UNIT_CODES[time_unit_type]

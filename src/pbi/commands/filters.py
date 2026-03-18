@@ -166,7 +166,7 @@ def filter_create(
     direction: Annotated[str, typer.Option("--direction", help="Top N direction: top or bottom.")] = "top",
     operator: Annotated[str | None, typer.Option("--operator", help="Relative operator: InLast, InThis, or InNext.")] = None,
     count: Annotated[int | None, typer.Option("--count", help="Relative time unit count.")] = None,
-    unit: Annotated[str | None, typer.Option("--unit", help="Relative unit: Minutes, Hours, Days, Weeks, Months, Quarters, or Years.")] = None,
+    unit: Annotated[str | None, typer.Option("--unit", help="Relative unit: Minutes, Hours, Days, Weeks, CalendarWeeks, Months, CalendarMonths, Years, or CalendarYears.")] = None,
     include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Include today for relative date filters when supported.")] = True,
     hidden: Annotated[bool, typer.Option("--hidden", help="Hide filter in view mode.")] = False,
     locked: Annotated[bool, typer.Option("--locked", help="Lock filter in view mode.")] = False,
@@ -371,7 +371,7 @@ def filter_create(
             console.print("[red]Error:[/red] Relative filters require --operator, --count, and --unit.")
             raise typer.Exit(1)
         valid_ops = ("InLast", "InThis", "InNext")
-        valid_units = ("Minutes", "Hours", "Days", "Weeks", "Months", "Quarters", "Years")
+        valid_units = ("Minutes", "Hours", "Days", "Weeks", "CalendarWeeks", "Months", "CalendarMonths", "Years", "CalendarYears")
         if operator not in valid_ops:
             console.print(f"[red]Error:[/red] Operator must be one of: {', '.join(valid_ops)}")
             raise typer.Exit(1)
