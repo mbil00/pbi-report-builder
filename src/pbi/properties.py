@@ -1079,8 +1079,9 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
         container_key="items", container_prop="fontColor", objects_path="objects",
     ),
     "slicerItems.background": PropertyDef(
-        None, "color", "Slicer items background",
+        None, "enum", "Slicer items background mode",
         container_key="items", container_prop="background", objects_path="objects",
+        enum_values=("auto", "on", "off"),
     ),
     "slicerItems.fontSize": PropertyDef(
         None, "number", "Slicer items font size",
