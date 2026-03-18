@@ -49,6 +49,27 @@ TIME_UNIT_CODES = {
     "Hours": 8,
 }
 
+# ── Advanced filter operator definitions ────────────────────────────
+# Maps CLI operator name → (json_node, ComparisonKind | None, negated, needs_value)
+# json_node: "Comparison", "Contains", or "StartsWith"
+
+ADVANCED_OPERATORS: dict[str, tuple[str, int | None, bool, bool]] = {
+    "is":                    ("Comparison", 0, False, True),
+    "is-not":                ("Comparison", 0, True,  True),
+    "less-than":             ("Comparison", 3, False, True),
+    "less-than-or-equal":    ("Comparison", 4, False, True),
+    "greater-than":          ("Comparison", 1, False, True),
+    "greater-than-or-equal": ("Comparison", 2, False, True),
+    "contains":              ("Contains",   None, False, True),
+    "does-not-contain":      ("Contains",   None, True,  True),
+    "starts-with":           ("StartsWith", None, False, True),
+    "does-not-start-with":   ("StartsWith", None, True,  True),
+    "is-blank":              ("Comparison", 0, False, False),
+    "is-not-blank":          ("Comparison", 0, True,  False),
+    "is-empty":              ("Comparison", 0, False, False),
+    "is-not-empty":          ("Comparison", 0, True,  False),
+}
+
 
 def get_filter_config(data: dict) -> dict:
     """Get the filterConfig from a JSON structure."""
@@ -226,6 +247,117 @@ def add_not_blank_filter(
         is_hidden=is_hidden,
         is_locked=is_locked,
     )
+
+
+def _build_advanced_condition(
+    operator: str,
+    col_expr: dict,
+    value: str | None,
+    data_type: str | None,
+) -> dict:
+    """Build a single advanced condition node from an operator."""
+    if operator not in ADVANCED_OPERATORS:
+        raise ValueError(
+            f"Unknown operator '{operator}'. "
+            f"Use one of: {', '.join(sorted(ADVANCED_OPERATORS))}."
+        )
+
+    json_node, comparison_kind, negated, needs_value = ADVANCED_OPERATORS[operator]
+
+    if needs_value and value is None:
+        raise ValueError(f"Operator '{operator}' requires a value.")
+
+    if json_node == "Comparison":
+        if operator in ("is-blank", "is-not-blank"):
+            right: dict = {"Literal": {"Value": "null"}}
+        elif operator in ("is-empty", "is-not-empty"):
+            right = {"Literal": {"Value": "''"}}
+        else:
+            right = _literal_expr(value, data_type=data_type)  # type: ignore[arg-type]
+        condition: dict = {
+            "Comparison": {
+                "ComparisonKind": comparison_kind,
+                "Left": col_expr,
+                "Right": right,
+            }
+        }
+    elif json_node == "Contains":
+        condition = {
+            "Contains": {
+                "Left": col_expr,
+                "Right": _literal_expr(value, data_type=data_type),  # type: ignore[arg-type]
+            }
+        }
+    elif json_node == "StartsWith":
+        condition = {
+            "StartsWith": {
+                "Left": col_expr,
+                "Right": _literal_expr(value, data_type=data_type),  # type: ignore[arg-type]
+            }
+        }
+    else:
+        raise ValueError(f"Unsupported JSON node type '{json_node}'.")
+
+    if negated:
+        condition = {"Not": {"Expression": condition}}
+
+    return condition
+
+
+def add_advanced_filter(
+    data: dict,
+    entity: str,
+    prop: str,
+    operator: str,
+    value: str | None = None,
+    field_type: str = "column",
+    is_hidden: bool = False,
+    is_locked: bool = False,
+    data_type: str | None = None,
+    operator2: str | None = None,
+    value2: str | None = None,
+    logic: str = "and",
+) -> dict:
+    """Add an advanced filter with a schema-backed operator.
+
+    Supported operators: is, is-not, less-than, less-than-or-equal,
+    greater-than, greater-than-or-equal, contains, does-not-contain,
+    starts-with, does-not-start-with, is-blank, is-not-blank,
+    is-empty, is-not-empty.
+
+    For compound filters, pass operator2/value2 with logic='and' or 'or'.
+    """
+    filter_name = f"Filter_{secrets.token_hex(8)}"
+    field_ref = _field_expr(entity, prop, field_type, entity)
+    alias = "f"
+    col_expr = _field_expr(entity, prop, field_type, alias)
+
+    condition = _build_advanced_condition(operator, col_expr, value, data_type)
+
+    if operator2 is not None:
+        if logic not in ("and", "or"):
+            raise ValueError("Compound logic must be 'and' or 'or'.")
+        condition2 = _build_advanced_condition(operator2, col_expr, value2, data_type)
+        logic_key = "And" if logic == "and" else "Or"
+        condition = {logic_key: {"Left": condition, "Right": condition2}}
+
+    filter_obj = {
+        "name": filter_name,
+        "type": "Advanced",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": alias, "Entity": entity, "Type": 0}],
+            "Where": [{"Condition": condition}],
+        },
+        "field": field_ref,
+        "isHiddenInViewMode": is_hidden,
+        "isLockedInViewMode": is_locked,
+        "howCreated": "User",
+    }
+
+    config = data.setdefault("filterConfig", {})
+    config.setdefault("filters", []).append(filter_obj)
+    return filter_obj
 
 
 def _add_null_filter(
@@ -747,12 +879,80 @@ def filter_field_refs(filter_obj: dict) -> list[str]:
             )
             if entity != "?" and prop != "?":
                 refs.append(f"{entity}.{prop}")
+        # Contains / StartsWith (direct or wrapped in Not)
+        inner_cond = condition
+        if "Not" in inner_cond:
+            inner_cond = inner_cond["Not"].get("Expression", {})
+        for node_key in ("Contains", "StartsWith"):
+            if node_key in inner_cond:
+                entity, prop = _extract_expression_ref(
+                    inner_cond[node_key].get("Left", {}),
+                    alias_map=alias_map,
+                )
+                if entity != "?" and prop != "?":
+                    refs.append(f"{entity}.{prop}")
 
     deduped: list[str] = []
     for ref in refs:
         if ref not in deduped:
             deduped.append(ref)
     return deduped
+
+
+def _decode_advanced_condition(cond: dict) -> str | None:
+    """Decode Contains, StartsWith, Not, And, Or conditions into display text."""
+    # Compound: And / Or
+    for logic_key, logic_label in (("And", "and"), ("Or", "or")):
+        if logic_key in cond:
+            left = _decode_advanced_condition(cond[logic_key].get("Left", {}))
+            right = _decode_advanced_condition(cond[logic_key].get("Right", {}))
+            if left and right:
+                return f"{left} {logic_label} {right}"
+            return left or right
+
+    negated = False
+    inner = cond
+
+    if "Not" in inner:
+        negated = True
+        inner = inner["Not"].get("Expression", {})
+
+    if "Contains" in inner:
+        literal = _decode_literal_expr(inner["Contains"].get("Right", {}))
+        op = "does not contain" if negated else "contains"
+        return f"{op} {literal}"
+
+    if "StartsWith" in inner:
+        literal = _decode_literal_expr(inner["StartsWith"].get("Right", {}))
+        op = "does not start with" if negated else "starts with"
+        return f"{op} {literal}"
+
+    if "Comparison" in inner:
+        comp = inner["Comparison"]
+        kind = comp.get("ComparisonKind", 0)
+        right = comp.get("Right", {})
+        raw_val = right.get("Literal", {}).get("Value")
+
+        if kind == 0:
+            if raw_val == "null":
+                return "is not blank" if negated else "is blank"
+            if raw_val == "''":
+                return "is not empty" if negated else "is empty"
+            if negated:
+                literal = _decode_literal_expr(right)
+                return f"is not {literal}"
+            # Non-negated equality falls through to standard Comparison decode
+            return None
+
+        if negated:
+            op_map = {1: "not >", 2: "not >=", 3: "not <", 4: "not <="}
+            literal = _decode_literal_expr(right)
+            return f"{op_map.get(kind, '?')} {literal}"
+
+        # Non-negated, non-equality comparisons handled by standard decode
+        return None
+
+    return None
 
 
 def _extract_filter_values(f: dict) -> list[str]:
@@ -784,8 +984,11 @@ def _extract_filter_values(f: dict) -> list[str]:
                     tuple_values.append("(" + ", ".join(decoded) + ")")
             values.extend(tuple_values)
 
-        # Range: Comparison conditions
-        if "Comparison" in cond:
+        # Advanced: Comparison, Contains, StartsWith, Not wrappers
+        decoded_adv = _decode_advanced_condition(cond)
+        if decoded_adv:
+            values.append(decoded_adv)
+        elif "Comparison" in cond:
             comp = cond["Comparison"]
             kind = comp.get("ComparisonKind", 0)
             right = comp.get("Right", {})
@@ -807,7 +1010,11 @@ def _extract_filter_values(f: dict) -> list[str]:
         if "RelativeDate" in cond:
             rd = cond["RelativeDate"]
             op_map = {0: "in last", 1: "in this", 2: "in next"}
-            unit_map = {0: "days", 1: "weeks", 2: "months", 3: "quarters", 4: "years"}
+            unit_map = {
+                0: "days", 1: "weeks", 2: "calendar weeks",
+                3: "months", 4: "calendar months",
+                5: "years", 6: "calendar years",
+            }
             op = op_map.get(rd.get("Operator", 0), "?")
             count = rd.get("TimeUnitsCount", "?")
             unit = unit_map.get(rd.get("TimeUnitType", 0), "?")

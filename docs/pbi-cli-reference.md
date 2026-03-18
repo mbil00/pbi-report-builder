@@ -146,6 +146,9 @@ pbi filter create Sales.Revenue --page "Sales Overview" --mode range --min 1000 
 pbi filter create Customers.Region --page "Sales Overview" --visual revenueChart --mode topn --topn 5 --topn-by Sales.TotalRevenue --direction top
 pbi filter create Date.Date --mode relative --operator InLast --count 7 --unit Days
 pbi filter create --page "Sales Overview" --mode tuple --row "Product.Color=Red,Product.Size=Large"
+pbi filter create Product.Name --mode advanced --operator contains --value "Pro"
+pbi filter create Product.Name --mode advanced --operator is-blank
+pbi filter create Sales.Revenue --mode advanced --operator greater-than --value 1000
 ```
 
 ```bash

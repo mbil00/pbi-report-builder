@@ -214,6 +214,9 @@ pbi filter create Sales.Region --value "East" --page "Overview"       # page-lev
 pbi filter create Sales.Revenue --min 100 --max 999      # range filter
 pbi filter create Sales.Category --topn 5 --topn-by Facts.Revenue    # top N
 pbi filter create Sales.OrderDate --mode relative --count 30 --unit Days  # relative date
+pbi filter create Product.Name --mode advanced --operator contains --value "Pro"  # text filter
+pbi filter create Product.Name --mode advanced --operator is-blank    # null check
+pbi filter create Sales.Revenue --mode advanced --operator greater-than --value 1000
 
 pbi filter delete Sales.Region                           # delete report filter
 pbi filter delete Sales.Region --page "Overview"         # delete page filter

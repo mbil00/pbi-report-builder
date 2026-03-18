@@ -155,7 +155,7 @@ The apply engine supports these property syntaxes in YAML:
 - **interactions:** page-level `interactions:` list with source/target/type
 - **bookmarks:** top-level `bookmarks:` list with name/page/hide
 - **conditionalFormatting:** `mode: measure` or `mode: gradient` with min/mid/max stops
-- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), categorical/include/exclude, `--mode blank`/`--mode not-blank` (null filtering)
+- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), categorical/include/exclude, `type: advanced` with `operator:` (contains, starts-with, is, is-not, greater-than, less-than, is-blank, is-not-blank, is-empty, is-not-empty, and negated variants). Compound: `operator2:`/`value2:`/`logic: and|or`
 - **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
 - **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
 - **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages

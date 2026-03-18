@@ -10,12 +10,14 @@ from unittest import mock
 from pbi.bookmarks import create_bookmark, update_bookmark_visuals
 from pbi.filters import (
     TupleField,
+    add_advanced_filter,
     add_exclude_filter,
     add_include_filter,
     add_relative_date_filter,
     add_relative_time_filter,
     add_topn_filter,
     add_tuple_filter,
+    filter_field_refs,
     parse_filter,
 )
 from pbi.project import Project
@@ -370,6 +372,221 @@ class SchemaBackedAdvancedFilterTests(unittest.TestCase):
         self.assertEqual(condition["LowerBound"], {"Now": {}})
         self.assertIn("DateAdd", condition["UpperBound"])
         self.assertEqual(parse_filter(filter_obj).values, ["in next 1 hours"])
+
+
+class AdvancedFilterTests(unittest.TestCase):
+    def test_contains_filter_shape(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="contains", value="Pro")
+
+        f = data["filterConfig"]["filters"][0]
+        self.assertEqual(f["type"], "Advanced")
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Contains", cond)
+        self.assertEqual(
+            cond["Contains"]["Right"], {"Literal": {"Value": "'Pro'"}}
+        )
+        self.assertEqual(parse_filter(f).values, ["contains Pro"])
+
+    def test_does_not_contain_filter_uses_not_wrapper(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="does-not-contain", value="Test")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Not", cond)
+        self.assertIn("Contains", cond["Not"]["Expression"])
+        self.assertEqual(parse_filter(f).values, ["does not contain Test"])
+
+    def test_starts_with_filter_shape(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Customer", "Region", operator="starts-with", value="North")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("StartsWith", cond)
+        self.assertEqual(
+            cond["StartsWith"]["Right"], {"Literal": {"Value": "'North'"}}
+        )
+        self.assertEqual(parse_filter(f).values, ["starts with North"])
+
+    def test_does_not_start_with_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Customer", "Region", operator="does-not-start-with", value="South")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Not", cond)
+        self.assertIn("StartsWith", cond["Not"]["Expression"])
+        self.assertEqual(parse_filter(f).values, ["does not start with South"])
+
+    def test_is_filter_uses_comparison_equal(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Category", operator="is", value="Bikes")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Comparison", cond)
+        self.assertEqual(cond["Comparison"]["ComparisonKind"], 0)
+        self.assertEqual(
+            cond["Comparison"]["Right"], {"Literal": {"Value": "'Bikes'"}}
+        )
+
+    def test_is_not_filter_wraps_in_not(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Category", operator="is-not", value="Bikes")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Not", cond)
+        inner = cond["Not"]["Expression"]
+        self.assertIn("Comparison", inner)
+        self.assertEqual(inner["Comparison"]["ComparisonKind"], 0)
+        self.assertEqual(parse_filter(f).values, ["is not Bikes"])
+
+    def test_greater_than_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Sales", "Revenue", operator="greater-than", value="1000", data_type="number")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertEqual(cond["Comparison"]["ComparisonKind"], 1)
+        self.assertEqual(
+            cond["Comparison"]["Right"], {"Literal": {"Value": "1000D"}}
+        )
+
+    def test_less_than_or_equal_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Sales", "Revenue", operator="less-than-or-equal", value="500")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertEqual(cond["Comparison"]["ComparisonKind"], 4)
+
+    def test_is_blank_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="is-blank")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertEqual(cond["Comparison"]["ComparisonKind"], 0)
+        self.assertEqual(cond["Comparison"]["Right"], {"Literal": {"Value": "null"}})
+        self.assertEqual(parse_filter(f).values, ["is blank"])
+
+    def test_is_not_blank_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="is-not-blank")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Not", cond)
+        inner = cond["Not"]["Expression"]
+        self.assertEqual(inner["Comparison"]["Right"], {"Literal": {"Value": "null"}})
+        self.assertEqual(parse_filter(f).values, ["is not blank"])
+
+    def test_is_empty_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="is-empty")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertEqual(cond["Comparison"]["Right"], {"Literal": {"Value": "''"}})
+        self.assertEqual(parse_filter(f).values, ["is empty"])
+
+    def test_is_not_empty_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="is-not-empty")
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Not", cond)
+        self.assertEqual(parse_filter(f).values, ["is not empty"])
+
+    def test_field_refs_extracted_from_contains(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="contains", value="X")
+        f = data["filterConfig"]["filters"][0]
+        refs = filter_field_refs(f)
+        self.assertIn("Product.Name", refs)
+
+    def test_field_refs_extracted_from_not_starts_with(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Customer", "City", operator="does-not-start-with", value="New")
+        f = data["filterConfig"]["filters"][0]
+        refs = filter_field_refs(f)
+        self.assertIn("Customer.City", refs)
+
+    def test_value_required_for_contains(self) -> None:
+        with self.assertRaises(ValueError):
+            add_advanced_filter({}, "Product", "Name", operator="contains")
+
+    def test_value_not_required_for_is_blank(self) -> None:
+        data: dict = {}
+        add_advanced_filter(data, "Product", "Name", operator="is-blank")
+        self.assertEqual(len(data["filterConfig"]["filters"]), 1)
+
+    def test_unknown_operator_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            add_advanced_filter({}, "Product", "Name", operator="banana", value="x")
+
+    def test_compound_and_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(
+            data, "Product", "Name",
+            operator="contains", value="Pro",
+            operator2="does-not-contain", value2="Prototype",
+            logic="and",
+        )
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("And", cond)
+        self.assertIn("Contains", cond["And"]["Left"])
+        self.assertIn("Not", cond["And"]["Right"])
+        self.assertIn("Contains", cond["And"]["Right"]["Not"]["Expression"])
+        self.assertEqual(
+            parse_filter(f).values,
+            ["contains Pro and does not contain Prototype"],
+        )
+
+    def test_compound_or_filter(self) -> None:
+        data: dict = {}
+        add_advanced_filter(
+            data, "Sales", "Revenue",
+            operator="less-than", value="100",
+            operator2="greater-than", value2="10000",
+            logic="or",
+        )
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("Or", cond)
+        self.assertEqual(cond["Or"]["Left"]["Comparison"]["ComparisonKind"], 3)
+        self.assertEqual(cond["Or"]["Right"]["Comparison"]["ComparisonKind"], 1)
+
+    def test_compound_with_nullary_operator(self) -> None:
+        data: dict = {}
+        add_advanced_filter(
+            data, "Product", "Name",
+            operator="contains", value="Pro",
+            operator2="is-not-blank",
+            logic="and",
+        )
+
+        f = data["filterConfig"]["filters"][0]
+        cond = f["filter"]["Where"][0]["Condition"]
+        self.assertIn("And", cond)
+        self.assertIn("Contains", cond["And"]["Left"])
+        self.assertIn("Not", cond["And"]["Right"])
+
+    def test_invalid_logic_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            add_advanced_filter(
+                {}, "Product", "Name",
+                operator="is", value="X",
+                operator2="is-not", value2="Y",
+                logic="xor",
+            )
 
 
 if __name__ == "__main__":

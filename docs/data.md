@@ -80,6 +80,27 @@ pbi filter create --page "Sales Overview" --mode tuple \
   --row "Product.Color=Blue,Product.Size=Medium"
 ```
 
+### Advanced (text and comparison operators)
+
+```bash
+pbi filter create Product.Name --mode advanced --operator contains --value "Pro"
+pbi filter create Product.Name --mode advanced --operator does-not-contain --value "Test"
+pbi filter create Customer.Region --mode advanced --operator starts-with --value "North"
+pbi filter create Customer.Region --mode advanced --operator does-not-start-with --value "South"
+pbi filter create Product.Category --mode advanced --operator is --value "Bikes"
+pbi filter create Product.Category --mode advanced --operator is-not --value "Bikes"
+pbi filter create Sales.Revenue --mode advanced --operator greater-than --value 1000
+pbi filter create Sales.Revenue --mode advanced --operator less-than-or-equal --value 500
+pbi filter create Product.Name --mode advanced --operator is-blank
+pbi filter create Product.Name --mode advanced --operator is-not-blank
+pbi filter create Product.Name --mode advanced --operator is-empty
+pbi filter create Product.Name --mode advanced --operator is-not-empty
+
+# Compound: two conditions joined with --logic and/or
+pbi filter create Product.Name --mode advanced --operator contains --value "Pro" --operator2 does-not-contain --value2 "Prototype" --logic and
+pbi filter create Sales.Revenue --mode advanced --operator less-than --value 100 --operator2 greater-than --value2 10000 --logic or
+```
+
 ## Delete Filters
 
 ```bash

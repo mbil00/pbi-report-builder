@@ -28,12 +28,12 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 
 | Area | Status | What is missing |
 |------|--------|------------------|
-| Filters | blocked | exact PBIR writer for Passthrough |
+| Filters | blocked | Passthrough, Visual, VisualTopN are internal PBI Desktop types (not user-authorable) |
 | Authoring accelerators | planned | report/page starter kits, report scaffold wizard, higher-level automation for creating reports from scratch |
 
 ## Recommended build order
 
-1. Build richer filter coverage from real PBIR examples plus schema validation.
+1. Filter coverage is now comprehensive — all user-facing filter types and advanced operators are supported.
 2. Expand bookmark support with grouping and richer captured state.
 3. Expand `report` commands to resources, annotations, and report objects.
 4. Build recipe-driven authoring on top of the lower-level PBIR editors.

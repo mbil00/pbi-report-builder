@@ -21,7 +21,7 @@ Use `pbi capabilities` to inspect the current support matrix.
 
 Close the remaining gaps where Power BI supports a feature and PBIR can represent it, but the CLI does not yet emit the exact object structure:
 
-- advanced filters: passthrough and any still-unobserved exported filter families
+- advanced filters: Passthrough, Visual, and VisualTopN are internal PBI Desktop types (not user-authorable); all user-facing advanced operators are now supported
 - deeper bookmark state: filters, sort state, active projections, grouped visuals
 - richer page-binding coverage for tooltip and drillthrough
 - broader report-level metadata and resource package management

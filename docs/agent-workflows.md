@@ -125,6 +125,13 @@ filters:
   type: range
   min: 1000
   max: 50000
+- field: Product.Name
+  type: advanced
+  operator: contains
+  value: Pro
+- field: Product.Description
+  type: advanced
+  operator: is-not-blank
 ```
 
 ## Styles (Reusable Formatting)

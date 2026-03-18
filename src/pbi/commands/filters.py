@@ -156,7 +156,7 @@ def filter_create(
         str,
         typer.Option(
             "--mode",
-            help="Filter mode: categorical, include, exclude, range, topn, relative, or tuple.",
+            help="Filter mode: categorical, include, exclude, range, topn, relative, tuple, blank, not-blank, or advanced.",
         ),
     ] = "categorical",
     min_val: Annotated[str | None, typer.Option("--min", help="Minimum value for range filter.")] = None,
@@ -164,7 +164,7 @@ def filter_create(
     topn: Annotated[int | None, typer.Option("--topn", help="Top N items count.")] = None,
     topn_by: Annotated[str | None, typer.Option("--topn-by", help="Order-by field for Top N (Table.Field).")] = None,
     direction: Annotated[str, typer.Option("--direction", help="Top N direction: top or bottom.")] = "top",
-    operator: Annotated[str | None, typer.Option("--operator", help="Relative operator: InLast, InThis, or InNext.")] = None,
+    operator: Annotated[str | None, typer.Option("--operator", help="Advanced: is, is-not, contains, starts-with, etc. Relative: InLast, InThis, InNext.")] = None,
     count: Annotated[int | None, typer.Option("--count", help="Relative time unit count.")] = None,
     unit: Annotated[str | None, typer.Option("--unit", help="Relative unit: Minutes, Hours, Days, Weeks, CalendarWeeks, Months, CalendarMonths, Years, or CalendarYears.")] = None,
     include_today: Annotated[bool, typer.Option("--include-today/--no-include-today", help="Include today for relative date filters when supported.")] = True,
@@ -172,11 +172,16 @@ def filter_create(
     locked: Annotated[bool, typer.Option("--locked", help="Lock filter in view mode.")] = False,
     field_type: Annotated[str, typer.Option("--field-type", help="Field type: auto, column, or measure.")] = "auto",
     row: Annotated[list[str] | None, typer.Option("--row", help="Tuple row as comma-separated Field=Value pairs. Repeatable.")] = None,
+    operator2: Annotated[str | None, typer.Option("--operator2", help="Second advanced operator for compound filters.")] = None,
+    value2: Annotated[str | None, typer.Option("--value2", help="Value for the second advanced operator.")] = None,
+    logic: Annotated[str, typer.Option("--logic", help="Compound logic: and or or.")] = "and",
     project: ProjectOpt = None,
 ) -> None:
     """Create a filter. Defaults to report level; use --page/--visual to narrow scope."""
     from pbi.filters import (
+        ADVANCED_OPERATORS,
         TupleField,
+        add_advanced_filter,
         add_blank_filter,
         add_categorical_filter,
         add_exclude_filter,
@@ -191,7 +196,7 @@ def filter_create(
         save_level_data,
     )
 
-    valid_modes = {"categorical", "include", "exclude", "range", "topn", "relative", "tuple", "blank", "not-blank"}
+    valid_modes = {"categorical", "include", "exclude", "range", "topn", "relative", "tuple", "blank", "not-blank", "advanced"}
     if mode not in valid_modes:
         console.print(
             f"[red]Error:[/red] Invalid --mode '{mode}'. "
@@ -292,6 +297,66 @@ def filter_create(
         label = "blank" if mode == "blank" else "not-blank"
         console.print(
             f'Created {label} filter on [cyan]{entity}.{prop}[/cyan] at {level} level'
+        )
+        return
+
+    if mode == "advanced":
+        if not operator:
+            console.print(
+                "[red]Error:[/red] Advanced filters require --operator. "
+                f"Valid operators: {', '.join(sorted(ADVANCED_OPERATORS))}."
+            )
+            raise typer.Exit(1)
+        if operator not in ADVANCED_OPERATORS:
+            console.print(
+                f"[red]Error:[/red] Unknown operator '{operator}'. "
+                f"Valid operators: {', '.join(sorted(ADVANCED_OPERATORS))}."
+            )
+            raise typer.Exit(1)
+        if operator2 and operator2 not in ADVANCED_OPERATORS:
+            console.print(
+                f"[red]Error:[/red] Unknown --operator2 '{operator2}'. "
+                f"Valid operators: {', '.join(sorted(ADVANCED_OPERATORS))}."
+            )
+            raise typer.Exit(1)
+        if logic not in ("and", "or"):
+            console.print("[red]Error:[/red] --logic must be 'and' or 'or'.")
+            raise typer.Exit(1)
+        _, _, _, needs_value = ADVANCED_OPERATORS[operator]
+        adv_value = value[0] if value else None
+        if needs_value and not adv_value:
+            console.print(f"[red]Error:[/red] Operator '{operator}' requires --value.")
+            raise typer.Exit(1)
+        try:
+            add_advanced_filter(
+                data,
+                entity,
+                prop,
+                operator=operator,
+                value=adv_value,
+                field_type=resolved_field_type,
+                is_hidden=hidden,
+                is_locked=locked,
+                data_type=data_type,
+                operator2=operator2,
+                value2=value2,
+                logic=logic,
+            )
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+        save_level_data(data, target)
+        parts = [operator]
+        if adv_value:
+            parts.append(f'"{adv_value}"')
+        if operator2:
+            parts.append(logic)
+            parts.append(operator2)
+            if value2:
+                parts.append(f'"{value2}"')
+        console.print(
+            f'Created advanced filter on [cyan]{entity}.{prop}[/cyan] '
+            f'{" ".join(parts)} at {level} level'
         )
         return
 

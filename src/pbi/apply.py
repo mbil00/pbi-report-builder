@@ -1019,6 +1019,51 @@ def _apply_filters(
                 data_type=data_type,
             )
             result.filters_added += 1
+        elif filter_type.lower() == "advanced":
+            from pbi.filters import ADVANCED_OPERATORS, add_advanced_filter
+
+            adv_operator = f_spec.get("operator", "")
+            if adv_operator not in ADVANCED_OPERATORS:
+                result.errors.append(
+                    f"{context}: unknown advanced operator '{adv_operator}'. "
+                    f"Use one of: {', '.join(sorted(ADVANCED_OPERATORS))}."
+                )
+                continue
+
+            adv_value = f_spec.get("value")
+            if adv_value is not None:
+                adv_value = str(adv_value)
+
+            # Resolve field type and data type via model
+            field_type = "column"
+            data_type = None
+            if project is not None:
+                entity, prop, field_type, data_type = _resolve_apply_field(
+                    field_ref, project, session=session
+                )
+
+            adv_operator2 = f_spec.get("operator2")
+            adv_value2 = f_spec.get("value2")
+            if adv_value2 is not None:
+                adv_value2 = str(adv_value2)
+            adv_logic = str(f_spec.get("logic", "and")).lower()
+
+            try:
+                add_advanced_filter(
+                    data, entity, prop,
+                    operator=adv_operator,
+                    value=adv_value,
+                    field_type=field_type,
+                    is_hidden=is_hidden,
+                    is_locked=is_locked,
+                    data_type=data_type,
+                    operator2=adv_operator2,
+                    value2=adv_value2,
+                    logic=adv_logic,
+                )
+                result.filters_added += 1
+            except ValueError as e:
+                result.errors.append(f"{context}: {e}")
         else:
             result.warnings.append(
                 f"{context}: filter type '{filter_type}' not yet supported in apply."

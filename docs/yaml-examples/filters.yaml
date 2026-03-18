@@ -42,6 +42,59 @@ pages:
     hidden: true
     locked: true
 
+  # Advanced: text operators — contains, starts-with, does-not-contain, does-not-start-with
+  - field: Product.Name
+    type: advanced
+    operator: contains
+    value: Pro
+
+  - field: Customer.Region
+    type: advanced
+    operator: starts-with
+    value: North
+
+  - field: Product.Name
+    type: advanced
+    operator: does-not-contain
+    value: Test
+
+  # Advanced: comparison operators — is, is-not, greater-than, less-than, etc.
+  - field: Product.Category
+    type: advanced
+    operator: is
+    value: Bikes
+
+  - field: Sales.Revenue
+    type: advanced
+    operator: greater-than
+    value: 1000
+
+  # Advanced: null/empty checks — is-blank, is-not-blank, is-empty, is-not-empty
+  - field: Product.Description
+    type: advanced
+    operator: is-not-blank
+
+  - field: Product.Notes
+    type: advanced
+    operator: is-not-empty
+
+  # Advanced compound: two conditions joined with and/or
+  - field: Product.Name
+    type: advanced
+    operator: contains
+    value: Pro
+    operator2: does-not-contain
+    value2: Prototype
+    logic: and
+
+  - field: Sales.Revenue
+    type: advanced
+    operator: less-than
+    value: 100
+    operator2: greater-than
+    value2: 10000
+    logic: or
+
   visuals:
 
   - name: filteredChart
