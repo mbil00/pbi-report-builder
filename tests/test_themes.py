@@ -18,6 +18,7 @@ from pbi.themes import (
     _build_theme_defaults,
     _cascade_visual_styles_colors,
     _ensure_resource_entry,
+    _fix_theme_resource_path,
     _load_theme_preset,
     _lookup_theme_default,
     _normalize_resource_item,
@@ -1315,6 +1316,88 @@ class TestEnsureResourceEntryFixesPath(unittest.TestCase):
         _ensure_resource_entry(report, "MyTheme")
         self.assertEqual(len(report["resourcePackages"][0]["items"]), 1)
         self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+
+
+class TestFixThemeResourcePath(unittest.TestCase):
+    """BUG-031: _fix_theme_resource_path repairs broken paths in both formats."""
+
+    def test_fixes_flat_format(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "name": "RegisteredResources",
+                "type": "RegisteredResources",
+                "items": [{"name": "MyTheme", "path": "MyTheme", "type": "CustomTheme"}],
+            }],
+        }
+        self.assertTrue(_fix_theme_resource_path(report, "MyTheme"))
+        self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+
+    def test_fixes_wrapped_format(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "resourcePackage": {
+                    "name": "RegisteredResources",
+                    "type": 1,
+                    "items": [{"name": "MyTheme", "path": "MyTheme", "type": 202}],
+                }
+            }],
+        }
+        self.assertTrue(_fix_theme_resource_path(report, "MyTheme"))
+        item = report["resourcePackages"][0]["resourcePackage"]["items"][0]
+        self.assertEqual(item["path"], "MyTheme.json")
+
+    def test_no_change_when_correct(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "name": "RegisteredResources",
+                "type": "RegisteredResources",
+                "items": [{"name": "MyTheme", "path": "MyTheme.json", "type": "CustomTheme"}],
+            }],
+        }
+        self.assertFalse(_fix_theme_resource_path(report, "MyTheme"))
+
+    def test_fixes_empty_path(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "name": "RegisteredResources",
+                "type": "RegisteredResources",
+                "items": [{"name": "MyTheme", "path": "", "type": "CustomTheme"}],
+            }],
+        }
+        self.assertTrue(_fix_theme_resource_path(report, "MyTheme"))
+        self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+
+
+class TestSaveThemeDataRepairsPath(unittest.TestCase):
+    """BUG-031: save_theme_data should repair broken resource paths in report.json."""
+
+    def test_repairs_broken_path_on_save(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            from pbi.project import Project
+            from pbi.themes import get_theme_data, save_theme_data
+
+            # Scaffold project with broken path (no .json extension)
+            root = Path(tmp)
+            theme_data = create_theme("TestTheme")
+            pbip = _scaffold_project(root, theme_data=theme_data)
+
+            # Corrupt the path in report.json
+            report_path = root / "Test.Report" / "definition" / "report.json"
+            report = json.loads(report_path.read_text())
+            report["resourcePackages"][0]["items"][0]["path"] = "TestTheme"
+            report_path.write_text(json.dumps(report, indent=2) + "\n")
+
+            # Run save_theme_data (as theme style set / theme set would)
+            proj = Project.find(pbip)
+            data = get_theme_data(proj)
+            save_theme_data(proj, data)
+
+            # Verify path was repaired
+            after = json.loads(report_path.read_text())
+            self.assertEqual(
+                after["resourcePackages"][0]["items"][0]["path"],
+                "TestTheme.json",
+            )
 
 
 # ── BUG-032: fontFamily must not be parsed as int ─────────────────────

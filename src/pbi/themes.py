@@ -607,6 +607,11 @@ def save_theme_data(project: Project, data: dict) -> None:
         raise FileNotFoundError("No custom theme applied to this project")
 
     theme_name = custom.get("name", "")
+
+    # Repair resource path if .json extension is missing (BUG-031)
+    if _fix_theme_resource_path(report, theme_name):
+        _write_report(project, report)
+
     for candidate in _custom_theme_paths(project, report, theme_name):
         if candidate.exists():
             with open(candidate, "w", encoding="utf-8", newline="\r\n") as f:
@@ -1475,6 +1480,39 @@ def _delete_theme_file(project: Project, theme_name: str) -> None:
     for path in _custom_theme_paths(project, report, theme_name):
         if path.exists():
             path.unlink()
+
+
+def _fix_theme_resource_path(report: dict, theme_name: str) -> bool:
+    """Ensure the CustomTheme resource item in report.json has a .json path.
+
+    PBI Desktop may write resource items with `path` equal to the theme name
+    (without `.json` extension).  This silently breaks theme loading.
+
+    Searches both flat and wrapped (``resourcePackage``) package formats.
+    Returns True if report was modified.
+    """
+    expected_path = f"{theme_name}.json"
+    fixed = False
+
+    for pkg in report.get("resourcePackages", []):
+        # Support both flat format and legacy wrapped format
+        inner = pkg.get("resourcePackage", pkg)
+        if not isinstance(inner, dict):
+            continue
+        for item in inner.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            if item.get("name") != theme_name:
+                continue
+            cur_path = item.get("path", "")
+            if isinstance(cur_path, str) and cur_path and not cur_path.endswith(".json"):
+                item["path"] = expected_path
+                fixed = True
+            elif not cur_path:
+                item["path"] = expected_path
+                fixed = True
+
+    return fixed
 
 
 def _remove_resource_items_by_type(report: dict, item_type: str) -> None:
