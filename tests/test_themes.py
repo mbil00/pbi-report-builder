@@ -15,8 +15,14 @@ from pbi.themes import (
     THEME_CASCADE,
     ThemePreset,
     _blend,
+    _build_theme_defaults,
+    _cascade_visual_styles_colors,
+    _ensure_resource_entry,
     _load_theme_preset,
+    _lookup_theme_default,
+    _normalize_resource_item,
     _validate_hex_color,
+    audit_theme_overrides,
     clone_theme_preset,
     create_theme,
     decode_theme_style_value,
@@ -24,6 +30,7 @@ from pbi.themes import (
     delete_visual_style,
     dump_theme_preset,
     encode_theme_style_value,
+    fix_theme_overrides,
     get_theme_preset,
     get_theme_property,
     get_visual_style_entries,
@@ -1074,6 +1081,342 @@ class TestThemeStyleDeleteCommand(unittest.TestCase):
             ])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No visual style", result.stdout)
+
+
+# ── Theme audit (IMP-09) ──────────────────────────────────────────────
+
+
+def _scaffold_audit_project(root: Path) -> Path:
+    """Create a project with a theme + visuals that have per-visual overrides."""
+    from pbi.project import Project
+
+    theme_data = create_theme("AuditTheme")
+    theme_data["visualStyles"] = {
+        "*": {"*": {
+            "background": [{"show": True, "color": {"solid": {"color": "#FFFFFF"}}}],
+            "border": [{"color": {"solid": {"color": "#E0DEDE"}}, "show": True}],
+        }},
+        "tableEx": {"*": {
+            "columnHeaders": [{"backColor": {"solid": {"color": "#002C77"}}}],
+        }},
+    }
+
+    pbip = _scaffold_project(root, theme_data=theme_data)
+    proj = Project.find(pbip)
+    page = proj.create_page("Dashboard")
+
+    # Visual 1: redundant override (matches theme)
+    v1 = proj.create_visual(page, "card")
+    v1.data["visual"]["visualContainerObjects"] = {
+        "background": [{
+            "properties": {
+                "show": {"expr": {"Literal": {"Value": "true"}}},
+                "color": {"solid": {"color": {"expr": {"Literal": {"Value": "'#FFFFFF'"}}}}},
+            },
+        }],
+    }
+    v1.save()
+
+    # Visual 2: conflicting override (differs from theme)
+    v2 = proj.create_visual(page, "tableEx")
+    v2.data["visual"]["visualContainerObjects"] = {
+        "border": [{
+            "properties": {
+                "color": {"solid": {"color": {"expr": {"Literal": {"Value": "'#CCCCCC'"}}}}},
+            },
+        }],
+    }
+    v2.data["visual"]["objects"] = {
+        "columnHeaders": [{
+            "properties": {
+                "backColor": {"solid": {"color": {"expr": {"Literal": {"Value": "'#002C77'"}}}}},
+            },
+        }],
+    }
+    v2.save()
+
+    # Visual 3: no overrides (clean)
+    proj.create_visual(page, "slicer")
+
+    return pbip
+
+
+class TestBuildThemeDefaults(unittest.TestCase):
+    def test_builds_lookup(self) -> None:
+        data = {
+            "visualStyles": {
+                "*": {"*": {
+                    "background": [{"show": True, "color": {"solid": {"color": "#FFF"}}}],
+                }},
+                "tableEx": {"*": {
+                    "columnHeaders": [{"backColor": {"solid": {"color": "#002C77"}}}],
+                }},
+            },
+        }
+        defaults = _build_theme_defaults(data)
+        self.assertEqual(defaults[("*", "background", "show")], True)
+        self.assertEqual(defaults[("*", "background", "color")], "#FFF")
+        self.assertEqual(defaults[("tableEx", "columnHeaders", "backColor")], "#002C77")
+
+    def test_type_specific_overrides_wildcard(self) -> None:
+        defaults = {
+            ("*", "background", "color"): "#FFF",
+            ("tableEx", "background", "color"): "#000",
+        }
+        val, found = _lookup_theme_default(defaults, "tableEx", "background", "color")
+        self.assertTrue(found)
+        self.assertEqual(val, "#000")
+
+    def test_wildcard_fallback(self) -> None:
+        defaults = {("*", "background", "color"): "#FFF"}
+        val, found = _lookup_theme_default(defaults, "card", "background", "color")
+        self.assertTrue(found)
+        self.assertEqual(val, "#FFF")
+
+    def test_not_found(self) -> None:
+        defaults = {("*", "background", "color"): "#FFF"}
+        val, found = _lookup_theme_default(defaults, "card", "legend", "show")
+        self.assertFalse(found)
+
+
+class TestAuditThemeOverrides(unittest.TestCase):
+    def test_finds_redundant_and_conflicts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            from pbi.project import Project
+
+            pbip = _scaffold_audit_project(Path(tmp))
+            proj = Project.find(pbip)
+            result = audit_theme_overrides(proj)
+
+            self.assertEqual(result.total_visuals, 3)
+            self.assertEqual(result.visuals_with_overrides, 2)
+
+            redundant = [o for o in result.overrides if o.is_match]
+            conflicts = [o for o in result.overrides if not o.is_match]
+
+            # card1: background.show=true and background.color=#FFFFFF are redundant
+            self.assertTrue(len(redundant) >= 2)
+            # table1: border.color=#CCCCCC conflicts with theme #E0DEDE
+            conflict_props = [(o.object_name, o.property_name) for o in conflicts]
+            self.assertIn(("border", "color"), conflict_props)
+
+    def test_fix_removes_redundant(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            from pbi.project import Project
+
+            pbip = _scaffold_audit_project(Path(tmp))
+            proj = Project.find(pbip)
+            result = audit_theme_overrides(proj)
+            redundant_before = result.redundant_count
+            self.assertGreater(redundant_before, 0)
+
+            removed = fix_theme_overrides(proj, result)
+            self.assertEqual(removed, redundant_before)
+
+            # Re-audit: no more redundant overrides
+            result2 = audit_theme_overrides(proj)
+            self.assertEqual(result2.redundant_count, 0)
+            # Conflicts should still exist
+            self.assertGreater(result2.conflict_count, 0)
+
+
+class TestThemeAuditCommand(unittest.TestCase):
+    def test_audit_output(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_audit_project(Path(tmp))
+            result = runner.invoke(app, ["theme", "audit", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("override theme defaults", result.stdout)
+            self.assertIn("redundant", result.stdout)
+
+    def test_audit_json(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_audit_project(Path(tmp))
+            result = runner.invoke(app, ["theme", "audit", "--json", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            import json as json_mod
+            rows = json_mod.loads(result.stdout)
+            self.assertIsInstance(rows, list)
+            self.assertTrue(len(rows) > 0)
+            self.assertIn("redundant", rows[0])
+
+    def test_audit_fix(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_audit_project(Path(tmp))
+            result = runner.invoke(app, ["theme", "audit", "--fix", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Removed", result.stdout)
+
+    def test_audit_dry_run(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_audit_project(Path(tmp))
+            result = runner.invoke(app, ["theme", "audit", "--dry-run", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Would remove", result.stdout)
+
+    def test_audit_no_theme(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            # Project without custom theme
+            pbip = _scaffold_project(Path(tmp))
+            result = runner.invoke(app, ["theme", "audit", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 1)
+
+
+# ── BUG-031: Resource path must preserve .json extension ──────────────
+
+
+class TestNormalizeResourceItemPreservesPath(unittest.TestCase):
+    """BUG-031: Ensure CustomTheme items always have .json extension in path."""
+
+    def test_preserves_json_extension(self) -> None:
+        item = {"name": "MyTheme", "path": "MyTheme.json", "type": "CustomTheme"}
+        result = _normalize_resource_item(item)
+        self.assertEqual(result["path"], "MyTheme.json")
+
+    def test_adds_json_extension_when_missing(self) -> None:
+        item = {"name": "MyTheme", "path": "MyTheme", "type": 202}
+        result = _normalize_resource_item(item)
+        self.assertEqual(result["path"], "MyTheme.json")
+
+    def test_adds_path_when_absent(self) -> None:
+        item = {"name": "MyTheme", "type": 202}
+        result = _normalize_resource_item(item)
+        self.assertEqual(result["path"], "MyTheme.json")
+
+
+class TestEnsureResourceEntryFixesPath(unittest.TestCase):
+    """BUG-031: _ensure_resource_entry should fix path on existing items."""
+
+    def test_fixes_missing_extension(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "name": "RegisteredResources",
+                "type": "RegisteredResources",
+                "items": [{"type": "CustomTheme", "name": "MyTheme", "path": "MyTheme"}],
+            }],
+        }
+        _ensure_resource_entry(report, "MyTheme")
+        item = report["resourcePackages"][0]["items"][0]
+        self.assertEqual(item["path"], "MyTheme.json")
+
+    def test_preserves_correct_path(self) -> None:
+        report: dict = {
+            "resourcePackages": [{
+                "name": "RegisteredResources",
+                "type": "RegisteredResources",
+                "items": [{"type": "CustomTheme", "name": "MyTheme", "path": "MyTheme.json"}],
+            }],
+        }
+        _ensure_resource_entry(report, "MyTheme")
+        self.assertEqual(len(report["resourcePackages"][0]["items"]), 1)
+        self.assertEqual(report["resourcePackages"][0]["items"][0]["path"], "MyTheme.json")
+
+
+# ── BUG-032: fontFamily must not be parsed as int ─────────────────────
+
+
+class TestEncodeThemeStyleValueStringFallback(unittest.TestCase):
+    """BUG-032: fmt/int/num schema types must handle string values gracefully."""
+
+    def test_fmt_string_value(self) -> None:
+        result = encode_theme_style_value("Segoe UI Semibold", "fmt")
+        self.assertEqual(result, "Segoe UI Semibold")
+
+    def test_int_string_value(self) -> None:
+        result = encode_theme_style_value("Segoe UI", "int")
+        self.assertEqual(result, "Segoe UI")
+
+    def test_num_string_value(self) -> None:
+        result = encode_theme_style_value("Arial", "num")
+        self.assertEqual(result, "Arial")
+
+    def test_fmt_numeric_still_works(self) -> None:
+        self.assertEqual(encode_theme_style_value("9", "fmt"), 9)
+        self.assertEqual(encode_theme_style_value("9.5", "fmt"), 9.5)
+
+
+# ── BUG-033: Color cascade must update visualStyles ───────────────────
+
+
+class TestCascadeVisualStylesColors(unittest.TestCase):
+    """BUG-033: Theme color changes must cascade to visualStyles."""
+
+    def test_cascade_replaces_colors(self) -> None:
+        data = {
+            "visualStyles": {
+                "tableEx": {"*": {
+                    "columnHeaders": [{"backColor": {"solid": {"color": "#5C564E"}}}],
+                }},
+            },
+        }
+        count = _cascade_visual_styles_colors(data, {"#5C564E": "#747474"})
+        self.assertEqual(count, 1)
+        val = data["visualStyles"]["tableEx"]["*"]["columnHeaders"][0]["backColor"]
+        self.assertEqual(val, {"solid": {"color": "#747474"}})
+
+    def test_cascade_case_insensitive(self) -> None:
+        data = {
+            "visualStyles": {
+                "*": {"*": {
+                    "border": [{"color": {"solid": {"color": "#edebe9"}}}],
+                }},
+            },
+        }
+        count = _cascade_visual_styles_colors(data, {"#EDEBE9": "#E0DEDE"})
+        self.assertEqual(count, 1)
+        self.assertEqual(
+            data["visualStyles"]["*"]["*"]["border"][0]["color"]["solid"]["color"],
+            "#E0DEDE",
+        )
+
+    def test_no_match_returns_zero(self) -> None:
+        data = {
+            "visualStyles": {
+                "*": {"*": {"border": [{"show": True}]}},
+            },
+        }
+        self.assertEqual(_cascade_visual_styles_colors(data, {"#FF0000": "#00FF00"}), 0)
+
+
+class TestSetThemePropertyCascadesToVisualStyles(unittest.TestCase):
+    """BUG-033: set_theme_property should cascade color changes to visualStyles."""
+
+    def test_cascade_updates_visual_styles(self) -> None:
+        data = {
+            "foreground": "#333333",
+            "visualStyles": {
+                "*": {"*": {
+                    "title": [{"fontColor": {"solid": {"color": "#333333"}}}],
+                }},
+            },
+        }
+        changed = set_theme_property(data, "foreground", "#111111")
+        self.assertIn("foreground", changed)
+        # Should have cascaded to visualStyles
+        val = data["visualStyles"]["*"]["*"]["title"][0]["fontColor"]
+        self.assertEqual(val, {"solid": {"color": "#111111"}})
+
+
+# ── BUG-034: theme get shows visualStyles ─────────────────────────────
+
+
+class TestThemeGetShowsVisualStyles(unittest.TestCase):
+    """BUG-034: theme get should display visualStyles properties."""
+
+    def test_overview_includes_visual_styles(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, ["theme", "get", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Visual Styles", result.stdout)
+            self.assertIn("categoryAxis", result.stdout)
+            self.assertIn("showAxisTitle", result.stdout)
 
 
 if __name__ == "__main__":

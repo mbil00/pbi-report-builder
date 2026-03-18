@@ -171,10 +171,11 @@ def encode_theme_style_value(value: str, schema_type: str | list[str] | None = N
     # Schema-guided types
     if schema_type == "bool":
         return value.lower() in ("true", "1", "yes", "on")
-    if schema_type == "int":
-        return int(value)
-    if schema_type in ("num", "fmt"):
-        return float(value) if "." in value else int(value)
+    if schema_type in ("int", "num", "fmt"):
+        try:
+            return float(value) if "." in value else int(value)
+        except ValueError:
+            return value
     if isinstance(schema_type, list):
         lower_map = {v.lower(): v for v in schema_type}
         return lower_map.get(value.lower(), value)
@@ -213,6 +214,42 @@ def get_visual_style_entries(data: dict, visual_type: str) -> dict[str, list[dic
 def list_visual_style_types(data: dict) -> list[str]:
     """Return sorted list of visual type keys in visualStyles."""
     return sorted(data.get("visualStyles", {}).keys())
+
+
+def _cascade_visual_styles_colors(data: dict, color_map: dict[str, str]) -> int:
+    """Replace old colors with new colors in visualStyles.
+
+    color_map maps old_hex (uppercased) → new_hex.
+    Returns count of properties updated.
+    """
+    vs = data.get("visualStyles")
+    if not vs or not color_map:
+        return 0
+
+    count = 0
+    for _vtype, roles in vs.items():
+        if not isinstance(roles, dict):
+            continue
+        for _role, objects in roles.items():
+            if not isinstance(objects, dict):
+                continue
+            for _obj_name, entries in objects.items():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    for prop_name, val in entry.items():
+                        if prop_name == "$id":
+                            continue
+                        if isinstance(val, dict) and "solid" in val:
+                            cur = val["solid"].get("color", "")
+                            if isinstance(cur, str):
+                                new = color_map.get(cur.upper())
+                                if new is not None:
+                                    val["solid"]["color"] = new
+                                    count += 1
+    return count
 
 
 def set_visual_style_property(
@@ -619,6 +656,13 @@ def set_theme_property(
 
     coerced = _coerce_theme_value(value, prop_type)
 
+    # Build color mapping for visualStyles cascade (old → new)
+    color_map: dict[str, str] = {}
+    if cascade and prop_type == "color" and isinstance(coerced, str):
+        old_val = get_theme_property(data, prop_path)
+        if isinstance(old_val, str) and old_val.upper() != coerced.upper():
+            color_map[old_val.upper()] = coerced
+
     # Set the value using dot-path
     _set_nested(data, prop_path, coerced)
     changed.append(prop_path)
@@ -630,8 +674,19 @@ def set_theme_property(
         for derived in THEME_CASCADE.get(top_key, []):
             # Only cascade if we're setting the top-level key directly
             if prop_path == top_key:
+                # Capture old derived value for visualStyles cascade
+                if prop_type == "color" and isinstance(coerced, str):
+                    old_derived = data.get(derived)
+                    if isinstance(old_derived, str) and old_derived.upper() != coerced.upper():
+                        color_map[old_derived.upper()] = coerced
                 _set_nested(data, derived, coerced)
                 changed.append(derived)
+
+    # Cascade color changes to visualStyles
+    if color_map:
+        vs_count = _cascade_visual_styles_colors(data, color_map)
+        if vs_count:
+            changed.append(f"visualStyles ({vs_count} properties)")
 
     return changed
 
@@ -972,6 +1027,239 @@ def remove_theme(project: Project) -> str | None:
     return theme_name
 
 
+# ── Theme audit ───────────────────────────────────────────────────────
+
+
+@dataclass
+class ThemeOverrideEntry:
+    """A per-visual property that overrides a theme default."""
+    page_name: str
+    visual_name: str
+    visual_type: str
+    object_name: str
+    property_name: str
+    visual_value: str  # decoded human-readable
+    theme_value: str  # decoded human-readable
+    is_match: bool  # True = redundant (visual == theme)
+
+    # Internal: for --fix to locate the property
+    _objects_key: str = ""
+    _entry_idx: int = 0
+
+
+@dataclass
+class ThemeAuditResult:
+    """Summary of a theme override audit."""
+    overrides: list[ThemeOverrideEntry]
+    total_visuals: int = 0
+    visuals_with_overrides: int = 0
+
+    @property
+    def redundant_count(self) -> int:
+        return sum(1 for o in self.overrides if o.is_match)
+
+    @property
+    def conflict_count(self) -> int:
+        return sum(1 for o in self.overrides if not o.is_match)
+
+
+def _build_theme_defaults(data: dict) -> dict[tuple[str, str, str], Any]:
+    """Build lookup of theme defaults: (visual_type, object, property) → decoded value.
+
+    Wildcard (*) entries apply to all visual types.
+    Type-specific entries are stored with their type key.
+    """
+    defaults: dict[tuple[str, str, str], Any] = {}
+    vs = data.get("visualStyles", {})
+    for vtype, roles in vs.items():
+        if not isinstance(roles, dict):
+            continue
+        for objects in roles.values():
+            if not isinstance(objects, dict):
+                continue
+            for obj_name, entries in objects.items():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    for prop_name, raw_val in entry.items():
+                        if prop_name == "$id":
+                            continue
+                        decoded = decode_theme_style_value(raw_val)
+                        defaults[(vtype, obj_name, prop_name)] = decoded
+    return defaults
+
+
+def _lookup_theme_default(
+    defaults: dict[tuple[str, str, str], Any],
+    visual_type: str,
+    object_name: str,
+    property_name: str,
+) -> tuple[Any, bool]:
+    """Look up theme default: type-specific first, then wildcard.
+
+    Returns (value, found).
+    """
+    # Type-specific
+    key = (visual_type, object_name, property_name)
+    if key in defaults:
+        return defaults[key], True
+    # Wildcard
+    key = ("*", object_name, property_name)
+    if key in defaults:
+        return defaults[key], True
+    return None, False
+
+
+def _decode_visual_value(raw: Any) -> Any:
+    """Decode a per-visual PBI property value to human-readable form."""
+    from pbi.properties import decode_pbi_value
+    return decode_pbi_value(raw)
+
+
+def _values_match(visual_val: Any, theme_val: Any) -> bool:
+    """Compare decoded visual and theme values (case-insensitive for strings)."""
+    if isinstance(visual_val, str) and isinstance(theme_val, str):
+        return visual_val.upper() == theme_val.upper()
+    return visual_val == theme_val
+
+
+def audit_theme_overrides(
+    project: Project,
+    *,
+    page_filter: str | None = None,
+) -> ThemeAuditResult:
+    """Scan all visuals for properties that override theme defaults.
+
+    Returns an audit result with all overrides found.
+    """
+    data = get_theme_data(project)
+    defaults = _build_theme_defaults(data)
+
+    if not defaults:
+        return ThemeAuditResult(overrides=[])
+
+    result = ThemeAuditResult(overrides=[])
+    pages = project.get_pages()
+    if page_filter:
+        pages = [project.find_page(page_filter)]
+
+    for page in pages:
+        for visual in project.get_visuals(page):
+            if "visualGroup" in visual.data:
+                continue
+            result.total_visuals += 1
+            vtype = visual.visual_type
+            visual_has_override = False
+
+            for objects_key in ("objects", "visualContainerObjects"):
+                objects = visual.data.get("visual", {}).get(objects_key, {})
+                for obj_name, entries in objects.items():
+                    if not isinstance(entries, list):
+                        continue
+                    for entry_idx, entry in enumerate(entries):
+                        props = entry.get("properties", {})
+                        if not isinstance(props, dict):
+                            continue
+                        for prop_name, raw_value in props.items():
+                            theme_val, found = _lookup_theme_default(
+                                defaults, vtype, obj_name, prop_name,
+                            )
+                            if not found:
+                                continue
+                            visual_val = _decode_visual_value(raw_value)
+                            is_match = _values_match(visual_val, theme_val)
+                            result.overrides.append(ThemeOverrideEntry(
+                                page_name=page.display_name,
+                                visual_name=visual.name,
+                                visual_type=vtype,
+                                object_name=obj_name,
+                                property_name=prop_name,
+                                visual_value=str(visual_val),
+                                theme_value=str(theme_val),
+                                is_match=is_match,
+                                _objects_key=objects_key,
+                                _entry_idx=entry_idx,
+                            ))
+                            visual_has_override = True
+
+            if visual_has_override:
+                result.visuals_with_overrides += 1
+
+    return result
+
+
+def fix_theme_overrides(
+    project: Project,
+    result: ThemeAuditResult,
+    *,
+    dry_run: bool = False,
+) -> int:
+    """Remove per-visual properties that match (are redundant with) the theme.
+
+    Returns the number of properties removed.
+    """
+    # Group redundant overrides by visual file path
+    removals: dict[str, list[ThemeOverrideEntry]] = {}
+    for entry in result.overrides:
+        if not entry.is_match:
+            continue
+        key = f"{entry.page_name}/{entry.visual_name}"
+        removals.setdefault(key, []).append(entry)
+
+    if dry_run or not removals:
+        return result.redundant_count
+
+    pages = project.get_pages()
+    removed = 0
+
+    for page in pages:
+        for visual in project.get_visuals(page):
+            if "visualGroup" in visual.data:
+                continue
+            key = f"{page.display_name}/{visual.name}"
+            entries_to_remove = removals.get(key)
+            if not entries_to_remove:
+                continue
+
+            changed = False
+            for entry in entries_to_remove:
+                objects = visual.data.get("visual", {}).get(entry._objects_key, {})
+                obj_entries = objects.get(entry.object_name)
+                if not isinstance(obj_entries, list):
+                    continue
+                if entry._entry_idx >= len(obj_entries):
+                    continue
+                props = obj_entries[entry._entry_idx].get("properties", {})
+                if entry.property_name in props:
+                    del props[entry.property_name]
+                    removed += 1
+                    changed = True
+                # Clean up empty properties dict
+                if not props:
+                    obj_entries[entry._entry_idx].pop("properties", None)
+                # Clean up empty entries
+                if not obj_entries[entry._entry_idx] or obj_entries[entry._entry_idx] == {}:
+                    obj_entries.pop(entry._entry_idx)
+                # Clean up empty object
+                if not obj_entries:
+                    objects.pop(entry.object_name, None)
+
+            if changed:
+                # Clean up empty objects/visualContainerObjects
+                for objects_key in ("objects", "visualContainerObjects"):
+                    obj_dict = visual.data.get("visual", {}).get(objects_key, {})
+                    if isinstance(obj_dict, dict) and not obj_dict:
+                        visual.data.get("visual", {}).pop(objects_key, None)
+                visual.save()
+
+    return removed
+
+
+# ── Theme migration ──────────────────────────────────────────────────
+
+
 @dataclass
 class ColorReplacement:
     """A color mapping from old theme to new theme."""
@@ -1232,15 +1520,19 @@ def _ensure_resource_entry(report: dict, theme_name: str) -> None:
 
     items = reg_pkg.setdefault("items", [])
 
-    # Check if theme already registered
+    expected_path = f"{theme_name}.json"
+
+    # Check if theme already registered — fix path if extension is missing
     for item in items:
         if item.get("name") == theme_name:
+            if item.get("path") != expected_path:
+                item["path"] = expected_path
             return
 
     items.append({
         "type": "CustomTheme",
         "name": theme_name,
-        "path": f"{theme_name}.json",
+        "path": expected_path,
     })
 
 
@@ -1281,6 +1573,13 @@ def _normalize_resource_item(item: dict) -> dict:
         item.get("type"),
         path=item.get("path", ""),
     )
+    # Ensure CustomTheme items have .json extension in path
+    if entry["type"] == "CustomTheme" and "name" in entry:
+        expected_path = f"{entry['name']}.json"
+        if entry.get("path", "") and not entry["path"].endswith(".json"):
+            entry["path"] = expected_path
+        elif not entry.get("path"):
+            entry["path"] = expected_path
     return entry
 
 

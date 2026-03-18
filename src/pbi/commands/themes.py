@@ -173,6 +173,107 @@ def theme_migrate(
         console.print("[dim]No matching color overrides found in visuals.[/dim]")
 
 
+@theme_app.command("audit")
+def theme_audit(
+    fix: Annotated[bool, typer.Option("--fix", help="Remove redundant overrides that match the theme.")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what --fix would do without modifying files.")] = False,
+    page: Annotated[Optional[str], typer.Option("--page", help="Audit a single page.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Audit visuals for properties that override the active theme.
+
+    Reports redundant overrides (matching theme) and conflicts (differing from theme).
+    Use --fix to remove redundant overrides so the theme controls styling.
+    """
+    import json
+
+    from pbi.themes import audit_theme_overrides, fix_theme_overrides
+
+    proj = get_project(project)
+
+    try:
+        result = audit_theme_overrides(proj, page_filter=page)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not result.overrides:
+        console.print("[dim]No per-visual overrides found that match theme properties.[/dim]")
+        return
+
+    if as_json:
+        rows = [
+            {
+                "page": o.page_name,
+                "visual": o.visual_name,
+                "visualType": o.visual_type,
+                "object": o.object_name,
+                "property": o.property_name,
+                "visualValue": o.visual_value,
+                "themeValue": o.theme_value,
+                "redundant": o.is_match,
+            }
+            for o in result.overrides
+        ]
+        console.print_json(json.dumps(rows, indent=2))
+        return
+
+    prefix = "[dim](dry run)[/dim] " if dry_run else ""
+
+    # Summary
+    console.print(
+        f"{result.visuals_with_overrides} visual(s) override theme defaults "
+        f"({result.redundant_count} redundant, {result.conflict_count} conflict)"
+    )
+
+    # Show conflicts (visual != theme)
+    conflicts = [o for o in result.overrides if not o.is_match]
+    if conflicts:
+        conflict_table = Table(title="Conflicts (differ from theme)", box=box.SIMPLE)
+        conflict_table.add_column("Page/Visual", style="cyan")
+        conflict_table.add_column("Property")
+        conflict_table.add_column("Visual Value")
+        conflict_table.add_column("Theme Value", style="dim")
+        for o in conflicts:
+            conflict_table.add_row(
+                f"{o.page_name}/{o.visual_name}",
+                f"{o.object_name}.{o.property_name}",
+                o.visual_value,
+                o.theme_value,
+            )
+        console.print(conflict_table)
+
+    # Show redundant (visual == theme)
+    redundant = [o for o in result.overrides if o.is_match]
+    if redundant:
+        red_table = Table(title="Redundant (match theme, can be removed)", box=box.SIMPLE)
+        red_table.add_column("Page/Visual", style="cyan")
+        red_table.add_column("Property")
+        red_table.add_column("Value", style="dim")
+        for o in redundant:
+            red_table.add_row(
+                f"{o.page_name}/{o.visual_name}",
+                f"{o.object_name}.{o.property_name}",
+                o.visual_value,
+            )
+        console.print(red_table)
+
+    if fix or dry_run:
+        if not redundant:
+            console.print("[dim]No redundant overrides to remove.[/dim]")
+            return
+
+        removed = fix_theme_overrides(proj, result, dry_run=dry_run)
+        verb = "Would remove" if dry_run else "Removed"
+        console.print(f"{prefix}{verb} [cyan]{removed}[/cyan] redundant override(s)")
+    elif redundant:
+        console.print(
+            f"\n[yellow]Run `pbi theme audit --fix` to remove "
+            f"{result.redundant_count} redundant override(s).[/yellow]"
+        )
+
+
 @theme_app.command("create")
 def theme_create(
     name: Annotated[str, typer.Argument(help="Theme name.")],
@@ -334,6 +435,41 @@ def theme_get(
                 cls.get("color", ""),
             )
         console.print(tc_table)
+
+    # Visual styles
+    vs = data.get("visualStyles", {})
+    if vs:
+        from pbi.themes import decode_theme_style_value
+
+        vs_table = Table(title="Visual Styles", box=box.SIMPLE)
+        vs_table.add_column("Type", style="cyan")
+        vs_table.add_column("Object")
+        vs_table.add_column("Property")
+        vs_table.add_column("Value")
+        vs_table.add_column("Selector", style="dim")
+        for vtype in sorted(vs.keys()):
+            roles = vs[vtype]
+            if not isinstance(roles, dict):
+                continue
+            for objects in roles.values():
+                if not isinstance(objects, dict):
+                    continue
+                for obj_name in sorted(objects.keys()):
+                    entries = objects[obj_name]
+                    if not isinstance(entries, list):
+                        continue
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        sid = entry.get("$id", "")
+                        for prop_name, raw_val in entry.items():
+                            if prop_name == "$id":
+                                continue
+                            vs_table.add_row(
+                                vtype, obj_name, prop_name,
+                                str(decode_theme_style_value(raw_val)), sid,
+                            )
+        console.print(vs_table)
 
 
 @theme_app.command("set")
