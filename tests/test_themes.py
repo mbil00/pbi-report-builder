@@ -19,13 +19,20 @@ from pbi.themes import (
     _validate_hex_color,
     clone_theme_preset,
     create_theme,
+    decode_theme_style_value,
     delete_theme_preset,
+    delete_visual_style,
     dump_theme_preset,
+    encode_theme_style_value,
     get_theme_preset,
     get_theme_property,
+    get_visual_style_entries,
     list_theme_presets,
+    list_visual_style_types,
+    parse_style_assignment,
     save_theme_preset,
     set_theme_property,
+    set_visual_style_property,
 )
 
 
@@ -766,6 +773,307 @@ class TestThemePresetCloneCommand(unittest.TestCase):
             ])
             self.assertNotEqual(result.exit_code, 0)
             self.assertIn("--to-global", result.stdout)
+
+
+# ── Visual style unit tests ─────────────────────────────────────────────
+
+
+class TestParseStyleAssignment(unittest.TestCase):
+    def test_simple(self) -> None:
+        obj, prop, sel, val = parse_style_assignment("legend.show=true")
+        self.assertEqual(obj, "legend")
+        self.assertEqual(prop, "show")
+        self.assertIsNone(sel)
+        self.assertEqual(val, "true")
+
+    def test_with_selector(self) -> None:
+        obj, prop, sel, val = parse_style_assignment("filterCard.border[Applied]=true")
+        self.assertEqual(obj, "filterCard")
+        self.assertEqual(prop, "border")
+        self.assertEqual(sel, "Applied")
+        self.assertEqual(val, "true")
+
+    def test_invalid_no_equals(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_style_assignment("legend.show")
+
+    def test_invalid_no_dot(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_style_assignment("legend=true")
+
+
+class TestEncodeThemeStyleValue(unittest.TestCase):
+    def test_color_hex(self) -> None:
+        result = encode_theme_style_value("#FF0000", "color")
+        self.assertEqual(result, {"solid": {"color": "#FF0000"}})
+
+    def test_color_token(self) -> None:
+        result = encode_theme_style_value("foreground", "color")
+        self.assertEqual(result, {"solid": {"color": "foreground"}})
+
+    def test_bool(self) -> None:
+        self.assertTrue(encode_theme_style_value("true", "bool"))
+        self.assertFalse(encode_theme_style_value("false", "bool"))
+
+    def test_int(self) -> None:
+        self.assertEqual(encode_theme_style_value("42", "int"), 42)
+
+    def test_num_float(self) -> None:
+        self.assertEqual(encode_theme_style_value("0.5", "num"), 0.5)
+
+    def test_enum(self) -> None:
+        result = encode_theme_style_value("dotted", ["solid", "dotted", "dashed"])
+        self.assertEqual(result, "dotted")
+
+    def test_fallback_bool(self) -> None:
+        self.assertTrue(encode_theme_style_value("true", None))
+
+    def test_fallback_int(self) -> None:
+        self.assertEqual(encode_theme_style_value("3", None), 3)
+
+    def test_fallback_string(self) -> None:
+        self.assertEqual(encode_theme_style_value("hello", None), "hello")
+
+    def test_palette_token_auto(self) -> None:
+        result = encode_theme_style_value("backgroundLight", None)
+        self.assertEqual(result, {"solid": {"color": "backgroundLight"}})
+
+
+class TestDecodeThemeStyleValue(unittest.TestCase):
+    def test_color_object(self) -> None:
+        self.assertEqual(decode_theme_style_value({"solid": {"color": "#FFF"}}), "#FFF")
+
+    def test_scalar(self) -> None:
+        self.assertEqual(decode_theme_style_value(True), True)
+        self.assertEqual(decode_theme_style_value(3), 3)
+
+
+class TestSetVisualStyleProperty(unittest.TestCase):
+    def test_set_creates_structure(self) -> None:
+        data: dict = {"name": "test"}
+        set_visual_style_property(data, "*", "legend", "show", "true")
+        entries = get_visual_style_entries(data, "*")
+        self.assertIsNotNone(entries)
+        self.assertIn("legend", entries)
+        self.assertEqual(entries["legend"][0]["show"], True)
+
+    def test_set_with_selector(self) -> None:
+        data: dict = {"name": "test"}
+        set_visual_style_property(data, "*", "filterCard", "border", "true", selector="Applied")
+        entries = get_visual_style_entries(data, "*")
+        found = [e for e in entries["filterCard"] if e.get("$id") == "Applied"]
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0]["border"])
+
+    def test_set_color_encodes_correctly(self) -> None:
+        data: dict = {"name": "test"}
+        set_visual_style_property(data, "*", "background", "backgroundColor", "#ffffff")
+        entries = get_visual_style_entries(data, "*")
+        self.assertEqual(
+            entries["background"][0]["backgroundColor"],
+            {"solid": {"color": "#FFFFFF"}},
+        )
+
+
+class TestDeleteVisualStyle(unittest.TestCase):
+    def test_delete_type(self) -> None:
+        data: dict = {
+            "visualStyles": {
+                "columnChart": {"*": {"legend": [{"show": True}]}},
+                "pieChart": {"*": {"labels": [{"show": True}]}},
+            }
+        }
+        self.assertTrue(delete_visual_style(data, "columnChart"))
+        self.assertNotIn("columnChart", data["visualStyles"])
+        self.assertIn("pieChart", data["visualStyles"])
+
+    def test_delete_object(self) -> None:
+        data: dict = {
+            "visualStyles": {
+                "columnChart": {"*": {"legend": [{"show": True}], "labels": [{"show": True}]}},
+            }
+        }
+        self.assertTrue(delete_visual_style(data, "columnChart", "legend"))
+        entries = get_visual_style_entries(data, "columnChart")
+        self.assertNotIn("legend", entries)
+        self.assertIn("labels", entries)
+
+    def test_delete_missing(self) -> None:
+        data: dict = {"visualStyles": {}}
+        self.assertFalse(delete_visual_style(data, "nonexistent"))
+
+    def test_delete_cleans_empty_parents(self) -> None:
+        data: dict = {
+            "visualStyles": {
+                "columnChart": {"*": {"legend": [{"show": True}]}},
+            }
+        }
+        delete_visual_style(data, "columnChart", "legend")
+        self.assertNotIn("columnChart", data["visualStyles"])
+
+
+class TestListVisualStyleTypes(unittest.TestCase):
+    def test_list(self) -> None:
+        data: dict = {
+            "visualStyles": {
+                "columnChart": {"*": {}},
+                "*": {"*": {}},
+                "pieChart": {"*": {}},
+            }
+        }
+        types = list_visual_style_types(data)
+        self.assertEqual(types, ["*", "columnChart", "pieChart"])
+
+    def test_empty(self) -> None:
+        self.assertEqual(list_visual_style_types({}), [])
+
+
+# ── Visual style CLI tests ──────────────────────────────────────────────
+
+
+def _scaffold_with_visual_styles(root: Path) -> Path:
+    """Create a project with a custom theme that has visualStyles."""
+    theme_data = create_theme("Styled")
+    theme_data["visualStyles"] = {
+        "*": {"*": {
+            "background": [{"show": True, "transparency": 0}],
+            "categoryAxis": [{"showAxisTitle": True, "gridlineStyle": "dotted"}],
+        }},
+        "columnChart": {"*": {
+            "legend": [{"show": True, "position": "RightCenter"}],
+        }},
+    }
+    return _scaffold_project(root, theme_data=theme_data)
+
+
+class TestThemeStyleListCommand(unittest.TestCase):
+    def test_list(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, ["theme", "style", "list", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("columnChart", result.stdout)
+
+    def test_list_no_styles(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            theme_data = create_theme("Plain")
+            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            result = runner.invoke(app, ["theme", "style", "list", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("No visual style", result.stdout)
+
+
+class TestThemeStyleGetCommand(unittest.TestCase):
+    def test_get_type(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, ["theme", "style", "get", "columnChart", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("legend", result.stdout)
+            self.assertIn("RightCenter", result.stdout)
+
+    def test_get_object(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, ["theme", "style", "get", "*", "categoryAxis", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("showAxisTitle", result.stdout)
+            self.assertIn("dotted", result.stdout)
+
+    def test_get_raw(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, ["theme", "style", "get", "--raw", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            parsed = json.loads(result.stdout)
+            self.assertIn("columnChart", parsed)
+
+
+class TestThemeStyleSetCommand(unittest.TestCase):
+    def test_set_new_property(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            theme_data = create_theme("Test")
+            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            result = runner.invoke(app, [
+                "theme", "style", "set", "columnChart",
+                "legend.show=true", "legend.position=RightCenter",
+                "-p", str(pbip),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+            # Verify
+            result = runner.invoke(app, ["theme", "style", "get", "columnChart", "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("RightCenter", result.stdout)
+
+    def test_set_wildcard_type(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            theme_data = create_theme("Test")
+            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            result = runner.invoke(app, [
+                "theme", "style", "set", "*",
+                "background.show=true",
+                "-p", str(pbip),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+    def test_set_with_selector(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            theme_data = create_theme("Test")
+            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            result = runner.invoke(app, [
+                "theme", "style", "set", "*",
+                "filterCard.border[Applied]=true",
+                "-p", str(pbip),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+
+class TestThemeStyleDeleteCommand(unittest.TestCase):
+    def test_delete_type(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, [
+                "theme", "style", "delete", "columnChart", "--force",
+                "-p", str(pbip),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Deleted", result.stdout)
+
+            # Verify gone
+            result = runner.invoke(app, ["theme", "style", "get", "columnChart", "-p", str(pbip)])
+            self.assertIn("No style overrides", result.stdout)
+
+    def test_delete_object(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, [
+                "theme", "style", "delete", "*", "categoryAxis", "--force",
+                "-p", str(pbip),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Deleted", result.stdout)
+
+    def test_delete_missing(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_with_visual_styles(Path(tmp))
+            result = runner.invoke(app, [
+                "theme", "style", "delete", "nonexistent", "--force",
+                "-p", str(pbip),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("No visual style", result.stdout)
 
 
 if __name__ == "__main__":

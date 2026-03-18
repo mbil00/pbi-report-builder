@@ -14,6 +14,8 @@ from .common import ProjectOpt, console, get_project, parse_property_assignments
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
 theme_preset_app = typer.Typer(help="Saved theme preset operations.", no_args_is_help=True)
 theme_app.add_typer(theme_preset_app, name="preset")
+theme_style_app = typer.Typer(help="Visual style overrides in the theme.", no_args_is_help=True)
+theme_app.add_typer(theme_style_app, name="style")
 
 
 @theme_app.command("list")
@@ -592,3 +594,235 @@ def theme_preset_clone(
     target_name = new_name or name
     direction = "global" if to_global else "project"
     console.print(f'Cloned "[cyan]{name}[/cyan]" → {direction} as "[cyan]{target_name}[/cyan]" → {path}')
+
+
+# ── Theme style subcommands ─────────────────────────────────────────────
+
+
+@theme_style_app.command("list")
+def theme_style_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List visual types with style overrides in the theme."""
+    from pbi.themes import get_theme_data, get_visual_style_entries, list_visual_style_types
+
+    proj = get_project(project)
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    types = list_visual_style_types(data)
+    if not types:
+        console.print("[yellow]No visual style overrides in this theme.[/yellow]")
+        raise typer.Exit(0)
+
+    if as_json:
+        import json
+
+        rows = []
+        for vtype in types:
+            entries = get_visual_style_entries(data, vtype) or {}
+            rows.append({"visualType": vtype, "objects": sorted(entries.keys())})
+        console.print_json(json.dumps(rows, indent=2))
+        return
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Visual Type", style="cyan")
+    table.add_column("Objects")
+    for vtype in types:
+        entries = get_visual_style_entries(data, vtype) or {}
+        table.add_row(vtype, ", ".join(sorted(entries.keys())))
+    console.print(table)
+
+
+@theme_style_app.command("get")
+def theme_style_get(
+    visual_type: Annotated[Optional[str], typer.Argument(help="Visual type (or * for global wildcard).")] = None,
+    objects: Annotated[Optional[list[str]], typer.Argument(help="Object name(s) to inspect.")] = None,
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump raw JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show visual style overrides for a type or object."""
+    import json as json_mod
+
+    from pbi.themes import decode_theme_style_value, get_theme_data, get_visual_style_entries, list_visual_style_types
+
+    proj = get_project(project)
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if raw:
+        vs = data.get("visualStyles", {})
+        if visual_type:
+            vs = vs.get(visual_type, {})
+        console.print_json(json_mod.dumps(vs, indent=2))
+        return
+
+    if not visual_type:
+        # Summary — same as list
+        types = list_visual_style_types(data)
+        if not types:
+            console.print("[yellow]No visual style overrides in this theme.[/yellow]")
+            raise typer.Exit(0)
+        table = Table(box=box.SIMPLE)
+        table.add_column("Visual Type", style="cyan")
+        table.add_column("Objects")
+        for vtype in types:
+            entries = get_visual_style_entries(data, vtype) or {}
+            table.add_row(vtype, ", ".join(sorted(entries.keys())))
+        console.print(table)
+        return
+
+    entries = get_visual_style_entries(data, visual_type)
+    if entries is None:
+        console.print(f'[yellow]No style overrides for "{visual_type}".[/yellow]')
+        raise typer.Exit(0)
+
+    if objects:
+        # Show properties for specific object(s)
+        table = Table(title=f"visualStyles: {visual_type}", box=box.SIMPLE)
+        table.add_column("Object", style="cyan")
+        table.add_column("Property")
+        table.add_column("Value")
+        table.add_column("Selector", style="dim")
+        for obj_name in objects:
+            obj_entries = entries.get(obj_name)
+            if not obj_entries:
+                console.print(f'[yellow]No object "{obj_name}" for "{visual_type}".[/yellow]')
+                continue
+            for entry in obj_entries:
+                sid = entry.get("$id", "")
+                for prop_name, raw_val in entry.items():
+                    if prop_name == "$id":
+                        continue
+                    table.add_row(obj_name, prop_name, str(decode_theme_style_value(raw_val)), sid)
+        console.print(table)
+        return
+
+    # Show all objects for the type
+    table = Table(title=f"visualStyles: {visual_type}", box=box.SIMPLE)
+    table.add_column("Object", style="cyan")
+    table.add_column("Property")
+    table.add_column("Value")
+    table.add_column("Selector", style="dim")
+    for obj_name in sorted(entries.keys()):
+        for entry in entries[obj_name]:
+            sid = entry.get("$id", "")
+            for prop_name, raw_val in entry.items():
+                if prop_name == "$id":
+                    continue
+                table.add_row(obj_name, prop_name, str(decode_theme_style_value(raw_val)), sid)
+    console.print(table)
+
+
+@theme_style_app.command("set")
+def theme_style_set(
+    visual_type: Annotated[str, typer.Argument(help="Visual type (or * for global wildcard).")],
+    assignments: Annotated[list[str], typer.Argument(help="Assignments: object.property=value [object.property[selector]=value ...].")],
+    project: ProjectOpt = None,
+) -> None:
+    """Set visual style properties in the theme."""
+    from pbi.themes import (
+        decode_theme_style_value,
+        get_theme_data,
+        get_visual_style_entries,
+        parse_style_assignment,
+        save_theme_data,
+        set_visual_style_property,
+    )
+
+    proj = get_project(project)
+
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    for raw in assignments:
+        try:
+            obj_name, prop_name, selector, value = parse_style_assignment(raw)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+        # Get old value for display
+        entries = get_visual_style_entries(data, visual_type)
+        old_val = None
+        if entries:
+            obj_entries = entries.get(obj_name, [])
+            for entry in obj_entries:
+                if selector and entry.get("$id") != selector:
+                    continue
+                if not selector and "$id" in entry:
+                    continue
+                old_val = decode_theme_style_value(entry.get(prop_name))
+                break
+
+        try:
+            set_visual_style_property(
+                data, visual_type, obj_name, prop_name, value,
+                selector=selector,
+            )
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {obj_name}.{prop_name}: {e}")
+            raise typer.Exit(1)
+
+        # Get new value for display
+        entries = get_visual_style_entries(data, visual_type) or {}
+        new_val = None
+        for entry in entries.get(obj_name, []):
+            if selector and entry.get("$id") != selector:
+                continue
+            if not selector and "$id" in entry:
+                continue
+            new_val = decode_theme_style_value(entry.get(prop_name))
+            break
+
+        old_str = str(old_val) if old_val is not None else "(none)"
+        new_str = str(new_val) if new_val is not None else "(none)"
+        sel_label = f" [{selector}]" if selector else ""
+        if old_str == new_str:
+            console.print(f"[dim]No change:[/dim] [cyan]{obj_name}.{prop_name}{sel_label}[/cyan] is already {new_str}")
+        else:
+            console.print(f"[dim]{obj_name}.{prop_name}{sel_label}:[/dim] {old_str} [dim]->[/dim] {new_str}")
+
+    save_theme_data(proj, data)
+
+
+@theme_style_app.command("delete")
+def theme_style_delete(
+    visual_type: Annotated[str, typer.Argument(help="Visual type to remove overrides for.")],
+    object_name: Annotated[Optional[str], typer.Argument(help="Object to remove (omit to remove entire type).")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Remove visual style overrides from the theme."""
+    from pbi.themes import delete_visual_style, get_theme_data, save_theme_data
+
+    proj = get_project(project)
+
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    target = f"{visual_type}.{object_name}" if object_name else visual_type
+    if not force:
+        confirm = typer.confirm(f'Delete visual style overrides for "{target}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    deleted = delete_visual_style(data, visual_type, object_name)
+    if deleted:
+        save_theme_data(proj, data)
+        console.print(f'Deleted visual style overrides for "[cyan]{target}[/cyan]"')
+    else:
+        console.print(f'[yellow]No visual style overrides for "{target}".[/yellow]')

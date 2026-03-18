@@ -132,6 +132,178 @@ THEME_PROPERTIES: list[tuple[str, str, str]] = [
 ]
 
 
+# ── Visual style encoding / CRUD ────────────────────────────────────────
+
+_STYLE_PROP_RE = re.compile(r"^([^.]+)\.([^\[]+)(?:\[([^\]]+)\])?$")
+
+
+def parse_style_assignment(raw: str) -> tuple[str, str, str | None, str]:
+    """Parse 'object.prop[selector]=value' into (object, prop, selector, value)."""
+    eq = raw.find("=")
+    if eq == -1:
+        raise ValueError(f"Invalid assignment '{raw}'. Use object.property=value format.")
+    key, value = raw[:eq], raw[eq + 1:]
+
+    m = _STYLE_PROP_RE.match(key)
+    if not m:
+        raise ValueError(f"Invalid property path '{key}'. Use object.property format.")
+    return m.group(1), m.group(2), m.group(3), value
+
+
+def _is_theme_color(value: str) -> bool:
+    """Check if value is a hex color or a known theme palette token."""
+    if value.startswith("#"):
+        return True
+    return value in THEME_PALETTE_KEYS
+
+
+def encode_theme_style_value(value: str, schema_type: str | list[str] | None = None) -> Any:
+    """Encode a CLI string into theme visualStyles JSON format.
+
+    Unlike PBIR encoding, theme values use plain scalars and
+    ``{"solid": {"color": "..."}}`` for colors (no expr wrappers).
+    """
+    # Schema-guided color
+    if schema_type == "color" or _is_theme_color(value):
+        color = _validate_hex_color(value) if value.startswith("#") else value
+        return {"solid": {"color": color}}
+
+    # Schema-guided types
+    if schema_type == "bool":
+        return value.lower() in ("true", "1", "yes", "on")
+    if schema_type == "int":
+        return int(value)
+    if schema_type in ("num", "fmt"):
+        return float(value) if "." in value else int(value)
+    if isinstance(schema_type, list):
+        lower_map = {v.lower(): v for v in schema_type}
+        return lower_map.get(value.lower(), value)
+
+    # Fallback type inference
+    if value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
+def decode_theme_style_value(raw: Any) -> Any:
+    """Decode a theme visualStyles value to a human-readable form."""
+    if isinstance(raw, dict) and "solid" in raw:
+        return raw["solid"].get("color", raw)
+    return raw
+
+
+def get_visual_style_entries(data: dict, visual_type: str) -> dict[str, list[dict]] | None:
+    """Return the objects dict for a visual type (unwrapping the '*' data role level)."""
+    vs = data.get("visualStyles", {})
+    vtype = vs.get(visual_type)
+    if vtype is None:
+        return None
+    # Always unwrap through the "*" data role wildcard
+    return vtype.get("*")
+
+
+def list_visual_style_types(data: dict) -> list[str]:
+    """Return sorted list of visual type keys in visualStyles."""
+    return sorted(data.get("visualStyles", {}).keys())
+
+
+def set_visual_style_property(
+    data: dict,
+    visual_type: str,
+    object_name: str,
+    property_name: str,
+    value: str,
+    *,
+    selector: str | None = None,
+) -> None:
+    """Set a property in visualStyles[visual_type]['*'][object_name]."""
+    from pbi.visual_schema import get_property_type, validate_object, validate_property
+
+    # Schema validation (advisory, for non-wildcard types)
+    schema_type: str | list[str] | None = None
+    if visual_type != "*":
+        w = validate_object(visual_type, object_name)
+        if w:
+            from pbi.commands.common import console
+            console.print(f"[yellow]Warning:[/yellow] {w}")
+        else:
+            w = validate_property(visual_type, object_name, property_name)
+            if w:
+                from pbi.commands.common import console
+                console.print(f"[yellow]Warning:[/yellow] {w}")
+        schema_type = get_property_type(visual_type, object_name, property_name)
+
+    encoded = encode_theme_style_value(value, schema_type)
+
+    # Navigate/create path: visualStyles -> visual_type -> "*" -> object_name
+    vs = data.setdefault("visualStyles", {})
+    vtype = vs.setdefault(visual_type, {})
+    drole = vtype.setdefault("*", {})
+    entries: list[dict] = drole.setdefault(object_name, [{}])
+
+    # Find or create the target entry
+    target: dict | None = None
+    if selector:
+        for entry in entries:
+            if entry.get("$id") == selector:
+                target = entry
+                break
+        if target is None:
+            target = {"$id": selector}
+            entries.append(target)
+    else:
+        # First entry without $id, or first entry if all have $id
+        for entry in entries:
+            if "$id" not in entry:
+                target = entry
+                break
+        if target is None:
+            target = entries[0]
+
+    target[property_name] = encoded
+
+
+def delete_visual_style(
+    data: dict,
+    visual_type: str,
+    object_name: str | None = None,
+) -> bool:
+    """Remove a visual type entry or specific object from visualStyles."""
+    vs = data.get("visualStyles")
+    if not vs:
+        return False
+
+    if object_name is None:
+        if visual_type in vs:
+            del vs[visual_type]
+            return True
+        return False
+
+    vtype = vs.get(visual_type)
+    if not vtype:
+        return False
+    drole = vtype.get("*")
+    if not drole:
+        return False
+    if object_name in drole:
+        del drole[object_name]
+        # Clean up empty parents
+        if not drole:
+            del vtype["*"]
+        if not vtype:
+            del vs[visual_type]
+        return True
+    return False
+
+
 # ── Theme preset storage (project + global scope) ───────────────────────
 
 @dataclass(frozen=True)

@@ -295,6 +295,17 @@ pbi theme preset delete "corporate" --force # delete a preset
 pbi theme preset clone "corporate" --to-global   # clone project → global
 pbi theme preset clone "corporate" --to-project  # clone global → project
 
+# Visual style overrides (default formatting per visual type)
+pbi theme style list                         # list types with style overrides
+pbi theme style get columnChart              # show all overrides for a type
+pbi theme style get * categoryAxis           # show specific object properties
+pbi theme style get --raw                    # dump full visualStyles JSON
+pbi theme style set columnChart legend.show=true legend.position=RightCenter
+pbi theme style set * background.show=true background.transparency=0
+pbi theme style set * filterCard.border[Applied]=true  # with $id selector
+pbi theme style delete columnChart --force   # remove type overrides
+pbi theme style delete * categoryAxis --force  # remove specific object
+
 # Apply, export, delete, migrate
 pbi theme apply corporate-theme.json        # apply custom theme from file
 pbi theme export theme-backup.json          # export current theme
