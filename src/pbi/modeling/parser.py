@@ -44,6 +44,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     lines = content.splitlines()
 
     table_name = None
+    table_props: dict[str, str] = {}
     columns: list[Column] = []
     measures: list[Measure] = []
     hierarchies: list[Hierarchy] = []
@@ -92,6 +93,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     display_folder=current_props.get("displayFolder", ""),
                     sort_by_column=current_props.get("sortByColumn", ""),
                     data_category=current_props.get("dataCategory", ""),
+                    is_key="isKey" in current_props,
                 )
             )
         elif current_type == "measure" and table_name:
@@ -144,6 +146,12 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
             continue
 
         if indent == 1:
+            if ":" in stripped and current_type is None:
+                key, _, val = stripped.partition(":")
+                key = key.strip()
+                if key in {"dataCategory"}:
+                    table_props[key] = val.strip()
+                    continue
             if stripped.startswith("column ") or stripped.startswith("calculatedColumn "):
                 _flush()
                 is_calculated = stripped.startswith("calculatedColumn ")
@@ -197,6 +205,8 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         if current_type and indent >= 2:
             if stripped == "isHidden":
                 current_props["isHidden"] = "true"
+            elif stripped == "isKey":
+                current_props["isKey"] = "true"
             elif stripped.startswith(("annotation ", "variation ")):
                 pass  # skip nested blocks
             elif ":" in stripped and not stripped.startswith("```"):
@@ -221,7 +231,30 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     return SemanticTable(
         name=table_name, columns=columns, measures=measures,
         hierarchies=hierarchies, definition_path=path,
+        data_category=table_props.get("dataCategory", ""),
     )
+
+
+def _parse_model_tmdl(path: Path) -> dict[str, bool | None]:
+    """Parse model-level settings needed by the CLI."""
+    settings: dict[str, bool | None] = {"time_intelligence_enabled": None}
+    content = path.read_text(encoding="utf-8-sig")
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("annotation "):
+            continue
+        rest = stripped[len("annotation "):]
+        name, sep, value = rest.partition("=")
+        if not sep:
+            continue
+        if name.strip() != "__PBI_TimeIntelligenceEnabled":
+            continue
+        normalized = value.strip().strip('"').lower()
+        if normalized in {"1", "true"}:
+            settings["time_intelligence_enabled"] = True
+        elif normalized in {"0", "false"}:
+            settings["time_intelligence_enabled"] = False
+    return settings
 
 
 def _parse_relationships_tmdl(path: Path) -> list[Relationship]:

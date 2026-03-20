@@ -17,7 +17,9 @@ from pbi.model import (
     create_relationship,
     delete_hierarchy,
     delete_relationship,
+    mark_as_date_table,
     set_member_property,
+    set_time_intelligence_enabled,
     set_relationship_property,
 )
 from pbi.model_apply import apply_model_yaml
@@ -54,6 +56,14 @@ def _write_relationships(root: Path, content: str) -> Path:
     defn = root / "Sample.SemanticModel" / "definition"
     defn.mkdir(parents=True, exist_ok=True)
     path = defn / "relationships.tmdl"
+    path.write_text(content.strip() + "\n", encoding="utf-8")
+    return path
+
+
+def _write_model(root: Path, content: str) -> Path:
+    defn = root / "Sample.SemanticModel" / "definition"
+    defn.mkdir(parents=True, exist_ok=True)
+    path = defn / "model.tmdl"
     path.write_text(content.strip() + "\n", encoding="utf-8")
     return path
 
@@ -164,8 +174,13 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+""")
             _write_table(root, "Sales.tmdl", """
 table Sales
+\tdataCategory: Time
 \tmeasure Revenue = SUM(Sales[Amount])
 \t\tdescription: Total revenue
 \t\tdisplayFolder: KPIs
@@ -173,6 +188,7 @@ table Sales
 
 \tcolumn OrderDate
 \t\tdataType: dateTime
+\t\tisKey
 \t\tdescription: When the order was placed
 \t\tdisplayFolder: Dates
 \t\tsortByColumn: OrderDateKey
@@ -182,7 +198,10 @@ table Sales
 \t\tsourceColumn: OrderDate
 """)
             model = SemanticModel.load(root)
+            self.assertTrue(model.time_intelligence_enabled)
             t = model.find_table("Sales")
+            self.assertEqual(t.data_category, "Time")
+            self.assertEqual(t.date_table_column, "OrderDate")
             m = t.find_measure("Revenue")
             self.assertEqual(m.description, "Total revenue")
             self.assertEqual(m.display_folder, "KPIs")
@@ -192,6 +211,95 @@ table Sales
             self.assertEqual(c.display_folder, "Dates")
             self.assertEqual(c.sort_by_column, "OrderDateKey")
             self.assertEqual(c.data_category, "DateOfBirth")
+            self.assertTrue(c.is_key)
+
+    def test_mark_as_date_table_sets_table_and_column_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+
+\tcolumn FiscalDate
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: FiscalDate
+""")
+            table, column, changed = mark_as_date_table(root, "Date", "Date")
+            self.assertEqual((table, column), ("Date", "Date"))
+            self.assertTrue(changed)
+
+            model = SemanticModel.load(root)
+            date_table = model.find_table("Date")
+            self.assertEqual(date_table.data_category, "Time")
+            self.assertEqual(date_table.date_table_column, "Date")
+            self.assertTrue(date_table.find_column("Date").is_key)
+            self.assertFalse(date_table.find_column("FiscalDate").is_key)
+
+    def test_disabling_time_intelligence_removes_auto_date_tables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+\tref table Date
+\tref table DateTableTemplate_abc
+\tref table LocalDateTable_abc
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+
+\t\tvariation Variation
+\t\t\tisDefault
+\t\t\tdefaultHierarchy: LocalDateTable_abc.'Date Hierarchy'
+""")
+            auto_local = _write_table(root, "LocalDateTable_abc.tmdl", """
+table LocalDateTable_abc
+\tshowAsVariationsOnly
+\tannotation __PBI_LocalDateTable = true
+""")
+            auto_template = _write_table(root, "DateTableTemplate_abc.tmdl", """
+table DateTableTemplate_abc
+\tisPrivate
+\tannotation __PBI_TemplateDateTable = true
+""")
+            _write_relationships(root, """
+relationship rel1
+\tfromColumn: Date.Date
+\ttoColumn: LocalDateTable_abc.Date
+""")
+
+            changed = set_time_intelligence_enabled(root, False)
+            self.assertTrue(changed)
+
+            model = SemanticModel.load(root)
+            self.assertFalse(model.time_intelligence_enabled)
+            model_text = (root / "Sample.SemanticModel" / "definition" / "model.tmdl").read_text(encoding="utf-8")
+            self.assertIn("__PBI_TimeIntelligenceEnabled = 0", model_text)
+            self.assertNotIn("LocalDateTable_abc", model_text)
+            self.assertNotIn("DateTableTemplate_abc", model_text)
+            self.assertFalse(auto_local.exists())
+            self.assertFalse(auto_template.exists())
+            self.assertNotIn("variation Variation", (root / "Sample.SemanticModel" / "definition" / "tables" / "Date.tmdl").read_text(encoding="utf-8"))
+            relationships_text = (root / "Sample.SemanticModel" / "definition" / "relationships.tmdl").read_text(encoding="utf-8")
+            self.assertNotIn("LocalDateTable_abc", relationships_text)
 
 
 class MetadataCLITests(unittest.TestCase):
@@ -276,6 +384,56 @@ table Sales
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("Total revenue", result.stdout)
             self.assertIn("KPIs", result.stdout)
+
+    def test_table_set_date_table_cli(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            result = runner.invoke(app, [
+                "model", "table", "set", "Date",
+                "dateTable=Date",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("dateTable", result.stdout)
+
+    def test_model_set_time_intelligence_cli(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            result = runner.invoke(app, [
+                "model", "set",
+                "timeIntelligence=off",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("timeIntelligence", result.stdout)
 
 
 # ── Phase 2: Relationship CRUD ──────────────────────────────────
@@ -827,6 +985,30 @@ table Date
 
 
 class ModelExportTests(unittest.TestCase):
+    def test_export_model_and_table_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 0
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tdataCategory: Time
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            yaml_str = export_model_yaml(root)
+            spec = yaml.safe_load(yaml_str)
+            self.assertFalse(spec["model"]["timeIntelligence"])
+            self.assertEqual(spec["tables"]["Date"]["dataCategory"], "Time")
+            self.assertEqual(spec["tables"]["Date"]["dateTable"], "Date")
+
     def test_export_measures(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1008,6 +1190,42 @@ table Sales
 
 
 class ModelApplyExtensionTests(unittest.TestCase):
+    def test_apply_model_and_table_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            yaml_content = yaml.safe_dump({
+                "model": {"timeIntelligence": False},
+                "tables": {
+                    "Date": {
+                        "dataCategory": "Time",
+                        "dateTable": "Date",
+                    },
+                },
+            }, sort_keys=False)
+            result = apply_model_yaml(root, yaml_content)
+            self.assertTrue(result.has_changes)
+            self.assertIn("Model", result.model_updated)
+            self.assertIn("Date", result.tables_updated)
+
+            model = SemanticModel.load(root)
+            self.assertFalse(model.time_intelligence_enabled)
+            date_table = model.find_table("Date")
+            self.assertEqual(date_table.data_category, "Time")
+            self.assertEqual(date_table.date_table_column, "Date")
+
     def test_apply_measure_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1256,6 +1474,28 @@ table Customers
 
 
 class RoundtripTests(unittest.TestCase):
+    def test_export_apply_roundtrip_model_and_table_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 0
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tdataCategory: Time
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            yaml_str = export_model_yaml(root)
+            result = apply_model_yaml(root, yaml_str)
+            self.assertFalse(result.has_changes)
+
     def test_export_apply_roundtrip_measures(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

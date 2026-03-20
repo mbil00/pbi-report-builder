@@ -18,6 +18,21 @@ def export_model_yaml(
     loaded_model = model or SemanticModel.load(project_root)
     spec: dict = {}
 
+    if loaded_model.time_intelligence_enabled is not None:
+        spec["model"] = {"timeIntelligence": loaded_model.time_intelligence_enabled}
+
+    tables_section: dict = {}
+    for table in loaded_model.tables:
+        entry: dict = {}
+        if table.data_category:
+            entry["dataCategory"] = table.data_category
+        if table.date_table_column:
+            entry["dateTable"] = table.date_table_column
+        if entry:
+            tables_section[table.name] = entry
+    if tables_section:
+        spec["tables"] = tables_section
+
     # Measures
     measures_section: dict = {}
     for table in loaded_model.tables:

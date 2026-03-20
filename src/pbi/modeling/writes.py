@@ -18,6 +18,10 @@ _MEMBER_PROPERTY_WHITELIST = frozenset({
     "summarizeBy", "dataCategory", "formatString",
 })
 
+_TABLE_PROPERTY_WHITELIST = frozenset({
+    "dataCategory",
+})
+
 
 @dataclass
 class TmdlEditSession:
@@ -112,6 +116,138 @@ def set_member_property(
         edit_session=edit_session,
     )
     return table.name, field_name, field_type, updated
+
+
+def set_table_property(
+    project_root: Path,
+    table_name: str,
+    property_name: str,
+    property_value: str,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, bool]:
+    """Set a metadata property on a table."""
+    if property_name not in _TABLE_PROPERTY_WHITELIST:
+        raise ValueError(
+            f'Property "{property_name}" is not writable. '
+            f'Allowed: {", ".join(sorted(_TABLE_PROPERTY_WHITELIST))}'
+        )
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
+    if table.definition_path is None:
+        raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+
+    updated = _update_table_property(
+        table.definition_path,
+        property_name=property_name,
+        property_value=property_value,
+        dry_run=dry_run,
+        edit_session=edit_session,
+    )
+    return table.name, updated
+
+
+def set_column_key(
+    project_root: Path,
+    field_ref: str,
+    is_key: bool,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, str, bool]:
+    """Set or clear the isKey flag on a column."""
+    loaded_model = model or SemanticModel.load(project_root)
+    table_name, field_name, field_type = loaded_model.resolve_field(field_ref)
+    if field_type != "column":
+        raise ValueError(f'Field "{field_ref}" resolves to a {field_type}, not a column.')
+    table = loaded_model.find_table(table_name)
+    if table.definition_path is None:
+        raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+
+    updated = _update_member_flag(
+        table.definition_path,
+        member_kind="column",
+        member_name=field_name,
+        flag_name="isKey",
+        present=is_key,
+        dry_run=dry_run,
+        edit_session=edit_session,
+    )
+    return table.name, field_name, updated
+
+
+def mark_as_date_table(
+    project_root: Path,
+    table_name: str,
+    column_name: str,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, str, bool]:
+    """Mark a table as a date table using the specified date column."""
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
+    column = table.find_column(column_name)
+    if column.data_type.lower() not in {"date", "datetime"}:
+        raise ValueError(
+            f'Column "{table.name}.{column.name}" must use a date/dateTime data type to mark the table as a date table.'
+        )
+
+    changed = False
+    _, table_changed = set_table_property(
+        project_root,
+        table.name,
+        "dataCategory",
+        "Time",
+        dry_run=dry_run,
+        model=loaded_model,
+        edit_session=edit_session,
+    )
+    changed = changed or table_changed
+    for existing in table.columns:
+        _, _, key_changed = set_column_key(
+            project_root,
+            f"{table.name}.{existing.name}",
+            existing.name == column.name,
+            dry_run=dry_run,
+            model=loaded_model,
+            edit_session=edit_session,
+        )
+        changed = changed or key_changed
+    return table.name, column.name, changed
+
+
+def set_time_intelligence_enabled(
+    project_root: Path,
+    enabled: bool,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Set the Power BI model time-intelligence toggle."""
+    loaded_model = model or SemanticModel.load(project_root)
+    model_path = _get_model_tmdl_path(loaded_model)
+    value = "1" if enabled else "0"
+    changed = _update_model_annotation(
+        model_path,
+        annotation_name="__PBI_TimeIntelligenceEnabled",
+        annotation_value=value,
+        dry_run=dry_run,
+        edit_session=edit_session,
+    )
+    if not enabled:
+        cleanup_changed = _remove_auto_date_tables(
+            loaded_model,
+            dry_run=dry_run,
+            edit_session=edit_session,
+        )
+        changed = changed or cleanup_changed
+    return changed
 
 
 def set_field_format(
@@ -383,6 +519,39 @@ def _update_member_property(
     return True
 
 
+def _update_table_property(
+    path: Path,
+    *,
+    property_name: str,
+    property_value: str,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Set or insert a keyed property inside the table block."""
+    lines = _get_tmdl_lines(path, edit_session)
+
+    replacement = f"\t{property_name}: {property_value}"
+    for idx in range(1, len(lines)):
+        stripped = lines[idx].strip()
+        if not stripped:
+            continue
+        if _indent_level(lines[idx]) != 1:
+            continue
+        if _starts_new_table_block(stripped):
+            break
+        if stripped.startswith(f"{property_name}:"):
+            if lines[idx] == replacement:
+                return False
+            lines[idx] = replacement
+            _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
+            return True
+
+    insert_at = _table_property_insert_index(lines)
+    lines.insert(insert_at, replacement)
+    _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
+    return True
+
+
 def _update_member_flag(
     path: Path,
     *,
@@ -410,6 +579,33 @@ def _update_member_flag(
 
     insert_at = _block_property_insert_index(lines, start, end)
     lines.insert(insert_at, f"\t\t{flag_name}")
+    _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _update_model_annotation(
+    path: Path,
+    *,
+    annotation_name: str,
+    annotation_value: str,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Set or insert a model-level annotation."""
+    lines = _get_tmdl_lines(path, edit_session)
+    replacement = f"annotation {annotation_name} = {annotation_value}"
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith(f"annotation {annotation_name} ="):
+            continue
+        if stripped == replacement:
+            return False
+        lines[idx] = replacement
+        _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
+        return True
+
+    insert_at = _model_annotation_insert_index(lines)
+    lines.insert(insert_at, replacement)
     _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
     return True
 
@@ -467,6 +663,28 @@ def _block_property_insert_index(lines: list[str], start: int, end: int) -> int:
         if stripped.startswith(("annotation ", "variation ")):
             return idx
     return end
+
+
+def _table_property_insert_index(lines: list[str]) -> int:
+    """Choose an insertion point within a table block before members/annotations."""
+    for idx in range(1, len(lines)):
+        stripped = lines[idx].strip()
+        if not stripped:
+            continue
+        if _indent_level(lines[idx]) != 1:
+            continue
+        if _starts_new_table_block(stripped):
+            return idx
+    return len(lines)
+
+
+def _model_annotation_insert_index(lines: list[str]) -> int:
+    """Insert model annotations before the first ref/culture section when possible."""
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("ref "):
+            return idx
+    return len(lines)
 
 
 def _indent_level(line: str) -> int:
@@ -670,6 +888,194 @@ def _format_tmdl_field_ref(table: str, column: str) -> str:
 from .writes_hierarchies import create_hierarchy, delete_hierarchy
 from .writes_refs import find_field_dependents, find_field_references, rename_column, rename_measure
 from .writes_relationships import _get_relationships_path, create_relationship, delete_relationship, set_relationship_property
+
+
+def _get_model_tmdl_path(model: SemanticModel) -> Path:
+    """Return the semantic-model definition/model.tmdl path."""
+    model_path = model.model_path or (model.folder / "definition" / "model.tmdl")
+    if not model_path.exists():
+        raise ValueError(f'No model.tmdl found in "{model.folder / "definition"}".')
+    return model_path
+
+
+def _remove_auto_date_tables(
+    model: SemanticModel,
+    *,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Remove auto-generated local/template date tables and references."""
+    auto_names = [
+        table.name
+        for table in model.tables
+        if table.name.startswith(("LocalDateTable_", "DateTableTemplate_"))
+    ]
+    if not auto_names:
+        return False
+
+    changed = False
+    model_path = _get_model_tmdl_path(model)
+    if _remove_model_table_refs(model_path, auto_names, dry_run=dry_run, edit_session=edit_session):
+        changed = True
+
+    relationships_path = _get_relationships_path(model.folder, model)
+    if relationships_path.exists() and _remove_relationships_for_tables(
+        relationships_path,
+        auto_names,
+        dry_run=dry_run,
+        edit_session=edit_session,
+    ):
+        changed = True
+
+    for table in model.tables:
+        if table.definition_path is None:
+            continue
+        if table.name in auto_names:
+            if not dry_run and table.definition_path.exists():
+                table.definition_path.unlink()
+            changed = True
+            continue
+        if _remove_variations_referencing_tables(
+            table.definition_path,
+            auto_names,
+            dry_run=dry_run,
+            edit_session=edit_session,
+        ):
+            changed = True
+    return changed
+
+
+def _remove_model_table_refs(
+    path: Path,
+    table_names: list[str],
+    *,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Remove ref table lines for the specified tables."""
+    lines = _get_tmdl_lines(path, edit_session)
+    table_names_set = {name.lower() for name in table_names}
+    filtered = [
+        line for line in lines
+        if not (
+            line.strip().startswith("ref table ")
+            and _parse_tmdl_name(line.strip()[10:]).lower() in table_names_set
+        )
+    ]
+    if filtered == lines:
+        return False
+    _commit_tmdl_lines(path, filtered, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _remove_relationships_for_tables(
+    path: Path,
+    table_names: list[str],
+    *,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Remove relationship blocks touching the specified tables."""
+    lines = _get_tmdl_lines(path, edit_session)
+    table_names_set = {name.lower() for name in table_names}
+    output: list[str] = []
+    idx = 0
+    changed = False
+    while idx < len(lines):
+        line = lines[idx]
+        stripped = line.strip()
+        if _indent_level(line) == 0 and stripped.startswith("relationship "):
+            end = idx + 1
+            from_table = ""
+            to_table = ""
+            while end < len(lines):
+                next_line = lines[end]
+                next_stripped = next_line.strip()
+                if next_stripped and _indent_level(next_line) == 0:
+                    break
+                if next_stripped.startswith("fromColumn:"):
+                    ref = next_stripped.partition(":")[2].strip()
+                    if "." in ref:
+                        from_table = ref.split(".", 1)[0].strip("'")
+                if next_stripped.startswith("toColumn:"):
+                    ref = next_stripped.partition(":")[2].strip()
+                    if "." in ref:
+                        to_table = ref.split(".", 1)[0].strip("'")
+                end += 1
+            if from_table.lower() in table_names_set or to_table.lower() in table_names_set:
+                changed = True
+                idx = end
+                continue
+            output.extend(lines[idx:end])
+            idx = end
+            continue
+        output.append(line)
+        idx += 1
+
+    if not changed:
+        return False
+    cleaned = _collapse_blank_lines(output)
+    _commit_tmdl_lines(path, cleaned, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _remove_variations_referencing_tables(
+    path: Path,
+    table_names: list[str],
+    *,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Remove variation blocks referencing the specified auto date tables."""
+    lines = _get_tmdl_lines(path, edit_session)
+    table_names_set = {name.lower() for name in table_names}
+    output: list[str] = []
+    idx = 0
+    changed = False
+    while idx < len(lines):
+        line = lines[idx]
+        stripped = line.strip()
+        if _indent_level(line) == 2 and stripped.startswith("variation "):
+            end = idx + 1
+            block = [line]
+            while end < len(lines):
+                next_line = lines[end]
+                next_stripped = next_line.strip()
+                if next_stripped and _indent_level(next_line) <= 2:
+                    break
+                block.append(next_line)
+                end += 1
+            lower_block = "\n".join(block).lower()
+            if any(name in lower_block for name in table_names_set):
+                changed = True
+            else:
+                output.extend(block)
+            idx = end
+            continue
+        output.append(line)
+        idx += 1
+    if not changed:
+        return False
+    cleaned = _collapse_blank_lines(output)
+    _commit_tmdl_lines(path, cleaned, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _collapse_blank_lines(lines: list[str]) -> list[str]:
+    """Collapse repeated blank lines and trim leading/trailing blanks."""
+    cleaned: list[str] = []
+    previous_blank = True
+    for line in lines:
+        is_blank = not line.strip()
+        if is_blank and previous_blank:
+            continue
+        cleaned.append(line)
+        previous_blank = is_blank
+    while cleaned and not cleaned[0].strip():
+        cleaned.pop(0)
+    while cleaned and not cleaned[-1].strip():
+        cleaned.pop()
+    return cleaned
 
 
 # ── Calculated table creation ───────────────────────────────────

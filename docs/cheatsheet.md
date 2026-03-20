@@ -181,12 +181,18 @@ pbi model column list Sales                   # list columns (shows calculated v
 pbi model measure list Facts                  # list measures (use --full for complete DAX)
 pbi model fields Sales                        # list both columns and measures
 pbi model search "revenue"                    # search across all tables
+pbi model get                                 # model-level settings
+pbi model table get Date                      # table metadata incl. date-table status
 pbi model relationship list                   # list relationships
 pbi model path Sales Products                 # show join path between tables
 
 # Format — same command for columns and measures
 pbi model format "Facts.Revenue" "#,0"
 pbi model format "Sales.OrderDate" "dd/mm/yyyy"
+
+# Time intelligence / date table
+pbi model table set Date dateTable=Date       # mark Date[Date] as the date table
+pbi model set timeIntelligence=off            # disable auto date/time and remove local date tables
 ```
 
 **Measures:**
@@ -211,6 +217,14 @@ pbi model column unhide Sales.InternalId
 ```bash
 pbi model apply model.yaml                     # create/update measures and columns
 pbi model apply model.yaml --dry-run           # preview changes
+
+# model.yaml can also include:
+# model:
+#   timeIntelligence: false
+# tables:
+#   Date:
+#     dataCategory: Time
+#     dateTable: Date
 ```
 
 ---

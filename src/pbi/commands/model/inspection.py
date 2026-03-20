@@ -15,8 +15,67 @@ from .base import (
     get_model,
     get_project,
     model_app,
+    parse_property_assignments,
     resolve_yaml_input,
 )
+
+
+@model_app.command("get")
+def model_get(
+    project: ProjectOpt = None,
+) -> None:
+    """Show model-level settings."""
+    _, model = get_model(project)
+    enabled = model.time_intelligence_enabled
+    console.print("[bold]Model[/bold]")
+    console.print(f"[dim]Time Intelligence:[/dim] {enabled if enabled is not None else '(none)'}")
+
+
+@model_app.command("set")
+def model_set(
+    assignments: Annotated[list[str], typer.Argument(help="Property assignments as key=value.")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Set model-level settings such as timeIntelligence=off."""
+    from pbi.model import set_time_intelligence_enabled
+
+    proj = get_project(project)
+    try:
+        pairs = parse_property_assignments(assignments)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    prefix = "[dim](dry run)[/dim] " if dry_run else ""
+    for prop_name, prop_value in pairs:
+        if prop_name != "timeIntelligence":
+            console.print('[red]Error:[/red] Property "{}" is not writable. Allowed: timeIntelligence'.format(prop_name))
+            raise typer.Exit(1)
+        normalized = prop_value.strip().lower()
+        if normalized in {"1", "true", "on", "yes"}:
+            enabled = True
+        elif normalized in {"0", "false", "off", "no"}:
+            enabled = False
+        else:
+            console.print(f'[red]Error:[/red] Invalid timeIntelligence value "{prop_value}". Use on/off, true/false, or 1/0.')
+            raise typer.Exit(1)
+
+        try:
+            changed = set_time_intelligence_enabled(
+                proj.root,
+                enabled,
+                dry_run=dry_run,
+            )
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+        rendered = "on" if enabled else "off"
+        if changed:
+            console.print(f'{prefix}[dim]timeIntelligence:[/dim] [dim]->[/dim] "{rendered}"')
+        else:
+            console.print(f'{prefix}[dim]No change:[/dim] timeIntelligence is already "{rendered}"')
 
 
 @model_app.command("search")
@@ -85,6 +144,10 @@ def model_apply(
     result = apply_model_yaml(proj.root, yaml_content, dry_run=dry_run)
 
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
+    for ref in result.model_updated:
+        console.print(f"{prefix}Updated model [cyan]{ref}[/cyan]")
+    for ref in result.tables_updated:
+        console.print(f"{prefix}Updated table [cyan]{ref}[/cyan]")
     for ref in result.measures_created:
         console.print(f"{prefix}Created measure [cyan]{ref}[/cyan]")
     for ref in result.measures_updated:

@@ -58,6 +58,10 @@ pbi visual column "any" "any" Sales.UPN --rename "User Principal Name" --all-pag
 pbi map --page "Sales Overview"    # single page detail
 pbi map --pages                    # pages only, no model
 pbi map --model                    # model only
+pbi model get                      # model settings
+pbi model set timeIntelligence=off
+pbi model table get Date
+pbi model table set Date dateTable=Date
 pbi model relationship list         # table relationships
 pbi model path Sales Customers     # relationship chain
 
@@ -71,6 +75,7 @@ cat sales.yaml | pbi apply         # apply from stdin
 # Model YAML apply
 pbi model apply model.yaml
 cat model.yaml | pbi model apply --dry-run
+# model.yaml supports model.timeIntelligence and tables.<name>.dateTable
 
 # Styles (reusable formatting presets)
 pbi style create card-style --from-visual "Sales" kpiStrip

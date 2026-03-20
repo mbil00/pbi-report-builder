@@ -20,6 +20,9 @@ from pbi.model import (
     delete_hierarchy,
     edit_calculated_column_expression,
     edit_measure_expression,
+    mark_as_date_table,
+    set_table_property,
+    set_time_intelligence_enabled,
     set_column_hidden,
     set_field_format,
     set_member_property,
@@ -31,6 +34,8 @@ from pbi.model import (
 class ModelApplyResult:
     """Summary of what changed during a model apply operation."""
 
+    model_updated: list[str] = field(default_factory=list)
+    tables_updated: list[str] = field(default_factory=list)
     measures_created: list[str] = field(default_factory=list)
     measures_updated: list[str] = field(default_factory=list)
     columns_created: list[str] = field(default_factory=list)
@@ -44,6 +49,9 @@ class ModelApplyResult:
     @property
     def has_changes(self) -> bool:
         return bool(
+            self.model_updated
+            or self.tables_updated
+            or
             self.measures_created
             or self.measures_updated
             or self.columns_created
@@ -125,7 +133,29 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
-    known_keys = {"measures", "columns", "relationships", "hierarchies"}
+    model_spec = spec.get("model")
+    if model_spec is not None:
+        _apply_model_settings(
+            project_root,
+            model_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
+
+    tables_spec = spec.get("tables")
+    if tables_spec is not None:
+        _apply_tables(
+            project_root,
+            tables_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
+
+    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies"}
     if not known_keys.intersection(spec.keys()):
         result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
 
@@ -133,6 +163,101 @@ def apply_model_yaml(
         edit_session.flush()
 
     return result
+
+
+def _apply_model_settings(
+    project_root: Path,
+    model_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+    edit_session: TmdlEditSession,
+) -> None:
+    """Apply model-level settings."""
+    if not isinstance(model_spec, dict):
+        result.errors.append("'model' must be a mapping.")
+        return
+
+    if "timeIntelligence" in model_spec:
+        value = model_spec["timeIntelligence"]
+        if not isinstance(value, bool):
+            result.errors.append("model.timeIntelligence: expected a boolean.")
+        else:
+            try:
+                changed = set_time_intelligence_enabled(
+                    project_root,
+                    value,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                if changed:
+                    result.model_updated.append("Model")
+            except (FileNotFoundError, ValueError) as e:
+                result.errors.append(f"model.timeIntelligence: {e}")
+
+
+def _apply_tables(
+    project_root: Path,
+    tables_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+    edit_session: TmdlEditSession,
+) -> None:
+    """Apply table-level metadata such as dataCategory/dateTable."""
+    if not isinstance(tables_spec, dict):
+        result.errors.append("'tables' must be a mapping of table name to table specs.")
+        return
+
+    for table_name, entry in tables_spec.items():
+        if not isinstance(entry, dict):
+            result.errors.append(f"tables.{table_name}: expected a mapping.")
+            continue
+        try:
+            table = model.find_table(str(table_name))
+        except ValueError as e:
+            result.errors.append(f"tables.{table_name}: {e}")
+            continue
+
+        changed = False
+        data_category = entry.get("dataCategory")
+        if isinstance(data_category, str):
+            try:
+                _, prop_changed = set_table_property(
+                    project_root,
+                    table.name,
+                    "dataCategory",
+                    data_category,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                changed = changed or prop_changed
+            except (FileNotFoundError, ValueError) as e:
+                result.errors.append(f"tables.{table_name}.dataCategory: {e}")
+                continue
+
+        date_table = entry.get("dateTable")
+        if isinstance(date_table, str):
+            try:
+                _, _, date_changed = mark_as_date_table(
+                    project_root,
+                    table.name,
+                    date_table,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                changed = changed or date_changed
+            except (FileNotFoundError, ValueError) as e:
+                result.errors.append(f"tables.{table_name}.dateTable: {e}")
+                continue
+
+        if changed:
+            result.tables_updated.append(table.name)
 
 
 def _apply_measures(

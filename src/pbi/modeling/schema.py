@@ -24,6 +24,7 @@ class Column:
     display_folder: str = ""
     sort_by_column: str = ""
     data_category: str = ""
+    is_key: bool = False
 
 
 @dataclass
@@ -61,6 +62,17 @@ class SemanticTable:
     measures: list[Measure] = field(default_factory=list)
     hierarchies: list[Hierarchy] = field(default_factory=list)
     definition_path: Path | None = None
+    data_category: str = ""
+
+    @property
+    def date_table_column(self) -> str | None:
+        """Return the marked date-table column when present."""
+        if self.data_category != "Time":
+            return None
+        for column in self.columns:
+            if column.is_key:
+                return column.name
+        return None
 
     def find_column(self, name: str) -> Column:
         """Find a column by name (case-insensitive)."""
@@ -122,11 +134,13 @@ class SemanticModel:
     folder: Path
     tables: list[SemanticTable] = field(default_factory=list)
     relationships: list[Relationship] = field(default_factory=list)
+    model_path: Path | None = None
+    time_intelligence_enabled: bool | None = None
 
     @classmethod
     def load(cls, project_root: Path) -> SemanticModel:
         """Find and load the semantic model from a project root."""
-        from .parser import _parse_relationships_tmdl, _parse_table_tmdl
+        from .parser import _parse_model_tmdl, _parse_relationships_tmdl, _parse_table_tmdl
 
         sm_folders = list(project_root.glob("*.SemanticModel"))
         if not sm_folders:
@@ -134,6 +148,11 @@ class SemanticModel:
         sm_folder = sm_folders[0]
 
         model = cls(folder=sm_folder)
+        model_path = sm_folder / "definition" / "model.tmdl"
+        model.model_path = model_path if model_path.exists() else None
+        if model.model_path is not None:
+            model_settings = _parse_model_tmdl(model.model_path)
+            model.time_intelligence_enabled = model_settings.get("time_intelligence_enabled")
         tables_dir = sm_folder / "definition" / "tables"
         if tables_dir.exists():
             for tmdl_file in sorted(tables_dir.glob("*.tmdl")):

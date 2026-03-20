@@ -15,6 +15,20 @@ pbi model fields Sales
 
 Use `pbi model fields <table>` when you need exact `Table.Field` references for binding, sorting, or filters.
 
+Inspect model or table settings:
+
+```bash
+pbi model get
+pbi model table get Date
+```
+
+Set a date table and disable auto date/time:
+
+```bash
+pbi model table set Date dateTable=Date
+pbi model set timeIntelligence=off
+```
+
 ## Relationships
 
 List all relationships in the semantic model, or filter by table:
@@ -130,6 +144,14 @@ cat model-changes.yaml | pbi model apply --dry-run
 Example:
 
 ```yaml
+model:
+  timeIntelligence: false
+
+tables:
+  Date:
+    dataCategory: Time
+    dateTable: Date
+
 measures:
   Sales:
   - name: Total Revenue
@@ -157,6 +179,8 @@ columns:
 
 Rules:
 
+- `model:` currently supports `timeIntelligence: true|false`
+- `tables:` supports table-level metadata such as `dataCategory` and `dateTable`
 - `measures:` is a mapping of table name to a list of measure specs
 - `columns:` is a mapping of table name to a mapping of column name to spec
 - calculated columns require `expression` and `dataType`
