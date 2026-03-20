@@ -1,0 +1,19 @@
+{
+  "fixture": "report-01-kitchen-sink",
+  "date_range": "2023-01-01 to 2024-12-31",
+  "import_tables": [
+    "Date",
+    "Product",
+    "Customer",
+    "Store",
+    "Channel",
+    "Promotion",
+    "Sales",
+    "Targets"
+  ],
+  "manual_modeling_steps": [
+    "Create the relationships from the fixture spec.",
+    "Create measures, hierarchies, bookmarks, page setup, images, and visuals in Power BI Desktop.",
+    "MonthName should be sorted by MonthNumber."
+  ]
+}

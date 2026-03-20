@@ -1,0 +1,181 @@
+CustomerKey,CustomerName,Segment,Region,Country,City,PostalCode,SignupDate
+1,Jordan Garcia,Enterprise,North,USA,Seattle,10001,2022-06-08
+2,Morgan Chen,Consumer,South,USA,Austin,10002,2023-11-15
+3,Riley Garcia,Small Business,West,USA,San Diego,10003,2021-04-22
+4,Casey Patel,Enterprise,Central,USA,Chicago,10004,2022-09-02
+5,Riley Nguyen,Consumer,EMEA,UK,London,10005,2023-02-09
+6,Morgan Parker,Small Business,APAC,Australia,Sydney,10006,2021-07-16
+7,Jordan Patel,Enterprise,North,USA,Seattle,10007,2022-12-23
+8,Taylor Brown,Consumer,South,USA,Austin,10008,2023-05-03
+9,Alex Garcia,Small Business,West,USA,San Diego,10009,2021-10-10
+10,Riley Brown,Enterprise,Central,USA,Chicago,10010,2022-03-17
+11,Taylor Davis,Consumer,EMEA,UK,London,10011,2023-08-24
+12,Morgan Garcia,Small Business,APAC,Australia,Sydney,10012,2021-01-04
+13,Jordan Chen,Enterprise,North,USA,Seattle,10013,2022-06-11
+14,Alex Garcia,Consumer,South,USA,Austin,10014,2023-11-18
+15,Alex Chen,Small Business,West,USA,San Diego,10015,2021-04-25
+16,Taylor Brown,Enterprise,Central,USA,Chicago,10016,2022-09-05
+17,Riley Patel,Consumer,EMEA,UK,London,10017,2023-02-12
+18,Taylor Chen,Small Business,APAC,Australia,Sydney,10018,2021-07-19
+19,Riley Nguyen,Enterprise,North,USA,Seattle,10019,2022-12-26
+20,Alex Nguyen,Consumer,South,USA,Austin,10020,2023-05-06
+21,Jordan Davis,Small Business,West,USA,San Diego,10021,2021-10-13
+22,Jordan Davis,Enterprise,Central,USA,Chicago,10022,2022-03-20
+23,Casey Patel,Consumer,EMEA,UK,London,10023,2023-08-27
+24,Alex Garcia,Small Business,APAC,Australia,Sydney,10024,2021-01-07
+25,Alex Davis,Enterprise,North,USA,Seattle,10025,2022-06-14
+26,Riley Patel,Consumer,South,USA,Austin,10026,2023-11-21
+27,Casey Davis,Small Business,West,USA,San Diego,10027,2021-04-01
+28,Casey Brown,Enterprise,Central,USA,Chicago,10028,2022-09-08
+29,Morgan Parker,Consumer,EMEA,UK,London,10029,2023-02-15
+30,Taylor Davis,Small Business,APAC,Australia,Sydney,10030,2021-07-22
+31,Jordan Davis,Enterprise,North,USA,Seattle,10031,2022-12-02
+32,Jordan Chen,Consumer,South,USA,Austin,10032,2023-05-09
+33,Taylor Garcia,Small Business,West,USA,San Diego,10033,2021-10-16
+34,Jordan Nguyen,Enterprise,Central,USA,Chicago,10034,2022-03-23
+35,Riley Patel,Consumer,EMEA,UK,London,10035,2023-08-03
+36,Morgan Chen,Small Business,APAC,Australia,Sydney,10036,2021-01-10
+37,Taylor Davis,Enterprise,North,USA,Seattle,10037,2022-06-17
+38,Morgan Patel,Consumer,South,USA,Austin,10038,2023-11-24
+39,Riley Patel,Small Business,West,USA,San Diego,10039,2021-04-04
+40,Jordan Patel,Enterprise,Central,USA,Chicago,10040,2022-09-11
+41,Jordan Patel,Consumer,EMEA,UK,London,10041,2023-02-18
+42,Jordan Garcia,Small Business,APAC,Australia,Sydney,10042,2021-07-25
+43,Casey Brown,Enterprise,North,USA,Seattle,10043,2022-12-05
+44,Alex Brown,Consumer,South,USA,Austin,10044,2023-05-12
+45,Alex Patel,Small Business,West,USA,San Diego,10045,2021-10-19
+46,Alex Patel,Enterprise,Central,USA,Chicago,10046,2022-03-26
+47,Taylor Brown,Consumer,EMEA,UK,London,10047,2023-08-06
+48,Taylor Parker,Small Business,APAC,Australia,Sydney,10048,2021-01-13
+49,Casey Parker,Enterprise,North,USA,Seattle,10049,2022-06-20
+50,Casey Davis,Consumer,South,USA,Austin,10050,2023-11-27
+51,Morgan Patel,Small Business,West,USA,San Diego,10051,2021-04-07
+52,Taylor Nguyen,Enterprise,Central,USA,Chicago,10052,2022-09-14
+53,Riley Chen,Consumer,EMEA,UK,London,10053,2023-02-21
+54,Riley Nguyen,Small Business,APAC,Australia,Sydney,10054,2021-07-01
+55,Casey Brown,Enterprise,North,USA,Seattle,10055,2022-12-08
+56,Alex Patel,Consumer,South,USA,Austin,10056,2023-05-15
+57,Casey Chen,Small Business,West,USA,San Diego,10057,2021-10-22
+58,Taylor Patel,Enterprise,Central,USA,Chicago,10058,2022-03-02
+59,Riley Garcia,Consumer,EMEA,UK,London,10059,2023-08-09
+60,Casey Davis,Small Business,APAC,Australia,Sydney,10060,2021-01-16
+61,Morgan Patel,Enterprise,North,USA,Seattle,10061,2022-06-23
+62,Taylor Chen,Consumer,South,USA,Austin,10062,2023-11-03
+63,Morgan Brown,Small Business,West,USA,San Diego,10063,2021-04-10
+64,Morgan Chen,Enterprise,Central,USA,Chicago,10064,2022-09-17
+65,Morgan Garcia,Consumer,EMEA,UK,London,10065,2023-02-24
+66,Jordan Chen,Small Business,APAC,Australia,Sydney,10066,2021-07-04
+67,Jordan Brown,Enterprise,North,USA,Seattle,10067,2022-12-11
+68,Alex Patel,Consumer,South,USA,Austin,10068,2023-05-18
+69,Casey Brown,Small Business,West,USA,San Diego,10069,2021-10-25
+70,Jordan Chen,Enterprise,Central,USA,Chicago,10070,2022-03-05
+71,Taylor Davis,Consumer,EMEA,UK,London,10071,2023-08-12
+72,Casey Davis,Small Business,APAC,Australia,Sydney,10072,2021-01-19
+73,Jordan Nguyen,Enterprise,North,USA,Seattle,10073,2022-06-26
+74,Riley Parker,Consumer,South,USA,Austin,10074,2023-11-06
+75,Morgan Patel,Small Business,West,USA,San Diego,10075,2021-04-13
+76,Taylor Davis,Enterprise,Central,USA,Chicago,10076,2022-09-20
+77,Alex Davis,Consumer,EMEA,UK,London,10077,2023-02-27
+78,Riley Brown,Small Business,APAC,Australia,Sydney,10078,2021-07-07
+79,Morgan Patel,Enterprise,North,USA,Seattle,10079,2022-12-14
+80,Taylor Patel,Consumer,South,USA,Austin,10080,2023-05-21
+81,Morgan Davis,Small Business,West,USA,San Diego,10081,2021-10-01
+82,Jordan Chen,Enterprise,Central,USA,Chicago,10082,2022-03-08
+83,Taylor Brown,Consumer,EMEA,UK,London,10083,2023-08-15
+84,Casey Nguyen,Small Business,APAC,Australia,Sydney,10084,2021-01-22
+85,Riley Chen,Enterprise,North,USA,Seattle,10085,2022-06-02
+86,Jordan Brown,Consumer,South,USA,Austin,10086,2023-11-09
+87,Jordan Parker,Small Business,West,USA,San Diego,10087,2021-04-16
+88,Jordan Patel,Enterprise,Central,USA,Chicago,10088,2022-09-23
+89,Jordan Garcia,Consumer,EMEA,UK,London,10089,2023-02-03
+90,Casey Patel,Small Business,APAC,Australia,Sydney,10090,2021-07-10
+91,Morgan Davis,Enterprise,North,USA,Seattle,10091,2022-12-17
+92,Morgan Nguyen,Consumer,South,USA,Austin,10092,2023-05-24
+93,Alex Patel,Small Business,West,USA,San Diego,10093,2021-10-04
+94,Taylor Patel,Enterprise,Central,USA,Chicago,10094,2022-03-11
+95,Taylor Brown,Consumer,EMEA,UK,London,10095,2023-08-18
+96,Taylor Nguyen,Small Business,APAC,Australia,Sydney,10096,2021-01-25
+97,Taylor Patel,Enterprise,North,USA,Seattle,10097,2022-06-05
+98,Morgan Chen,Consumer,South,USA,Austin,10098,2023-11-12
+99,Taylor Brown,Small Business,West,USA,San Diego,10099,2021-04-19
+100,Morgan Garcia,Enterprise,Central,USA,Chicago,10100,2022-09-26
+101,Morgan Brown,Consumer,EMEA,UK,London,10101,2023-02-06
+102,Jordan Nguyen,Small Business,APAC,Australia,Sydney,10102,2021-07-13
+103,Riley Parker,Enterprise,North,USA,Seattle,10103,2022-12-20
+104,Alex Parker,Consumer,South,USA,Austin,10104,2023-05-27
+105,Alex Chen,Small Business,West,USA,San Diego,10105,2021-10-07
+106,Alex Davis,Enterprise,Central,USA,Chicago,10106,2022-03-14
+107,Morgan Nguyen,Consumer,EMEA,UK,London,10107,2023-08-21
+108,Taylor Garcia,Small Business,APAC,Australia,Sydney,10108,2021-01-01
+109,Jordan Parker,Enterprise,North,USA,Seattle,10109,2022-06-08
+110,Alex Parker,Consumer,South,USA,Austin,10110,2023-11-15
+111,Riley Chen,Small Business,West,USA,San Diego,10111,2021-04-22
+112,Alex Chen,Enterprise,Central,USA,Chicago,10112,2022-09-02
+113,Casey Garcia,Consumer,EMEA,UK,London,10113,2023-02-09
+114,Riley Patel,Small Business,APAC,Australia,Sydney,10114,2021-07-16
+115,Riley Davis,Enterprise,North,USA,Seattle,10115,2022-12-23
+116,Casey Garcia,Consumer,South,USA,Austin,10116,2023-05-03
+117,Jordan Garcia,Small Business,West,USA,San Diego,10117,2021-10-10
+118,Riley Patel,Enterprise,Central,USA,Chicago,10118,2022-03-17
+119,Taylor Davis,Consumer,EMEA,UK,London,10119,2023-08-24
+120,Morgan Nguyen,Small Business,APAC,Australia,Sydney,10120,2021-01-04
+121,Riley Brown,Enterprise,North,USA,Seattle,10121,2022-06-11
+122,Casey Patel,Consumer,South,USA,Austin,10122,2023-11-18
+123,Casey Davis,Small Business,West,USA,San Diego,10123,2021-04-25
+124,Jordan Brown,Enterprise,Central,USA,Chicago,10124,2022-09-05
+125,Alex Parker,Consumer,EMEA,UK,London,10125,2023-02-12
+126,Jordan Brown,Small Business,APAC,Australia,Sydney,10126,2021-07-19
+127,Riley Brown,Enterprise,North,USA,Seattle,10127,2022-12-26
+128,Taylor Davis,Consumer,South,USA,Austin,10128,2023-05-06
+129,Riley Chen,Small Business,West,USA,San Diego,10129,2021-10-13
+130,Morgan Garcia,Enterprise,Central,USA,Chicago,10130,2022-03-20
+131,Riley Garcia,Consumer,EMEA,UK,London,10131,2023-08-27
+132,Alex Brown,Small Business,APAC,Australia,Sydney,10132,2021-01-07
+133,Casey Parker,Enterprise,North,USA,Seattle,10133,2022-06-14
+134,Taylor Nguyen,Consumer,South,USA,Austin,10134,2023-11-21
+135,Taylor Parker,Small Business,West,USA,San Diego,10135,2021-04-01
+136,Morgan Nguyen,Enterprise,Central,USA,Chicago,10136,2022-09-08
+137,Morgan Nguyen,Consumer,EMEA,UK,London,10137,2023-02-15
+138,Casey Chen,Small Business,APAC,Australia,Sydney,10138,2021-07-22
+139,Morgan Patel,Enterprise,North,USA,Seattle,10139,2022-12-02
+140,Jordan Brown,Consumer,South,USA,Austin,10140,2023-05-09
+141,Casey Garcia,Small Business,West,USA,San Diego,10141,2021-10-16
+142,Taylor Nguyen,Enterprise,Central,USA,Chicago,10142,2022-03-23
+143,Casey Chen,Consumer,EMEA,UK,London,10143,2023-08-03
+144,Jordan Nguyen,Small Business,APAC,Australia,Sydney,10144,2021-01-10
+145,Riley Chen,Enterprise,North,USA,Seattle,10145,2022-06-17
+146,Riley Garcia,Consumer,South,USA,Austin,10146,2023-11-24
+147,Taylor Parker,Small Business,West,USA,San Diego,10147,2021-04-04
+148,Taylor Brown,Enterprise,Central,USA,Chicago,10148,2022-09-11
+149,Jordan Patel,Consumer,EMEA,UK,London,10149,2023-02-18
+150,Alex Nguyen,Small Business,APAC,Australia,Sydney,10150,2021-07-25
+151,Riley Davis,Enterprise,North,USA,Seattle,10151,2022-12-05
+152,Jordan Nguyen,Consumer,South,USA,Austin,10152,2023-05-12
+153,Jordan Nguyen,Small Business,West,USA,San Diego,10153,2021-10-19
+154,Taylor Patel,Enterprise,Central,USA,Chicago,10154,2022-03-26
+155,Casey Nguyen,Consumer,EMEA,UK,London,10155,2023-08-06
+156,Riley Davis,Small Business,APAC,Australia,Sydney,10156,2021-01-13
+157,Riley Parker,Enterprise,North,USA,Seattle,10157,2022-06-20
+158,Jordan Garcia,Consumer,South,USA,Austin,10158,2023-11-27
+159,Morgan Brown,Small Business,West,USA,San Diego,10159,2021-04-07
+160,Riley Nguyen,Enterprise,Central,USA,Chicago,10160,2022-09-14
+161,Alex Patel,Consumer,EMEA,UK,London,10161,2023-02-21
+162,Casey Parker,Small Business,APAC,Australia,Sydney,10162,2021-07-01
+163,Taylor Parker,Enterprise,North,USA,Seattle,10163,2022-12-08
+164,Taylor Chen,Consumer,South,USA,Austin,10164,2023-05-15
+165,Riley Chen,Small Business,West,USA,San Diego,10165,2021-10-22
+166,Alex Davis,Enterprise,Central,USA,Chicago,10166,2022-03-02
+167,Morgan Patel,Consumer,EMEA,UK,London,10167,2023-08-09
+168,Jordan Nguyen,Small Business,APAC,Australia,Sydney,10168,2021-01-16
+169,Jordan Nguyen,Enterprise,North,USA,Seattle,10169,2022-06-23
+170,Riley Brown,Consumer,South,USA,Austin,10170,2023-11-03
+171,Jordan Chen,Small Business,West,USA,San Diego,10171,2021-04-10
+172,Taylor Patel,Enterprise,Central,USA,Chicago,10172,2022-09-17
+173,Morgan Davis,Consumer,EMEA,UK,London,10173,2023-02-24
+174,Morgan Garcia,Small Business,APAC,Australia,Sydney,10174,2021-07-04
+175,Alex Garcia,Enterprise,North,USA,Seattle,10175,2022-12-11
+176,Jordan Brown,Consumer,South,USA,Austin,10176,2023-05-18
+177,Alex Nguyen,Small Business,West,USA,San Diego,10177,2021-10-25
+178,Jordan Garcia,Enterprise,Central,USA,Chicago,10178,2022-03-05
+179,Riley Patel,Consumer,EMEA,UK,London,10179,2023-08-12
+180,Casey Patel,Small Business,APAC,Australia,Sydney,10180,2021-01-19

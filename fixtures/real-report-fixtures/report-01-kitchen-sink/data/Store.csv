@@ -1,0 +1,13 @@
+StoreKey,StoreName,StoreType,Region,Manager,OpenDate
+1,North Flagship 1,Flagship,North,Owen Young,2019-03-01
+2,North Outlet 2,Outlet,North,Nora Singh,2020-05-01
+3,South Mall 3,Mall,South,Nora King,2021-07-01
+4,South Urban 4,Urban,South,Priya Lopez,2022-09-01
+5,West Flagship 5,Flagship,West,Priya Singh,2018-11-01
+6,West Outlet 6,Outlet,West,Mina Singh,2019-01-01
+7,Central Urban 7,Urban,Central,Nora Young,2020-03-01
+8,Central Mall 8,Mall,Central,Mina Lopez,2021-05-01
+9,EMEA Flagship 9,Flagship,EMEA,Nora Singh,2022-07-01
+10,EMEA Urban 10,Urban,EMEA,Priya King,2018-09-01
+11,APAC Flagship 11,Flagship,APAC,Lucas King,2019-11-01
+12,APAC Outlet 12,Outlet,APAC,Priya King,2020-01-01

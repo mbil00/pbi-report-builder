@@ -1,0 +1,49 @@
+ProductKey,SKU,ProductName,Brand,Category,Subcategory,Color,UnitListPrice,LaunchDate,IsActive
+1,SKU-0001,Northwind Tea 1,Northwind,Beverages,Tea,Green,11.75,2022-01-01,True
+2,SKU-0002,Blue Pine Tea 2,Blue Pine,Beverages,Tea,Silver,15.50,2023-02-01,True
+3,SKU-0003,Summit Tea 3,Summit,Beverages,Tea,Amber,19.25,2021-03-01,True
+4,SKU-0004,Harbor Tea 4,Harbor,Beverages,Tea,Red,23.00,2022-04-01,True
+5,SKU-0005,Aster Coffee 1,Aster,Beverages,Coffee,Amber,22.35,2023-05-01,True
+6,SKU-0006,Pioneer Coffee 2,Pioneer,Beverages,Coffee,Red,26.10,2021-06-01,True
+7,SKU-0007,Northwind Coffee 3,Northwind,Beverages,Coffee,Green,29.85,2022-07-01,True
+8,SKU-0008,Blue Pine Coffee 4,Blue Pine,Beverages,Coffee,Silver,33.60,2023-08-01,True
+9,SKU-0009,Summit Sparkling Water 1,Summit,Beverages,Sparkling Water,Green,9.10,2021-09-01,True
+10,SKU-0010,Harbor Sparkling Water 2,Harbor,Beverages,Sparkling Water,Silver,12.85,2022-10-01,True
+11,SKU-0011,Aster Sparkling Water 3,Aster,Beverages,Sparkling Water,Amber,16.60,2023-11-01,False
+12,SKU-0012,Pioneer Sparkling Water 4,Pioneer,Beverages,Sparkling Water,Red,20.35,2021-12-01,True
+13,SKU-0013,Northwind Chips 1,Northwind,Snacks,Chips,Amber,19.70,2022-01-01,True
+14,SKU-0014,Blue Pine Chips 2,Blue Pine,Snacks,Chips,Red,23.45,2023-02-01,True
+15,SKU-0015,Summit Chips 3,Summit,Snacks,Chips,Green,27.20,2021-03-01,True
+16,SKU-0016,Harbor Chips 4,Harbor,Snacks,Chips,Silver,30.95,2022-04-01,True
+17,SKU-0017,Aster Bars 1,Aster,Snacks,Bars,Green,30.30,2023-05-01,True
+18,SKU-0018,Pioneer Bars 2,Pioneer,Snacks,Bars,Silver,10.20,2021-06-01,True
+19,SKU-0019,Northwind Bars 3,Northwind,Snacks,Bars,Amber,13.95,2022-07-01,True
+20,SKU-0020,Blue Pine Bars 4,Blue Pine,Snacks,Bars,Red,17.70,2023-08-01,True
+21,SKU-0021,Summit Nuts 1,Summit,Snacks,Nuts,Amber,17.05,2021-09-01,True
+22,SKU-0022,Harbor Nuts 2,Harbor,Snacks,Nuts,Red,20.80,2022-10-01,False
+23,SKU-0023,Aster Nuts 3,Aster,Snacks,Nuts,Green,24.55,2023-11-01,True
+24,SKU-0024,Pioneer Nuts 4,Pioneer,Snacks,Nuts,Silver,28.30,2021-12-01,True
+25,SKU-0025,Northwind Cleaners 1,Northwind,Household,Cleaners,Green,27.65,2022-01-01,True
+26,SKU-0026,Blue Pine Cleaners 2,Blue Pine,Household,Cleaners,Silver,31.40,2023-02-01,True
+27,SKU-0027,Summit Cleaners 3,Summit,Household,Cleaners,Amber,11.30,2021-03-01,True
+28,SKU-0028,Harbor Cleaners 4,Harbor,Household,Cleaners,Red,15.05,2022-04-01,True
+29,SKU-0029,Aster Laundry 1,Aster,Household,Laundry,Amber,14.40,2023-05-01,True
+30,SKU-0030,Pioneer Laundry 2,Pioneer,Household,Laundry,Red,18.15,2021-06-01,True
+31,SKU-0031,Northwind Laundry 3,Northwind,Household,Laundry,Green,21.90,2022-07-01,True
+32,SKU-0032,Blue Pine Laundry 4,Blue Pine,Household,Laundry,Silver,25.65,2023-08-01,True
+33,SKU-0033,Summit Storage 1,Summit,Household,Storage,Green,25.00,2021-09-01,False
+34,SKU-0034,Harbor Storage 2,Harbor,Household,Storage,Silver,28.75,2022-10-01,True
+35,SKU-0035,Aster Storage 3,Aster,Household,Storage,Amber,32.50,2023-11-01,True
+36,SKU-0036,Pioneer Storage 4,Pioneer,Household,Storage,Red,12.40,2021-12-01,True
+37,SKU-0037,Northwind Soap 1,Northwind,Personal Care,Soap,Amber,11.75,2022-01-01,True
+38,SKU-0038,Blue Pine Soap 2,Blue Pine,Personal Care,Soap,Red,15.50,2023-02-01,True
+39,SKU-0039,Summit Soap 3,Summit,Personal Care,Soap,Green,19.25,2021-03-01,True
+40,SKU-0040,Harbor Soap 4,Harbor,Personal Care,Soap,Silver,23.00,2022-04-01,True
+41,SKU-0041,Aster Oral Care 1,Aster,Personal Care,Oral Care,Green,22.35,2023-05-01,True
+42,SKU-0042,Pioneer Oral Care 2,Pioneer,Personal Care,Oral Care,Silver,26.10,2021-06-01,True
+43,SKU-0043,Northwind Oral Care 3,Northwind,Personal Care,Oral Care,Amber,29.85,2022-07-01,True
+44,SKU-0044,Blue Pine Oral Care 4,Blue Pine,Personal Care,Oral Care,Red,33.60,2023-08-01,False
+45,SKU-0045,Summit Skincare 1,Summit,Personal Care,Skincare,Amber,9.10,2021-09-01,True
+46,SKU-0046,Harbor Skincare 2,Harbor,Personal Care,Skincare,Red,12.85,2022-10-01,True
+47,SKU-0047,Aster Skincare 3,Aster,Personal Care,Skincare,Green,16.60,2023-11-01,True
+48,SKU-0048,Pioneer Skincare 4,Pioneer,Personal Care,Skincare,Silver,20.35,2021-12-01,True

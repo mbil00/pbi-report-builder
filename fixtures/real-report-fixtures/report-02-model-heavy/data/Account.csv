@@ -1,0 +1,37 @@
+AccountKey,AccountNumber,AccountName,AccountGroup,AccountSubgroup,AccountType,Sign,SortOrder
+1,4001,Product Revenue 1,Revenue,Product Revenue,Revenue,-1,10
+2,4002,Product Revenue 2,Revenue,Product Revenue,Revenue,-1,20
+3,4003,Product Revenue 3,Revenue,Product Revenue,Revenue,-1,30
+4,4004,Service Revenue 1,Revenue,Service Revenue,Revenue,-1,40
+5,4005,Service Revenue 2,Revenue,Service Revenue,Revenue,-1,50
+6,4006,Service Revenue 3,Revenue,Service Revenue,Revenue,-1,60
+7,4007,Partner Revenue 1,Revenue,Partner Revenue,Revenue,-1,70
+8,4008,Partner Revenue 2,Revenue,Partner Revenue,Revenue,-1,80
+9,4009,Partner Revenue 3,Revenue,Partner Revenue,Revenue,-1,90
+10,4010,Salaries 1,Payroll,Salaries,Expense,1,100
+11,4011,Salaries 2,Payroll,Salaries,Expense,1,110
+12,4012,Salaries 3,Payroll,Salaries,Expense,1,120
+13,4013,Bonuses 1,Payroll,Bonuses,Expense,1,130
+14,4014,Bonuses 2,Payroll,Bonuses,Expense,1,140
+15,4015,Bonuses 3,Payroll,Bonuses,Expense,1,150
+16,4016,Benefits 1,Payroll,Benefits,Expense,1,160
+17,4017,Benefits 2,Payroll,Benefits,Expense,1,170
+18,4018,Benefits 3,Payroll,Benefits,Expense,1,180
+19,4019,Travel 1,Operating Expense,Travel,Expense,1,190
+20,4020,Travel 2,Operating Expense,Travel,Expense,1,200
+21,4021,Travel 3,Operating Expense,Travel,Expense,1,210
+22,4022,Software 1,Operating Expense,Software,Expense,1,220
+23,4023,Software 2,Operating Expense,Software,Expense,1,230
+24,4024,Software 3,Operating Expense,Software,Expense,1,240
+25,4025,Facilities 1,Operating Expense,Facilities,Expense,1,250
+26,4026,Facilities 2,Operating Expense,Facilities,Expense,1,260
+27,4027,Facilities 3,Operating Expense,Facilities,Expense,1,270
+28,4028,Consulting 1,Services,Consulting,Expense,1,280
+29,4029,Consulting 2,Services,Consulting,Expense,1,290
+30,4030,Consulting 3,Services,Consulting,Expense,1,300
+31,4031,Training 1,Services,Training,Expense,1,310
+32,4032,Training 2,Services,Training,Expense,1,320
+33,4033,Training 3,Services,Training,Expense,1,330
+34,4034,Support 1,Services,Support,Expense,1,340
+35,4035,Support 2,Services,Support,Expense,1,350
+36,4036,Support 3,Services,Support,Expense,1,360

@@ -1,0 +1,9 @@
+PromotionKey,PromotionName,PromotionType,StartDate,EndDate
+1,Spring Campaign 1,Discount,2024-01-01,2024-02-15
+2,Summer Campaign 2,BOGO,2024-04-01,2024-05-17
+3,Spring Campaign 3,Bundle,2024-07-01,2024-08-17
+4,Summer Campaign 4,Loyalty,2024-10-01,2024-11-18
+5,Holiday Campaign 5,Discount,2024-01-01,2024-02-19
+6,Spring Campaign 6,BOGO,2024-04-01,2024-05-21
+7,Spring Campaign 7,Bundle,2024-07-01,2024-08-21
+8,Spring Campaign 8,Loyalty,2024-10-01,2024-11-22

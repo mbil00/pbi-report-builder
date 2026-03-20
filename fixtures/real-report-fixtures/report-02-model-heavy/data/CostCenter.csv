@@ -1,0 +1,21 @@
+CostCenterKey,CostCenterCode,CostCenterName,DepartmentKey,ManagerName
+1,CC-D001-C,Corporate FP&A Core,1,Jamie Hayes
+2,CC-D001-P,Corporate FP&A Programs,1,Jamie Price
+3,CC-D002-C,Accounting Core,2,Skyler Price
+4,CC-D002-P,Accounting Programs,2,Jamie Bell
+5,CC-D003-C,Field Sales Core,3,Skyler Price
+6,CC-D003-P,Field Sales Programs,3,Quinn Myers
+7,CC-D004-C,Enterprise Sales Core,4,Skyler Bell
+8,CC-D004-P,Enterprise Sales Programs,4,Jamie Myers
+9,CC-D005-C,Manufacturing Core,5,Skyler Price
+10,CC-D005-P,Manufacturing Programs,5,Jamie Price
+11,CC-D006-C,Logistics Core,6,Jamie Bell
+12,CC-D006-P,Logistics Programs,6,Skyler Bell
+13,CC-D007-C,Platform Engineering Core,7,Jamie Hayes
+14,CC-D007-P,Platform Engineering Programs,7,Rowan Bell
+15,CC-D008-C,Business Systems Core,8,Rowan Bell
+16,CC-D008-P,Business Systems Programs,8,Rowan Bell
+17,CC-D009-C,People Operations Core,9,Quinn Hayes
+18,CC-D009-P,People Operations Programs,9,Skyler Hayes
+19,CC-D010-C,Talent Acquisition Core,10,Skyler Price
+20,CC-D010-P,Talent Acquisition Programs,10,Skyler Hayes

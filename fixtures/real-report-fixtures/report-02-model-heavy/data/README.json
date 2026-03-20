@@ -1,0 +1,21 @@
+{
+  "fixture": "report-02-model-heavy",
+  "date_range": "2023-01-01 to 2025-12-31",
+  "import_tables": [
+    "Date",
+    "Department",
+    "CostCenter",
+    "Account",
+    "Scenario",
+    "GL_Actuals",
+    "Budget",
+    "Forecast",
+    "ExchangeRate"
+  ],
+  "manual_modeling_steps": [
+    "Create relationships, hidden columns, display folders, hierarchies, measures, and calculated artifacts from the fixture spec.",
+    "MonthName should be sorted by MonthNumber.",
+    "AccountName should be sorted by SortOrder.",
+    "Add the calculated table Variance Bands manually."
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "report-01-kitchen-sink": {
+    "Channel_rows": 3,
+    "Customer_rows": 180,
+    "Date_rows": 731,
+    "Product_rows": 48,
+    "Promotion_rows": 8,
+    "Sales_rows": 1800,
+    "Store_rows": 12,
+    "Targets_rows": 72,
+    "dataset": "report-01-kitchen-sink"
+  },
+  "report-02-model-heavy": {
+    "Account_rows": 36,
+    "Budget_rows": 8640,
+    "CostCenter_rows": 20,
+    "Date_rows": 1096,
+    "Department_rows": 10,
+    "ExchangeRate_rows": 72,
+    "Forecast_rows": 8640,
+    "GL_Actuals_rows": 17280,
+    "Scenario_rows": 3,
+    "dataset": "report-02-model-heavy"
+  }
+}

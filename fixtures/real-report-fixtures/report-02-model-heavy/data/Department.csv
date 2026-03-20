@@ -1,0 +1,11 @@
+DepartmentKey,DepartmentCode,DepartmentName,Division,VPName,IsCorporate
+1,D001,Corporate FP&A,Corporate,Blake Reed,True
+2,D002,Accounting,Corporate,Emerson Reed,True
+3,D003,Field Sales,Sales,Avery Foster,False
+4,D004,Enterprise Sales,Sales,Avery Foster,False
+5,D005,Manufacturing,Operations,Devon Bennett,False
+6,D006,Logistics,Operations,Emerson Ward,False
+7,D007,Platform Engineering,Technology,Finley Reed,False
+8,D008,Business Systems,Technology,Blake Foster,False
+9,D009,People Operations,People,Emerson Ward,True
+10,D010,Talent Acquisition,People,Avery Howard,True
