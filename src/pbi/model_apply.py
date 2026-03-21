@@ -12,12 +12,16 @@ from pbi.model import (
     Column,
     Measure,
     PerspectiveMemberSpec,
+    RoleMember,
+    RoleSpec,
+    RoleTablePermission,
     SemanticModel,
     TmdlEditSession,
     create_calculated_column,
     create_hierarchy,
     create_measure,
     create_perspective,
+    create_role,
     create_relationship,
     delete_hierarchy,
     edit_calculated_column_expression,
@@ -29,6 +33,7 @@ from pbi.model import (
     set_field_format,
     set_member_property,
     set_perspective,
+    set_role,
     set_relationship_property,
 )
 
@@ -47,6 +52,8 @@ class ModelApplyResult:
     relationships_updated: list[str] = field(default_factory=list)
     hierarchies_created: list[str] = field(default_factory=list)
     hierarchies_updated: list[str] = field(default_factory=list)
+    roles_created: list[str] = field(default_factory=list)
+    roles_updated: list[str] = field(default_factory=list)
     perspectives_created: list[str] = field(default_factory=list)
     perspectives_updated: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -65,6 +72,8 @@ class ModelApplyResult:
             or self.relationships_updated
             or self.hierarchies_created
             or self.hierarchies_updated
+            or self.roles_created
+            or self.roles_updated
             or self.perspectives_created
             or self.perspectives_updated
         )
@@ -140,6 +149,17 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
+    roles_spec = spec.get("roles")
+    if roles_spec is not None:
+        _apply_roles(
+            project_root,
+            roles_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
+
     perspectives_spec = spec.get("perspectives")
     if perspectives_spec is not None:
         _apply_perspectives(
@@ -173,7 +193,7 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
-    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "perspectives"}
+    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "roles", "perspectives"}
     if not known_keys.intersection(spec.keys()):
         result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
 
@@ -725,6 +745,123 @@ def _apply_hierarchies(
                         result.hierarchies_updated.append(label)
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"hierarchies.{table_name}.{name}: {e}")
+
+
+def _apply_roles(
+    project_root: Path,
+    roles_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+    edit_session: TmdlEditSession,
+) -> None:
+    """Apply declarative role and RLS changes."""
+    if not isinstance(roles_spec, dict):
+        result.errors.append("'roles' must be a mapping of role name to role specs.")
+        return
+
+    for role_name, entry in roles_spec.items():
+        if not isinstance(entry, dict):
+            result.errors.append(f"roles.{role_name}: expected a mapping.")
+            continue
+
+        permission = entry.get("permission", "read")
+        if not isinstance(permission, str):
+            result.errors.append(f"roles.{role_name}.permission: expected a string.")
+            continue
+
+        filters_spec = entry.get("filters", {})
+        if filters_spec in (None, {}):
+            filters_spec = {}
+        if not isinstance(filters_spec, dict):
+            result.errors.append(f"roles.{role_name}.filters: expected a mapping of table name to DAX expression.")
+            continue
+
+        members_spec = entry.get("members", [])
+        if members_spec in (None, []):
+            members_spec = []
+        if not isinstance(members_spec, list):
+            result.errors.append(f"roles.{role_name}.members: expected a list.")
+            continue
+
+        table_permissions: list[RoleTablePermission] = []
+        invalid = False
+        for table_name, expression in filters_spec.items():
+            if not isinstance(expression, str):
+                result.errors.append(f"roles.{role_name}.filters.{table_name}: expected a string.")
+                invalid = True
+                continue
+            table_permissions.append(RoleTablePermission(table=str(table_name), filter_expression=expression))
+
+        members: list[RoleMember] = []
+        for index, member_entry in enumerate(members_spec):
+            if not isinstance(member_entry, dict):
+                result.errors.append(f"roles.{role_name}.members[{index}]: expected a mapping.")
+                invalid = True
+                continue
+            member_name = member_entry.get("name")
+            if not isinstance(member_name, str) or not member_name.strip():
+                result.errors.append(f"roles.{role_name}.members[{index}].name: expected a non-empty string.")
+                invalid = True
+                continue
+            member_type = member_entry.get("type", "user")
+            if not isinstance(member_type, str):
+                result.errors.append(f"roles.{role_name}.members[{index}].type: expected a string.")
+                invalid = True
+                continue
+            identity_provider = member_entry.get("identityProvider")
+            if identity_provider is not None and not isinstance(identity_provider, str):
+                result.errors.append(f"roles.{role_name}.members[{index}].identityProvider: expected a string.")
+                invalid = True
+                continue
+            members.append(
+                RoleMember(
+                    name=member_name,
+                    member_type=member_type,
+                    identity_provider=identity_provider,
+                )
+            )
+
+        if invalid:
+            continue
+
+        spec = RoleSpec(
+            model_permission=permission,
+            table_permissions=table_permissions,
+            members=members,
+        )
+
+        try:
+            try:
+                existing = model.find_role(str(role_name))
+            except ValueError:
+                existing = None
+
+            if existing is None:
+                name, created = create_role(
+                    project_root,
+                    str(role_name),
+                    spec,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                if created:
+                    result.roles_created.append(name)
+            else:
+                name, changed = set_role(
+                    project_root,
+                    existing.name,
+                    spec,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                if changed:
+                    result.roles_updated.append(name)
+        except (FileNotFoundError, ValueError) as e:
+            result.errors.append(f"roles.{role_name}: {e}")
 
 
 def _apply_perspectives(

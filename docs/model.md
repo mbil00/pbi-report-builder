@@ -29,6 +29,17 @@ pbi model table set Date dateTable=Date
 pbi model set timeIntelligence=off
 ```
 
+Manage perspectives and RLS roles:
+
+```bash
+pbi model perspective list
+pbi model perspective create "Exec View" --include-all Sales --measure Sales.Revenue
+pbi model role list
+pbi model role create "Finance Readers"
+pbi model role filter set "Finance Readers" Department 'Department[Division] = "Corporate"'
+pbi model role member create "Finance Readers" finance@example.com --type group
+```
+
 ## Relationships
 
 List all relationships in the semantic model, or filter by table:
@@ -183,9 +194,25 @@ Rules:
 - `tables:` supports table-level metadata such as `dataCategory` and `dateTable`
 - `measures:` is a mapping of table name to a list of measure specs
 - `columns:` is a mapping of table name to a mapping of column name to spec
+- `roles:` is a mapping of role name to `permission`, `filters`, and `members`
+- `perspectives:` is a mapping of perspective name to table membership specs
 - calculated columns require `expression` and `dataType`
 - source columns cannot be created through `model apply`
 - existing measures and calculated columns are updated in place when names match
+
+Role example:
+
+```yaml
+roles:
+  Finance Readers:
+    permission: read
+    filters:
+      Department: Department[Division] = "Corporate"
+    members:
+    - name: finance@example.com
+    - name: finance-group@example.com
+      type: group
+```
 
 ## Recommended workflow
 

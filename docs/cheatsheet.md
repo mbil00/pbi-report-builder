@@ -193,6 +193,8 @@ pbi model measure list Facts                  # list measures (use --full for co
 pbi model fields Sales                        # list both columns and measures
 pbi model search "revenue"                    # search across all tables
 pbi model get                                 # model-level settings
+pbi model role list                           # list RLS roles
+pbi model role get "Finance Readers"          # inspect permission, filters, and members
 pbi model perspective list                    # list perspectives
 pbi model perspective get "Exec View"         # inspect included tables, columns, measures, hierarchies
 pbi model table get Date                      # table metadata incl. date-table status
@@ -211,6 +213,14 @@ pbi model set timeIntelligence=off            # disable auto date/time and remov
 pbi model perspective create "Exec View" --include-all Sales --measure Sales.Revenue
 pbi model perspective set "Exec View" --column Date.Year --hierarchy Date.Calendar
 pbi model perspective delete "Exec View" --force
+
+# Roles / RLS
+pbi model role create "Finance Readers"
+pbi model role set "Finance Readers" permission=readRefresh
+pbi model role filter set "Finance Readers" Department 'Department[Division] = "Corporate"'
+pbi model role member create "Finance Readers" finance@example.com --type group
+pbi model role filter clear "Finance Readers" Department
+pbi model role delete "Finance Readers" --force
 ```
 
 **Measures:**

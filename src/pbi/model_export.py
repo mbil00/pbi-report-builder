@@ -108,6 +108,28 @@ def export_model_yaml(
     if hierarchies_section:
         spec["hierarchies"] = hierarchies_section
 
+    roles_section: dict = {}
+    for role in loaded_model.roles:
+        entry: dict = {"permission": role.model_permission}
+        if role.table_permissions:
+            entry["filters"] = {
+                item.table: item.filter_expression
+                for item in role.table_permissions
+            }
+        if role.members:
+            members: list[dict] = []
+            for member in role.members:
+                member_entry: dict = {"name": member.name}
+                if member.member_type != "user":
+                    member_entry["type"] = member.member_type
+                if member.identity_provider:
+                    member_entry["identityProvider"] = member.identity_provider
+                members.append(member_entry)
+            entry["members"] = members
+        roles_section[role.name] = entry
+    if roles_section:
+        spec["roles"] = roles_section
+
     perspectives_section: dict = {}
     for perspective in loaded_model.perspectives:
         tables_entry: dict = {}

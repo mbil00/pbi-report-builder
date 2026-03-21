@@ -130,6 +130,52 @@ class Relationship:
 
 
 @dataclass
+class RoleTablePermission:
+    table: str
+    filter_expression: str
+
+
+@dataclass
+class RoleMember:
+    name: str
+    member_type: str = "user"
+    identity_provider: str | None = None
+
+
+@dataclass
+class ModelRole:
+    name: str
+    model_permission: str = "read"
+    table_permissions: list[RoleTablePermission] = field(default_factory=list)
+    members: list[RoleMember] = field(default_factory=list)
+    definition_path: Path | None = None
+
+    def find_table_permission(self, table_name: str) -> RoleTablePermission:
+        """Find one table permission by table name."""
+        lowered = table_name.lower()
+        for permission in self.table_permissions:
+            if permission.table.lower() == lowered:
+                return permission
+        available = ", ".join(f'"{permission.table}"' for permission in self.table_permissions)
+        raise ValueError(
+            f'Table permission for "{table_name}" not found in role "{self.name}". '
+            f'Available: {available or "(none)"}'
+        )
+
+    def find_member(self, member_name: str) -> RoleMember:
+        """Find one role member by name."""
+        lowered = member_name.lower()
+        for member in self.members:
+            if member.name.lower() == lowered:
+                return member
+        available = ", ".join(f'"{member.name}"' for member in self.members)
+        raise ValueError(
+            f'Role member "{member_name}" not found in role "{self.name}". '
+            f'Available: {available or "(none)"}'
+        )
+
+
+@dataclass
 class PerspectiveTable:
     table: str
     include_all: bool = False
@@ -162,6 +208,7 @@ class SemanticModel:
     folder: Path
     tables: list[SemanticTable] = field(default_factory=list)
     relationships: list[Relationship] = field(default_factory=list)
+    roles: list[ModelRole] = field(default_factory=list)
     perspectives: list[Perspective] = field(default_factory=list)
     model_path: Path | None = None
     time_intelligence_enabled: bool | None = None
@@ -169,7 +216,13 @@ class SemanticModel:
     @classmethod
     def load(cls, project_root: Path) -> SemanticModel:
         """Find and load the semantic model from a project root."""
-        from .parser import _parse_model_tmdl, _parse_perspective_tmdl, _parse_relationships_tmdl, _parse_table_tmdl
+        from .parser import (
+            _parse_model_tmdl,
+            _parse_perspective_tmdl,
+            _parse_relationships_tmdl,
+            _parse_role_tmdl,
+            _parse_table_tmdl,
+        )
 
         sm_folders = list(project_root.glob("*.SemanticModel"))
         if not sm_folders:
@@ -192,6 +245,13 @@ class SemanticModel:
         rel_file = sm_folder / "definition" / "relationships.tmdl"
         if rel_file.exists():
             model.relationships = _parse_relationships_tmdl(rel_file)
+
+        roles_dir = sm_folder / "definition" / "roles"
+        if roles_dir.exists():
+            for tmdl_file in sorted(roles_dir.glob("*.tmdl")):
+                role = _parse_role_tmdl(tmdl_file)
+                if role is not None:
+                    model.roles.append(role)
 
         perspectives_dir = sm_folder / "definition" / "perspectives"
         if perspectives_dir.exists():
@@ -269,6 +329,20 @@ class SemanticModel:
             raise ValueError(f'Table "{name}" not found. Did you mean: {suggestion}?')
         available = ", ".join(f'"{n}"' for n in table_names)
         raise ValueError(f'Table "{name}" not found. Available: {available}')
+
+    def find_role(self, name: str) -> ModelRole:
+        """Find a role by name (case-insensitive)."""
+        name_lower = name.lower()
+        for role in self.roles:
+            if role.name.lower() == name_lower:
+                return role
+        names = [role.name for role in self.roles]
+        close = difflib.get_close_matches(name, names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{item}"' for item in close)
+            raise ValueError(f'Role "{name}" not found. Did you mean: {suggestion}?')
+        available = ", ".join(f'"{item}"' for item in names)
+        raise ValueError(f'Role "{name}" not found. Available: {available or "(none)"}')
 
     def find_perspective(self, name: str) -> Perspective:
         """Find a perspective by name (case-insensitive)."""

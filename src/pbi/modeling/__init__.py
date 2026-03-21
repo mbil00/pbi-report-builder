@@ -1,7 +1,30 @@
 """Focused semantic-model submodules."""
 
 from .parser import _parse_tmdl_name
-from .schema import Column, Hierarchy, HierarchyLevel, Measure, Perspective, PerspectiveTable, SemanticModel, SemanticTable
+from .schema import (
+    Column,
+    Hierarchy,
+    HierarchyLevel,
+    Measure,
+    ModelRole,
+    Perspective,
+    PerspectiveTable,
+    RoleMember,
+    RoleTablePermission,
+    SemanticModel,
+    SemanticTable,
+)
+from .writes_roles import (
+    RoleSpec,
+    add_role_member,
+    clear_role_table_filter,
+    create_role,
+    delete_role,
+    delete_role_member,
+    set_role,
+    set_role_permission,
+    set_role_table_filter,
+)
 from .writes_perspectives import PerspectiveMemberSpec, create_perspective, delete_perspective, set_perspective
 from .writes import (
     TmdlEditSession,
@@ -37,9 +60,13 @@ __all__ = [
     "Hierarchy",
     "HierarchyLevel",
     "Measure",
+    "ModelRole",
     "Perspective",
     "PerspectiveMemberSpec",
     "PerspectiveTable",
+    "RoleMember",
+    "RoleSpec",
+    "RoleTablePermission",
     "SemanticModel",
     "SemanticTable",
     "TmdlEditSession",
@@ -49,11 +76,16 @@ __all__ = [
     "create_hierarchy",
     "create_measure",
     "create_perspective",
+    "create_role",
     "create_relationship",
+    "add_role_member",
+    "clear_role_table_filter",
     "delete_calculated_column",
     "delete_hierarchy",
     "delete_measure",
     "delete_perspective",
+    "delete_role",
+    "delete_role_member",
     "delete_relationship",
     "edit_calculated_column_expression",
     "edit_measure_expression",
@@ -68,6 +100,9 @@ __all__ = [
     "set_field_format",
     "set_member_property",
     "set_perspective",
+    "set_role",
+    "set_role_permission",
+    "set_role_table_filter",
     "set_table_property",
     "set_time_intelligence_enabled",
     "set_relationship_property",

@@ -29,6 +29,7 @@ def model_get(
     enabled = model.time_intelligence_enabled
     console.print("[bold]Model[/bold]")
     console.print(f"[dim]Time Intelligence:[/dim] {enabled if enabled is not None else '(none)'}")
+    console.print(f"[dim]Roles:[/dim] {len(model.roles)}")
     console.print(f"[dim]Perspectives:[/dim] {len(model.perspectives)}")
 
 
@@ -165,6 +166,10 @@ def model_apply(
         console.print(f"{prefix}Created hierarchy [cyan]{ref}[/cyan]")
     for ref in result.hierarchies_updated:
         console.print(f"{prefix}Updated hierarchy [cyan]{ref}[/cyan]")
+    for ref in result.roles_created:
+        console.print(f"{prefix}Created role [cyan]{ref}[/cyan]")
+    for ref in result.roles_updated:
+        console.print(f"{prefix}Updated role [cyan]{ref}[/cyan]")
     for ref in result.perspectives_created:
         console.print(f"{prefix}Created perspective [cyan]{ref}[/cyan]")
     for ref in result.perspectives_updated:

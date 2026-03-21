@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .schema import Column, Hierarchy, HierarchyLevel, Measure, Perspective, PerspectiveTable, Relationship, SemanticTable
+from .schema import (
+    Column,
+    Hierarchy,
+    HierarchyLevel,
+    Measure,
+    ModelRole,
+    Perspective,
+    PerspectiveTable,
+    Relationship,
+    RoleMember,
+    RoleTablePermission,
+    SemanticTable,
+)
 
 # Known TMDL property names that can appear inside column/measure blocks.
 # Used to distinguish metadata lines from DAX expression continuation.
@@ -314,6 +326,90 @@ def _parse_perspective_tmdl(path: Path) -> Perspective | None:
         return None
 
     return Perspective(name=perspective_name, tables=tables, definition_path=path)
+
+
+def _parse_role_tmdl(path: Path) -> ModelRole | None:
+    """Parse one role TMDL file."""
+    content = path.read_text(encoding="utf-8-sig")
+    lines = content.splitlines()
+
+    role_name: str | None = None
+    model_permission = "read"
+    table_permissions: list[RoleTablePermission] = []
+    members: list[RoleMember] = []
+    current_member: RoleMember | None = None
+
+    def _flush_member() -> None:
+        nonlocal current_member
+        if current_member is not None:
+            members.append(current_member)
+        current_member = None
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("///"):
+            continue
+
+        indent = 0
+        for ch in line:
+            if ch == "\t":
+                indent += 1
+            elif ch == " ":
+                indent += 0.25
+            else:
+                break
+        indent = int(indent)
+
+        if indent == 0 and stripped.startswith("role "):
+            _flush_member()
+            role_name = _parse_tmdl_name(stripped[len("role "):])
+            continue
+
+        if indent == 1 and stripped.startswith("modelPermission:"):
+            _flush_member()
+            model_permission = stripped.partition(":")[2].strip()
+            continue
+
+        if indent == 1 and stripped.startswith("tablePermission "):
+            _flush_member()
+            rest = stripped[len("tablePermission "):]
+            table_part, sep, expression = rest.partition("=")
+            if not sep:
+                continue
+            table_permissions.append(
+                RoleTablePermission(
+                    table=_parse_tmdl_name(table_part.strip()),
+                    filter_expression=expression.strip(),
+                )
+            )
+            continue
+
+        if indent == 1 and stripped.startswith("member "):
+            _flush_member()
+            rest = stripped[len("member "):]
+            name_part, sep, member_type = rest.partition("=")
+            current_member = RoleMember(
+                name=_parse_tmdl_name(name_part.strip()),
+                member_type=(member_type.strip() if sep else "user") or "user",
+            )
+            continue
+
+        if current_member is not None and indent >= 2 and stripped.startswith("identityProvider"):
+            _, _, value = stripped.partition("=")
+            current_member.identity_provider = value.strip()
+
+    _flush_member()
+
+    if role_name is None:
+        return None
+
+    return ModelRole(
+        name=role_name,
+        model_permission=model_permission,
+        table_permissions=table_permissions,
+        members=members,
+        definition_path=path,
+    )
 
 
 def _parse_relationships_tmdl(path: Path) -> list[Relationship]:

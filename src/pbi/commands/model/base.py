@@ -14,6 +14,9 @@ model_measure_app = typer.Typer(help="Semantic model measure operations.", no_ar
 model_relationship_app = typer.Typer(help="Semantic model relationship operations.", no_args_is_help=True)
 model_hierarchy_app = typer.Typer(help="Semantic model hierarchy operations.", no_args_is_help=True)
 model_perspective_app = typer.Typer(help="Semantic model perspective operations.", no_args_is_help=True)
+model_role_app = typer.Typer(help="Semantic model role operations.", no_args_is_help=True)
+model_role_member_app = typer.Typer(help="Semantic model role member operations.", no_args_is_help=True)
+model_role_filter_app = typer.Typer(help="Semantic model role filter operations.", no_args_is_help=True)
 model_table_app = typer.Typer(help="Semantic model table operations.", no_args_is_help=True)
 
 model_app.add_typer(model_column_app, name="column")
@@ -21,7 +24,10 @@ model_app.add_typer(model_measure_app, name="measure")
 model_app.add_typer(model_relationship_app, name="relationship")
 model_app.add_typer(model_hierarchy_app, name="hierarchy")
 model_app.add_typer(model_perspective_app, name="perspective")
+model_app.add_typer(model_role_app, name="role")
 model_app.add_typer(model_table_app, name="table")
+model_role_app.add_typer(model_role_member_app, name="member")
+model_role_app.add_typer(model_role_filter_app, name="filter")
 
 
 def get_model(project):

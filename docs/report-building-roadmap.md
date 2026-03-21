@@ -306,7 +306,7 @@ This is not about service administration. It is about model features that direct
 
 ### Status
 
-In progress. Perspectives are now first-class in the semantic-model layer, CLI, and model export/apply round-trip. Remaining work is row-level security, partitions, and broader model-wide metadata.
+In progress. Perspectives and row-level security roles are now first-class in the semantic-model layer, CLI, and model export/apply round-trip. Remaining work is partitions and broader model-wide metadata.
 
 ### Goal
 
