@@ -249,6 +249,13 @@ Expose the report objects and metadata that materially affect report behavior an
 - report resource package editing beyond basic image registration
 - report object inspection and mutation helpers
 
+### Shipped
+
+- `report annotation list|get|set|delete`
+- `report object list|get|set|clear` for top-level report arrays/objects
+- `report resource package ...` and `report resource item ...`
+- `report custom-visual list|get|set|delete` for `organizationCustomVisuals`
+
 ### Exit Criteria
 
 - users can author report-wide settings and metadata without dropping into raw JSON

@@ -33,6 +33,11 @@ pbi report resource item get RegisteredResources logo.png
 pbi report resource item set RegisteredResources logo.png --type Image --name Logo --from-file ./logo.png
 pbi report resource item delete RegisteredResources logo.png --drop-file
 
+pbi report custom-visual list
+pbi report custom-visual get "Org Timeline"
+pbi report custom-visual set "Org Timeline" store/org-timeline.pbiviz --disabled
+pbi report custom-visual delete "Org Timeline"
+
 pbi report properties
 ```
 
@@ -44,4 +49,5 @@ pbi report properties
 - `pbi report object` is for top-level JSON objects/arrays such as `filterConfig`, `objects`, `resourcePackages`, `settings`, and `themeCollection`.
 - `pbi report resource package` manages `resourcePackages` at the package level.
 - `pbi report resource item` manages individual resource entries inside a package and can copy files into `RegisteredResources` with `--from-file`.
+- `pbi report custom-visual` manages the `organizationCustomVisuals` array with `name`, `path`, and optional `disabled` state.
 - Theme and report-level filters remain under `pbi theme` and `pbi filter`.

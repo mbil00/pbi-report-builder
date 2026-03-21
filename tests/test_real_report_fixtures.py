@@ -283,6 +283,62 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
             self.assertFalse(registered_path.exists())
 
+    def test_kitchen_sink_report_custom_visual_commands(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "custom-visual",
+                    "set",
+                    "Retail Timeline",
+                    "org/RetailTimeline.pbiviz",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            get_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "custom-visual",
+                    "get",
+                    "Retail Timeline",
+                    "--raw",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertEqual(
+                json.loads(get_result.stdout),
+                {"name": "Retail Timeline", "path": "org/RetailTimeline.pbiviz"},
+            )
+
+            delete_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "custom-visual",
+                    "delete",
+                    "Retail Timeline",
+                    "--force",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+
+            reloaded = Project.find(pbip)
+            self.assertNotIn("organizationCustomVisuals", reloaded.get_report_meta())
+
     def test_kitchen_sink_bookmark_cli_reports_expected_fixture_state(self) -> None:
         runner = CliRunner()
 

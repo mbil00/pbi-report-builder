@@ -23,9 +23,11 @@ report_object_app = typer.Typer(help="Report-level object and array operations."
 report_resource_app = typer.Typer(help="Report resource package operations.", no_args_is_help=True)
 report_resource_package_app = typer.Typer(help="Resource package operations.", no_args_is_help=True)
 report_resource_item_app = typer.Typer(help="Resource item operations.", no_args_is_help=True)
+report_custom_visual_app = typer.Typer(help="Organization custom visual operations.", no_args_is_help=True)
 report_app.add_typer(report_annotation_app, name="annotation")
 report_app.add_typer(report_object_app, name="object")
 report_app.add_typer(report_resource_app, name="resource")
+report_app.add_typer(report_custom_visual_app, name="custom-visual")
 report_resource_app.add_typer(report_resource_package_app, name="package")
 report_resource_app.add_typer(report_resource_item_app, name="item")
 
@@ -725,3 +727,127 @@ def report_resource_item_delete(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
     console.print(f'Deleted resource item "[cyan]{deleted.get("name", item)}[/cyan]"')
+
+
+@report_custom_visual_app.command("list")
+def report_custom_visual_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List organization custom visuals used by the report."""
+    from pbi.report_custom_visuals import list_organization_custom_visuals
+
+    proj = get_project(project)
+    rows = list_organization_custom_visuals(proj)
+
+    if as_json:
+        console.print_json(
+            json.dumps(
+                [
+                    {
+                        "name": row.name,
+                        "path": row.path,
+                        "disabled": row.disabled,
+                    }
+                    for row in rows
+                ],
+                indent=2,
+            )
+        )
+        return
+
+    if not rows:
+        console.print("[yellow]No organization custom visuals. Use `pbi report custom-visual set` to add one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title="Organization Custom Visuals", box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Path")
+    table.add_column("Disabled")
+    for row in rows:
+        table.add_row(row.name, row.path, "yes" if row.disabled else "")
+    console.print(table)
+
+
+@report_custom_visual_app.command("get")
+def report_custom_visual_get(
+    identifier: Annotated[str, typer.Argument(help="Custom visual name or path.")],
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show one organization custom visual entry."""
+    from pbi.report_custom_visuals import get_organization_custom_visual
+
+    proj = get_project(project)
+    try:
+        entry = get_organization_custom_visual(proj, identifier)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if raw:
+        console.print_json(json.dumps(entry, indent=2))
+        return
+
+    table = Table(title=str(entry.get("name", identifier)), box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    table.add_row("Name", str(entry.get("name", "")))
+    table.add_row("Path", str(entry.get("path", "")))
+    if "disabled" in entry:
+        table.add_row("Disabled", "yes" if entry.get("disabled") else "")
+    console.print(table)
+
+
+@report_custom_visual_app.command("set")
+def report_custom_visual_set(
+    name: Annotated[str, typer.Argument(help="Custom visual name.")],
+    path: Annotated[str, typer.Argument(help="Path where the custom visual is stored.")],
+    disabled: Annotated[bool, typer.Option("--disabled/--enabled", help="Mark the custom visual as disabled or enabled.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Create or update an organization custom visual entry."""
+    from pbi.report_custom_visuals import set_organization_custom_visual
+
+    proj = get_project(project)
+    try:
+        entry, created, changed = set_organization_custom_visual(proj, name, path, disabled=disabled)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not changed:
+        console.print(f'[dim]No change:[/dim] [cyan]{name}[/cyan] already matches the requested state')
+    elif created:
+        console.print(f'Created organization custom visual "[cyan]{entry.get("name", name)}[/cyan]"')
+    else:
+        console.print(f'Set organization custom visual "[cyan]{entry.get("name", name)}[/cyan]"')
+
+
+@report_custom_visual_app.command("delete")
+def report_custom_visual_delete(
+    identifier: Annotated[str, typer.Argument(help="Custom visual name or path.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete an organization custom visual entry."""
+    from pbi.report_custom_visuals import delete_organization_custom_visual, get_organization_custom_visual
+
+    proj = get_project(project)
+    try:
+        entry = get_organization_custom_visual(proj, identifier)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not force:
+        confirm = typer.confirm(f'Delete "{entry.get("name", identifier)}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        deleted = delete_organization_custom_visual(proj, identifier)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    console.print(f'Deleted organization custom visual "[cyan]{deleted.get("name", identifier)}[/cyan]"')

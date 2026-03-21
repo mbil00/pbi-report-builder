@@ -344,6 +344,88 @@ class ReportCommandTests(unittest.TestCase):
             report = json.loads(report_path.read_text(encoding="utf-8-sig"))
             self.assertEqual(report["resourcePackages"][0]["items"], [])
 
+    def test_report_custom_visual_set_list_get_update_and_delete(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pbip_path, report_path = self._make_report_project(root)
+
+            create_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "custom-visual",
+                    "set",
+                    "Org Timeline",
+                    "store/org-timeline.pbiviz",
+                    "--disabled",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+            list_result = runner.invoke(
+                app,
+                ["report", "custom-visual", "list", "--json", "--project", str(pbip_path)],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            rows = json.loads(list_result.stdout)
+            self.assertEqual(
+                rows,
+                [
+                    {
+                        "name": "Org Timeline",
+                        "path": "store/org-timeline.pbiviz",
+                        "disabled": True,
+                    }
+                ],
+            )
+
+            get_result = runner.invoke(
+                app,
+                ["report", "custom-visual", "get", "Org Timeline", "--raw", "--project", str(pbip_path)],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertEqual(
+                json.loads(get_result.stdout),
+                {
+                    "name": "Org Timeline",
+                    "path": "store/org-timeline.pbiviz",
+                    "disabled": True,
+                },
+            )
+
+            update_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "custom-visual",
+                    "set",
+                    "Org Timeline",
+                    "store/org-timeline-v2.pbiviz",
+                    "--enabled",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(update_result.exit_code, 0, update_result.stdout)
+
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            self.assertEqual(
+                report["organizationCustomVisuals"],
+                [{"name": "Org Timeline", "path": "store/org-timeline-v2.pbiviz"}],
+            )
+
+            delete_result = runner.invoke(
+                app,
+                ["report", "custom-visual", "delete", "Org Timeline", "--force", "--project", str(pbip_path)],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            self.assertNotIn("organizationCustomVisuals", report)
+
 
 if __name__ == "__main__":
     unittest.main()
