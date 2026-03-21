@@ -457,6 +457,45 @@ class FilterModelRegressionTests(unittest.TestCase):
             info = parse_filter(filters[0], "report")
             self.assertEqual(info.filter_type, "Include")
 
+    def test_filter_delete_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            create_result = runner.invoke(
+                app,
+                [
+                    "filter",
+                    "create",
+                    "Product.Category",
+                    "--mode",
+                    "include",
+                    "--value",
+                    "Bikes",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+            delete_result = runner.invoke(
+                app,
+                [
+                    "filter",
+                    "delete",
+                    "Product.Category",
+                    "--force",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+            report_data = Project.find(root / "Sample.pbip").get_report_meta()
+            self.assertEqual(get_filters(report_data), [])
+
 
 class DrillthroughRegressionTests(unittest.TestCase):
     def test_cli_uses_canonical_table_name_for_drillthrough_fields(self) -> None:

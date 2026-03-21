@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Annotated
 
 import typer
@@ -501,6 +502,7 @@ def filter_delete(
     field: Annotated[str, typer.Argument(help="Filter field reference or name to delete.")],
     page_opt: Annotated[str | None, typer.Option("--page", help="Page name (narrows to page scope).")] = None,
     visual_opt: Annotated[str | None, typer.Option("--visual", help="Visual name (narrows to visual scope, requires --page).")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Delete a filter by field reference or filter name."""
@@ -514,9 +516,18 @@ def filter_delete(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    preview_data = copy.deepcopy(data)
+    match_count = remove_filter(preview_data, field)
+    if not match_count:
+        console.print(f'[yellow]No filter matching "{field}" found at {level} level.[/yellow]')
+        return
+
+    if not force:
+        confirm = typer.confirm(f'Delete {match_count} filter(s) matching "{field}" at {level} level?')
+        if not confirm:
+            raise typer.Abort()
+
     removed = remove_filter(data, field)
     if removed:
         save_level_data(data, target)
         console.print(f'Deleted {removed} filter(s) matching "{field}" at {level} level')
-    else:
-        console.print(f'[yellow]No filter matching "{field}" found at {level} level.[/yellow]')
