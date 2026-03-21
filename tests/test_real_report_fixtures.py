@@ -6,10 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
+from pbi.apply import apply_yaml
 from pbi.cli import app
 from pbi.export import export_yaml
+from pbi.interactions import get_interactions
 from pbi.model import SemanticModel
 from pbi.model_apply import apply_model_yaml
 from pbi.model_export import export_model_yaml
@@ -147,6 +150,115 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertFalse(report_meta["settings"]["useEnhancedTooltips"])
             self.assertEqual(report_meta["settings"]["pagesPosition"], "PagesPane")
 
+    def test_kitchen_sink_bookmark_cli_reports_expected_fixture_state(self) -> None:
+        runner = CliRunner()
+
+        list_result = runner.invoke(
+            app,
+            ["bookmark", "list", "--json", "--project", str(KITCHEN_SINK_PBIP)],
+        )
+        self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+        rows = json.loads(list_result.stdout)
+        self.assertEqual(
+            [row["displayName"] for row in rows],
+            ["Default View", "Focus On Online", "Hide Slicers"],
+        )
+
+        get_result = runner.invoke(
+            app,
+            ["bookmark", "get", "Hide Slicers", "--raw", "--project", str(KITCHEN_SINK_PBIP)],
+        )
+        self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+        bookmark = json.loads(get_result.stdout)
+        containers = (
+            bookmark["explorationState"]["sections"][bookmark["explorationState"]["activeSection"]]["visualContainers"]
+        )
+        self.assertEqual(
+            set(containers),
+            {"slicerYear", "slicerCategory", "slicerRegion", "navHelp"},
+        )
+        self.assertTrue(
+            all(
+                entry["singleVisual"]["display"]["mode"] == "hidden"
+                for entry in containers.values()
+            )
+        )
+
+    def test_kitchen_sink_navigation_commands_rewire_real_buttons(self) -> None:
+        from pbi.bookmarks import get_bookmark
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            page = "Executive Overview"
+
+            set_page_result = runner.invoke(
+                app,
+                ["nav", "set-page", page, "navHelp", "Regional Detail", "--project", str(pbip)],
+            )
+            self.assertEqual(set_page_result.exit_code, 0, set_page_result.stdout)
+
+            set_bookmark_result = runner.invoke(
+                app,
+                ["nav", "set-bookmark", page, "navToRegional", "Hide Slicers", "--project", str(pbip)],
+            )
+            self.assertEqual(set_bookmark_result.exit_code, 0, set_bookmark_result.stdout)
+
+            set_url_result = runner.invoke(
+                app,
+                [
+                    "nav",
+                    "set-url",
+                    page,
+                    "navFocusOnline",
+                    "https://example.com/support",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_url_result.exit_code, 0, set_url_result.stdout)
+
+            reloaded = Project.find(pbip)
+            overview = reloaded.find_page(page)
+            regional_detail = reloaded.find_page("Regional Detail")
+            hide_slicers = get_bookmark(reloaded, "Hide Slicers")
+
+            nav_help = reloaded.find_visual(overview, "navHelp")
+            self.assertEqual(get_property(nav_help.data, "action.type", VISUAL_PROPERTIES), "PageNavigation")
+            self.assertEqual(get_property(nav_help.data, "action.page", VISUAL_PROPERTIES), regional_detail.name)
+            self.assertIsNone(get_property(nav_help.data, "action.url", VISUAL_PROPERTIES))
+
+            nav_to_regional = reloaded.find_visual(overview, "navToRegional")
+            self.assertEqual(get_property(nav_to_regional.data, "action.type", VISUAL_PROPERTIES), "Bookmark")
+            self.assertEqual(
+                get_property(nav_to_regional.data, "action.bookmark", VISUAL_PROPERTIES),
+                hide_slicers["name"],
+            )
+            self.assertIsNone(get_property(nav_to_regional.data, "action.page", VISUAL_PROPERTIES))
+
+            nav_focus_online = reloaded.find_visual(overview, "navFocusOnline")
+            self.assertEqual(get_property(nav_focus_online.data, "action.type", VISUAL_PROPERTIES), "WebUrl")
+            self.assertEqual(
+                get_property(nav_focus_online.data, "action.url", VISUAL_PROPERTIES),
+                "https://example.com/support",
+            )
+            self.assertIsNone(get_property(nav_focus_online.data, "action.bookmark", VISUAL_PROPERTIES))
+
+            clear_result = runner.invoke(
+                app,
+                ["nav", "clear", page, "navFocusOnline", "--force", "--project", str(pbip)],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+
+            reloaded = Project.find(pbip)
+            nav_focus_online = reloaded.find_visual(reloaded.find_page(page), "navFocusOnline")
+            self.assertIsNone(get_property(nav_focus_online.data, "action.type", VISUAL_PROPERTIES))
+            self.assertIsNone(get_property(nav_focus_online.data, "action.url", VISUAL_PROPERTIES))
+            self.assertIsNone(get_property(nav_focus_online.data, "action.bookmark", VISUAL_PROPERTIES))
+
     def test_model_heavy_model_cli_inspection_commands(self) -> None:
         runner = CliRunner()
 
@@ -232,6 +344,136 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertIn("Imported Product Detail", after_pages)
             imported_page = reloaded.find_page("Imported Product Detail")
             self.assertEqual(len(reloaded.get_visuals(imported_page)), 7)
+
+    def test_kitchen_sink_interaction_commands_set_and_clear_real_visuals(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+            page = "Executive Overview"
+
+            before_result = runner.invoke(
+                app,
+                ["interaction", "list", page, "--project", str(pbip)],
+            )
+            self.assertEqual(before_result.exit_code, 0, before_result.stdout)
+            self.assertIn("No custom interactions", before_result.stdout)
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "interaction",
+                    "set",
+                    page,
+                    "revenueByMonth",
+                    "revenueByChannel",
+                    "--mode",
+                    "NoFilter",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            reloaded = Project.find(pbip)
+            interactions = get_interactions(reloaded.find_page(page))
+            self.assertEqual(
+                interactions,
+                [{"source": "revenueByMonth", "target": "revenueByChannel", "type": "NoFilter"}],
+            )
+
+            clear_result = runner.invoke(
+                app,
+                [
+                    "interaction",
+                    "clear",
+                    page,
+                    "revenueByMonth",
+                    "revenueByChannel",
+                    "--force",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+
+            reloaded = Project.find(pbip)
+            self.assertEqual(get_interactions(reloaded.find_page(page)), [])
+
+    def test_kitchen_sink_visual_get_and_set_cli_updates_real_visuals(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+            page = "Executive Overview"
+
+            get_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "get",
+                    page,
+                    "revenueByMonth",
+                    "title.text",
+                    "background.color",
+                    "border.color",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("Revenue vs Target by Month", get_result.stdout)
+            self.assertIn("#FFFFFF", get_result.stdout)
+            self.assertIn("#E0E0E0", get_result.stdout)
+
+            set_chart_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    page,
+                    "revenueByMonth",
+                    "title.text=Revenue Trend by Fiscal Month",
+                    "background.color=#FFF8E7",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_chart_result.exit_code, 0, set_chart_result.stdout)
+
+            set_slicer_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    page,
+                    "slicerYear",
+                    "title.text=Fiscal Year",
+                    "border.color=#B85C00",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_slicer_result.exit_code, 0, set_slicer_result.stdout)
+
+            reloaded = Project.find(pbip)
+            overview = reloaded.find_page(page)
+
+            revenue_by_month = reloaded.find_visual(overview, "revenueByMonth")
+            self.assertEqual(
+                get_property(revenue_by_month.data, "title.text", VISUAL_PROPERTIES),
+                "Revenue Trend by Fiscal Month",
+            )
+            self.assertEqual(
+                get_property(revenue_by_month.data, "background.color", VISUAL_PROPERTIES),
+                "#FFF8E7",
+            )
+
+            slicer_year = reloaded.find_visual(overview, "slicerYear")
+            self.assertEqual(get_property(slicer_year.data, "title.text", VISUAL_PROPERTIES), "Fiscal Year")
+            self.assertEqual(get_property(slicer_year.data, "border.color", VISUAL_PROPERTIES), "#B85C00")
 
     def test_kitchen_sink_component_create_and_apply_cli(self) -> None:
         runner = CliRunner()
@@ -431,6 +673,45 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertEqual(
                 get_property(revenue_by_month.data, "background.color", VISUAL_PROPERTIES),
                 "#FFF8E7",
+            )
+
+    def test_kitchen_sink_apply_yaml_mutates_real_visual_property(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            project = Project.find(pbip)
+            spec = {
+                "pages": [
+                    {
+                        "name": "Executive Overview",
+                        "visuals": [
+                            {
+                                "name": "revenueByMonth",
+                                "title": {"text": "Revenue by Fiscal Month"},
+                                "background": {"color": "#FDF1D6"},
+                            }
+                        ],
+                    }
+                ]
+            }
+
+            result = apply_yaml(project, yaml.safe_dump(spec, sort_keys=False))
+
+            self.assertEqual(result.errors, [])
+            self.assertFalse(result.rolled_back)
+
+            reloaded = Project.find(pbip)
+            overview = reloaded.find_page("Executive Overview")
+            revenue_by_month = reloaded.find_visual(overview, "revenueByMonth")
+            self.assertEqual(
+                get_property(revenue_by_month.data, "title.text", VISUAL_PROPERTIES),
+                "Revenue by Fiscal Month",
+            )
+            self.assertEqual(
+                get_property(revenue_by_month.data, "background.color", VISUAL_PROPERTIES),
+                "#FDF1D6",
             )
 
 
