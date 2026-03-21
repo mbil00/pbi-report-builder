@@ -351,6 +351,201 @@ table Date
             with self.assertRaises(ValueError):
                 reloaded.find_visual(page, "badCard")
 
+    def test_visual_create_auto_sorts_chart_category_from_sort_by_column(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+            write_model_table(
+                root,
+                "Date.tmdl",
+                """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tsourceColumn: MonthName
+\t\tsortByColumn: MonthNumber
+
+\tcolumn MonthNumber
+\t\tdataType: int64
+\t\tsourceColumn: MonthNumber
+                """,
+            )
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tmeasure Revenue = 1
+\t\tformatString: #,0
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "clusteredColumnChart",
+                    "--name",
+                    "monthlyRevenue",
+                    "--bind",
+                    "Category=Date.MonthName",
+                    "--bind",
+                    "Y=Sales.Revenue",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Date.MonthNumber Ascending", result.stdout)
+            self.assertIn("(auto)", result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            page = reloaded.find_page("Demo")
+            visual = reloaded.find_visual(page, "monthlyRevenue")
+            self.assertEqual(
+                reloaded.get_sort(visual),
+                [("Date", "MonthNumber", "column", "Ascending")],
+            )
+
+    def test_visual_create_auto_sorts_slicer_values_from_sort_by_column(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+            write_model_table(
+                root,
+                "Date.tmdl",
+                """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tsourceColumn: MonthName
+\t\tsortByColumn: MonthNumber
+
+\tcolumn MonthNumber
+\t\tdataType: int64
+\t\tsourceColumn: MonthNumber
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "slicer",
+                    "--name",
+                    "monthSlicer",
+                    "--bind",
+                    "Values=Date.MonthName",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Date.MonthNumber Ascending", result.stdout)
+            self.assertIn("(auto)", result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            page = reloaded.find_page("Demo")
+            visual = reloaded.find_visual(page, "monthSlicer")
+            self.assertEqual(
+                reloaded.get_sort(visual),
+                [("Date", "MonthNumber", "column", "Ascending")],
+            )
+
+    def test_visual_create_explicit_sort_and_no_auto_sort_override_default_inference(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+            write_model_table(
+                root,
+                "Date.tmdl",
+                """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tsourceColumn: MonthName
+\t\tsortByColumn: MonthNumber
+
+\tcolumn MonthNumber
+\t\tdataType: int64
+\t\tsourceColumn: MonthNumber
+                """,
+            )
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tmeasure Revenue = 1
+\t\tformatString: #,0
+                """,
+            )
+
+            explicit_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "clusteredColumnChart",
+                    "--name",
+                    "explicitSortChart",
+                    "--bind",
+                    "Category=Date.MonthName",
+                    "--bind",
+                    "Y=Sales.Revenue",
+                    "--sort",
+                    "Date.MonthName",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(explicit_result.exit_code, 0, explicit_result.stdout)
+            self.assertNotIn("(auto)", explicit_result.stdout)
+
+            disabled_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "clusteredColumnChart",
+                    "--name",
+                    "manualChart",
+                    "--bind",
+                    "Category=Date.MonthName",
+                    "--bind",
+                    "Y=Sales.Revenue",
+                    "--no-auto-sort",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(disabled_result.exit_code, 0, disabled_result.stdout)
+            self.assertNotIn("Sort:", disabled_result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            page = reloaded.find_page("Demo")
+            explicit = reloaded.find_visual(page, "explicitSortChart")
+            manual = reloaded.find_visual(page, "manualChart")
+            self.assertEqual(
+                reloaded.get_sort(explicit),
+                [("Date", "MonthName", "column", "Ascending")],
+            )
+            self.assertEqual(reloaded.get_sort(manual), [])
+
 
 if __name__ == "__main__":
     unittest.main()

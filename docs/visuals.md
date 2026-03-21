@@ -90,6 +90,11 @@ starting format on supported families:
 - `slicer` for slicers
 - `card` for card visuals
 
+When `--sort` is omitted, builder-aware create also uses semantic-model metadata
+to infer a default ascending sort for chart categories and slicer values when
+the bound column has `sortByColumn` metadata. Use `--no-auto-sort` to disable
+that inference.
+
 ## Layout Helpers
 
 ```bash

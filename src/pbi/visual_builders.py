@@ -111,6 +111,46 @@ def apply_initial_sort(
     return entity, prop, resolved_field_type, direction
 
 
+def infer_default_sort(
+    project,
+    visual,
+    bound_fields: list[BoundField],
+) -> tuple[str, str, str, str] | None:
+    """Infer a useful default sort from semantic-model metadata."""
+    from pbi.model import SemanticModel
+
+    candidate = _find_sort_candidate(visual.visual_type, bound_fields)
+    if candidate is None or candidate.field_type != "column":
+        return None
+
+    try:
+        model = SemanticModel.load(project.root)
+        table = model.find_table(candidate.entity)
+        column = table.find_column(candidate.prop)
+    except (FileNotFoundError, ValueError):
+        return None
+
+    if column.sort_by_column:
+        return apply_initial_sort(
+            project,
+            visual,
+            f"{table.name}.{column.sort_by_column}",
+            field_type="column",
+            descending=False,
+        )
+
+    if (column.data_type or "").lower() in {"date", "datetime", "datetimezone"}:
+        return apply_initial_sort(
+            project,
+            visual,
+            f"{table.name}.{column.name}",
+            field_type="column",
+            descending=False,
+        )
+
+    return None
+
+
 def apply_builder_preset(
     visual,
     preset: str,
@@ -173,3 +213,18 @@ def _preset_assignments(preset: str, bound_fields: list[BoundField]) -> list[tup
             ("header.show", "false"),
         ]
     raise ValueError(f"Unsupported preset {preset}")
+
+
+def _find_sort_candidate(visual_type: str, bound_fields: list[BoundField]) -> BoundField | None:
+    """Pick the bound field most likely to define user-visible ordering."""
+    if visual_type == "slicer":
+        for field in bound_fields:
+            if field.role == "Values":
+                return field
+        return None
+
+    for field in bound_fields:
+        if field.role == "Category":
+            return field
+
+    return None

@@ -123,6 +123,13 @@ Current behavior:
 - infer sort defaults for date/category axes
 - add typed literal and aggregation helpers where PBIR requires them
 
+Initial implementation shipped:
+
+- automatic ascending sort inference for chart categories and slicer values
+  when the bound model column defines `sortByColumn`
+- explicit `--sort` still wins
+- `--no-auto-sort` disables inference
+
 #### Slice 4: Fixture-backed parity
 
 - create builder tests against real PBIP fixtures

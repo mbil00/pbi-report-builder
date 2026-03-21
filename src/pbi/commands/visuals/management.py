@@ -13,6 +13,7 @@ from pbi.visual_builders import (
     apply_builder_preset,
     apply_initial_sort,
     apply_role_bindings,
+    infer_default_sort,
     get_default_visual_size,
 )
 
@@ -32,6 +33,7 @@ def visual_create(
     preset: Annotated[str | None, typer.Option("--preset", help="Apply a builder preset for common visual families: chart, table, slicer, card.")] = None,
     sort: Annotated[str | None, typer.Option("--sort", help="Set initial sort field as Table.Field.")] = None,
     descending: Annotated[bool, typer.Option("--descending/--ascending", help="Sort direction for --sort (default: ascending).")] = False,
+    auto_sort: Annotated[bool, typer.Option("--auto-sort/--no-auto-sort", help="Infer initial sort from semantic-model metadata when --sort is omitted.")] = True,
     field_type: Annotated[str, typer.Option("--field-type", help="Field type used for --bind/--sort: auto, column, or measure.")] = "auto",
     from_ref: Annotated[str | None, typer.Option("--from", help="Reference visual as 'page/visual' to copy type, style, and bindings from.")] = None,
     project: ProjectOpt = None,
@@ -56,6 +58,9 @@ def visual_create(
             raise typer.Exit(1)
         if sort:
             console.print("[red]Error:[/red] --sort cannot be combined with --from.")
+            raise typer.Exit(1)
+        if not auto_sort:
+            console.print("[red]Error:[/red] --no-auto-sort cannot be combined with --from.")
             raise typer.Exit(1)
         if "/" not in from_ref:
             console.print("[red]Error:[/red] --from must be 'page/visual' format.")
@@ -150,6 +155,7 @@ def visual_create(
             raise typer.Exit(1)
 
     sort_details: tuple[str, str, str, str] | None = None
+    sort_is_auto = False
     if sort:
         try:
             sort_details = apply_initial_sort(
@@ -163,6 +169,9 @@ def visual_create(
             console.print(f"[red]Error:[/red] {e}")
             proj.delete_visual(vis)
             raise typer.Exit(1)
+    elif auto_sort and bound_fields:
+        sort_details = infer_default_sort(proj, vis, bound_fields)
+        sort_is_auto = sort_details is not None
 
     display = name or vis.name
     console.print(
@@ -182,7 +191,8 @@ def visual_create(
 
     if sort_details is not None:
         sort_entity, sort_prop, _field_type, direction = sort_details
-        console.print(f"[dim]Sort:[/dim] {sort_entity}.{sort_prop} {direction}")
+        suffix = " [dim](auto)[/dim]" if sort_is_auto else ""
+        console.print(f"[dim]Sort:[/dim] {sort_entity}.{sort_prop} {direction}{suffix}")
 
     # Show scaffolded roles so the agent knows what to bind
     roles = get_visual_roles(canonical_visual_type)
