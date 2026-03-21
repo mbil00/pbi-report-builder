@@ -129,7 +129,7 @@ class ThemeSchemaShapeTests(unittest.TestCase):
         self.assertEqual(pkg["name"], "RegisteredResources")
         self.assertEqual(pkg["type"], "RegisteredResources")
         self.assertTrue(all(isinstance(item["type"], str) for item in pkg["items"]))
-        self.assertEqual(report["themeCollection"]["customTheme"]["name"], "Custom Theme")
+        self.assertEqual(report["themeCollection"]["customTheme"]["name"], "Custom Theme.json")
 
     def test_apply_theme_rejects_unsafe_theme_name(self) -> None:
         report_path = self.definition_folder / "report.json"
@@ -202,7 +202,7 @@ class ThemeSchemaShapeTests(unittest.TestCase):
                     "$schema": REPORT_SCHEMA,
                     "themeCollection": {
                         "customTheme": {
-                            "name": "Old Theme",
+                            "name": "Old Theme.json",
                             "type": "RegisteredResources",
                             "reportVersionAtImport": {},
                         }
@@ -213,7 +213,7 @@ class ThemeSchemaShapeTests(unittest.TestCase):
                             "type": "RegisteredResources",
                             "items": [
                                 {
-                                    "name": "Old Theme",
+                                    "name": "Old Theme.json",
                                     "path": "Old Theme.json",
                                     "type": "CustomTheme",
                                 }
@@ -235,7 +235,7 @@ class ThemeSchemaShapeTests(unittest.TestCase):
                 apply_theme(self.project, theme_path)
 
         report = json.loads(report_path.read_text(encoding="utf-8-sig"))
-        self.assertEqual(report["themeCollection"]["customTheme"]["name"], "Old Theme")
+        self.assertEqual(report["themeCollection"]["customTheme"]["name"], "Old Theme.json")
         self.assertTrue((reg_dir / "Old Theme.json").exists())
 
 

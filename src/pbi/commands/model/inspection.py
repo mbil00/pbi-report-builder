@@ -273,7 +273,7 @@ def model_export_cmd(
         raise typer.Exit(1)
 
     if output:
-        resolved = resolve_output_path(output, base_dir=Path.cwd(), confine_to=proj.root)
+        resolved = resolve_output_path(output, base_dir=Path.cwd())
         resolved.write_text(yaml_str, encoding="utf-8")
         console.print(f'Exported model to [cyan]{resolved}[/cyan]')
     else:

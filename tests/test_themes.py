@@ -265,7 +265,7 @@ class TestThemeCreateCommand(unittest.TestCase):
 
             # Verify theme was applied
             report = json.loads((Path(tmp) / "Test.Report" / "definition" / "report.json").read_text())
-            self.assertEqual(report["themeCollection"]["customTheme"]["name"], "MyBrand")
+            self.assertEqual(report["themeCollection"]["customTheme"]["name"], "MyBrand.json")
 
             # Verify theme file exists
             theme_file = Path(tmp) / "Test.Report" / "StaticResources" / "RegisteredResources" / "MyBrand.json"

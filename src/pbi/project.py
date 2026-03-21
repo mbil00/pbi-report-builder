@@ -477,7 +477,12 @@ class Project:
         page_path = visual.folder.parent.parent
         self._invalidate_visuals_cache(page_path)
         if "visualGroup" in visual.data:
-            visuals = self._get_visuals_cached(page_path)
+            page = next((candidate for candidate in self.get_pages() if candidate.folder == page_path), None)
+            if page is None:
+                page_json = page_path / "page.json"
+                if page_json.exists():
+                    page = Page(folder=page_path, data=_read_json(page_json))
+            visuals = self._get_visuals_cached(page) if page is not None else []
             for candidate in visuals:
                 if candidate.data.get("parentGroupName") == visual.name:
                     candidate.data.pop("parentGroupName", None)

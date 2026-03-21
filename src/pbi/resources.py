@@ -168,6 +168,21 @@ def find_registered_image_item(report: dict, ref: str) -> dict | None:
         if path_name.lower() == ref_lower:
             return item
 
+    ref_path = Path(ref)
+    ref_stem = ref_path.stem.lower()
+    ref_suffix = ref_path.suffix.lower()
+    if ref_stem and ref_suffix:
+        candidates = []
+        for item in items:
+            path_name = Path(str(item.get("path", ""))).name
+            path = Path(path_name)
+            if path.suffix.lower() != ref_suffix:
+                continue
+            if path.stem.lower().startswith(ref_stem):
+                candidates.append(item)
+        if len(candidates) == 1:
+            return candidates[0]
+
     return None
 
 

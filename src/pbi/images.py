@@ -12,7 +12,6 @@ from pbi.project import Project
 from pbi.resources import (
     REGISTERED_RESOURCES_PACKAGE,
     add_or_update_resource_item,
-    choose_registered_image_name,
     find_registered_image_item,
     get_or_create_resource_package,
     normalize_resource_packages,
@@ -116,16 +115,11 @@ def add_image(project: Project, source_path: Path) -> str:
     shutil.copy2(source_path, dest)
 
     # Add to report.json
-    report_data, items = _get_resource_package(project)
-    item_name = choose_registered_image_name(
-        items,
-        preferred_name=source_path.name,
-        fallback_name=registered_name,
-    )
+    report_data, _items = _get_resource_package(project)
     add_or_update_resource_item(
         report_data,
         item_type="Image",
-        name=item_name,
+        name=registered_name,
         path=registered_name,
     )
     _save_report_json(project, report_data)
@@ -200,7 +194,7 @@ def resolve_registered_image(project: Project, ref: str) -> dict:
 def build_image_resource_property(project: Project, ref: str, *, scaling: str = "Normal") -> dict:
     """Build the PBIR image sourceFile payload for a registered resource."""
     item = resolve_registered_image(project, ref)
-    item_name = str(item.get("name") or item.get("path") or ref)
+    item_name = Path(ref).name or str(item.get("name") or item.get("path") or ref)
     resource_name = str(item.get("path") or item.get("name") or ref)
     return {
         "image": {

@@ -53,7 +53,7 @@ class ImageResourceRegressionTests(unittest.TestCase):
             self.assertEqual(package["items"][0]["type"], "CustomTheme")
             image_items = [item for item in package["items"] if item["type"] == "Image"]
             self.assertEqual(len(image_items), 1)
-            self.assertEqual(image_items[0]["name"], "logo.png")
+            self.assertEqual(image_items[0]["name"], registered_name)
             self.assertEqual(image_items[0]["path"], registered_name)
 
     def test_visual_set_image_source_uses_resource_package_item_payload(self) -> None:

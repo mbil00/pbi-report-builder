@@ -603,6 +603,18 @@ def _validate_theme_name(theme_name: str) -> str:
     return normalized
 
 
+def _theme_filename(theme_name: str) -> str:
+    """Return the registered theme filename stored in report metadata."""
+    validated = _validate_theme_name(theme_name)
+    return validated if validated.endswith(".json") else f"{validated}.json"
+
+
+def _theme_display_name(theme_name: str) -> str:
+    """Return the logical theme name without the registered file suffix."""
+    validated = _validate_theme_name(theme_name)
+    return validated[:-5] if validated.endswith(".json") else validated
+
+
 def _resolve_registered_resource_path(project: Project, raw_path: str) -> Path:
     """Resolve a resource path and reject escapes outside RegisteredResources."""
     resources_dir = _registered_resources_dir(project)
@@ -623,14 +635,23 @@ def _custom_theme_paths(project: Project, report: dict, theme_name: str | None =
 
     if theme_name:
         try:
-            safe_name = _validate_theme_name(theme_name)
+            filename = _theme_filename(theme_name)
+            stem = _theme_display_name(theme_name)
         except ValueError:
-            safe_name = ""
-        if safe_name:
+            filename = ""
+            stem = ""
+        if filename:
             paths.extend(
                 [
-                    resources_dir / f"{safe_name}.json",
-                    resources_dir / "BaseThemes" / f"{safe_name}.json",
+                    resources_dir / filename,
+                    resources_dir / "BaseThemes" / filename,
+                ]
+            )
+        if stem and stem != filename:
+            paths.extend(
+                [
+                    resources_dir / f"{stem}.json",
+                    resources_dir / "BaseThemes" / f"{stem}.json",
                 ]
             )
 
@@ -675,7 +696,7 @@ def get_themes(project: Project) -> list[ThemeInfo]:
     custom = collection.get("customTheme")
     if custom:
         themes.append(ThemeInfo(
-            name=custom.get("name", "unknown"),
+            name=_theme_display_name(custom.get("name", "unknown")),
             source=custom.get("type", "RegisteredResources"),
             is_custom=True,
         ))
@@ -695,6 +716,7 @@ def apply_theme(project: Project, theme_path: Path) -> str:
         theme_data = json.load(f)
 
     theme_name = _validate_theme_name(theme_data.get("name", theme_path.stem))
+    theme_filename = _theme_filename(theme_name)
 
     report = _read_report(project)
     _normalize_resource_packages(report)
@@ -707,8 +729,8 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     # Copy theme to RegisteredResources (flat, not in BaseThemes/ subdirectory)
     resources_dir = _registered_resources_dir(project)
     resources_dir.mkdir(parents=True, exist_ok=True)
-    dest = resources_dir / f"{theme_name}.json"
-    temp_dest = resources_dir / f".{theme_name}.json.tmp"
+    dest = resources_dir / theme_filename
+    temp_dest = resources_dir / f".{theme_filename}.tmp"
     shutil.copy2(theme_path, temp_dest)
     temp_dest.replace(dest)
 
@@ -723,7 +745,7 @@ def apply_theme(project: Project, theme_path: Path) -> str:
 
     # Set custom theme reference
     report["themeCollection"]["customTheme"] = {
-        "name": theme_name,
+        "name": theme_filename,
         "reportVersionAtImport": version_at_import,
         "type": "RegisteredResources",
     }
@@ -744,7 +766,7 @@ def apply_theme(project: Project, theme_path: Path) -> str:
         if path.exists():
             path.unlink()
 
-    return theme_name
+    return _theme_display_name(theme_name)
 
 
 def export_theme(project: Project, output_path: Path) -> str:
@@ -769,7 +791,7 @@ def export_theme(project: Project, output_path: Path) -> str:
         )
 
     shutil.copy2(theme_file, output_path)
-    return theme_name
+    return _theme_display_name(theme_name)
 
 
 def remove_theme(project: Project) -> str | None:
@@ -849,7 +871,8 @@ def _fix_theme_resource_path(report: dict, theme_name: str) -> bool:
     Searches both flat and wrapped (``resourcePackage``) package formats.
     Returns True if report was modified.
     """
-    expected = f"{theme_name}.json"
+    expected = _theme_filename(theme_name)
+    stem = _theme_display_name(theme_name)
     fixed = False
 
     for pkg in report.get("resourcePackages", []):
@@ -862,7 +885,7 @@ def _fix_theme_resource_path(report: dict, theme_name: str) -> bool:
                 continue
             # Match by either old format (stem) or new format (filename)
             item_name = item.get("name", "")
-            if item_name != theme_name and item_name != expected:
+            if item_name != theme_name and item_name != expected and item_name != stem:
                 continue
             if item.get("name") != expected:
                 item["name"] = expected

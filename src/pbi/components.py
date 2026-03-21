@@ -9,8 +9,9 @@ from typing import Any
 
 import yaml
 
+from pbi.apply.visual_support import apply_raw_visual_payload
 from pbi.export import export_visual_spec
-from pbi.project import Page, Project, Visual
+from pbi.project import Page, Project, Visual, sanitize_visual_name
 from pbi.textbox import set_textbox_content
 
 
@@ -401,9 +402,16 @@ def apply_component(
     if dry_run:
         return []
 
+    _remove_existing_component_instance(project, page, component_name)
+
     # Create visuals with absolute positions
     created: list[Visual] = []
     for spec in visual_specs:
+        if isinstance(spec, dict):
+            spec.pop("group", None)
+            raw_pbir = spec.get("pbir")
+            if isinstance(raw_pbir, dict):
+                raw_pbir.pop("parentGroupName", None)
         vis_type = spec.get("type", "shape")
         pos_str = spec.get("position", "0, 0")
         size_str = spec.get("size", "300 x 200")
@@ -419,7 +427,6 @@ def apply_component(
         # Apply name
         vis_name = spec.get("name")
         if vis_name:
-            from pbi.project import sanitize_visual_name
             vis.data["name"] = sanitize_visual_name(vis_name)
 
         # Apply properties via the YAML apply engine approach
@@ -433,6 +440,32 @@ def apply_component(
         created.append(group)
 
     return created
+
+
+def _remove_existing_component_instance(project: Project, page: Page, component_name: str) -> None:
+    """Delete an existing grouped component stamp with the same logical name."""
+    safe_name = sanitize_visual_name(component_name)
+    visuals = project.get_visuals(page)
+    matching_groups = [
+        visual
+        for visual in visuals
+        if "visualGroup" in visual.data
+        and (
+            visual.name == safe_name
+            or visual.data.get("visualGroup", {}).get("displayName") == component_name
+        )
+    ]
+    if not matching_groups:
+        return
+
+    for group in matching_groups:
+        children = [
+            visual for visual in project.get_visuals(page)
+            if visual.data.get("parentGroupName") == group.name
+        ]
+        for child in children:
+            project.delete_visual(child)
+        project.delete_visual(group)
 
 
 def apply_component_row(
@@ -595,10 +628,7 @@ def _apply_spec_to_visual(project: Project, visual: Visual, spec: dict) -> None:
     # Apply raw PBIR payload if present (for round-trip fidelity)
     pbir = spec.get("pbir")
     if isinstance(pbir, dict):
-        vis = visual.data.setdefault("visual", {})
-        for key in ("objects", "visualContainerObjects"):
-            if key in pbir:
-                vis[key] = pbir[key]
+        apply_raw_visual_payload(visual, pbir)
 
     if visual.visual_type == "textbox" and isinstance(spec.get("text"), str):
         style = spec.get("textStyle", {})

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
 from pbi.filters import add_topn_filter
+from pbi.images import add_image, build_image_resource_property
 from pbi.project import Project
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
@@ -368,6 +370,79 @@ class YamlRoundTripTests(unittest.TestCase):
             )
             self.assertEqual(title_text, "'Department Breakdown'")
             self.assertEqual(subtitle_text, "'Operations'")
+
+    def test_component_apply_preserves_nested_image_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+            title = project.create_visual(page, "textbox", x=0, y=0, width=200, height=40)
+            title.data["name"] = "header-title"
+            set_textbox_content(title.data, text="Executive Summary")
+            title.save()
+
+            image_path = root / "logo.png"
+            image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5Wv2QAAAAASUVORK5CYII="))
+            add_image(project, image_path)
+
+            logo = project.create_visual(page, "image", x=0, y=50, width=40, height=40)
+            logo.data["name"] = "header-logo"
+            logo.data["visual"]["objects"] = {
+                "image": [
+                    {
+                        "properties": {
+                            "sourceType": {"expr": {"Literal": {"Value": "'image'"}}},
+                            "sourceFile": build_image_resource_property(project, "logo.png"),
+                        }
+                    }
+                ]
+            }
+            logo.save()
+
+            group = project.create_group(page, [title, logo], display_name="page_header")
+            save_component(project, page, group, "page_header")
+            target = project.create_page("Target")
+
+            stamped = apply_component(project, target, "page_header")
+
+            self.assertEqual(len(stamped), 3)
+            target_visuals = {
+                vis.name: vis for vis in project.get_visuals(target)
+                if "visualGroup" not in vis.data
+            }
+            image_props = target_visuals["header-logo"].data["visual"]["objects"]["image"][0]["properties"]
+            self.assertIn("sourceFile", image_props)
+            self.assertNotIn("sourceFile.image", image_props)
+            self.assertEqual(
+                image_props["sourceFile"]["image"]["url"]["expr"]["ResourcePackageItem"]["PackageName"],
+                "RegisteredResources",
+            )
+
+    def test_component_apply_replaces_existing_group_with_same_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+            first = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first.data["name"] = "title"
+            set_textbox_content(first.data, text="One")
+            first.save()
+            second = project.create_visual(page, "textbox", x=0, y=40, width=100, height=30)
+            second.data["name"] = "subtitle"
+            set_textbox_content(second.data, text="Two")
+            second.save()
+            group = project.create_group(page, [first, second], display_name="page_header")
+
+            save_component(project, page, group, "page_header")
+            apply_component(project, page, "page_header", x=0, y=0)
+            apply_component(project, page, "page_header", x=20, y=20)
+
+            project.clear_caches()
+            visuals = project.get_visuals(page)
+            groups = [vis for vis in visuals if "visualGroup" in vis.data and vis.name == "page_header"]
+            children = [vis for vis in visuals if vis.data.get("parentGroupName") == "page_header"]
+            self.assertEqual(len(groups), 1)
+            self.assertEqual({vis.name for vis in children}, {"title", "subtitle"})
 
     def test_minimal_card_export_no_longer_needs_raw_visual_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

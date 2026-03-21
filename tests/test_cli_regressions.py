@@ -101,6 +101,22 @@ class PathSecurityRegressionTests(unittest.TestCase):
                 Project.find(pbip)
 
 class OutputPathHardeningTests(unittest.TestCase):
+    def test_model_export_allows_output_outside_project(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            make_project(root, with_model=True)
+            outside = Path(tmp) / "model.yaml"
+
+            result = runner.invoke(
+                app,
+                ["model", "export", "--output", str(outside), "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertTrue(outside.exists())
+
     def test_map_allows_output_outside_project(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,3 +202,27 @@ class OutputPathHardeningTests(unittest.TestCase):
 
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertTrue(output.exists())
+
+
+class GroupDeleteRegressionTests(unittest.TestCase):
+    def test_delete_visual_group_clears_children_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            first = project.create_visual(page, "textbox")
+            first.data["name"] = "first"
+            first.save()
+            second = project.create_visual(page, "textbox")
+            second.data["name"] = "second"
+            second.save()
+
+            group = project.create_group(page, [first, second], display_name="header")
+
+            project.delete_visual(group)
+            project.clear_caches()
+
+            visuals = {visual.name: visual for visual in project.get_visuals(page)}
+            self.assertNotIn("header", visuals)
+            self.assertNotIn("parentGroupName", visuals["first"].data)
+            self.assertNotIn("parentGroupName", visuals["second"].data)
