@@ -1,0 +1,33 @@
+relationship AutoDetected_184122ee-792d-4f82-a3ad-38268dae6699
+	fromColumn: Sales.ChannelKey
+	toColumn: Channel.ChannelKey
+
+relationship AutoDetected_9dc1d004-ce71-4b11-b62e-55eab45588ff
+	fromColumn: Targets.ChannelKey
+	toColumn: Channel.ChannelKey
+
+relationship AutoDetected_e1ef1140-5266-404d-ab0b-e84af464d8cd
+	fromColumn: Sales.ProductKey
+	toColumn: Product.ProductKey
+
+relationship AutoDetected_e9093815-8000-44f3-b43f-97421e4f91a9
+	fromColumn: Sales.CustomerKey
+	toColumn: Customer.CustomerKey
+
+relationship AutoDetected_102adf95-fb6f-48a8-ae05-42a50a2b4c76
+	fromColumn: Sales.StoreKey
+	toColumn: Store.StoreKey
+
+relationship AutoDetected_952bba53-1e37-4781-bb2e-6a45cf8e21bd
+	fromColumn: Sales.PromotionKey
+	toColumn: Promotion.PromotionKey
+
+relationship 62014830-7b43-4c3e-9e85-5dd1cc872d1d
+	fromColumn: Sales.OrderDate
+	toColumn: Date.Date
+
+relationship adc42290-de91-4e16-bb7c-d212fe616b1f
+	isActive: false
+	fromColumn: Sales.ShipDate
+	toColumn: Date.Date
+

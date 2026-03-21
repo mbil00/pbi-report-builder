@@ -1,0 +1,68 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "card-ytd",
+  "position": {
+    "x": 1060,
+    "y": 140,
+    "z": 5000,
+    "height": 100,
+    "width": 200,
+    "tabOrder": 4
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": []
+        },
+        "Fields": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "YTD Actual"
+                }
+              },
+              "queryRef": "Forecast.YTD Actual",
+              "nativeQueryRef": "YTD Actual"
+            }
+          ]
+        },
+        "Rows": {
+          "projections": []
+        },
+        "Tooltips": {
+          "projections": []
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'YTD Actual'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

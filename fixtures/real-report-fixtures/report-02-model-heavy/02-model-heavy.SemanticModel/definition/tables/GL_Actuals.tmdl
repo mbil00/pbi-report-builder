@@ -1,0 +1,123 @@
+table GL_Actuals
+	lineageTag: 663c4889-d3ce-4c1c-ae03-8c0aed186ca6
+
+	measure 'Actual Amount' = SUM ( GL_Actuals[Amount] )
+		displayFolder: Actuals
+		lineageTag: 68765b7c-d9ce-4730-bbee-002d5ec2624a
+
+	measure 'FTE Actual' = SUM ( GL_Actuals[FTE] )
+		displayFolder: Actuals
+		lineageTag: e3f12693-869c-4fdd-bab5-080d910b24bc
+
+	measure 'Corporate Actual' = CALCULATE ( [Actual Amount], Department[IsCorporate] = TRUE() )
+		displayFolder: Actuals
+		lineageTag: f83597c0-3e43-4a6c-8bfc-5f96d68ac2ef
+
+	measure 'Expense Actual' = CALCULATE ( [Actual Amount], Account[AccountType] = "Expense" )
+		displayFolder: Actuals
+		lineageTag: 793295a8-3adf-42df-903d-da3feb813943
+
+	column ActualKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 6ae19b1c-0ac6-4f81-a179-0fbe3df3df64
+		summarizeBy: count
+		sourceColumn: ActualKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: cbcc6da0-522a-46ea-af4f-cff584530886
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column DepartmentKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 20f55699-7aad-4741-9ca9-d1e2589fde04
+		summarizeBy: none
+		sourceColumn: DepartmentKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column CostCenterKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 8e13b551-6d85-462b-96b6-f1ac884ec721
+		summarizeBy: count
+		sourceColumn: CostCenterKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 002475bd-a60b-46ac-9edd-7c475a9066b3
+		summarizeBy: none
+		sourceColumn: AccountKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ScenarioKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: f0fc22e5-8922-4719-adbb-be94930b360e
+		summarizeBy: none
+		sourceColumn: ScenarioKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column Amount
+		dataType: double
+		lineageTag: c79a9c8d-77df-4ace-baf1-21305fe30a14
+		summarizeBy: sum
+		sourceColumn: Amount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column FTE
+		dataType: double
+		lineageTag: 6256f4f5-a72f-42ba-bba1-78e1ded0f45b
+		summarizeBy: sum
+		sourceColumn: FTE
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column CommentCode
+		dataType: string
+		isHidden
+		lineageTag: 3ed31226-21d0-4380-bc77-b468d5d1157a
+		summarizeBy: none
+		sourceColumn: CommentCode
+
+		annotation SummarizationSetBy = Automatic
+
+	partition GL_Actuals = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\GL_Actuals.csv"),[Delimiter=",", Columns=9, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ActualKey", Int64.Type}, {"Date", type date}, {"DepartmentKey", Int64.Type}, {"CostCenterKey", Int64.Type}, {"AccountKey", Int64.Type}, {"ScenarioKey", Int64.Type}, {"Amount", type number}, {"FTE", type number}, {"CommentCode", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

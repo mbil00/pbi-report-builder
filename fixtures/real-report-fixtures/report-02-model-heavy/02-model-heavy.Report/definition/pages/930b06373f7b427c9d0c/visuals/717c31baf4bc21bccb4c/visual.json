@@ -1,0 +1,87 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "treemap-division",
+  "position": {
+    "x": 20,
+    "y": 440,
+    "z": 3000,
+    "height": 260,
+    "width": 500,
+    "tabOrder": 2
+  },
+  "visual": {
+    "visualType": "treemap",
+    "query": {
+      "queryState": {
+        "Details": {
+          "projections": []
+        },
+        "Gradient": {
+          "projections": []
+        },
+        "Group": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "Division"
+                }
+              },
+              "queryRef": "Department.Division",
+              "nativeQueryRef": "Division",
+              "active": true
+            }
+          ]
+        },
+        "Tooltips": {
+          "projections": []
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "GL_Actuals"
+                    }
+                  },
+                  "Property": "Actual Amount"
+                }
+              },
+              "queryRef": "GL_Actuals.Actual Amount",
+              "nativeQueryRef": "Actual Amount"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Division Breakdown'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

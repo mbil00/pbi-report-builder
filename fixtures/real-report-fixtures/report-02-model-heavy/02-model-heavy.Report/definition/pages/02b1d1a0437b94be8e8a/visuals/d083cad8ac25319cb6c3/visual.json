@@ -1,0 +1,68 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "card-yoy",
+  "position": {
+    "x": 1060,
+    "y": 20,
+    "z": 3000,
+    "height": 100,
+    "width": 200,
+    "tabOrder": 2
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": []
+        },
+        "Fields": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Actual YoY"
+                }
+              },
+              "queryRef": "Forecast.Actual YoY",
+              "nativeQueryRef": "Actual YoY"
+            }
+          ]
+        },
+        "Rows": {
+          "projections": []
+        },
+        "Tooltips": {
+          "projections": []
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Actual YoY'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

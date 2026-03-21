@@ -1,0 +1,22 @@
+table 'Variance Bands'
+	lineageTag: 033b06c8-d3ed-43d5-b380-a34397200e04
+
+	column Band
+		lineageTag: f299947c-3ab1-4da9-961e-a0396a4302fa
+		isNameInferred
+		sourceColumn: [Band]
+
+	column MinPct
+		lineageTag: 72aeb7e0-bed8-4ca6-92e6-de0a3624f80c
+		isNameInferred
+		sourceColumn: [MinPct]
+
+	column MaxPct
+		lineageTag: 3e76c566-73bc-4dd4-a6e3-1c78be0b7b13
+		isNameInferred
+		sourceColumn: [MaxPct]
+
+	partition 'Variance Bands' = calculated
+		mode: import
+		source = DATATABLE ( "Band", STRING, "MinPct", DOUBLE, "MaxPct", DOUBLE, { { "On Target", -0.05, 0.05 }, { "Minor Variance", -0.10, -0.05 }, { "Minor Variance", 0.05, 0.10 }, { "Major Variance", -0.25, -0.10 }, { "Major Variance", 0.10, 0.25 }, { "Critical", -1.0, -0.25 }, { "Critical", 0.25, 1.0 } } )
+

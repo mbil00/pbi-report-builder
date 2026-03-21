@@ -1,0 +1,84 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "variance-chart",
+  "position": {
+    "x": 20,
+    "y": 460,
+    "z": 6000,
+    "height": 240,
+    "width": 620,
+    "tabOrder": 5
+  },
+  "visual": {
+    "visualType": "waterfallChart",
+    "query": {
+      "queryState": {
+        "Breakdown": {
+          "projections": []
+        },
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Account"
+                    }
+                  },
+                  "Property": "AccountGroup"
+                }
+              },
+              "queryRef": "Account.AccountGroup",
+              "nativeQueryRef": "AccountGroup",
+              "active": true
+            }
+          ]
+        },
+        "Tooltips": {
+          "projections": []
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Actual vs Budget"
+                }
+              },
+              "queryRef": "Forecast.Actual vs Budget",
+              "nativeQueryRef": "Actual vs Budget"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Variance by Account Group'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

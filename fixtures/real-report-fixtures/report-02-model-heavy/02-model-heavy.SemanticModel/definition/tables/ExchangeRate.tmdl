@@ -1,0 +1,46 @@
+table ExchangeRate
+	lineageTag: d0546174-ba69-4658-bb96-6baae2edb3d4
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 130e04ad-7e93-4846-9641-6b2c942e2e51
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column CurrencyCode
+		dataType: string
+		lineageTag: e9d30fa6-5fa4-4e23-b8d7-5caae3ee299f
+		summarizeBy: none
+		sourceColumn: CurrencyCode
+
+		annotation SummarizationSetBy = Automatic
+
+	column RateToUSD
+		dataType: double
+		lineageTag: 0278346d-2ebb-4e57-8a58-c52291b23602
+		summarizeBy: sum
+		sourceColumn: RateToUSD
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition ExchangeRate = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\ExchangeRate.csv"),[Delimiter=",", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"CurrencyCode", type text}, {"RateToUSD", type number}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

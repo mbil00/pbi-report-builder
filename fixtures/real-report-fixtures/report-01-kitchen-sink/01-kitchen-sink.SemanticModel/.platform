@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "01-kitchen-sink"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "b3757a77-6914-4e27-bf5d-e5e3414ac94f"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Hide Slicers",
+  "name": "dab0b7ac7d6f6b7533af",
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "eb6cb5c033bc16fa450d",
+    "sections": {
+      "eb6cb5c033bc16fa450d": {
+        "visualContainers": {
+          "slicerYear": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "slicerCategory": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "slicerRegion": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "navHelp": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+table Scenario
+	lineageTag: fec8dbb3-e65c-44e3-852f-5566f4e18455
+
+	column ScenarioKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: a7b3a8a1-9559-44e9-a17a-8eea08907015
+		summarizeBy: none
+		sourceColumn: ScenarioKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ScenarioName
+		dataType: string
+		lineageTag: 818a19c1-163b-4c5b-8c18-eed2968295f8
+		summarizeBy: none
+		sourceColumn: ScenarioName
+
+		annotation SummarizationSetBy = Automatic
+
+	column ScenarioType
+		dataType: string
+		lineageTag: 4857f0df-1952-4363-ae8c-767536941d56
+		summarizeBy: none
+		sourceColumn: ScenarioType
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Scenario = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\Scenario.csv"),[Delimiter=",", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ScenarioKey", Int64.Type}, {"ScenarioName", type text}, {"ScenarioType", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

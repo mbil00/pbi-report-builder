@@ -1,0 +1,129 @@
+table Date
+	lineageTag: ac83b81b-52f1-44ef-8049-e6dbf0802e89
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 2b81e645-287a-4570-bdc1-af945c87e3e7
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: bf63825c-44d3-44b3-9ee8-a549005d1726
+		summarizeBy: sum
+		sourceColumn: Year
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quarter
+		dataType: string
+		lineageTag: ea0ea55a-c8f5-415c-97dc-ec2c0996adf1
+		summarizeBy: none
+		sourceColumn: Quarter
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthNumber
+		dataType: int64
+		formatString: 0
+		lineageTag: be2c2e41-7937-4064-b810-3f8ba96d7a0a
+		summarizeBy: sum
+		sourceColumn: MonthNumber
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthName
+		dataType: string
+		lineageTag: 6c4f0f3a-cfae-436c-99d5-f6769db1cc19
+		summarizeBy: none
+		sourceColumn: MonthName
+		sortByColumn: MonthNumber
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthShort
+		dataType: string
+		lineageTag: dc86de1c-f99d-4375-9651-a7971fa2ed35
+		summarizeBy: none
+		sourceColumn: MonthShort
+
+		annotation SummarizationSetBy = Automatic
+
+	column YearMonth
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 156f21f4-e8a0-42a4-bbda-687ecf943c70
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column WeekOfYear
+		dataType: int64
+		formatString: 0
+		lineageTag: 38d59d19-5c53-4b06-93fe-3321f19f6f25
+		summarizeBy: sum
+		sourceColumn: WeekOfYear
+
+		annotation SummarizationSetBy = Automatic
+
+	column DayOfWeek
+		dataType: string
+		lineageTag: 9b44c0f0-d26d-4be9-bb86-f5c92906b46f
+		summarizeBy: none
+		sourceColumn: DayOfWeek
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsWeekend
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 182fe90c-f830-433a-88e1-af18b070ee49
+		summarizeBy: none
+		sourceColumn: IsWeekend
+
+		annotation SummarizationSetBy = Automatic
+
+	hierarchy Calendar
+		lineageTag: 581f8b3f-8ca0-41f6-b8ab-c81511a480e6
+
+		level Year
+			lineageTag: d9cd6c57-3df2-48b5-8c49-16e4ccf19eb0
+			column: Year
+
+		level Quarter
+			lineageTag: 36aaf403-990a-46b0-aa28-90a34c853928
+			column: Quarter
+
+		level MonthName
+			lineageTag: 4318d775-38b9-4f80-80cf-7b4d89c92d58
+			column: MonthName
+
+		level Date
+			lineageTag: f900815c-3ede-476b-a303-ed962e252434
+			column: Date
+
+	partition Date = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-01-kitchen-sink\data\Date.csv"),[Delimiter=",", Columns=10, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Year", Int64.Type}, {"Quarter", type text}, {"MonthNumber", Int64.Type}, {"MonthName", type text}, {"MonthShort", type text}, {"YearMonth", type date}, {"WeekOfYear", Int64.Type}, {"DayOfWeek", type text}, {"IsWeekend", type logical}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

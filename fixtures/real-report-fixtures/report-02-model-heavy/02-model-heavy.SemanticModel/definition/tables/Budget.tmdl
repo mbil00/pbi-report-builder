@@ -1,0 +1,96 @@
+table Budget
+	lineageTag: 8ed59376-fa1e-4213-af78-8c03438fde28
+
+	measure 'Budget Amount' = SUM ( Budget[BudgetAmount] )
+		displayFolder: Budget
+		lineageTag: 446faa59-4fa7-4faf-8204-4a24c2710775
+
+	measure 'FTE Budget' = SUM ( Budget[BudgetFTE] )
+		displayFolder: Budget
+		lineageTag: 76557d07-a8fe-4adc-8cc4-0173a9529ffe
+
+	column BudgetKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 5c5abbaf-a62f-43f4-b153-b247f88c01a9
+		summarizeBy: count
+		sourceColumn: BudgetKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: f2f93d08-4a06-44ce-a0df-9600d96fb5d6
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column DepartmentKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: b0a0fd7f-0c54-4527-94ee-3e782bedd686
+		summarizeBy: none
+		sourceColumn: DepartmentKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 1abae391-ddc3-44c0-9616-c8dc5f641610
+		summarizeBy: none
+		sourceColumn: AccountKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ScenarioKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: fa7b6376-6792-492a-aa84-bd738bdb8866
+		summarizeBy: none
+		sourceColumn: ScenarioKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column BudgetAmount
+		dataType: double
+		lineageTag: eb9149f5-3eb6-4181-841b-2c744717bc2a
+		summarizeBy: sum
+		sourceColumn: BudgetAmount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column BudgetFTE
+		dataType: double
+		lineageTag: fb3fe349-3f21-43c5-af21-84c5aa2b5015
+		summarizeBy: sum
+		sourceColumn: BudgetFTE
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition Budget = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\Budget.csv"),[Delimiter=",", Columns=7, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"BudgetKey", Int64.Type}, {"Date", type date}, {"DepartmentKey", Int64.Type}, {"AccountKey", Int64.Type}, {"ScenarioKey", Int64.Type}, {"BudgetAmount", type number}, {"BudgetFTE", type number}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,105 @@
+table Product
+	lineageTag: 67baae8f-52ab-4d0e-9754-927d07e81618
+
+	column ProductKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: ea95d7c1-1088-43e6-aee9-f5ddb1c163cd
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column SKU
+		dataType: string
+		lineageTag: cb40c72c-0641-426a-a8bc-3c3e9ad95f93
+		summarizeBy: none
+		sourceColumn: SKU
+
+		annotation SummarizationSetBy = Automatic
+
+	column ProductName
+		dataType: string
+		lineageTag: 64b1f6b2-eb1d-4a98-bf92-9013f2478a10
+		summarizeBy: none
+		sourceColumn: ProductName
+
+		annotation SummarizationSetBy = Automatic
+
+	column Brand
+		dataType: string
+		lineageTag: 5130222e-8f30-4bd0-9c41-c03798774670
+		summarizeBy: none
+		sourceColumn: Brand
+
+		annotation SummarizationSetBy = Automatic
+
+	column Category
+		dataType: string
+		lineageTag: 395a6798-f3c8-417e-bb7a-b49b6700442f
+		summarizeBy: none
+		sourceColumn: Category
+
+		annotation SummarizationSetBy = Automatic
+
+	column Subcategory
+		dataType: string
+		lineageTag: b9ac3781-6eb4-46be-b120-c2daa82c6234
+		summarizeBy: none
+		sourceColumn: Subcategory
+
+		annotation SummarizationSetBy = Automatic
+
+	column Color
+		dataType: string
+		lineageTag: f4425cae-c70b-4831-835c-a49f30d53108
+		summarizeBy: none
+		sourceColumn: Color
+
+		annotation SummarizationSetBy = Automatic
+
+	column UnitListPrice
+		dataType: double
+		lineageTag: d66e4a37-7027-46e3-a272-42e99a42d655
+		summarizeBy: sum
+		sourceColumn: UnitListPrice
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column LaunchDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: c29d13f1-3663-4563-ad22-1ff51bc723c2
+		summarizeBy: none
+		sourceColumn: LaunchDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column IsActive
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 41e7d19a-7819-481d-88a0-b1676c93d27e
+		summarizeBy: none
+		sourceColumn: IsActive
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Product = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-01-kitchen-sink\data\Product.csv"),[Delimiter=",", Columns=10, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ProductKey", Int64.Type}, {"SKU", type text}, {"ProductName", type text}, {"Brand", type text}, {"Category", type text}, {"Subcategory", type text}, {"Color", type text}, {"UnitListPrice", type number}, {"LaunchDate", type date}, {"IsActive", type logical}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

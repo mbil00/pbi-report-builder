@@ -1,0 +1,124 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "dept-matrix",
+  "position": {
+    "x": 660,
+    "y": 140,
+    "z": 6000,
+    "height": 300,
+    "width": 600,
+    "tabOrder": 5
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Columns": {
+          "projections": []
+        },
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "Division"
+                }
+              },
+              "queryRef": "Department.Division",
+              "nativeQueryRef": "Division",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "DepartmentName"
+                }
+              },
+              "queryRef": "Department.DepartmentName",
+              "nativeQueryRef": "DepartmentName",
+              "active": false
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "GL_Actuals"
+                    }
+                  },
+                  "Property": "Actual Amount"
+                }
+              },
+              "queryRef": "GL_Actuals.Actual Amount",
+              "nativeQueryRef": "Actual Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Budget"
+                    }
+                  },
+                  "Property": "Budget Amount"
+                }
+              },
+              "queryRef": "Budget.Budget Amount",
+              "nativeQueryRef": "Budget Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Actual vs Budget"
+                }
+              },
+              "queryRef": "Forecast.Actual vs Budget",
+              "nativeQueryRef": "Actual vs Budget"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Department Summary'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

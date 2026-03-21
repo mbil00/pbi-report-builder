@@ -1,0 +1,68 @@
+table _Measures
+	lineageTag: c513e871-08dd-4cec-896a-c11a39bd656e
+
+	measure Revenue = SUM ( Sales[SalesAmount] )
+		formatString: $#,##0
+		lineageTag: 4ad1b69a-7c65-405c-b411-a72895e65985
+
+	measure Cost = SUMX ( Sales, Sales[Quantity] * Sales[UnitCost] )
+		formatString: $#,##0
+		lineageTag: 16f64ce9-7419-4489-b41b-83ed659156b7
+
+	measure Margin = [Revenue] - [Cost]
+		formatString: $#,##0
+		lineageTag: 0989f8d1-7fd9-43db-9531-757acae7ca9a
+
+	measure 'Margin %' = DIVIDE ( [Margin], [Revenue] )
+		formatString: 0.0%
+		lineageTag: 6a9bf418-173d-4f8d-97e9-7dc639844afc
+
+	measure Orders = DISTINCTCOUNT ( Sales[OrderNumber] )
+		formatString: #,##0
+		lineageTag: 1e80f514-fdb7-496b-92a2-2fd6a39a8167
+
+	measure Units = SUM ( Sales[Quantity] )
+		formatString: #,##0
+		lineageTag: 8e739918-bb19-43ac-aaa0-b74c25d98a2a
+
+	measure 'Avg Order Value' = DIVIDE ( [Revenue], [Orders] )
+		formatString: $#,##0.00
+		lineageTag: c3d929e4-93eb-4cd5-a776-1128a85d82ad
+
+	measure 'Return Rate' = DIVIDE ( CALCULATE ( [Orders], Sales[ReturnedFlag] = TRUE() ), [Orders] )
+		formatString: 0.0%
+		lineageTag: d1bfe902-1277-471a-972f-26181f526fb8
+
+	measure 'Revenue Target' = SUM ( Targets[SalesTarget] )
+		formatString: $#,##0
+		lineageTag: 3a015011-c959-44d0-a064-e1a24f98ed6a
+
+	measure 'Target Variance' = [Revenue] - [Revenue Target]
+		formatString: $#,##0
+		lineageTag: 7692fbd9-8a95-4c95-baa5-2a26ddfb347f
+
+	measure 'Revenue YTD' = TOTALYTD ( [Revenue], 'Date'[Date] )
+		formatString: $#,##0
+		lineageTag: 834fa83d-5281-46b0-a36e-7d763da616d0
+
+	measure 'Revenue YoY' = [Revenue] - CALCULATE ( [Revenue], DATEADD ( 'Date'[Date], -1, YEAR ) )
+		formatString: $#,##0
+		lineageTag: e31fc3bb-9c57-4f2c-8e82-20735e9be07c
+
+	measure 'Revenue YoY %' = DIVIDE ( [Revenue YoY], CALCULATE ( [Revenue], DATEADD ( 'Date'[Date], -1, YEAR ) ) )
+		formatString: 0.0%
+		lineageTag: 3f1d7bd1-1eb6-4a01-8b9b-ae235324d220
+
+	measure 'Revenue by Ship Date' = CALCULATE ( [Revenue], USERELATIONSHIP ( Sales[ShipDate], 'Date'[Date] ) )
+		formatString: $#,##0
+		lineageTag: a23ff293-8ea7-43b5-9ae7-0771b25f4a4f
+
+	column x
+		lineageTag: 708392c7-671a-49bd-9160-af97c1c26e97
+		isNameInferred
+		sourceColumn: [x]
+
+	partition Measures = calculated
+		mode: import
+		source = ROW("x", 1)
+

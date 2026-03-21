@@ -1,0 +1,61 @@
+table CostCenter
+	lineageTag: 615997cc-5d61-45d1-9f5f-e7137be8ac20
+
+	column CostCenterKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: df55872f-ac5e-4dac-a141-90d666e66113
+		summarizeBy: count
+		sourceColumn: CostCenterKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column CostCenterCode
+		dataType: string
+		lineageTag: 4a99459e-70d2-4a6b-ad3e-d5a64fe5908e
+		summarizeBy: none
+		sourceColumn: CostCenterCode
+
+		annotation SummarizationSetBy = Automatic
+
+	column CostCenterName
+		dataType: string
+		lineageTag: 04906180-65a8-4843-9cb6-2977f3767026
+		summarizeBy: none
+		sourceColumn: CostCenterName
+
+		annotation SummarizationSetBy = Automatic
+
+	column DepartmentKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: c1f47320-f143-40f2-b19c-22a6e741e7f1
+		summarizeBy: none
+		sourceColumn: DepartmentKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ManagerName
+		dataType: string
+		lineageTag: 19a8cbae-4950-44b8-a9f4-4d3267d37b14
+		summarizeBy: none
+		sourceColumn: ManagerName
+
+		annotation SummarizationSetBy = Automatic
+
+	partition CostCenter = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\CostCenter.csv"),[Delimiter=",", Columns=5, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"CostCenterKey", Int64.Type}, {"CostCenterCode", type text}, {"CostCenterName", type text}, {"DepartmentKey", Int64.Type}, {"ManagerName", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

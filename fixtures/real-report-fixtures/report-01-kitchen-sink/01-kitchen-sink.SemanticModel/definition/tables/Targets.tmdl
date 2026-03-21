@@ -1,0 +1,58 @@
+table Targets
+	lineageTag: 914a45ff-1605-4726-a348-834f6a54a62e
+
+	column YearMonth
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 4820a844-27dd-42a6-b0b4-c4ef017d5b54
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column ChannelKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 75ca909d-bddd-4285-96b5-db7c9c86fce5
+		summarizeBy: none
+		sourceColumn: ChannelKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column SalesTarget
+		dataType: double
+		lineageTag: b19a244e-8441-4cc1-a3ce-5547381b9138
+		summarizeBy: sum
+		sourceColumn: SalesTarget
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column MarginTarget
+		dataType: double
+		lineageTag: cbc18539-8700-41f5-8963-e52583e16158
+		summarizeBy: sum
+		sourceColumn: MarginTarget
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition Targets = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-01-kitchen-sink\data\Targets.csv"),[Delimiter=",", Columns=4, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"YearMonth", type date}, {"ChannelKey", Int64.Type}, {"SalesTarget", type number}, {"MarginTarget", type number}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "3ad6d7afb7f400f38d45",
+  "displayName": "Finance Overview",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280,
+  "visualInteractions": [
+    {
+      "source": "slicer-scenario",
+      "target": "dept-matrix",
+      "type": "DataFilter"
+    },
+    {
+      "source": "slicer-scenario",
+      "target": "card-actual",
+      "type": "NoFilter"
+    },
+    {
+      "source": "slicer-scenario",
+      "target": "card-budget",
+      "type": "NoFilter"
+    }
+  ]
+}

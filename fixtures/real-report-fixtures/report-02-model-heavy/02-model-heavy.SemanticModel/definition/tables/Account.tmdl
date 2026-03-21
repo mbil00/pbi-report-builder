@@ -1,0 +1,109 @@
+table Account
+	lineageTag: bbdcaf0b-665e-4dc5-857a-0e05702dc91d
+
+	column AccountKey
+		dataType: int64
+		formatString: 0
+		lineageTag: f37a975e-f699-41cb-8553-ef4e7f262326
+		summarizeBy: none
+		sourceColumn: AccountKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountNumber
+		dataType: int64
+		formatString: 0
+		lineageTag: 1e6444ee-c862-464a-bb0e-fa7aaf5beb43
+		summarizeBy: sum
+		sourceColumn: AccountNumber
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountName
+		dataType: string
+		lineageTag: 4100fc6b-9028-4d30-bc33-ee9c12d0b31d
+		summarizeBy: none
+		sourceColumn: AccountName
+		sortByColumn: SortOrder
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountGroup
+		dataType: string
+		lineageTag: 656f88bf-4560-4b17-80d1-ac6c0d1f8333
+		summarizeBy: none
+		sourceColumn: AccountGroup
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountSubgroup
+		dataType: string
+		lineageTag: 22abbfa0-b3da-4de1-86ba-6cf03f92a23f
+		summarizeBy: none
+		sourceColumn: AccountSubgroup
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountType
+		dataType: string
+		lineageTag: a2a7e075-06e1-4bda-907f-e580f0b544be
+		dataCategory: uncategorized
+		summarizeBy: none
+		sourceColumn: AccountType
+
+		annotation SummarizationSetBy = Automatic
+
+	column Sign
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 7a01bfe1-f96e-4b8f-b05d-b7e2995c1a20
+		summarizeBy: sum
+		sourceColumn: Sign
+
+		annotation SummarizationSetBy = Automatic
+
+	column SortOrder
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 2a3c5107-c875-4cb1-a877-32afcc4bcd58
+		summarizeBy: sum
+		sourceColumn: SortOrder
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Account Label' = Account[AccountNumber] & " - " & Account[AccountName]
+		dataType: string
+		lineageTag: 08962443-85ba-4a31-8780-57e24822747a
+		summarizeBy: none
+
+	hierarchy P&L
+		lineageTag: 3b8c6858-5fe3-4ada-aa15-bfd56a42fc68
+
+		level AccountGroup
+			lineageTag: 2eca0438-58d3-431f-8ca5-03d090fa0dba
+			column: AccountGroup
+
+		level AccountSubgroup
+			lineageTag: c78e7598-5eb5-4dcd-a792-e9cdc0ed9801
+			column: AccountSubgroup
+
+		level AccountName
+			lineageTag: 7b0437f0-5160-486c-a6e5-be5c6c0c9f06
+			column: AccountName
+
+	partition Account = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\Account.csv"),[Delimiter=",", Columns=8, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"AccountKey", Int64.Type}, {"AccountNumber", Int64.Type}, {"AccountName", type text}, {"AccountGroup", type text}, {"AccountSubgroup", type text}, {"AccountType", type text}, {"Sign", Int64.Type}, {"SortOrder", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

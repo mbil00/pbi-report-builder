@@ -1,0 +1,129 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "dept-detail-table",
+  "position": {
+    "x": 540,
+    "y": 440,
+    "z": 4000,
+    "height": 260,
+    "width": 720,
+    "tabOrder": 3
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "DepartmentName"
+                }
+              },
+              "queryRef": "Department.DepartmentName",
+              "nativeQueryRef": "DepartmentName"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "Division"
+                }
+              },
+              "queryRef": "Department.Division",
+              "nativeQueryRef": "Division"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "VPName"
+                }
+              },
+              "queryRef": "Department.VPName",
+              "nativeQueryRef": "VPName"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "GL_Actuals"
+                    }
+                  },
+                  "Property": "Actual Amount"
+                }
+              },
+              "queryRef": "GL_Actuals.Actual Amount",
+              "nativeQueryRef": "Actual Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "GL_Actuals"
+                    }
+                  },
+                  "Property": "FTE Actual"
+                }
+              },
+              "queryRef": "GL_Actuals.FTE Actual",
+              "nativeQueryRef": "FTE Actual"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Average Actual per FTE"
+                }
+              },
+              "queryRef": "Forecast.Average Actual per FTE",
+              "nativeQueryRef": "Average Actual per FTE"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Department Detail'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

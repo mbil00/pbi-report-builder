@@ -1,0 +1,35 @@
+table Channel
+	lineageTag: e12d84c1-d1e1-4b96-98b5-6f236dced2a7
+
+	column ChannelKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 28009bc1-9554-4a17-9f97-aa4687d75cea
+		summarizeBy: none
+		sourceColumn: ChannelKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ChannelName
+		dataType: string
+		lineageTag: 8aaa09c1-3b43-487a-b707-7261b9695896
+		summarizeBy: none
+		sourceColumn: ChannelName
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Channel = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-01-kitchen-sink\data\Channel.csv"),[Delimiter=",", Columns=2, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ChannelKey", Int64.Type}, {"ChannelName", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

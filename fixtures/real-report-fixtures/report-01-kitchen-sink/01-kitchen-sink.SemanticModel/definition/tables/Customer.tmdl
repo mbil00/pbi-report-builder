@@ -1,0 +1,87 @@
+table Customer
+	lineageTag: 80e59653-47f9-4fc5-8df5-ebbce838252f
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: ee4f8701-1597-4a46-ab9d-f3b1584c98a2
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column CustomerName
+		dataType: string
+		lineageTag: 3698c50f-d0cf-4bfe-bbb6-219317cbf95d
+		summarizeBy: none
+		sourceColumn: CustomerName
+
+		annotation SummarizationSetBy = Automatic
+
+	column Segment
+		dataType: string
+		lineageTag: 59c2460a-4b80-404c-9899-e307ba01643c
+		summarizeBy: none
+		sourceColumn: Segment
+
+		annotation SummarizationSetBy = Automatic
+
+	column Region
+		dataType: string
+		lineageTag: e971a2db-140a-43b8-a949-54fe7ceb5581
+		summarizeBy: none
+		sourceColumn: Region
+
+		annotation SummarizationSetBy = Automatic
+
+	column Country
+		dataType: string
+		lineageTag: c8a45dd9-b357-4144-973b-7c8ceb1a38c6
+		summarizeBy: none
+		sourceColumn: Country
+
+		annotation SummarizationSetBy = Automatic
+
+	column City
+		dataType: string
+		lineageTag: 1aaa574d-d64e-44d1-bc71-303bb9c3fc3e
+		summarizeBy: none
+		sourceColumn: City
+
+		annotation SummarizationSetBy = Automatic
+
+	column PostalCode
+		dataType: int64
+		formatString: 0
+		lineageTag: 8b910392-245b-4c4f-9877-58a31fde7684
+		summarizeBy: count
+		sourceColumn: PostalCode
+
+		annotation SummarizationSetBy = Automatic
+
+	column SignupDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 5e3a4359-02ad-4f9c-bbdd-0c383572a8e1
+		summarizeBy: none
+		sourceColumn: SignupDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-01-kitchen-sink\data\Customer.csv"),[Delimiter=",", Columns=8, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"CustomerKey", Int64.Type}, {"CustomerName", type text}, {"Segment", type text}, {"Region", type text}, {"Country", type text}, {"City", type text}, {"PostalCode", Int64.Type}, {"SignupDate", type date}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

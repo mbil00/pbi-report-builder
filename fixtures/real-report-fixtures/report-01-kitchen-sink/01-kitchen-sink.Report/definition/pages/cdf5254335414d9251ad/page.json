@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "cdf5254335414d9251ad",
+  "displayName": "Tooltip - Order Context",
+  "displayOption": "FitToPage",
+  "width": 320,
+  "height": 240,
+  "visibility": "HiddenInViewMode",
+  "type": "Tooltip",
+  "pageBinding": {
+    "name": "27ce86ff74f97359fbd653fbc7e5b224",
+    "type": "Tooltip",
+    "parameters": []
+  }
+}
