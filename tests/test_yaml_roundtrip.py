@@ -9,6 +9,7 @@ import yaml
 
 from pbi.apply import apply_yaml
 from pbi.bookmarks import create_bookmark, create_bookmark_group, export_bookmarks, get_bookmark, list_bookmarks
+from pbi.components import apply_component, save_component
 from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
@@ -17,6 +18,7 @@ from pbi.project import Project
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.styles import create_style
+from pbi.textbox import set_textbox_content
 from pbi.themes import apply_theme, create_theme
 
 
@@ -252,6 +254,120 @@ class YamlRoundTripTests(unittest.TestCase):
             reexported_map = {entry["name"]: entry for entry in reexported}
             self.assertEqual(reexported_map["Detailed View"]["group"], "Views")
             self.assertIn("state", reexported_map["Detailed View"])
+
+    def test_round_trip_preserves_visual_type_for_raw_pbir_visuals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            source.create_page("Details")
+            page = source.create_page("Demo")
+
+            textbox = source.create_visual(page, "textbox")
+            textbox.data["name"] = "note"
+            set_textbox_content(textbox.data, text="Hello")
+            textbox.save()
+
+            button = source.create_visual(page, "actionButton")
+            button.data["name"] = "goDetails"
+            set_property(button.data, "action.show", "true", VISUAL_PROPERTIES)
+            set_property(button.data, "action.type", "PageNavigation", VISUAL_PROPERTIES)
+            set_property(button.data, "action.page", source.find_page("Details").name, VISUAL_PROPERTIES)
+            button.save()
+
+            spec = export_yaml(source, page_filter="Demo")
+            parsed = yaml.safe_load(spec)
+            raw_visual_entries = [
+                vis for vis in parsed["pages"][0]["visuals"]
+                if isinstance(vis.get("pbir"), dict) and isinstance(vis["pbir"].get("visual"), dict)
+            ]
+            self.assertTrue(raw_visual_entries)
+
+            target = self._make_project(root / "target")
+            target.create_page("Details")
+            result = apply_yaml(target, spec)
+
+            self.assertEqual(result.errors, [])
+            demo = target.find_page("Demo")
+            for visual in target.get_visuals(demo):
+                if "visualGroup" in visual.data:
+                    continue
+                self.assertIn("visualType", visual.data["visual"])
+
+    def test_round_trip_preserves_visual_groups(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            page = source.create_page("Demo")
+            first = source.create_visual(page, "cardVisual", x=10, y=10, width=120, height=80)
+            first.data["name"] = "card1"
+            first.save()
+            second = source.create_visual(page, "cardVisual", x=140, y=10, width=120, height=80)
+            second.data["name"] = "card2"
+            second.save()
+            group = source.create_group(page, [first, second], display_name="Cards")
+
+            spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
+            visuals = spec["pages"][0]["visuals"]
+            group_entry = next(vis for vis in visuals if vis.get("type") == "group")
+            self.assertEqual(group_entry["name"], group.name)
+            child_groups = {vis["name"]: vis.get("group") for vis in visuals if vis.get("type") != "group"}
+            self.assertEqual(child_groups["card1"], group.name)
+            self.assertEqual(child_groups["card2"], group.name)
+
+            target = self._make_project(root / "target")
+            result = apply_yaml(target, yaml.safe_dump(spec, sort_keys=False))
+
+            self.assertEqual(result.errors, [])
+            demo = target.find_page("Demo")
+            visuals = target.get_visuals(demo)
+            groups = [vis for vis in visuals if "visualGroup" in vis.data]
+            self.assertEqual(len(groups), 1)
+            self.assertEqual(groups[0].name, group.name)
+            child_map = {
+                vis.name: vis.data.get("parentGroupName")
+                for vis in visuals
+                if "visualGroup" not in vis.data
+            }
+            self.assertEqual(child_map["card1"], group.name)
+            self.assertEqual(child_map["card2"], group.name)
+
+    def test_component_save_detects_textbox_text_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+            title = project.create_visual(page, "textbox", x=0, y=0, width=200, height=40)
+            title.data["name"] = "header-title"
+            set_textbox_content(title.data, text="Executive Summary")
+            title.save()
+            subtitle = project.create_visual(page, "textbox", x=0, y=50, width=200, height=30)
+            subtitle.data["name"] = "header-subtitle"
+            set_textbox_content(subtitle.data, text="FY26 outlook")
+            subtitle.save()
+            group = project.create_group(page, [title, subtitle], display_name="page_header")
+
+            save_component(project, page, group, "page_header")
+            target = project.create_page("Target")
+            stamped = apply_component(
+                project,
+                target,
+                "page_header",
+                params={"title": "Department Breakdown", "subtitle": "Operations"},
+            )
+
+            self.assertEqual(len(stamped), 3)
+            target_visuals = {
+                vis.name: vis for vis in project.get_visuals(target)
+                if "visualGroup" not in vis.data
+            }
+            title_text = (
+                target_visuals["header-title"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
+            )
+            subtitle_text = (
+                target_visuals["header-subtitle"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
+            )
+            self.assertEqual(title_text, "'Department Breakdown'")
+            self.assertEqual(subtitle_text, "'Operations'")
 
     def test_minimal_card_export_no_longer_needs_raw_visual_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

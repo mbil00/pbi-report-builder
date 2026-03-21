@@ -37,9 +37,13 @@ plus the CLI's known defaults for common properties, and marks each row as
 pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue"
 pbi visual set "Sales Overview" revenueChart background.color="#FFFFFF" border.show=true
 pbi visual set "Sales Overview" revenueChart accentBar.color="#E8A83E" --for-measure "Sum(Devices.StaleDevices30d)"
+pbi visual set "Sales Overview" noteBox text="Quarter close in progress"
+pbi visual set "Sales Overview" noteBox text.fontSize=14 text.fontColor="#1E2A36" text.bold=true
 ```
 
 `pbi visual set` accepts `key=value` only.
+Textbox visuals also support first-class `text=...` and `text.*` writes instead
+of forcing raw `paragraphs/textRuns` editing.
 
 ## Bulk Styling
 
@@ -64,6 +68,7 @@ pbi visual set-all border.color="#DDD6CC" --all-pages --where border.color="#EDE
 ```bash
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart --width 600 --height 400
 pbi visual create "Sales Overview" card --name kpiCard --title "Total Revenue"
+pbi visual create "Sales Overview" textbox --name noteBox --text "Quarter close in progress"
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --sort Date.Month
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart \
@@ -102,6 +107,10 @@ do not pass `--title`. Builder validation is stricter than low-level
 `pbi visual bind`: unsupported role combinations and clearly invalid
 column-vs-measure placements are rejected up front.
 
+Textbox visuals can also be seeded inline with `--text`, which writes the
+canonical textbox paragraph structure immediately instead of requiring a second
+mutation step.
+
 ## Layout Helpers
 
 ```bash
@@ -127,6 +136,10 @@ Options: `--align` (left, right, top, bottom, center-x, center-y), `--distribute
 pbi visual group "Sales Overview" revenueChart profitChart --name "Revenue Charts"
 pbi visual ungroup "Sales Overview" "Revenue Charts"
 ```
+
+Group containers now survive full YAML export/apply round-trips, and exported
+child visuals keep their `group:` membership when the container exists on the
+page.
 
 ## Style Copy
 

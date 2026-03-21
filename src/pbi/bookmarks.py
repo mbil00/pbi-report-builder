@@ -41,6 +41,7 @@ class BookmarkGroupInfo:
     """Summary of a bookmark group in bookmarks.json metadata."""
 
     name: str
+    identifier: str | None = None
     children: list[str] = field(default_factory=list)
 
 
@@ -129,6 +130,7 @@ def list_bookmark_groups(project: Project) -> list[BookmarkGroupInfo]:
         groups.append(
             BookmarkGroupInfo(
                 name=name,
+                identifier=item.get("name") if isinstance(item.get("name"), str) else None,
                 children=[child for child in children if isinstance(child, str)],
             )
         )
@@ -139,6 +141,15 @@ def get_bookmark(project: Project, identifier: str) -> dict:
     """Get a bookmark's full data by name or display name."""
     data, _ = _find_bookmark_file(project, identifier)
     return data
+
+
+def get_bookmark_group(project: Project, identifier: str) -> BookmarkGroupInfo:
+    """Get bookmark-group metadata by display name or identifier."""
+    lowered = identifier.lower()
+    for group in list_bookmark_groups(project):
+        if group.name.lower() == lowered or (group.identifier and group.identifier.lower() == lowered):
+            return group
+    raise FileNotFoundError(f'Bookmark group "{identifier}" not found')
 
 
 def normalize_bookmark_state(project: Project, state: dict) -> dict:
@@ -639,7 +650,11 @@ def reconcile_bookmark_groups(
         if len(children) == 1:
             preserved_items.append({"name": children[0]})
             continue
-        preserved_items.append({"displayName": group_name, "children": children})
+        preserved_items.append({
+            "name": _existing_group_id(meta, group_name) or secrets.token_hex(10),
+            "displayName": group_name,
+            "children": children,
+        })
 
     meta["items"] = preserved_items
     _save_meta(project, meta)
@@ -685,12 +700,14 @@ def create_bookmark_group(
         filtered_items.append(item)
 
     filtered_items.append({
+        "name": secrets.token_hex(10),
         "displayName": display_name,
         "children": children,
     })
     meta["items"] = filtered_items
     _save_meta(project, meta)
-    return BookmarkGroupInfo(name=display_name, children=children)
+    group_id = filtered_items[-1]["name"]
+    return BookmarkGroupInfo(name=display_name, identifier=group_id, children=children)
 
 
 def delete_bookmark_group(project: Project, identifier: str) -> BookmarkGroupInfo:
@@ -709,6 +726,7 @@ def delete_bookmark_group(project: Project, identifier: str) -> BookmarkGroupInf
             if display_name == identifier:
                 removed = BookmarkGroupInfo(
                     name=str(display_name),
+                    identifier=item.get("name") if isinstance(item.get("name"), str) else None,
                     children=[child for child in children if isinstance(child, str)],
                 )
                 for child in removed.children:
@@ -977,6 +995,11 @@ def _ensure_bookmark_meta_reference(items: list[dict], bookmark_name: str) -> li
 def _normalize_meta(meta: dict) -> dict:
     """Normalize bookmarks metadata to the published schema shape."""
     if isinstance(meta.get("items"), list):
+        for item in meta["items"]:
+            if not isinstance(item, dict):
+                continue
+            if isinstance(item.get("children"), list) and not isinstance(item.get("name"), str):
+                item["name"] = secrets.token_hex(10)
         meta["$schema"] = BOOKMARKS_METADATA_SCHEMA
         return meta
 
@@ -1022,6 +1045,20 @@ def _bookmark_group_lookup(meta: dict) -> dict[str, str]:
             if isinstance(child, str):
                 result[child] = display_name
     return result
+
+
+def _existing_group_id(meta: dict, display_name: str) -> str | None:
+    """Return an existing bookmark-group identifier by display name."""
+    lowered = display_name.lower()
+    for item in meta.get("items", []):
+        if not isinstance(item, dict) or not isinstance(item.get("children"), list):
+            continue
+        display = item.get("displayName") or item.get("name")
+        if isinstance(display, str) and display.lower() == lowered:
+            name = item.get("name")
+            if isinstance(name, str) and name:
+                return name
+    return None
 
 
 def _standalone_bookmark_names(meta: dict) -> set[str]:

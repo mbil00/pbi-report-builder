@@ -600,10 +600,27 @@ def _schema_validate_chart_prop(
     if not visual_type:
         return []
     warnings = validate_chart_property(visual_type, obj_key, prop_key, value)
-    result = [str(w) for w in warnings]
+    result = [
+        str(w)
+        for w in warnings
+        if not _is_known_chart_schema_gap(visual_type, obj_key, prop_key)
+    ]
     for msg in result:
         logger.warning("Schema: %s", msg)
     return result
+
+
+def _is_known_chart_schema_gap(visual_type: str, obj_key: str, prop_key: str) -> bool:
+    """Suppress known extractor gaps for Desktop-exported property paths."""
+    if visual_type == "image" and obj_key == "image":
+        return prop_key == "sourceFile.image" or prop_key.startswith("sourceFile.image.")
+    if visual_type == "textbox" and obj_key in {"paragraph", "general"}:
+        return prop_key == "paragraphs" or prop_key.startswith("paragraphs.")
+    if visual_type == "tableEx" and ".expr.FillRule." in prop_key:
+        return True
+    if visual_type == "pivotTable" and ".expr.Conditional." in prop_key:
+        return True
+    return False
 
 
 def get_visual_objects(data: dict) -> dict[str, dict[str, Any]]:

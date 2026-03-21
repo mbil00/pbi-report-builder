@@ -53,6 +53,19 @@ def apply_visual(
     vis_type = vis_spec.get("type")
     visual_baseline: dict | None = None
 
+    if vis_type == "group":
+        _apply_group_visual(
+            project,
+            page,
+            vis_spec,
+            result,
+            dry_run=dry_run,
+            keep_visual_ids=keep_visual_ids,
+            session=session,
+            page_state=page_state,
+        )
+        return
+
     if not vis_name and not vis_type:
         result.errors.append(f"Page {page_name}: visual must have 'name' or 'type'.")
         return
@@ -153,6 +166,8 @@ def apply_visual(
     raw_pbir = vis_spec.get("pbir")
     if isinstance(raw_pbir, dict):
         apply_raw_visual_payload(visual, raw_pbir)
+        if isinstance(vis_spec.get("type"), str):
+            visual.data.setdefault("visual", {})["visualType"] = vis_spec["type"]
 
     if "position" in vis_spec:
         x, y = parse_position(vis_spec["position"])
@@ -194,6 +209,7 @@ def apply_visual(
         "referenceLabelLayout",
         "text",
         "textStyle",
+        "group",
         "x",
         "y",
         "width",
@@ -213,6 +229,22 @@ def apply_visual(
 
     if "isHidden" in vis_spec:
         visual.data["isHidden"] = bool(vis_spec["isHidden"])
+        result.properties_set += 1
+
+    if "group" in vis_spec:
+        group_ref = vis_spec.get("group")
+        if isinstance(group_ref, str) and group_ref:
+            try:
+                group_visual = page_state.find_visual(group_ref)
+            except ValueError as e:
+                result.errors.append(f"{context}: group {e}")
+                return
+            if "visualGroup" not in group_visual.data:
+                result.errors.append(f'{context}: "{group_ref}" is not a group container.')
+                return
+            visual.data["parentGroupName"] = group_visual.name
+        else:
+            visual.data.pop("parentGroupName", None)
         result.properties_set += 1
 
     if "bindings" in vis_spec:
@@ -353,3 +385,104 @@ def _resolve_page_ref(project: Project, value: object) -> str | None:
         return project.find_page(value).name
     except ValueError:
         return None
+
+
+def _apply_group_visual(
+    project: Project,
+    page: Page,
+    vis_spec: dict,
+    result: ApplyResult,
+    *,
+    dry_run: bool,
+    keep_visual_ids: set[str] | None,
+    session: _ApplySession,
+    page_state: _PageVisualState,
+) -> None:
+    """Create or update a group container from a visual spec."""
+    page_name = page.display_name
+    group_name = vis_spec.get("name")
+    group_id = vis_spec.get("id")
+    if not isinstance(group_name, str) and not isinstance(group_id, str):
+        result.errors.append(f"Page {page_name}: group must have 'name' or 'id'.")
+        return
+
+    visual: Visual | None = None
+    if isinstance(group_id, str) and group_id:
+        visual = page_state._by_folder.get(group_id)
+    if visual is None and isinstance(group_name, str) and group_name:
+        try:
+            visual = page_state.find_visual(group_name)
+        except ValueError:
+            visual = None
+
+    if visual is not None and "visualGroup" not in visual.data:
+        result.errors.append(f'Page {page_name}: "{group_name or group_id}" exists but is not a group container.')
+        return
+
+    if dry_run:
+        entry_name = str(group_name or group_id or "group")
+        if visual is None:
+            result.visuals_created.append((page_name, entry_name))
+        else:
+            result.visuals_updated.append((page_name, entry_name))
+        count_dry_run_changes(vis_spec, result)
+        return
+
+    if visual is None:
+        x, y = parse_position(vis_spec.get("position", "0, 0"))
+        w, h = parse_size(vis_spec.get("size", "0 x 0"))
+        session.ensure_snapshot(project)
+        visual = project.create_group_container(
+            page,
+            name=str(group_name) if isinstance(group_name, str) else None,
+            display_name=vis_spec.get("displayName") if isinstance(vis_spec.get("displayName"), str) else str(group_name or group_id or "group"),
+            x=x,
+            y=y,
+            width=w,
+            height=h,
+        )
+        page_state.add(visual)
+        result.visuals_created.append((page_name, visual.name))
+        visual_baseline = copy.deepcopy(visual.data)
+    else:
+        result.visuals_updated.append((page_name, visual.name))
+        visual_baseline = copy.deepcopy(visual.data)
+
+    if keep_visual_ids is not None:
+        keep_visual_ids.add(visual.folder.name)
+
+    if isinstance(group_name, str) and group_name:
+        visual.data["name"] = sanitize_visual_name(group_name)
+    if isinstance(vis_spec.get("displayName"), str) and vis_spec["displayName"]:
+        visual.data.setdefault("visualGroup", {})["displayName"] = vis_spec["displayName"]
+
+    if "position" in vis_spec:
+        x, y = parse_position(vis_spec["position"])
+        visual.data.setdefault("position", {})["x"] = x
+        visual.data["position"]["y"] = y
+        result.properties_set += 2
+
+    if "size" in vis_spec:
+        w, h = parse_size(vis_spec["size"])
+        visual.data.setdefault("position", {})["width"] = w
+        visual.data["position"]["height"] = h
+        result.properties_set += 2
+
+    if "group" in vis_spec:
+        group_ref = vis_spec.get("group")
+        if isinstance(group_ref, str) and group_ref:
+            try:
+                parent = page_state.find_visual(group_ref)
+            except ValueError as e:
+                result.errors.append(f'Page {page_name}/{visual.name}: group {e}')
+                return
+            if "visualGroup" not in parent.data:
+                result.errors.append(f'Page {page_name}/{visual.name}: "{group_ref}" is not a group container.')
+                return
+            visual.data["parentGroupName"] = parent.name
+        else:
+            visual.data.pop("parentGroupName", None)
+        result.properties_set += 1
+
+    _save_visual_if_changed(project, visual, original_data=visual_baseline, session=session)
+    page_state.refresh()

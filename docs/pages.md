@@ -135,8 +135,13 @@ Each section creates a shape visual (background), a textbox visual (title), and 
 pbi page drillthrough set "Product Details" Product.Category
 pbi page drillthrough get "Product Details"
 pbi page drillthrough set "Shared Details" Product.Category --cross-report
+pbi page drillthrough set "Visible Details" Product.Category --no-hide
 pbi page drillthrough clear "Product Details"
 ```
+
+`page drillthrough set` hides the page in view mode by default because that is
+the common Desktop pattern for drillthrough targets. Use `--no-hide` when you
+want the page to stay visible in normal navigation.
 
 ## Tooltip
 

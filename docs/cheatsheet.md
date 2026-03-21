@@ -61,6 +61,7 @@ pbi page export "Overview" -o overview.yaml      # export one page
 **Page types (drillthrough & tooltip):**
 ```bash
 pbi page drillthrough set "Detail" Products.Category   # make drillthrough page
+pbi page drillthrough set "Detail" Products.Category --no-hide
 pbi page drillthrough get "Detail"                     # inspect drillthrough fields
 pbi page drillthrough clear "Detail"                    # revert to normal page
 pbi page tooltip set "Card Tip"                         # make tooltip page
@@ -85,6 +86,7 @@ pbi visual create "Overview" donutChart --name revenueMix \
 pbi visual create "Overview" slicer --name yearSlicer --bind Values=Date.Year --preset slicer
 pbi visual create "Overview" clusteredColumnChart --name monthlyRevenue \
   --bind Category=Date.MonthName --bind Y=Sales.Revenue   # auto-sorts via sortByColumn
+pbi visual create "Overview" textbox --name note1 --text "Quarter close in progress"
 pbi visual rename "Overview" kpi1 "revenueCard"  # give visual a friendly name
 pbi visual copy "Overview" chart1 --to-page "Detail"   # copy to another page
 pbi visual delete "Overview" chart1 --force       # delete visual
@@ -98,6 +100,7 @@ pbi visual types clusteredBarChart                # show roles for one type
 ```bash
 pbi visual set "Overview" myChart title.show=true title.text="Sales"
 pbi visual set "Overview" myChart background.color="#FFFFFF" border.show=true
+pbi visual set "Overview" note1 text="Quarter close in progress" text.fontSize=14
 
 # Bulk set across visuals — the most powerful styling command
 pbi visual set-all --page "Overview" border.show=false         # all visuals on page
@@ -326,6 +329,7 @@ pbi component create "Overview" kpiGroup --name kpi-strip     # save group as co
 pbi component apply "Detail" kpi-strip --x 16 --y 16         # stamp onto page
 pbi component apply "Detail" kpi-strip --row 3 --gap 16      # stamp 3 copies in a row
 pbi component apply "Detail" kpi-strip --set measure=Facts.Rev  # override parameters
+pbi component apply "Overview" page-header --set title="Department Breakdown"
 ```
 
 **Page templates** — reusable page layouts:
@@ -415,6 +419,7 @@ pbi image prune --force                     # remove unreferenced images
 # Set button/visual click actions
 pbi nav page set "Overview" myButton "Detail View"          # navigate to page
 pbi nav bookmark set "Overview" myButton "Show North"       # apply bookmark
+pbi nav toggle set "Overview" myButton "Department Views"   # cycle bookmark group
 pbi nav back set "Detail" backButton                        # navigate back
 pbi nav url set "Overview" linkButton "https://example.com"
 pbi nav drillthrough set "Overview" detailsBtn "Detail View"
@@ -440,6 +445,8 @@ pbi map --model                  # model only
 pbi map --page "Overview"       # single page detail
 pbi info                         # quick project summary
 pbi validate                    # check for structural errors, schema violations, and warnings
+pbi validate --strict           # also fail on warnings
+pbi validate --ignore-schema-warnings
 pbi render "Overview" -o page.html   # HTML mockup of page layout
 pbi capabilities                 # show what the CLI supports vs PBIR spec
 ```

@@ -15,6 +15,7 @@ from pbi.properties import (
 )
 from pbi.roundtrip import iter_nested_property_assignments
 from pbi.styles import StylePreset, get_style
+from pbi.textbox import set_textbox_content
 
 
 def apply_nested_properties(
@@ -97,31 +98,7 @@ def apply_textbox_content(
     style = vis_spec.get("textStyle", {})
     if not isinstance(style, dict):
         style = {}
-
-    text_style: dict[str, Any] = {}
-    if "fontFamily" in style:
-        text_style["fontFamily"] = f"'{style['fontFamily']}'"
-    if "fontSize" in style:
-        text_style["fontSize"] = f"'{style['fontSize']}pt'"
-    if "fontColor" in style:
-        text_style["color"] = {"expr": {"Literal": {"Value": f"'{style['fontColor']}'"}}}
-    if "bold" in style:
-        text_style["fontWeight"] = "'bold'" if style["bold"] else "'normal'"
-
-    text_run: dict[str, Any] = {"value": f"'{text}'"}
-    if text_style:
-        text_run["textStyle"] = text_style
-
-    paragraphs = [{"textRuns": [text_run]}]
-    visual.data.setdefault("visual", {})["objects"] = {
-        "general": [
-            {
-                "properties": {
-                    "paragraphs": paragraphs,
-                },
-            }
-        ],
-    }
+    set_textbox_content(visual.data, text=text, style_updates=style)
     result.properties_set += 1
 
 
@@ -290,7 +267,19 @@ def parse_size(value: Any) -> tuple[int | float, int | float]:
 def apply_raw_visual_payload(visual: Visual, raw_pbir: dict) -> None:
     """Restore the exact exported PBIR payload for a visual."""
     for key, value in raw_pbir.items():
-        visual.data[key] = copy.deepcopy(value)
+        if isinstance(value, dict) and isinstance(visual.data.get(key), dict):
+            _deep_merge_dict(visual.data[key], value)
+        else:
+            visual.data[key] = copy.deepcopy(value)
+
+
+def _deep_merge_dict(target: dict, source: dict) -> None:
+    """Merge source into target, preserving scaffold fields already created."""
+    for key, value in source.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge_dict(target[key], value)
+        else:
+            target[key] = copy.deepcopy(value)
 
 
 def count_dry_run_changes(vis_spec: dict, result: ApplyResult) -> None:

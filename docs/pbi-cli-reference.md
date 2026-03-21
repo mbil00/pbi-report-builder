@@ -43,6 +43,7 @@ pbi page get "Sales Overview" width displayOption      # specific properties
 pbi visual get "Sales Overview" revenueChart --full    # everything in one call
 pbi visual get "Sales Overview" revenueChart title.show background.color
 pbi visual get "Sales Overview" revenueChart --all-props
+pbi visual get "Sales Overview" noteBox text.fontSize
 pbi visual diff "Sales Overview" revenueChart "Executive Summary" revenueChartCopy
 pbi visual page-diff "Sales Overview" "Executive Summary"
 
@@ -56,6 +57,7 @@ pbi report custom-visual set "Org Timeline" store/org-timeline.pbiviz --disabled
 pbi report data-source-variables set --from-file variables.json
 pbi page set "Sales Overview" width=1440 displayOption=FitToWidth
 pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue"
+pbi visual set "Sales Overview" noteBox text="Quarter close in progress" text.fontColor="#1E2A36"
 
 # Batch property writes
 pbi page set-all background.color="#F0EDE8"
@@ -91,6 +93,8 @@ pbi apply sales.yaml --dry-run     # validate
 pbi apply sales.yaml               # apply
 cat sales.yaml | pbi diff          # diff from stdin
 cat sales.yaml | pbi apply         # apply from stdin
+pbi validate --strict              # fail on warnings too
+pbi validate --ignore-schema-warnings
 
 # Model YAML apply
 pbi model apply model.yaml
@@ -118,6 +122,7 @@ pbi component get kpi-card
 pbi component apply "Dashboard" kpi-card --x 16 --y 200 --set title=Revenue
 pbi component apply "Dashboard" kpi-card --row 4 --x 16 --y 200 --gap 12 \
   --set-each title=Revenue,Margin,Pipeline,Backlog
+pbi component apply "Dashboard" page-header --set title="Department Breakdown"
 pbi component clone kpi-card --to-global
 pbi component delete kpi-card --force
 
@@ -139,6 +144,7 @@ pbi visual tree "Dashboard" --json
 # Navigation helpers
 pbi nav page set "Sales Overview" navButton "Executive Summary"
 pbi nav bookmark set "Sales Overview" toggleBtn "Show Details"
+pbi nav toggle set "Sales Overview" toggleBtn "Department Views"
 pbi nav back set "Drillthrough" backButton
 pbi nav url set "Sales Overview" helpBtn "https://docs.example.com"
 pbi nav drillthrough set "Sales Overview" detailsBtn "Product Details"
@@ -155,6 +161,7 @@ pbi visual arrange align "Sales" chart1 chart2 --align top --match-height
 pbi visual sort set "Sales Overview" revenueChart Sales.Revenue --direction desc
 pbi visual format set "Sales Overview" revenueChart dataPoint.fill --mode measure --source Sales.ColorMeasure
 pbi theme format set columnChart dataPoint.fill --mode gradient --source Sales.SalesAmount --min-color "#FFF7E6" --min-value 0 --max-color "#C50F1F" --max-value 5000
+pbi page drillthrough set "Product Details" Product.Category --no-hide
 
 # Theme migration
 pbi theme migrate old-theme.json new-theme.json

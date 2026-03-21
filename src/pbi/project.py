@@ -474,7 +474,14 @@ class Project:
 
     def delete_visual(self, visual: Visual) -> None:
         """Delete a visual."""
-        self._invalidate_visuals_cache(visual.folder.parent.parent)
+        page_path = visual.folder.parent.parent
+        self._invalidate_visuals_cache(page_path)
+        if "visualGroup" in visual.data:
+            visuals = self._get_visuals_cached(page_path)
+            for candidate in visuals:
+                if candidate.data.get("parentGroupName") == visual.name:
+                    candidate.data.pop("parentGroupName", None)
+                    candidate.save()
         shutil.rmtree(visual.folder)
 
     # ── Visual grouping ─────────────────────────────────────────
@@ -550,6 +557,53 @@ class Project:
 
         self._invalidate_visuals_cache(page)
         return Visual(folder=group_dir, data=group_data)
+
+    def create_group_container(
+        self,
+        page: Page,
+        *,
+        name: str | None = None,
+        display_name: str | None = None,
+        x: int = 0,
+        y: int = 0,
+        width: int = 0,
+        height: int = 0,
+    ) -> Visual:
+        """Create an empty visual group container."""
+        existing = self._get_visuals_cached(page)
+        max_z = max((v.position.get("z", 0) for v in existing), default=0)
+        group_id = secrets.token_hex(10)
+        group_dir = page.folder / "visuals" / group_id
+        group_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_name = sanitize_visual_name(name) if name else group_id
+        group_data = {
+            "$schema": VISUAL_CONTAINER_SCHEMA,
+            "name": safe_name,
+            "position": {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "z": max_z + 1,
+                "tabOrder": len(existing),
+            },
+            "visualGroup": {
+                "displayName": display_name or safe_name,
+                "groupMode": "ScaleMode",
+                "objects": {},
+            },
+        }
+        _write_json(group_dir / "visual.json", group_data)
+        visual = Visual(folder=group_dir, data=group_data)
+        existing.append(visual)
+        existing.sort(
+            key=lambda v: (
+                v.position.get("y", 0),
+                v.position.get("x", 0),
+            )
+        )
+        return visual
 
     def ungroup(self, page: Page, group: Visual) -> list[Visual]:
         """Ungroup a visual group. Returns the freed child visuals."""

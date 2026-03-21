@@ -11,6 +11,7 @@ import yaml
 
 from pbi.export import export_visual_spec
 from pbi.project import Page, Project, Visual
+from pbi.textbox import set_textbox_content
 
 
 @dataclass(frozen=True)
@@ -149,6 +150,14 @@ def _detect_parameters(visual_specs: list[dict]) -> dict[str, dict[str, Any]]:
                 "default": title["text"],
             }
 
+        text = spec.get("text")
+        if isinstance(text, str) and text:
+            param_name = _textbox_param_name(vis_name, parameters)
+            parameters[param_name] = {
+                "source": f"{vis_name}.text",
+                "default": text,
+            }
+
         # Categorical filter values
         for filt in spec.get("filters", []):
             if not isinstance(filt, dict):
@@ -180,6 +189,19 @@ def _deep_replace(obj: Any, old_value: Any, new_value: str) -> Any:
                 obj[i] = new_value
             elif isinstance(item, (dict, list)):
                 _deep_replace(item, old_value, new_value)
+
+
+def _textbox_param_name(vis_name: str, parameters: dict[str, dict[str, Any]]) -> str:
+    lowered = vis_name.lower()
+    for candidate in ("title", "subtitle", "note", "label"):
+        if candidate in lowered and candidate not in parameters:
+            return candidate
+    candidate = f"text[{vis_name}]"
+    suffix = 2
+    while candidate in parameters:
+        candidate = f"text[{vis_name}]#{suffix}"
+        suffix += 1
+    return candidate
 
 
 def get_component(
@@ -488,7 +510,22 @@ def _apply_spec_to_visual(project: Project, visual: Visual, spec: dict) -> None:
     from pbi.properties import VISUAL_PROPERTIES, set_property
 
     # Apply formatting properties
-    skip_keys = {"id", "name", "type", "position", "size", "bindings", "sort", "filters", "pbir", "style", "isHidden"}
+    skip_keys = {
+        "id",
+        "name",
+        "type",
+        "position",
+        "size",
+        "bindings",
+        "sort",
+        "filters",
+        "pbir",
+        "style",
+        "isHidden",
+        "text",
+        "textStyle",
+        "group",
+    }
 
     for key, value in spec.items():
         if key in skip_keys:
@@ -562,3 +599,11 @@ def _apply_spec_to_visual(project: Project, visual: Visual, spec: dict) -> None:
         for key in ("objects", "visualContainerObjects"):
             if key in pbir:
                 vis[key] = pbir[key]
+
+    if visual.visual_type == "textbox" and isinstance(spec.get("text"), str):
+        style = spec.get("textStyle", {})
+        set_textbox_content(
+            visual.data,
+            text=spec["text"],
+            style_updates=style if isinstance(style, dict) else None,
+        )

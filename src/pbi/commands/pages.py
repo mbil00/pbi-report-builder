@@ -674,6 +674,7 @@ def page_set_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     fields: Annotated[list[str], typer.Argument(help="Drillthrough fields as Table.Field (e.g. Product.Category).")],
     cross_report: Annotated[bool, typer.Option("--cross-report", help="Enable cross-report drillthrough.")] = False,
+    hide: Annotated[bool, typer.Option("--hide/--no-hide", help="Hide the page in view mode after configuring drillthrough.")] = True,
     project: ProjectOpt = None,
 ) -> None:
     """Configure a page as a drillthrough target."""
@@ -682,14 +683,13 @@ def page_set_drillthrough(
     proj, pg = _get_page(project, page)
     parsed = _resolve_page_fields(proj, fields)
 
-    configure_drillthrough(pg, parsed, cross_report=cross_report)
+    configure_drillthrough(pg, parsed, cross_report=cross_report, hide=hide)
     pg.save()
 
     field_list = ", ".join(fields)
     cross = " (cross-report)" if cross_report else ""
-    console.print(
-        f'Configured "[cyan]{pg.display_name}[/cyan]" as drillthrough page{cross}: {field_list}'
-    )
+    hidden_note = " [dim](hidden)[/dim]" if hide else ""
+    console.print(f'Configured "[cyan]{pg.display_name}[/cyan]" as drillthrough page{cross}{hidden_note}: {field_list}')
 
 
 @page_drillthrough_app.command("get")

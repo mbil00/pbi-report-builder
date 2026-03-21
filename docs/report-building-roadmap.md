@@ -234,6 +234,24 @@ Completed with:
 - persisted PBIR assertions for all action types
 - real-report import/export/apply tests that preserve action wiring
 
+## Acceptance Hardening
+
+Status: completed
+
+After the phase work landed, a full real-report acceptance build surfaced a few
+authoring holes. They are now part of the completed parity baseline:
+
+- `apply` now preserves `visual.visualType` even when raw `pbir.visual` payloads
+  are round-tripped
+- bookmark groups now persist schema-correct identifiers
+- textbox visuals have first-class authoring support through `visual create --text`,
+  `visual set text=...`, and `text.*` style writes
+- component parameter substitution now reaches textbox content
+- page drillthrough setup hides target pages by default, with `--no-hide` opt-out
+- `nav toggle set` wires bookmark-group toggle actions
+- export/apply now preserve visual group containers and child `group:` membership
+- `validate` now supports `--strict` and `--ignore-schema-warnings`
+
 ## Phase 4: Report-Level Authoring
 
 Report-level metadata is still thinner than page/visual authoring.

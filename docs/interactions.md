@@ -21,6 +21,7 @@ Use the first-class `pbi nav` helpers for button and shape actions:
 pbi nav back set "Sales Overview" navButton
 pbi nav page set "Sales Overview" navButton "Overview"
 pbi nav bookmark set "Sales Overview" toggleBtn "Show Details"
+pbi nav toggle set "Sales Overview" toggleBtn "Department Views"
 pbi nav url set "Sales Overview" helpBtn "https://docs.example.com"
 pbi nav drillthrough set "Sales Overview" detailsBtn "Product Details"
 pbi nav tooltip set "Sales Overview" revenueChart "Sales Tooltip"
@@ -32,6 +33,7 @@ Optional tooltips can be attached during setup:
 
 ```bash
 pbi nav page set "Sales Overview" navButton "Overview" --tooltip "Go to overview"
+pbi nav toggle set "Sales Overview" toggleBtn "Department Views" --tooltip "Cycle views"
 ```
 
 The underlying action properties are still available through `pbi visual set` when you need lower-level control:

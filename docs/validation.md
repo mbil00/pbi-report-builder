@@ -6,10 +6,15 @@ Check project files for structural errors without requiring external schema down
 
 ```bash
 pbi validate
+pbi validate --strict
+pbi validate --ignore-schema-warnings
 pbi validate -p /path/to/project
 ```
 
-Exit code 0 if no errors (warnings are OK), exit code 1 if errors found.
+Exit code `0` if no errors are found. By default warnings do not fail the
+command. Use `--strict` to exit `1` on warnings too. Use
+`--ignore-schema-warnings` to suppress known schema-gap warnings such as textbox
+or image internals when you only care about structural issues.
 
 ### What it checks
 
@@ -30,6 +35,7 @@ Exit code 0 if no errors (warnings are OK), exit code 1 if errors found.
 - `visualContainerObjects` entries are arrays of objects with `properties` keys
 - `visual.objects` entries are arrays
 - `parentGroupName` is a string if present
+- `parentGroupName` references are warned when the target group container is missing
 
 **Interactions:**
 - Visual interaction source/target names reference existing visuals on the page
@@ -59,6 +65,10 @@ Exit code 0 if no errors (warnings are OK), exit code 1 if errors found.
 1 warning(s):
   WARN  definition/report.json: Missing $schema field
 ```
+
+Known schema gaps for textbox/image internals and a few Desktop-only
+conditional-format payloads are now classified as schema warnings and can be
+hidden with `--ignore-schema-warnings`.
 
 ## PBIR File Structure
 

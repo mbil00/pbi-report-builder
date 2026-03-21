@@ -19,6 +19,7 @@ def configure_drillthrough(
     fields: list[tuple[str, str, str]],
     *,
     cross_report: bool = False,
+    hide: bool = True,
 ) -> None:
     """Configure a page as a drillthrough target.
 
@@ -27,9 +28,11 @@ def configure_drillthrough(
         fields: List of (entity, property, field_type) tuples for drillthrough fields.
             field_type is "column" or "measure".
         cross_report: Enable cross-report drillthrough.
+        hide: Hide the page in view mode after configuring drillthrough.
     """
     page.data["type"] = "Drillthrough"
-    page.data["visibility"] = "HiddenInViewMode"
+    if hide:
+        page.data["visibility"] = "HiddenInViewMode"
 
     binding, filters = build_drillthrough_payload(fields, cross_report=cross_report)
     page.data["pageBinding"] = binding

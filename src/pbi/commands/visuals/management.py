@@ -9,6 +9,7 @@ import typer
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import resolve_visual_target, _set_visual_image_source
+from pbi.textbox import set_textbox_content
 from pbi.visual_builders import (
     apply_auto_title,
     apply_builder_preset,
@@ -29,6 +30,7 @@ def visual_create(
     height: Annotated[int | None, typer.Option("-H", "--height", help="Height.")] = None,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Friendly name for the visual.")] = None,
     title: Annotated[str | None, typer.Option("--title", help="Set title text (also enables title.show).")] = None,
+    text: Annotated[str | None, typer.Option("--text", help="Set textbox body content during creation.")] = None,
     image: Annotated[str | None, typer.Option("--image", help="Bind an image visual to a registered resource name or path.")] = None,
     bind: Annotated[list[str], typer.Option("--bind", help="Bind a role as Role=Table.Field. Repeat to create a usable visual in one command.")] = [],
     preset: Annotated[str | None, typer.Option("--preset", help="Apply a builder preset for common visual families: chart, table, slicer, card.")] = None,
@@ -105,6 +107,9 @@ def visual_create(
     if image and canonical_visual_type != "image":
         console.print('[red]Error:[/red] --image can only be used with an image visual.')
         raise typer.Exit(1)
+    if text is not None and canonical_visual_type != "textbox":
+        console.print('[red]Error:[/red] --text can only be used with a textbox visual.')
+        raise typer.Exit(1)
     if visual_type != canonical_visual_type:
         console.print(
             f'[dim]Using canonical visual type [cyan]{canonical_visual_type}[/cyan] '
@@ -134,7 +139,10 @@ def visual_create(
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
 
-    if name or title or image:
+    if text is not None:
+        set_textbox_content(vis.data, text=text)
+
+    if name or title or image or text is not None:
         vis.save()
 
     bound_fields = []

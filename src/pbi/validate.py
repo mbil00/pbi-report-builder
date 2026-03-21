@@ -94,6 +94,7 @@ def validate_project(project: Project) -> list[ValidationIssue]:
                     page_data,
                     visual_names=page_visual_names,
                 ))
+                issues.extend(_validate_group_membership(page_dir.name, page_visuals))
 
     # Validate visual layout (overlaps, out-of-bounds, zero sizes)
     issues.extend(_validate_layout(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
@@ -546,6 +547,21 @@ def _validate_bookmarks_meta(path: Path) -> list[ValidationIssue]:
         issues.append(ValidationIssue(rel, "error", "Missing items array"))
     elif not isinstance(items, list):
         issues.append(ValidationIssue(rel, "error", "items must be an array"))
+    else:
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                issues.append(ValidationIssue(rel, "error", "items entries must be objects", path=f"items[{index}]"))
+                continue
+            children = item.get("children")
+            if isinstance(children, list):
+                name = item.get("name")
+                if not isinstance(name, str) or not name:
+                    issues.append(ValidationIssue(
+                        rel,
+                        "error",
+                        "Bookmark groups must include a name identifier",
+                        path=f"items[{index}].name",
+                    ))
 
     return issues
 
@@ -767,7 +783,7 @@ def _validate_visual_schema(
 
     for obj_name, entries in objects.items():
         obj_warning = validate_object(visual_type, obj_name)
-        if obj_warning is not None:
+        if obj_warning is not None and not _is_known_schema_gap(visual_type, obj_name):
             issues.append(ValidationIssue(
                 rel, "warning",
                 f"Schema: {obj_warning}",
@@ -782,10 +798,61 @@ def _validate_visual_schema(
             props = entry.get("properties", {})
             for prop_name in props:
                 prop_warning = validate_property(visual_type, obj_name, prop_name)
-                if prop_warning is not None:
+                if prop_warning is not None and not _is_known_schema_gap(visual_type, obj_name, prop_name):
                     issues.append(ValidationIssue(
                         rel, "warning",
                         f"Schema: {prop_warning}",
                     ))
 
     return issues
+
+
+def _validate_group_membership(
+    page_name: str,
+    visuals: list[tuple[str, dict]],
+) -> list[ValidationIssue]:
+    """Check that parentGroupName references a real group container on the same page."""
+    issues: list[ValidationIssue] = []
+    group_names = {
+        visual_data.get("name", visual_id)
+        for visual_id, visual_data in visuals
+        if "visualGroup" in visual_data
+    }
+    for visual_id, visual_data in visuals:
+        parent = visual_data.get("parentGroupName")
+        if not parent:
+            continue
+        if parent not in group_names:
+            issues.append(ValidationIssue(
+                f"pages/{page_name}/visuals/{visual_id}/visual.json",
+                "warning",
+                f'parentGroupName "{parent}" does not reference a group container on this page',
+            ))
+    return issues
+
+
+def _is_known_schema_gap(
+    visual_type: str,
+    object_name: str,
+    property_name: str | None = None,
+) -> bool:
+    """Suppress known schema gaps for Desktop-exported shapes the extractor misses."""
+    if visual_type == "image" and object_name == "image":
+        if property_name is None:
+            return False
+        return property_name == "sourceFile.image" or property_name.startswith("sourceFile.image.")
+
+    if visual_type == "textbox":
+        if object_name == "paragraph":
+            return True
+        if object_name == "general" and property_name is not None:
+            return property_name == "paragraphs" or property_name.startswith("paragraphs.")
+
+    if property_name is None:
+        return False
+
+    if visual_type == "tableEx" and ".expr.FillRule." in property_name:
+        return True
+    if visual_type == "pivotTable" and ".expr.Conditional." in property_name:
+        return True
+    return False

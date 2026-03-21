@@ -11,6 +11,7 @@ from pbi.bookmarks import (
     create_bookmark,
     create_bookmark_group,
     get_bookmark,
+    get_bookmark_group,
     list_bookmark_groups,
     list_bookmarks,
     update_bookmark_visuals,
@@ -162,6 +163,10 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
             self.assertEqual(list_result.exit_code, 0, list_result.stdout)
             self.assertIn('"name": "Main Views"', list_result.stdout)
 
+            meta = json.loads((root / "Sample.Report" / "definition" / "bookmarks" / "bookmarks.json").read_text())
+            created_group = next(item for item in meta["items"] if item.get("displayName") == "Main Views")
+            self.assertRegex(created_group["name"], r"^[0-9a-f]{20}$")
+
             bookmark_rows = list_bookmarks(Project.find(root / "Sample.pbip"))
             self.assertEqual([row.group for row in bookmark_rows], ["Main Views", "Main Views"])
 
@@ -212,6 +217,34 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
             self.assertEqual(get_result.exit_code, 0, get_result.stdout)
             self.assertIn("Group", get_result.stdout)
             self.assertIn("Views", get_result.stdout)
+
+    def test_nav_toggle_set_targets_bookmark_group_identifier(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Home")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "toggleButton"
+            visual.save()
+
+            first = create_bookmark(project, "Default", page, [visual])
+            second = create_bookmark(project, "Focus", page, [visual])
+            group = create_bookmark_group(project, "Views", [first["name"], second["name"]])
+
+            result = runner.invoke(
+                app,
+                ["nav", "toggle", "set", "Home", "toggleButton", "Views", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn('bookmark group "Views"', result.stdout)
+
+            refreshed = Project.find(root / "Sample.pbip")
+            updated = refreshed.find_visual(refreshed.find_page("Home"), "toggleButton")
+            self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "Bookmark")
+            self.assertEqual(get_property(updated.data, "action.bookmark", VISUAL_PROPERTIES), group.identifier)
+            self.assertEqual(get_bookmark_group(refreshed, "Views").identifier, group.identifier)
 
     def test_bookmark_set_updates_page_targets_options_and_state_patch(self) -> None:
         runner = CliRunner()
@@ -402,6 +435,42 @@ class NavigationCommandTests(unittest.TestCase):
             self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "Drillthrough")
             self.assertEqual(get_property(updated.data, "action.drillthrough", VISUAL_PROPERTIES), details.name)
             self.assertIsNone(get_property(updated.data, "action.page", VISUAL_PROPERTIES))
+
+    def test_page_drillthrough_set_hides_page_by_default_and_can_opt_out(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Detail")
+
+            result = runner.invoke(
+                app,
+                ["page", "drillthrough", "set", "Detail", "Sales.Region", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            refreshed = Project.find(root / "Sample.pbip").find_page("Detail")
+            self.assertEqual(refreshed.visibility, "HiddenInViewMode")
+
+            detail = refreshed
+            detail.data["visibility"] = "AlwaysVisible"
+            detail.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "page",
+                    "drillthrough",
+                    "set",
+                    "Detail",
+                    "Sales.Region",
+                    "--no-hide",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            refreshed = Project.find(root / "Sample.pbip").find_page("Detail")
+            self.assertEqual(refreshed.visibility, "AlwaysVisible")
 
     def test_nav_tooltip_set_get_and_clear(self) -> None:
         runner = CliRunner()

@@ -19,6 +19,7 @@ nav_app = typer.Typer(help="Navigation and button action operations.", no_args_i
 nav_action_app = typer.Typer(help="Inspect or clear the current visual action.", no_args_is_help=True)
 nav_page_app = typer.Typer(help="Set page navigation actions.", no_args_is_help=True)
 nav_bookmark_app = typer.Typer(help="Set bookmark actions.", no_args_is_help=True)
+nav_toggle_app = typer.Typer(help="Set bookmark-group toggle actions.", no_args_is_help=True)
 nav_back_app = typer.Typer(help="Set back actions.", no_args_is_help=True)
 nav_url_app = typer.Typer(help="Set URL actions.", no_args_is_help=True)
 nav_drillthrough_app = typer.Typer(help="Set drillthrough actions.", no_args_is_help=True)
@@ -26,6 +27,7 @@ nav_tooltip_app = typer.Typer(help="Inspect or manage report-page tooltips.", no
 nav_app.add_typer(nav_action_app, name="action")
 nav_app.add_typer(nav_page_app, name="page")
 nav_app.add_typer(nav_bookmark_app, name="bookmark")
+nav_app.add_typer(nav_toggle_app, name="toggle")
 nav_app.add_typer(nav_back_app, name="back")
 nav_app.add_typer(nav_url_app, name="url")
 nav_app.add_typer(nav_drillthrough_app, name="drillthrough")
@@ -205,6 +207,34 @@ def _nav_set_bookmark(
     vis.save()
     console.print(
         f'Set navigation on "[cyan]{vis.name}[/cyan]" -> bookmark "[cyan]{bookmark_name}[/cyan]"'
+    )
+
+
+def _nav_set_toggle(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    group: Annotated[str, typer.Argument(help="Bookmark group display name or identifier.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to toggle through a bookmark group."""
+    from pbi.bookmarks import get_bookmark_group
+
+    proj, _pg, vis = resolve_visual_target(project, page, visual)
+    try:
+        bookmark_group = get_bookmark_group(proj, group)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not bookmark_group.identifier:
+        console.print(f'[red]Error:[/red] Bookmark group "{bookmark_group.name}" has no identifier.')
+        raise typer.Exit(1)
+
+    _set_action(vis.data, action_type="Bookmark", bookmark=bookmark_group.identifier, tooltip=tooltip)
+    vis.save()
+    console.print(
+        f'Set navigation on "[cyan]{vis.name}[/cyan]" -> bookmark group "[cyan]{bookmark_group.name}[/cyan]"'
     )
 
 
@@ -390,6 +420,18 @@ def nav_bookmark_set(
     _nav_set_bookmark(page, visual, bookmark, tooltip, project)
 
 
+@nav_toggle_app.command("set")
+def nav_toggle_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    group: Annotated[str, typer.Argument(help="Bookmark group display name or identifier.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to toggle through a bookmark group."""
+    _nav_set_toggle(page, visual, group, tooltip, project)
+
+
 @nav_back_app.command("set")
 def nav_back_set(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
@@ -468,4 +510,3 @@ def nav_tooltip_clear(
 ) -> None:
     """Clear a visual's configured report-page tooltip."""
     _nav_clear_tooltip(page, visual, force, project)
-

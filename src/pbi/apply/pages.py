@@ -148,7 +148,11 @@ def apply_page(
         return
 
     kept_visual_ids: set[str] = set()
-    for vis_spec in visuals_spec:
+    ordered_visual_specs = [
+        *[spec for spec in visuals_spec if isinstance(spec, dict) and spec.get("type") == "group"],
+        *[spec for spec in visuals_spec if not (isinstance(spec, dict) and spec.get("type") == "group")],
+    ]
+    for vis_spec in ordered_visual_specs:
         if isinstance(vis_spec, dict):
             if dry_run and page_is_new:
                 vis_name = vis_spec.get("name") or vis_spec.get("type", "unknown")

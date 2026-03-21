@@ -98,6 +98,9 @@ def apply_yaml(
             bookmarks_spec = spec.get("bookmarks", [])
             if isinstance(bookmarks_spec, list) and bookmarks_spec:
                 _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
+
+            if not dry_run:
+                _validate_apply_invariants(project, result)
         except Exception:
             if session.snapshot_dir is not None:
                 session.restore(project)
@@ -111,3 +114,31 @@ def apply_yaml(
         return result
     finally:
         session.cleanup()
+
+
+def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
+    """Catch critical structural breakage before apply returns success."""
+    from pbi.bookmarks import _load_meta
+
+    for page in project.get_pages():
+        group_names = {
+            visual.name
+            for visual in project.get_visuals(page)
+            if "visualGroup" in visual.data
+        }
+        for visual in project.get_visuals(page):
+            if "visualGroup" not in visual.data:
+                if "visualType" not in visual.data.get("visual", {}):
+                    result.errors.append(
+                        f'{page.display_name}/{visual.name}: apply produced a visual without visual.visualType.'
+                    )
+                parent = visual.data.get("parentGroupName")
+                if isinstance(parent, str) and parent and parent not in group_names:
+                    result.warnings.append(
+                        f'{page.display_name}/{visual.name}: parentGroupName "{parent}" has no matching group container.'
+                    )
+
+    for item in _load_meta(project).get("items", []):
+        if isinstance(item, dict) and isinstance(item.get("children"), list):
+            if not isinstance(item.get("name"), str) or not item.get("name"):
+                result.errors.append("Bookmark groups must include a name identifier.")

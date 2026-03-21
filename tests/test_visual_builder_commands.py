@@ -13,6 +13,92 @@ from tests.cli_regressions_support import make_project, write_model_table
 
 
 class VisualBuilderCommandTests(unittest.TestCase):
+    def test_visual_create_textbox_supports_inline_text(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "textbox",
+                    "--name",
+                    "note",
+                    "--text",
+                    "Hello world",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            reloaded = Project.find(root / "Sample.pbip")
+            visual = reloaded.find_visual(reloaded.find_page("Demo"), "note")
+            paragraphs = (
+                visual.data["visual"]["objects"]["general"][0]["properties"]["paragraphs"]
+            )
+            self.assertEqual(paragraphs[0]["textRuns"][0]["value"], "'Hello world'")
+
+    def test_visual_set_supports_textbox_text_and_style(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "textbox")
+            visual.data["name"] = "note"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    "Demo",
+                    "note",
+                    "text=Hello world",
+                    "text.fontSize=14",
+                    "text.fontColor=#112233",
+                    "text.bold=true",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+            alias_result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    "Demo",
+                    "note",
+                    "chart:paragraph.text=Alias text",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(alias_result.exit_code, 0, alias_result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            updated = reloaded.find_visual(reloaded.find_page("Demo"), "note")
+            objects = updated.data["visual"]["objects"]
+            self.assertNotIn("paragraph", objects)
+            run = objects["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]
+            self.assertEqual(run["value"], "'Alias text'")
+            self.assertEqual(run["textStyle"]["fontSize"], "'14pt'")
+            self.assertEqual(
+                run["textStyle"]["color"]["expr"]["Literal"]["Value"],
+                "'#112233'",
+            )
+            self.assertEqual(run["textStyle"]["fontWeight"], "'bold'")
+
     def test_visual_create_can_bind_roles_and_sort_in_one_command(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

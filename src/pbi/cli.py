@@ -699,6 +699,11 @@ def capabilities(
 
 @app.command()
 def validate(
+    strict: Annotated[bool, typer.Option("--strict", help="Fail on warnings as well as errors.")] = False,
+    ignore_schema_warnings: Annotated[
+        bool,
+        typer.Option("--ignore-schema-warnings", help="Suppress schema-derived warnings from validation output."),
+    ] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Validate project files for structural errors.
@@ -710,6 +715,11 @@ def validate(
 
     proj = get_project(project)
     issues = validate_project(proj)
+    if ignore_schema_warnings:
+        issues = [
+            issue for issue in issues
+            if not (issue.level == "warning" and issue.message.startswith("Schema:"))
+        ]
 
     if not issues:
         console.print("[green]No issues found.[/green]")
@@ -729,6 +739,8 @@ def validate(
             console.print(f"  [yellow]WARN[/yellow]  {issue.file}: {issue.message}")
 
     if errors:
+        raise typer.Exit(1)
+    if strict and warnings:
         raise typer.Exit(1)
 
 

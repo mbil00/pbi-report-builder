@@ -14,6 +14,12 @@ from pbi.properties import (
     get_property,
     set_property,
 )
+from pbi.textbox import (
+    parse_textbox_style_value,
+    set_textbox_content,
+    textbox_text,
+    textbox_text_style_value,
+)
 
 from ..common import console, get_project
 
@@ -244,6 +250,7 @@ def prepare_visual_property_updates(
         key=lambda item: 0 if item[0] in {"type", "visualType"} else 1,
     )
     for prop, value in ordered_pairs:
+        visual_type = updated.get("visual", {}).get("visualType")
         if prop in {"type", "visualType"}:
             old = updated.get("visual", {}).get("visualType")
             new = _apply_visual_type_update(updated, value)
@@ -257,6 +264,28 @@ def prepare_visual_property_updates(
             _set_visual_image_source(updated, project, value)
             changes.append((prop, old, value))
             continue
+
+        if visual_type == "textbox":
+            if prop in {"chart:paragraph.text", "paragraph.text"}:
+                old = textbox_text(updated)
+                set_textbox_content(updated, text=value)
+                changes.append((prop, old, textbox_text(updated)))
+                continue
+
+            if prop == "text":
+                old = textbox_text(updated)
+                set_textbox_content(updated, text=value)
+                changes.append((prop, old, textbox_text(updated)))
+                continue
+
+            textbox_style_key = _textbox_style_key(prop)
+            if textbox_style_key is not None:
+                old = textbox_text_style_value(updated, textbox_style_key)
+                parsed = parse_textbox_style_value(textbox_style_key, value)
+                set_textbox_content(updated, style_updates={textbox_style_key: parsed})
+                new = textbox_text_style_value(updated, textbox_style_key)
+                changes.append((prop, old, new))
+                continue
 
         old = get_property(updated, prop, VISUAL_PROPERTIES, measure_ref=measure_ref)
         try:
@@ -310,3 +339,13 @@ def _current_image_resource_ref(data: dict) -> str | None:
         if item:
             return item
     return None
+
+
+def _textbox_style_key(prop: str) -> str | None:
+    if prop.startswith("text."):
+        key = prop.split(".", 1)[1]
+    elif prop.startswith("textStyle."):
+        key = prop.split(".", 1)[1]
+    else:
+        return None
+    return key if key in {"fontFamily", "fontSize", "fontColor", "bold", "italic"} else None
