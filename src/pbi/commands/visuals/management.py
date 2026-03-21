@@ -9,6 +9,7 @@ import typer
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import resolve_visual_target, _set_visual_image_source
+from pbi.visual_builders import apply_initial_sort, apply_role_bindings, get_default_visual_size
 
 
 @visual_app.command("create")
@@ -22,6 +23,10 @@ def visual_create(
     name: Annotated[str | None, typer.Option("--name", "-n", help="Friendly name for the visual.")] = None,
     title: Annotated[str | None, typer.Option("--title", help="Set title text (also enables title.show).")] = None,
     image: Annotated[str | None, typer.Option("--image", help="Bind an image visual to a registered resource name or path.")] = None,
+    bind: Annotated[list[str], typer.Option("--bind", help="Bind a role as Role=Table.Field. Repeat to create a usable visual in one command.")] = [],
+    sort: Annotated[str | None, typer.Option("--sort", help="Set initial sort field as Table.Field.")] = None,
+    descending: Annotated[bool, typer.Option("--descending/--ascending", help="Sort direction for --sort (default: ascending).")] = False,
+    field_type: Annotated[str, typer.Option("--field-type", help="Field type used for --bind/--sort: auto, column, or measure.")] = "auto",
     from_ref: Annotated[str | None, typer.Option("--from", help="Reference visual as 'page/visual' to copy type, style, and bindings from.")] = None,
     project: ProjectOpt = None,
 ) -> None:
@@ -37,6 +42,12 @@ def visual_create(
 
     # --from: copy from reference visual
     if from_ref:
+        if bind:
+            console.print("[red]Error:[/red] --bind cannot be combined with --from.")
+            raise typer.Exit(1)
+        if sort:
+            console.print("[red]Error:[/red] --sort cannot be combined with --from.")
+            raise typer.Exit(1)
         if "/" not in from_ref:
             console.print("[red]Error:[/red] --from must be 'page/visual' format.")
             raise typer.Exit(1)
@@ -72,10 +83,10 @@ def visual_create(
         console.print("[red]Error:[/red] Visual type is required (or use --from to clone).")
         raise typer.Exit(1)
 
-    w = width if width is not None else 300
-    h = height if height is not None else 200
-
     canonical_visual_type = normalize_visual_type(visual_type)
+    default_w, default_h = get_default_visual_size(canonical_visual_type)
+    w = width if width is not None else default_w
+    h = height if height is not None else default_h
     if image and canonical_visual_type != "image":
         console.print('[red]Error:[/red] --image can only be used with an image visual.')
         raise typer.Exit(1)
@@ -111,11 +122,46 @@ def visual_create(
     if name or title or image:
         vis.save()
 
+    bound_fields = []
+    if bind:
+        try:
+            bound_fields = apply_role_bindings(proj, vis, bind, field_type=field_type)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            proj.delete_visual(vis)
+            raise typer.Exit(1)
+
+    sort_details: tuple[str, str, str, str] | None = None
+    if sort:
+        try:
+            sort_details = apply_initial_sort(
+                proj,
+                vis,
+                sort,
+                field_type=field_type,
+                descending=descending,
+            )
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            proj.delete_visual(vis)
+            raise typer.Exit(1)
+
     display = name or vis.name
     console.print(
         f'Created [cyan]{canonical_visual_type}[/cyan] "{display}" on "{pg.display_name}" '
         f"@ {x},{y} {w}x{h}"
     )
+
+    if bound_fields:
+        bindings_str = ", ".join(
+            f'{field.role}={field.entity}.{field.prop}'
+            for field in bound_fields
+        )
+        console.print(f"[dim]Bindings:[/dim] {bindings_str}")
+
+    if sort_details is not None:
+        sort_entity, sort_prop, _field_type, direction = sort_details
+        console.print(f"[dim]Sort:[/dim] {sort_entity}.{sort_prop} {direction}")
 
     # Show scaffolded roles so the agent knows what to bind
     roles = get_visual_roles(canonical_visual_type)

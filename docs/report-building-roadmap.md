@@ -1,0 +1,291 @@
+# Report-Building Roadmap
+
+This roadmap narrows the project goal to one thing:
+
+- make PBIP/PBIR report authoring as complete as practical
+
+It explicitly does **not** try to replace Power BI Desktop for:
+
+- publish/deploy workflows
+- refresh, credentials, gateways, or service configuration
+- Power Query authoring
+- Desktop-only inspection UX
+
+The target is a strong authoring layer that can build and evolve reports, leaving final validation and publishing to the user in Power BI Desktop.
+
+## Success Criteria
+
+The project should eventually be able to:
+
+- build most common report pages from model metadata plus declarative specs
+- create and edit common visuals without hand-authoring raw PBIR
+- capture the major interaction/state flows used in real reports
+- edit report, page, visual, theme, and model metadata that materially affects report authoring
+- round-trip real exported PBIP fixtures with high confidence
+
+## Principles
+
+1. New write paths must stay schema-backed or be derived from real exported PBIR.
+2. Real-fixture tests are the gate for authoring parity work.
+3. Prioritize features that reduce raw PBIR editing, not features that add more low-level escape hatches.
+4. Finish the common report-authoring surface before chasing edge-case Desktop parity.
+
+## Phase 1: Visual Builders
+
+This is the biggest authoring gap today. The CLI can mutate visuals well, but creating safe, complete visual queries still relies too much on generic bindings.
+
+### Goal
+
+Add visual-type-specific builders so common visuals can be created from semantic-model fields without hand-tuning PBIR query state.
+
+### Deliverables
+
+- Introduce typed builders for the highest-usage visuals:
+  - clustered/stacked bar and column
+  - line and combo
+  - table and matrix
+  - card and KPI-style card
+  - slicer
+  - donut/pie
+- Add builder-aware validation for role combinations and field typing.
+- Add sensible default formatting/layout presets for each supported builder.
+- Add a safer authoring path on top of `visual create` and `visual bind` rather than requiring raw `apply` for common cases.
+
+### Likely CLI surface
+
+- extend `pbi visual create` with typed role arguments and presets, or
+- add a new builder-oriented sub-surface that still compiles down to normal visuals
+
+### Exit Criteria
+
+- a new page with common visuals can be built without raw PBIR edits
+- builder output survives `pbi validate`
+- builder-created visuals round-trip through `export` and `apply`
+- real PBIP fixtures can be recreated or meaningfully extended using builders
+
+### Test Gate
+
+- fixture-backed creation tests for each supported visual family
+- golden YAML export/apply round-trip for builder-created visuals
+- negative tests for invalid role combinations and unsupported query shapes
+
+### Execution Plan
+
+#### Slice 1: Builder-aware `visual create`
+
+Status: in progress
+
+- extend `pbi visual create` to accept repeatable role bindings in one command
+- allow initial sort setup during creation
+- apply sensible default sizes for common visual types
+- validate role combinations strictly for modeled role-backed visuals
+
+This slice keeps the existing command surface and removes the need to do:
+
+1. `visual create`
+2. `visual bind`
+3. `visual bind`
+4. `visual sort set`
+
+for the most common authoring flow.
+
+#### Slice 2: Common visual presets
+
+- add builder presets for:
+  - clustered/stacked column and bar
+  - line and combo
+  - table and matrix
+  - slicer
+  - card/KPI
+- set safer defaults for titles, legends, and common layout choices
+- expose preset-aware help and validation
+
+#### Slice 3: Semantic-model-driven helpers
+
+- infer column vs measure roles more reliably from the semantic model
+- infer sort defaults for date/category axes
+- add typed literal and aggregation helpers where PBIR requires them
+
+#### Slice 4: Fixture-backed parity
+
+- create builder tests against real PBIP fixtures
+- verify builder-created visuals survive export/diff/apply round-trips
+- promote supported builders from “partial” to “supported” only after fixture coverage exists
+
+## Phase 2: Bookmark And State Parity
+
+Current bookmark support is useful but shallow. Power BI bookmarks matter because they are the main way reports encode guided user state.
+
+### Goal
+
+Expand bookmarks from simple visibility snapshots to full authorable report-state objects.
+
+### Deliverables
+
+- author filters captured by bookmarks
+- author sort state captured by bookmarks
+- author active projections or role state where PBIR supports it
+- preserve and edit grouped-visual behavior
+- add bookmark grouping support
+- improve bookmark inspection so diffs are understandable
+
+### Related actions
+
+- strengthen `nav set-bookmark` workflows
+- support bookmark-driven show/hide patterns cleanly in templates/components
+
+### Exit Criteria
+
+- real bookmark-driven reports can be created and maintained without Desktop rework
+- exported bookmark PBIR can be edited and reapplied without lossy state drops
+
+### Test Gate
+
+- real-fixture tests using multi-bookmark navigation flows
+- regression tests for bookmark updates preserving unrelated state
+- apply/export round-trip coverage for bookmarks with richer state payloads
+
+## Phase 3: Tooltip, Drillthrough, And Action Coverage
+
+Pages and nav are already strong, but the remaining interaction surface still has holes.
+
+### Goal
+
+Make page-to-page behavior authorable enough for full report navigation design.
+
+### Deliverables
+
+- first-class `nav` support for drillthrough actions
+- first-class `nav` support for tooltip targeting where PBIR allows it
+- richer tooltip page binding coverage
+- richer drillthrough binding coverage
+- helper flows for common navigation/button setups
+
+### Exit Criteria
+
+- a multi-page guided report with buttons, drillthrough, tooltips, and bookmarks can be built entirely through the CLI
+
+### Test Gate
+
+- fixture-backed tests for drillthrough pages and tooltip pages
+- persisted PBIR assertions for all action types
+- real-report import/export/apply tests that preserve action wiring
+
+## Phase 4: Report-Level Authoring
+
+Report-level metadata is still thinner than page/visual authoring.
+
+### Goal
+
+Expose the report objects and metadata that materially affect report behavior and packaging.
+
+### Deliverables
+
+- report annotations editor
+- broader `report get/set` coverage for report-level arrays and objects
+- report resource package editing beyond basic image registration
+- report object inspection and mutation helpers
+
+### Exit Criteria
+
+- users can author report-wide settings and metadata without dropping into raw JSON
+- report-level edits no longer feel like a secondary path compared to page/visual editing
+
+### Test Gate
+
+- real-fixture tests for report metadata round-trip
+- diff/apply coverage for report-level arrays and resources
+
+## Phase 5: Theme And Style Completeness
+
+Theme support is already valuable, but it is not yet complete enough to treat themes as a primary authoring layer for all report styling.
+
+### Goal
+
+Close the gap between simple theme editing and the fuller `visualStyles` patterns exported by Power BI Desktop.
+
+### Deliverables
+
+- broader support for nested `visualStyles` encoding patterns
+- theme-level conditional formatting where PBIR supports it
+- better inspection/diff tooling for theme style payloads
+- clearer theme-to-visual precedence rules in authoring workflows
+
+### Exit Criteria
+
+- teams can maintain complex report-wide styling mostly in themes instead of per-visual patching
+
+### Test Gate
+
+- real-fixture theme round-trip tests with more complex `visualStyles`
+- migration/apply/export coverage for nested theme objects
+
+## Phase 6: Model Features That Affect Authoring
+
+This is not about service administration. It is about model features that directly affect what can be built in reports.
+
+### Goal
+
+Add first-class model editing for report-relevant semantic features that are currently absent.
+
+### Deliverables
+
+- perspectives
+- row-level security definitions
+- partitions where needed for PBIP/TMDL completeness
+- broader model-level settings and metadata
+
+### Exit Criteria
+
+- report-building flows are not blocked by missing semantic-model metadata editors
+
+### Test Gate
+
+- model export/apply round-trip coverage for each new model feature
+- fixture-backed inspection tests using a model-heavy PBIP project
+
+## Cross-Cutting Work
+
+These should advance alongside every phase.
+
+### 1. Real Fixture Expansion
+
+- keep adding real exported PBIP fixtures when new report patterns appear
+- use fixture-backed tests before claiming parity on a new authoring surface
+
+### 2. Capability Inventory
+
+- keep [capabilities.md](./capabilities.md) and [src/pbi/capabilities.py](/home/mbil/Projects/pbi-report-builder/src/pbi/capabilities.py) aligned with actual implementation
+- distinguish `partial` from `supported` aggressively
+
+### 3. Authoring Abstractions
+
+- prefer typed helpers and builders over direct raw-PBIR writes
+- keep `apply` as the escape hatch, not the main ergonomic path
+
+### 4. Validation And Diff
+
+- every new authoring feature should land with:
+  - validation hooks where possible
+  - `get` or inspection visibility
+  - export/apply round-trip coverage
+
+## Recommended Build Order
+
+1. Visual builders
+2. Bookmark/state parity
+3. Tooltip/drillthrough/action coverage
+4. Report-level authoring
+5. Theme/style completeness
+6. Model features that affect report authoring
+
+## What “Complete Enough” Looks Like
+
+The project does not need to match every Desktop pane. It needs to let a user:
+
+- start from a PBIP project and semantic model
+- generate pages and common visuals
+- wire navigation, bookmarks, drillthrough, and tooltips
+- apply consistent styling and themes
+- export, diff, and reapply the result safely
+- open the project in Power BI Desktop for final inspection rather than core construction

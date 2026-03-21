@@ -8,6 +8,9 @@ This project is moving toward a schema-first PBIR authoring CLI:
 
 Use `pbi capabilities` to inspect the current support matrix.
 
+For the narrowed goal of PBIP authoring completeness, see
+[Report-Building Roadmap](report-building-roadmap.md).
+
 ## Current Status
 
 - `supported`: schema-backed and usable today
