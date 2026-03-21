@@ -460,6 +460,8 @@ def diff_cmd(
     project: ProjectOpt = None,
 ) -> None:
     """Show what 'pbi apply' would change, property by property."""
+    from pbi.bookmarks import export_bookmarks
+    from pbi.commands.visuals.helpers import flatten_diff_spec, flatten_visual_diff_spec
     from pbi.export import export_visual_spec
 
     proj = get_project(project)
@@ -495,8 +497,6 @@ def diff_cmd(
         vis_by_name = {v.name: v for v in visuals}
         vis_by_id = {v.folder.name: v for v in visuals}
 
-        from pbi.commands.visuals.helpers import flatten_visual_diff_spec
-
         for vis_spec in page_spec.get("visuals", []):
             vis_name = vis_spec.get("name", "")
             vis_id = vis_spec.get("id", "")
@@ -525,6 +525,51 @@ def diff_cmd(
                 console.print(f'\n[bold]{page_name}/{existing.name}[/bold]')
                 for prop, old, new in diffs:
                     console.print(f"  [cyan]{prop}[/cyan]: {old or '(none)'} [dim]->[/dim] {new}")
+
+    yaml_bookmarks = spec.get("bookmarks", [])
+    if isinstance(yaml_bookmarks, list):
+        bookmark_page = None
+        if page:
+            try:
+                bookmark_page = proj.find_page(page)
+            except ValueError:
+                bookmark_page = None
+        current_bookmarks = {
+            entry["name"]: entry
+            for entry in export_bookmarks(proj, page=bookmark_page)
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        }
+
+        for bookmark_spec in yaml_bookmarks:
+            if not isinstance(bookmark_spec, dict):
+                continue
+            bookmark_name = bookmark_spec.get("name", "")
+            bookmark_page_name = bookmark_spec.get("page", "")
+            if page and isinstance(bookmark_page_name, str) and bookmark_page_name.lower() != page.lower():
+                continue
+            if not isinstance(bookmark_name, str) or not bookmark_name:
+                continue
+
+            existing = current_bookmarks.get(bookmark_name)
+            if existing is None:
+                console.print(f'\n[green]+ New bookmark:[/green] [cyan]{bookmark_name}[/cyan]')
+                has_diffs = True
+                continue
+
+            current_flat = flatten_diff_spec(existing, ignore_keys={"name"})
+            yaml_flat = flatten_diff_spec(bookmark_spec, ignore_keys={"name"})
+            diffs = []
+            for key, proposed in yaml_flat.items():
+                curr = str(current_flat.get(key, ""))
+                proposed_text = str(proposed)
+                if curr != proposed_text:
+                    diffs.append((key, curr or "(none)", proposed_text))
+
+            if diffs:
+                has_diffs = True
+                console.print(f'\n[bold]Bookmark {bookmark_name}[/bold]')
+                for prop, old, new in diffs:
+                    console.print(f"  [cyan]{prop}[/cyan]: {old} [dim]->[/dim] {new}")
 
     if not has_diffs:
         console.print("[dim]No differences found.[/dim]")

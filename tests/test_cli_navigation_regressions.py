@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -210,6 +211,141 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
             self.assertEqual(get_result.exit_code, 0, get_result.stdout)
             self.assertIn("Group", get_result.stdout)
             self.assertIn("Views", get_result.stdout)
+
+    def test_bookmark_set_updates_page_targets_options_and_state_patch(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            home = project.create_page("Home")
+            details = project.create_page("Details")
+            first = project.create_visual(home, "shape")
+            first.data["name"] = "vis1"
+            first.save()
+            second = project.create_visual(details, "tableEx")
+            second.data["name"] = "vis2"
+            second.save()
+
+            create_bookmark(project, "Stateful", home, [first], hidden_visuals=["vis1"])
+
+            state_path = root / "bookmark-state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "sections": {
+                            details.name: {
+                                "visualContainers": {
+                                    "vis2": {
+                                        "orderBy": {"Direction": 2},
+                                        "singleVisual": {
+                                            "objects": {"title": {"show": True}},
+                                            "projections": {"Values": [{"queryRef": "Product.Category"}]},
+                                        },
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            options_path = root / "bookmark-options.json"
+            options_path.write_text(json.dumps({"customFlag": True}) + "\n", encoding="utf-8")
+
+            result = runner.invoke(
+                app,
+                [
+                    "bookmark",
+                    "set",
+                    "Stateful",
+                    "--show",
+                    "vis1",
+                    "--page",
+                    "Details",
+                    "--target",
+                    "vis2",
+                    "--no-capture-data",
+                    "--state-file",
+                    str(state_path),
+                    "--options-file",
+                    str(options_path),
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            bookmark = get_bookmark(reloaded, "Stateful")
+            self.assertEqual(bookmark["explorationState"]["activeSection"], details.name)
+            self.assertEqual(bookmark["options"]["targetVisualNames"], ["vis2"])
+            self.assertTrue(bookmark["options"]["suppressData"])
+            self.assertTrue(bookmark["options"]["customFlag"])
+            detail_state = bookmark["explorationState"]["sections"][details.name]["visualContainers"]["vis2"]
+            self.assertEqual(detail_state["orderBy"]["Direction"], 2)
+            self.assertIn("objects", detail_state["singleVisual"])
+            self.assertIn("projections", detail_state["singleVisual"])
+
+            list_result = runner.invoke(
+                app,
+                ["bookmark", "list", "--json", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            rows = json.loads(list_result.stdout)
+            self.assertEqual(rows[0]["sortStates"], 1)
+            self.assertEqual(rows[0]["projectionStates"], 1)
+            self.assertEqual(rows[0]["objectStates"], 1)
+            self.assertEqual(rows[0]["hiddenVisuals"], 1)
+
+            get_result = runner.invoke(
+                app,
+                ["bookmark", "get", "Stateful", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("Sort States", get_result.stdout)
+            self.assertIn("Projection States", get_result.stdout)
+            self.assertIn("sort:", get_result.stdout)
+
+    def test_diff_reports_bookmark_state_changes(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "vis1"
+            visual.save()
+            create_bookmark(project, "Stateful", page, [visual])
+
+            spec_path = root / "bookmark-diff.yaml"
+            spec_path.write_text(
+                """\
+version: 1
+pages:
+- name: Demo
+bookmarks:
+- name: Stateful
+  page: Demo
+  hide: [vis1]
+  state:
+    sections:
+      Demo:
+        visualContainers:
+          vis1:
+            orderBy:
+              Direction: 2
+""",
+                encoding="utf-8",
+            )
+
+            result = runner.invoke(
+                app,
+                ["diff", str(spec_path), "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Bookmark Stateful", result.stdout)
+            self.assertIn("state.sections", result.stdout)
 
 class NavigationCommandTests(unittest.TestCase):
     def test_nav_set_page_resolves_target_page_and_clears_old_action(self) -> None:

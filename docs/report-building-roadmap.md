@@ -153,7 +153,7 @@ Completed with:
 
 ## Phase 2: Bookmark And State Parity
 
-Status: in progress
+Status: completed
 
 Current bookmark support is useful but shallow. Power BI bookmarks matter because they are the main way reports encode guided user state.
 
@@ -170,10 +170,15 @@ Expand bookmarks from simple visibility snapshots to full authorable report-stat
 - add bookmark grouping support
 - improve bookmark inspection so diffs are understandable
 
-Initial implementation shipped:
+Completed with:
 
 - bookmark group metadata authoring via `bookmark group list/create/delete`
-- bookmark list/get now surface group membership
+- bookmark list/get now surface group membership plus richer state summaries
+- bookmark create/set can merge richer `explorationState` and `options` payloads
+- full export/apply round-trip now carries top-level `bookmarks:` entries
+- bookmark YAML now supports grouped metadata plus richer `state` and `options`
+- `pbi diff` now reports bookmark-level changes
+- bookmark apply now updates existing bookmarks in place instead of duplicating them
 
 ### Related actions
 

@@ -215,7 +215,9 @@ def apply_bookmarks_spec(
     session: ApplySession,
 ) -> None:
     """Apply bookmark definitions from the YAML spec."""
-    from pbi.bookmarks import create_bookmark
+    from pbi.bookmarks import normalize_bookmark_state, reconcile_bookmark_groups, upsert_bookmark
+
+    bookmark_groups: list[tuple[str, str | None]] = []
 
     for entry in bookmarks_spec:
         if not isinstance(entry, dict):
@@ -233,16 +235,22 @@ def apply_bookmarks_spec(
         capture_data = entry.get("captureData", True)
         capture_display = entry.get("captureDisplay", True)
         capture_page = entry.get("capturePage", True)
+        group = entry.get("group")
+        state = entry.get("state")
+        options = entry.get("options")
 
         if dry_run:
             result.properties_set += 1
+            if isinstance(group, str):
+                bookmark_groups.append((str(name), group))
             continue
 
         try:
             page = project.find_page(page_ref)
             visuals = project.get_visuals(page)
             session.ensure_snapshot(project)
-            create_bookmark(
+            normalized_state = normalize_bookmark_state(project, state) if isinstance(state, dict) else None
+            upsert_bookmark(
                 project,
                 display_name=name,
                 page=page,
@@ -252,10 +260,19 @@ def apply_bookmarks_spec(
                 suppress_data=not bool(capture_data),
                 suppress_display=not bool(capture_display),
                 suppress_active_section=not bool(capture_page),
+                exploration_state_patch=normalized_state,
+                options_patch=options if isinstance(options, dict) else None,
             )
+            bookmark_groups.append((str(name), str(group) if isinstance(group, str) and group else None))
             result.properties_set += 1
         except (ValueError, FileNotFoundError) as e:
             result.errors.append(f'Bookmark "{name}": {e}')
+
+    if bookmark_groups and not dry_run:
+        try:
+            reconcile_bookmark_groups(project, bookmark_groups)
+        except (ValueError, FileNotFoundError) as e:
+            result.errors.append(f"Bookmark groups: {e}")
 
 
 def apply_interactions_spec(

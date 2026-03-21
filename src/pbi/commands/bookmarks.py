@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -13,6 +15,23 @@ from .common import ProjectOpt, console, get_project
 bookmark_app = typer.Typer(help="Bookmark operations.", no_args_is_help=True)
 bookmark_group_app = typer.Typer(help="Bookmark group operations.", no_args_is_help=True)
 bookmark_app.add_typer(bookmark_group_app, name="group")
+
+
+def _load_json_mapping(path: Path | None) -> dict | None:
+    if path is None:
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        console.print(f"[red]Error:[/red] File not found: {path}")
+        raise typer.Exit(1)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]Error:[/red] Invalid JSON in {path}: {e}")
+        raise typer.Exit(1)
+    if not isinstance(data, dict):
+        console.print(f"[red]Error:[/red] {path} must contain a JSON object.")
+        raise typer.Exit(1)
+    return data
 
 
 @bookmark_app.command("list")
@@ -43,6 +62,11 @@ def bookmark_list(
                 "suppressData": bm.suppress_data,
                 "suppressDisplay": bm.suppress_display,
                 "group": bm.group,
+                "hiddenVisuals": bm.hidden_visuals,
+                "sortStates": bm.sort_states,
+                "filterStates": bm.filter_states,
+                "projectionStates": bm.projection_states,
+                "objectStates": bm.object_states,
             })
         console.print_json(json_mod.dumps(rows, indent=2))
         return
@@ -53,10 +77,22 @@ def bookmark_list(
     table.add_column("Active Page")
     table.add_column("Group", style="dim")
     table.add_column("Targets", style="dim")
+    table.add_column("State", style="dim")
     table.add_column("Options", style="dim")
 
     for bookmark in bookmarks:
         targets = ", ".join(bookmark.target_visuals) if bookmark.target_visuals else "all"
+        state_parts = []
+        if bookmark.hidden_visuals:
+            state_parts.append(f"{bookmark.hidden_visuals} hidden")
+        if bookmark.sort_states:
+            state_parts.append(f"{bookmark.sort_states} sort")
+        if bookmark.filter_states:
+            state_parts.append(f"{bookmark.filter_states} filter")
+        if bookmark.projection_states:
+            state_parts.append(f"{bookmark.projection_states} projection")
+        if bookmark.object_states:
+            state_parts.append(f"{bookmark.object_states} object")
         opts = []
         if bookmark.suppress_data:
             opts.append("no-data")
@@ -68,6 +104,7 @@ def bookmark_list(
             bookmark.active_section[:16] + "..." if len(bookmark.active_section) > 16 else bookmark.active_section,
             bookmark.group or "-",
             targets,
+            ", ".join(state_parts) or "-",
             ", ".join(opts) or "-",
         )
 
@@ -83,7 +120,7 @@ def bookmark_get(
     """Show bookmark details."""
     import json as json_mod
 
-    from pbi.bookmarks import get_bookmark
+    from pbi.bookmarks import describe_bookmark_state, get_bookmark, summarize_bookmark_state
 
     proj = get_project(project)
     try:
@@ -113,6 +150,12 @@ def bookmark_get(
     table.add_row("Name", data.get("name", ""))
     table.add_row("Display Name", data.get("displayName", ""))
     table.add_row("Active Section", exploration.get("activeSection", ""))
+    summary = summarize_bookmark_state(data)
+    table.add_row("Hidden Visuals", str(summary["hiddenVisuals"]))
+    table.add_row("Sort States", str(summary["sortStates"]))
+    table.add_row("Filter States", str(summary["filterStates"]))
+    table.add_row("Projection States", str(summary["projectionStates"]))
+    table.add_row("Object States", str(summary["objectStates"]))
     if group_lookup is not None:
         group_name = group_lookup.get(data.get("name", ""))
         if group_name:
@@ -130,16 +173,11 @@ def bookmark_get(
             targets = options.get("targetVisualNames", [])
             table.add_row("Target Visuals", ", ".join(targets))
 
-    sections = exploration.get("sections", {})
-    for section_name, section_data in sections.items():
-        containers = section_data.get("visualContainers", {})
-        if containers:
-            table.add_section()
-            for vis_name, vis_state in containers.items():
-                single = vis_state.get("singleVisual", {})
-                display_state = single.get("display", {})
-                mode = display_state.get("mode", "normal")
-                table.add_row(f"[dim]{section_name}[/dim] {vis_name}", mode)
+    state_rows = describe_bookmark_state(data)
+    if state_rows:
+        table.add_section()
+        for label, value in state_rows:
+            table.add_row(label, value)
 
     console.print(table)
 
@@ -234,10 +272,12 @@ def bookmark_create(
     capture_data: Annotated[bool, typer.Option("--capture-data/--no-capture-data", help="Capture data and filter state.")] = True,
     capture_display: Annotated[bool, typer.Option("--capture-display/--no-capture-display", help="Capture display state.")] = True,
     capture_page: Annotated[bool, typer.Option("--capture-page/--no-capture-page", help="Capture the active page.")] = True,
+    state_file: Annotated[Path | None, typer.Option("--state-file", help="Merge bookmark explorationState patch from JSON file.")] = None,
+    options_file: Annotated[Path | None, typer.Option("--options-file", help="Merge bookmark options patch from JSON file.")] = None,
     project: ProjectOpt = None,
 ) -> None:
     """Create a bookmark capturing page state."""
-    from pbi.bookmarks import create_bookmark
+    from pbi.bookmarks import create_bookmark, normalize_bookmark_state
 
     proj = get_project(project)
     try:
@@ -247,6 +287,10 @@ def bookmark_create(
         raise typer.Exit(1)
 
     visuals = proj.get_visuals(pg)
+    state_patch = _load_json_mapping(state_file)
+    if state_patch is not None:
+        state_patch = normalize_bookmark_state(proj, state_patch)
+    options_patch = _load_json_mapping(options_file)
     create_bookmark(
         proj,
         display_name=name,
@@ -257,6 +301,8 @@ def bookmark_create(
         suppress_data=not capture_data,
         suppress_display=not capture_display,
         suppress_active_section=not capture_page,
+        exploration_state_patch=state_patch,
+        options_patch=options_patch,
     )
 
     hidden_count = len(hide) if hide else 0
@@ -271,23 +317,62 @@ def bookmark_set(
     bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
     hide: Annotated[list[str] | None, typer.Option("--hide", help="Visual names to set as hidden.")] = None,
     show: Annotated[list[str] | None, typer.Option("--show", help="Visual names to set as visible.")] = None,
+    page: Annotated[str | None, typer.Option("--page", help="Set the bookmark's active page.")] = None,
+    target: Annotated[list[str] | None, typer.Option("--target", help="Restrict bookmark to these visuals.")] = None,
+    clear_targets: Annotated[bool, typer.Option("--clear-targets", help="Remove bookmark target-visual restrictions.")] = False,
+    capture_data: Annotated[bool | None, typer.Option("--capture-data/--no-capture-data", help="Toggle data/filter capture.")] = None,
+    capture_display: Annotated[bool | None, typer.Option("--capture-display/--no-capture-display", help="Toggle display capture.")] = None,
+    capture_page: Annotated[bool | None, typer.Option("--capture-page/--no-capture-page", help="Toggle active-page capture.")] = None,
+    state_file: Annotated[Path | None, typer.Option("--state-file", help="Merge bookmark explorationState patch from JSON file.")] = None,
+    options_file: Annotated[Path | None, typer.Option("--options-file", help="Merge bookmark options patch from JSON file.")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Update visual visibility in an existing bookmark."""
-    from pbi.bookmarks import update_bookmark_visuals
+    """Update an existing bookmark."""
+    from pbi.bookmarks import normalize_bookmark_state, update_bookmark
 
     proj = get_project(project)
 
-    if not hide and not show:
-        console.print("[red]Error:[/red] Specify --hide or --show to update visual states.")
+    if not any([
+        hide,
+        show,
+        page,
+        target is not None,
+        clear_targets,
+        capture_data is not None,
+        capture_display is not None,
+        capture_page is not None,
+        state_file is not None,
+        options_file is not None,
+    ]):
+        console.print("[red]Error:[/red] Specify bookmark state changes to apply.")
         raise typer.Exit(1)
 
+    page_ref = None
+    if page:
+        try:
+            page_ref = proj.find_page(page)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    state_patch = _load_json_mapping(state_file)
+    if state_patch is not None:
+        state_patch = normalize_bookmark_state(proj, state_patch)
+    options_patch = _load_json_mapping(options_file)
     try:
-        data = update_bookmark_visuals(
+        data = update_bookmark(
             proj,
             bookmark,
             hidden_visuals=hide,
             visible_visuals=show,
+            page=page_ref,
+            target_visuals=target,
+            clear_targets=clear_targets,
+            capture_data=capture_data,
+            capture_display=capture_display,
+            capture_page=capture_page,
+            exploration_state_patch=state_patch,
+            options_patch=options_patch,
         )
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -298,6 +383,22 @@ def bookmark_set(
         changes.append(f"hidden: {', '.join(hide)}")
     if show:
         changes.append(f"visible: {', '.join(show)}")
+    if page_ref is not None:
+        changes.append(f"page: {page_ref.display_name}")
+    if target is not None:
+        changes.append(f"targets: {', '.join(target) if target else '(none)'}")
+    if clear_targets:
+        changes.append("targets cleared")
+    if capture_data is not None:
+        changes.append(f"captureData: {capture_data}")
+    if capture_display is not None:
+        changes.append(f"captureDisplay: {capture_display}")
+    if capture_page is not None:
+        changes.append(f"capturePage: {capture_page}")
+    if state_file is not None:
+        changes.append(f"state patch: {state_file.name}")
+    if options_file is not None:
+        changes.append(f"options patch: {options_file.name}")
     console.print(
         f'Updated bookmark "[cyan]{data.get("displayName", bookmark)}[/cyan]": '
         f'{"; ".join(changes)}'

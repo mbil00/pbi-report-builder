@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from pbi.bookmarks import export_bookmarks
 from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
@@ -89,6 +90,10 @@ def export_pages(project: Project, page_filter: str | None = None) -> dict:
         pages = [page]
 
     result["pages"] = [export_page(project, p) for p in pages]
+    bookmark_page = pages[0] if page_filter and pages else None
+    bookmarks = export_bookmarks(project, page=bookmark_page)
+    if bookmarks:
+        result["bookmarks"] = bookmarks
     return result
 
 

@@ -174,6 +174,19 @@ def flatten_visual_diff_spec(
             if len(parts) == 2:
                 filtered["size"] = {"width": parts[0], "height": parts[1]}
 
+    return flatten_diff_spec(filtered)
+
+
+def flatten_diff_spec(
+    spec: dict,
+    *,
+    ignore_keys: set[str] | None = None,
+) -> dict[str, str]:
+    """Flatten a structured exported spec into dotted path/value rows."""
+    filtered = copy.deepcopy(spec)
+    for key in ignore_keys or set():
+        filtered.pop(key, None)
+
     rows: dict[str, str] = {}
     _flatten_diff_value(filtered, rows)
     return rows

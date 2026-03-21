@@ -162,16 +162,16 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         domain="Bookmarks",
         feature="Bookmark create, update, delete, visibility state",
-        status="partial",
+        status="supported",
         commands=(
             "pbi bookmark list", "pbi bookmark get", "pbi bookmark create",
             "pbi bookmark set", "pbi bookmark delete",
             "pbi bookmark group list", "pbi bookmark group create", "pbi bookmark group delete",
         ),
         pbi_support="Power BI bookmarks can capture page, display, data, drill, and formatting state.",
-        cli_support="Basic bookmark lifecycle, visibility state, and bookmark-group metadata are implemented with schema-correct metadata.",
-        gap="Only a narrow subset of bookmark state is currently authorable.",
-        next_step="Expand bookmark capture/edit support for filters, sorts, active projections, and grouped visuals.",
+        cli_support="Bookmark lifecycle, visibility state, bookmark-group metadata, richer state export/apply, grouped YAML round-trip, and readable bookmark diff/inspection summaries are implemented with schema-correct metadata.",
+        gap="Bookmark state remains payload-oriented for richer shapes; higher-level helpers for specific bookmark state recipes could still improve ergonomics.",
+        next_step="Add recipe-level helpers for common bookmark patterns on top of the supported state round-trip.",
         schema_refs=(BOOKMARK_SCHEMA, BOOKMARKS_METADATA_SCHEMA),
     ),
     Capability(

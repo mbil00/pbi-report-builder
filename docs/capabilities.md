@@ -19,7 +19,7 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 | Visual containers and formatting | CRUD, layout, alignment (`visual arrange align`), grouping, tree view (`visual tree`), style presets (project + global + bundled shape presets), sort, conditional formatting (imperative + YAML), column config (`--all-pages` bulk rename), `set-all --all-pages --where` conditional bulk updates, visual type conversion in apply, `page-diff`, builder-aware `visual create` with `--bind`, `--preset`, auto-title, and model-aware auto-sort for common chart/table/matrix/card/slicer/pie families | no full recipe catalog for every visual type; advanced aggregation patterns still require lower-level editing |
 | Semantic model and data binding | model introspection, relationships (`model relationships`, `model path`), field formatting, column visibility, measure/calculated-column CRUD, declarative `model apply` (file or stdin), bind/unbind, bindings list, semantic-model-driven builder defaults during `visual create` | no field parameter workflow; no advanced query builder for edge-case visual shapes |
 | Filters | categorical, include, exclude, tuple, range, Top N, and relative date/time at report/page/visual scope; TopN and range also in YAML apply | no Passthrough examples yet |
-| Bookmarks and interactions | bookmark CRUD, bookmark groups, interaction CRUD, first-class nav commands (`nav set-page`, `nav set-bookmark`, `nav set-back`, `nav set-url`, `nav clear`), both declarable in YAML apply | richer captured bookmark state still partial |
+| Bookmarks and interactions | bookmark CRUD, bookmark groups, richer bookmark state export/apply (`state`, `options`, group metadata), bookmark diff/inspection summaries, interaction CRUD, first-class nav commands (`nav set-page`, `nav set-bookmark`, `nav set-back`, `nav set-url`, `nav clear`), all declarable in YAML apply | drillthrough and tooltip actions are still separate follow-up work |
 | Authoring accelerators | `pbi apply` (styles, interactions, bookmarks, conditionalFormatting, bracket selectors, `chart:` prefix, type conversion, overwrite, stdin), `pbi diff` (file or stdin), page export, full-page templates (project + global), style presets (`--from-visual`, global scope, `clone`, bundled shape presets), reusable components (`component create/apply/apply --row`, parameter substitution), semantic-model-driven visual builders on `visual create` | no report/page scaffold wizard yet |
 | Themes and report resources | theme list/apply/export/delete/migrate (color replacement across visuals), image resource management (`image create/list/prune`) | no broader resource package management beyond images |
 | Report-level metadata | `report get`, `report set`, `report properties` for core metadata/settings | no resource package editor, no annotations editor |
@@ -34,9 +34,9 @@ Use `pbi capabilities --status blocked` to focus on the highest-value schema gap
 ## Recommended build order
 
 1. Filter coverage is now comprehensive — all user-facing filter types and advanced operators are supported.
-2. Expand bookmark support with grouping and richer captured state.
-3. Expand `report` commands to resources, annotations, and report objects.
-4. Build recipe-driven authoring on top of the lower-level PBIR editors.
+2. Expand `report` commands to resources, annotations, and report objects.
+3. Build recipe-driven authoring on top of the lower-level PBIR editors.
+4. Finish tooltip/drillthrough action parity.
 
 ## Agent note
 

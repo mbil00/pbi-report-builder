@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from pbi.apply import apply_yaml
+from pbi.bookmarks import create_bookmark, create_bookmark_group, export_bookmarks, get_bookmark, list_bookmarks
 from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
@@ -91,6 +92,77 @@ class YamlRoundTripTests(unittest.TestCase):
             filters = page.data["filterConfig"]["filters"]
             self.assertEqual(len(filters), 1)
             self.assertEqual(filters[0]["type"], "TopN")
+
+    def test_round_trip_preserves_rich_bookmarks_and_updates_in_place(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            page = source.create_page("Demo")
+            visual = source.create_visual(page, "tableEx")
+            visual.data["name"] = "table1"
+            visual.save()
+
+            first = create_bookmark(
+                source,
+                "Detailed View",
+                page,
+                [visual],
+                hidden_visuals=["table1"],
+                target_visuals=["table1"],
+                exploration_state_patch={
+                    "version": "1.0",
+                    "sections": {
+                        page.name: {
+                            "visualContainers": {
+                                "table1": {
+                                    "orderBy": {"Direction": 2},
+                                    "singleVisual": {
+                                        "display": {"mode": "hidden"},
+                                        "objects": {"title": {"show": True}},
+                                        "projections": {"Values": [{"queryRef": "Product.Category"}]},
+                                    },
+                                }
+                            }
+                        }
+                    },
+                },
+                options_patch={"customFlag": True},
+            )
+            second = create_bookmark(source, "Overview", page, [visual])
+            create_bookmark_group(source, "Views", [first["name"], second["name"]])
+
+            spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
+            self.assertIn("bookmarks", spec)
+            exported = {entry["name"]: entry for entry in spec["bookmarks"]}
+            self.assertEqual(exported["Detailed View"]["group"], "Views")
+            self.assertEqual(exported["Detailed View"]["target"], ["table1"])
+            self.assertEqual(exported["Detailed View"]["hide"], ["table1"])
+            self.assertEqual(exported["Detailed View"]["state"]["version"], "1.0")
+            self.assertIn("orderBy", exported["Detailed View"]["state"]["sections"]["Demo"]["visualContainers"]["table1"])
+            self.assertTrue(exported["Detailed View"]["options"]["customFlag"])
+
+            target = self._make_project(root / "target")
+            yaml_content = yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=120)
+            first_apply = apply_yaml(target, yaml_content)
+            second_apply = apply_yaml(target, yaml_content)
+
+            self.assertEqual(first_apply.errors, [])
+            self.assertEqual(second_apply.errors, [])
+            bookmarks = list_bookmarks(target)
+            self.assertEqual([bookmark.display_name for bookmark in bookmarks], ["Detailed View", "Overview"])
+            self.assertEqual([bookmark.group for bookmark in bookmarks], ["Views", "Views"])
+
+            bookmark = get_bookmark(target, "Detailed View")
+            container = bookmark["explorationState"]["sections"][target.find_page("Demo").name]["visualContainers"]["table1"]
+            self.assertEqual(container["orderBy"]["Direction"], 2)
+            self.assertIn("objects", container["singleVisual"])
+            self.assertIn("projections", container["singleVisual"])
+            self.assertTrue(bookmark["options"]["customFlag"])
+
+            reexported = export_bookmarks(target, page=target.find_page("Demo"))
+            reexported_map = {entry["name"]: entry for entry in reexported}
+            self.assertEqual(reexported_map["Detailed View"]["group"], "Views")
+            self.assertIn("state", reexported_map["Detailed View"])
 
     def test_minimal_card_export_no_longer_needs_raw_visual_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
