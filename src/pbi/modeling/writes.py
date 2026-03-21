@@ -22,6 +22,17 @@ _TABLE_PROPERTY_WHITELIST = frozenset({
     "dataCategory",
 })
 
+_RESERVED_OBJECT_NAMES = frozenset({
+    "aux",
+    "clock$",
+    "con",
+    "nul",
+    "prn",
+})
+_RESERVED_TABLE_NAMES = frozenset({
+    "measures",
+})
+
 
 @dataclass
 class TmdlEditSession:
@@ -60,6 +71,41 @@ def _get_tmdl_lines(path: Path, session: TmdlEditSession | None) -> list[str]:
     if path.exists():
         return path.read_text(encoding="utf-8-sig").splitlines()
     return []
+
+
+def validate_model_object_name(name: str, object_kind: Literal["table", "column", "measure"]) -> None:
+    """Validate a semantic-model object name against documented engine constraints."""
+    if not name or not name.strip():
+        raise ValueError(f"{object_kind.title()} name cannot be empty.")
+    if name != name.strip():
+        raise ValueError(f"{object_kind.title()} name cannot have leading or trailing spaces.")
+    if len(name) > 100:
+        raise ValueError(f"{object_kind.title()} name cannot exceed 100 characters.")
+    if any(ord(ch) == 0 or ord(ch) < 32 for ch in name):
+        raise ValueError(f"{object_kind.title()} name cannot contain control characters.")
+
+    lowered = name.lower()
+    if lowered in _RESERVED_OBJECT_NAMES:
+        raise ValueError(f'"{name}" is a reserved {object_kind} name.')
+    if re.fullmatch(r"com[1-9]", lowered) or re.fullmatch(r"lpt[1-9]", lowered):
+        raise ValueError(f'"{name}" is a reserved {object_kind} name.')
+    if object_kind == "table" and lowered in _RESERVED_TABLE_NAMES:
+        raise ValueError(f'"{name}" is a reserved table name.')
+
+
+def validate_table_name(table_name: str) -> None:
+    """Validate a table name before creating or renaming it."""
+    validate_model_object_name(table_name, "table")
+
+
+def validate_column_name(column_name: str) -> None:
+    """Validate a column name before creating or renaming it."""
+    validate_model_object_name(column_name, "column")
+
+
+def validate_measure_name(measure_name: str) -> None:
+    """Validate a measure name before creating or renaming it."""
+    validate_model_object_name(measure_name, "measure")
 
 
 def _commit_tmdl_lines(
@@ -323,6 +369,7 @@ def create_measure(
 ) -> tuple[str, str, bool]:
     """Create a new measure in a table TMDL file."""
     loaded_model = model or SemanticModel.load(project_root)
+    validate_measure_name(measure_name)
     table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
@@ -411,6 +458,7 @@ def create_calculated_column(
 ) -> tuple[str, str, bool]:
     """Create a new calculated column in a table TMDL file."""
     loaded_model = model or SemanticModel.load(project_root)
+    validate_column_name(column_name)
     table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
@@ -886,7 +934,7 @@ def _format_tmdl_field_ref(table: str, column: str) -> str:
 
 
 from .writes_hierarchies import create_hierarchy, delete_hierarchy
-from .writes_refs import find_field_dependents, find_field_references, rename_column, rename_measure
+from .writes_refs import find_field_dependents, find_field_references, rename_column, rename_measure, rename_table
 from .writes_relationships import _get_relationships_path, create_relationship, delete_relationship, set_relationship_property
 
 
@@ -1094,6 +1142,7 @@ def create_calculated_table(
     Returns (table_name, tmdl_path, created).
     """
     loaded_model = model or SemanticModel.load(project_root)
+    validate_table_name(table_name)
 
     # Check duplicate
     for t in loaded_model.tables:

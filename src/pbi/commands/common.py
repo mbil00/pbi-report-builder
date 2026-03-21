@@ -73,9 +73,6 @@ def resolve_field_info(
     entity, prop = field[:dot], field[dot + 1 :]
     mode = normalize_field_type(field_type)
 
-    if mode == "measure":
-        return entity, prop, "measure", None
-
     if model is None:
         try:
             from pbi.model import SemanticModel
@@ -95,17 +92,38 @@ def resolve_field_info(
     effective_type = mode if mode in {"column", "measure"} else resolved_field_type
 
     data_type = None
-    if effective_type == "column":
-        try:
-            table = model.find_table(resolved_entity)
+    try:
+        table = model.find_table(resolved_entity)
+        if effective_type == "column":
             for column in table.columns:
                 if column.name == resolved_prop:
                     data_type = column.data_type
                     break
-        except (ValueError, KeyError):
-            pass
+        elif effective_type == "measure":
+            for measure in table.measures:
+                if measure.name == resolved_prop:
+                    data_type = _infer_measure_data_type(measure.format_string)
+                    break
+    except (ValueError, KeyError):
+        pass
 
     return resolved_entity, resolved_prop, effective_type, data_type
+
+
+def _infer_measure_data_type(format_string: str) -> str | None:
+    """Best-effort measure type inference from the format string."""
+    fmt = (format_string or "").strip()
+    if not fmt:
+        return None
+
+    lowered = fmt.lower()
+    if any(symbol in fmt for symbol in ("$", "€", "£", "¥")) or "currency" in lowered:
+        return "currency"
+    if "%" in fmt:
+        return "number"
+    if "." in fmt:
+        return "number"
+    return None
 
 
 def parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:

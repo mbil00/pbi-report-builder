@@ -14,6 +14,7 @@ VISUAL_TYPE_ALIASES: dict[str, str] = {
     "matrix": "pivotTable",
     "card": "cardVisual",
     "button": "actionButton",
+    "stackedBarChart": "clusteredBarChart",
 }
 
 VISUAL_ROLE_ALIASES: dict[str, dict[str, str]] = {
@@ -42,12 +43,6 @@ VISUAL_ROLES: dict[str, list[dict]] = {
         _role("Category", "X axis categories"),
         _role("Y", "Y axis values (columns)", multi=True),
         _role("Series", "Legend / color grouping"),
-        _role("Tooltips", "Additional tooltip fields", multi=True),
-    ],
-    "stackedBarChart": [
-        _role("Category", "Y axis categories"),
-        _role("Y", "X axis values (stacked)", multi=True),
-        _role("Series", "Legend / stack grouping"),
         _role("Tooltips", "Additional tooltip fields", multi=True),
     ],
     "stackedColumnChart": [

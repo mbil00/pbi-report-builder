@@ -127,6 +127,7 @@ def _copy_page_resources(
     target_res_dir.mkdir(parents=True, exist_ok=True)
 
     from pbi.images import _get_resource_package, _save_report_json, _scan_for_resource_refs
+    from pbi.resources import add_or_update_resource_item, find_registered_image_item
 
     refs: dict[str, list[str]] = {}
     for visual in source_project.get_visuals(source_page):
@@ -145,13 +146,19 @@ def _copy_page_resources(
 
         shutil.copy2(source_file, target_file)
         report_data, items = _get_resource_package(target_project)
-        existing = {item.get("name") for item in items}
+        source_report_data, _ = _get_resource_package(source_project)
+        source_item = find_registered_image_item(source_report_data, image_name)
+        display_name = image_name
+        if source_item is not None:
+            display_name = str(source_item.get("name") or image_name)
+        existing = {str(item.get("path") or item.get("name", "")) for item in items}
         if image_name not in existing:
-            items.append({
-                "type": 202,
-                "name": image_name,
-                "path": f"RegisteredResources/{image_name}",
-            })
+            add_or_update_resource_item(
+                report_data,
+                item_type="Image",
+                name=display_name,
+                path=image_name,
+            )
             _save_report_json(target_project, report_data)
         copied += 1
 

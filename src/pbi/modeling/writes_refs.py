@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 from .schema import SemanticModel
@@ -14,6 +16,9 @@ from .writes import (
     _format_tmdl_name,
     _get_tmdl_lines,
     _update_member_property,
+    validate_column_name,
+    validate_measure_name,
+    validate_table_name,
 )
 
 
@@ -123,6 +128,7 @@ def rename_measure(
     from .dax_refs import find_dependents, replace_refs as dax_replace
 
     loaded_model = model or SemanticModel.load(project_root)
+    validate_measure_name(new_name)
     owns_edit_session = edit_session is None
     if edit_session is None:
         edit_session = TmdlEditSession()
@@ -188,6 +194,7 @@ def rename_column(
     from .dax_refs import replace_refs as dax_replace
 
     loaded_model = model or SemanticModel.load(project_root)
+    validate_column_name(new_name)
     owns_edit_session = edit_session is None
     if edit_session is None:
         edit_session = TmdlEditSession()
@@ -280,3 +287,169 @@ def rename_column(
         edit_session.flush()
 
     return table.name, old_name, new_name, updated_refs
+
+
+def rename_table(
+    project_root: Path,
+    old_name: str,
+    new_name: str,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+) -> tuple[str, str, list[str]]:
+    """Rename a table and cascade through model/report references."""
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(old_name)
+    validate_table_name(new_name)
+
+    if table.name.lower() == new_name.lower():
+        return table.name, new_name, []
+
+    for existing in loaded_model.tables:
+        if existing.name.lower() == new_name.lower():
+            raise ValueError(f'Table "{new_name}" already exists.')
+
+    if table.definition_path is None:
+        raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+
+    updated_refs: list[str] = []
+
+    lines = _get_tmdl_lines(table.definition_path, None)
+    old_decl = f"table {_format_tmdl_name(table.name)}"
+    new_decl = f"table {_format_tmdl_name(new_name)}"
+    declaration_updated = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("table ") and old_decl in line:
+            lines[index] = line.replace(old_decl, new_decl, 1)
+            declaration_updated = True
+            break
+    if not declaration_updated:
+        raise ValueError(f'Could not find table declaration for "{table.name}".')
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=None)
+
+    for model_table in loaded_model.tables:
+        if model_table.definition_path is None:
+            continue
+        table_lines = _get_tmdl_lines(model_table.definition_path, None)
+        changed = False
+
+        for index, line in enumerate(table_lines):
+            replaced = _replace_dax_table_refs(line, old_table=table.name, new_table=new_name)
+            if replaced != line:
+                table_lines[index] = replaced
+                changed = True
+
+        if changed:
+            _commit_tmdl_lines(model_table.definition_path, table_lines, dry_run=dry_run, session=None)
+            for measure in model_table.measures:
+                if _replace_dax_table_refs(measure.expression, old_table=table.name, new_table=new_name) != measure.expression:
+                    updated_refs.append(f"{model_table.name}.{measure.name}")
+            for column in model_table.columns:
+                if column.expression and _replace_dax_table_refs(column.expression, old_table=table.name, new_table=new_name) != column.expression:
+                    updated_refs.append(f"{model_table.name}.{column.name}")
+
+    rel_path = _get_relationships_path(project_root, loaded_model)
+    if rel_path.exists():
+        rel_lines = _get_tmdl_lines(rel_path, None)
+        changed = False
+        old_ref = f"{_format_tmdl_name(table.name)}."
+        new_ref = f"{_format_tmdl_name(new_name)}."
+        for index, line in enumerate(rel_lines):
+            stripped = line.strip()
+            if stripped.startswith(("fromColumn:", "toColumn:")) and old_ref in line:
+                rel_lines[index] = line.replace(old_ref, new_ref, 1)
+                changed = True
+                updated_refs.append(f"relationship ({stripped.split(':', 1)[0].strip()})")
+        if changed:
+            _commit_tmdl_lines(rel_path, rel_lines, dry_run=dry_run, session=None)
+
+    updated_refs.extend(_rename_table_in_report_json(project_root, table.name, new_name, dry_run=dry_run))
+
+    new_path = table.definition_path.with_name(f"{_safe_table_filename(new_name)}.tmdl")
+    if not dry_run and new_path != table.definition_path:
+        table.definition_path.rename(new_path)
+
+    return table.name, new_name, sorted(set(updated_refs))
+
+
+def _replace_dax_table_refs(expression: str, *, old_table: str, new_table: str) -> str:
+    from .dax_refs import extract_refs
+
+    replacements: list[tuple[int, int, str]] = []
+    for ref in extract_refs(expression):
+        if not ref.qualified or ref.table.lower() != old_table.lower():
+            continue
+        replacements.append((ref.start, ref.end, f"{_dax_table_token(new_table)}[{ref.name}]"))
+
+    if not replacements:
+        return expression
+
+    result = expression
+    for start, end, replacement in reversed(replacements):
+        result = result[:start] + replacement + result[end:]
+    return result
+
+
+def _dax_table_token(name: str) -> str:
+    if re.fullmatch(r"[A-Za-z_]\w*", name):
+        return name
+    return "'" + name.replace("'", "''") + "'"
+
+
+def _safe_table_filename(name: str) -> str:
+    return name.replace(" ", "_").replace("'", "")
+
+
+def _rename_table_in_report_json(
+    project_root: Path,
+    old_table: str,
+    new_table: str,
+    *,
+    dry_run: bool,
+) -> list[str]:
+    report_folders = list(project_root.glob("*.Report"))
+    if not report_folders:
+        return []
+
+    definition = report_folders[0] / "definition"
+    updated_files: list[str] = []
+    for path in sorted(definition.rglob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        changed = _replace_table_refs_in_json(payload, old_table=old_table, new_table=new_table)
+        if not changed:
+            continue
+        updated_files.append(str(path.relative_to(project_root)))
+        if dry_run:
+            continue
+        with open(path, "w", encoding="utf-8", newline="\r\n") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+    return updated_files
+
+
+def _replace_table_refs_in_json(payload: object, *, old_table: str, new_table: str) -> bool:
+    changed = False
+    old_prefix = f"{old_table}."
+    new_prefix = f"{new_table}."
+
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if isinstance(value, str):
+                if key == "Entity" and value == old_table:
+                    payload[key] = new_table
+                    changed = True
+                    continue
+                if key in {"queryRef", "nativeQueryRef", "metadata"} and value.startswith(old_prefix):
+                    payload[key] = new_prefix + value[len(old_prefix) :]
+                    changed = True
+                    continue
+            if _replace_table_refs_in_json(value, old_table=old_table, new_table=new_table):
+                changed = True
+        return changed
+
+    if isinstance(payload, list):
+        for item in payload:
+            if _replace_table_refs_in_json(item, old_table=old_table, new_table=new_table):
+                changed = True
+    return changed

@@ -9,6 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from pbi.project import Project
+from pbi.resources import (
+    REGISTERED_RESOURCES_PACKAGE,
+    add_or_update_resource_item,
+    choose_registered_image_name,
+    find_registered_image_item,
+    get_or_create_resource_package,
+    normalize_resource_packages,
+)
 
 
 @dataclass
@@ -16,6 +24,7 @@ class RegisteredImage:
     """A registered image resource."""
     name: str
     path: Path
+    resource_path: str
     size: int
     referenced_by: list[str]  # visual names that reference it
 
@@ -36,23 +45,9 @@ def _get_resource_package(project: Project) -> tuple[dict, list[dict]]:
     else:
         report_data = {"$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/1.0.0/report.json"}
 
-    packages = report_data.setdefault("resourcePackages", [])
-    for pkg in packages:
-        rp = pkg.get("resourcePackage", {})
-        if rp.get("name") == "RegisteredResources":
-            return report_data, rp.setdefault("items", [])
-
-    # Create the package
-    new_pkg = {
-        "resourcePackage": {
-            "name": "RegisteredResources",
-            "type": 1,
-            "items": [],
-            "disabled": False,
-        }
-    }
-    packages.append(new_pkg)
-    return report_data, new_pkg["resourcePackage"]["items"]
+    normalize_resource_packages(report_data)
+    package = get_or_create_resource_package(report_data)
+    return report_data, package.setdefault("items", [])
 
 
 def _save_report_json(project: Project, report_data: dict) -> None:
@@ -122,11 +117,17 @@ def add_image(project: Project, source_path: Path) -> str:
 
     # Add to report.json
     report_data, items = _get_resource_package(project)
-    items.append({
-        "type": 202,
-        "name": registered_name,
-        "path": f"RegisteredResources/{registered_name}",
-    })
+    item_name = choose_registered_image_name(
+        items,
+        preferred_name=source_path.name,
+        fallback_name=registered_name,
+    )
+    add_or_update_resource_item(
+        report_data,
+        item_type="Image",
+        name=item_name,
+        path=registered_name,
+    )
     _save_report_json(project, report_data)
 
     return registered_name
@@ -141,12 +142,14 @@ def list_images(project: Project) -> list[RegisteredImage]:
     result = []
     for item in items:
         name = item.get("name", "")
-        file_path = res_dir / name
+        resource_path = str(item.get("path") or item.get("name", ""))
+        file_path = res_dir / resource_path
         size = file_path.stat().st_size if file_path.exists() else 0
-        referenced_by = refs.get(name, [])
+        referenced_by = refs.get(resource_path, [])
         result.append(RegisteredImage(
             name=name,
             path=file_path,
+            resource_path=resource_path,
             size=size,
             referenced_by=referenced_by,
         ))
@@ -162,13 +165,14 @@ def prune_images(project: Project) -> list[str]:
     removed = []
     remaining = []
     for item in items:
-        name = item.get("name", "")
-        if name not in refs:
+        resource_path = str(item.get("path") or item.get("name", ""))
+        label = str(item.get("name") or resource_path)
+        if resource_path not in refs:
             # Remove file
-            file_path = res_dir / name
+            file_path = res_dir / resource_path
             if file_path.exists():
                 file_path.unlink()
-            removed.append(name)
+            removed.append(label)
         else:
             remaining.append(item)
 
@@ -178,3 +182,38 @@ def prune_images(project: Project) -> list[str]:
         _save_report_json(project, report_data)
 
     return removed
+
+
+def resolve_registered_image(project: Project, ref: str) -> dict:
+    """Resolve a registered image item by logical name or stored path."""
+    report_data, _items = _get_resource_package(project)
+    item = find_registered_image_item(report_data, ref)
+    if item is None:
+        raise ValueError(
+            f'Image "{ref}" is not registered. Use `pbi image list` to see available resources.'
+        )
+    if item.get("type") != "Image":
+        raise ValueError(f'"{ref}" is not an image resource.')
+    return item
+
+
+def build_image_resource_property(project: Project, ref: str, *, scaling: str = "Normal") -> dict:
+    """Build the PBIR image sourceFile payload for a registered resource."""
+    item = resolve_registered_image(project, ref)
+    item_name = str(item.get("name") or item.get("path") or ref)
+    resource_name = str(item.get("path") or item.get("name") or ref)
+    return {
+        "image": {
+            "name": {"expr": {"Literal": {"Value": f"'{item_name}'"}}},
+            "url": {
+                "expr": {
+                    "ResourcePackageItem": {
+                        "PackageName": REGISTERED_RESOURCES_PACKAGE,
+                        "PackageType": 1,
+                        "ItemName": resource_name,
+                    }
+                }
+            },
+            "scaling": {"expr": {"Literal": {"Value": f"'{scaling}'"}}},
+        }
+    }

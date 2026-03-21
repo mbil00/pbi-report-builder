@@ -165,3 +165,33 @@ def model_table_create(
 
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
     console.print(f'{prefix}Created calculated table [cyan]{name}[/cyan]')
+
+
+@model_table_app.command("rename")
+def model_table_rename(
+    old_name: Annotated[str, typer.Argument(help="Current table name.")],
+    new_name: Annotated[str, typer.Argument(help="New table name.")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Rename a table and cascade through model/report references."""
+    from pbi.model import rename_table
+
+    proj = get_project(project)
+    try:
+        old, new, updated_refs = rename_table(
+            proj.root,
+            old_name,
+            new_name,
+            dry_run=dry_run,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    prefix = "[dim](dry run)[/dim] " if dry_run else ""
+    console.print(f'{prefix}Renamed table [cyan]{old}[/cyan] [dim]->[/dim] [cyan]{new}[/cyan]')
+    if updated_refs:
+        console.print(f"[dim]Updated {len(updated_refs)} reference(s):[/dim]")
+        for ref in updated_refs:
+            console.print(f"  [dim]{ref}[/dim]")

@@ -8,7 +8,7 @@ import typer
 
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
-from .helpers import resolve_visual_target
+from .helpers import resolve_visual_target, _set_visual_image_source
 
 
 @visual_app.command("create")
@@ -21,6 +21,7 @@ def visual_create(
     height: Annotated[int | None, typer.Option("-H", "--height", help="Height.")] = None,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Friendly name for the visual.")] = None,
     title: Annotated[str | None, typer.Option("--title", help="Set title text (also enables title.show).")] = None,
+    image: Annotated[str | None, typer.Option("--image", help="Bind an image visual to a registered resource name or path.")] = None,
     from_ref: Annotated[str | None, typer.Option("--from", help="Reference visual as 'page/visual' to copy type, style, and bindings from.")] = None,
     project: ProjectOpt = None,
 ) -> None:
@@ -64,6 +65,9 @@ def visual_create(
         )
         return
 
+    if image and visual_type is None:
+        visual_type = "image"
+
     if not visual_type:
         console.print("[red]Error:[/red] Visual type is required (or use --from to clone).")
         raise typer.Exit(1)
@@ -72,6 +76,9 @@ def visual_create(
     h = height if height is not None else 200
 
     canonical_visual_type = normalize_visual_type(visual_type)
+    if image and canonical_visual_type != "image":
+        console.print('[red]Error:[/red] --image can only be used with an image visual.')
+        raise typer.Exit(1)
     if visual_type != canonical_visual_type:
         console.print(
             f'[dim]Using canonical visual type [cyan]{canonical_visual_type}[/cyan] '
@@ -94,7 +101,14 @@ def visual_create(
         set_property(vis.data, "title.show", "true", VISUAL_PROPERTIES)
         set_property(vis.data, "title.text", title, VISUAL_PROPERTIES)
 
-    if name or title:
+    if image:
+        try:
+            _set_visual_image_source(vis.data, proj, image)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    if name or title or image:
         vis.save()
 
     display = name or vis.name

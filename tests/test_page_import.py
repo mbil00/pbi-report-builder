@@ -105,5 +105,5 @@ def test_import_page_copies_registered_resources_when_requested() -> None:
         assert copied_file.exists()
 
         report_data = json.loads((target.definition_folder / "report.json").read_text(encoding="utf-8"))
-        items = report_data["resourcePackages"][0]["resourcePackage"]["items"]
-        assert any(item["name"] == registered_name for item in items)
+        items = report_data["resourcePackages"][0]["items"]
+        assert any(item["path"] == registered_name for item in items)

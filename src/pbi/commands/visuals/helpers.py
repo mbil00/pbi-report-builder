@@ -6,6 +6,7 @@ import copy
 
 import typer
 
+from pbi.images import build_image_resource_property
 from pbi.properties import (
     VISUAL_PROPERTIES,
     canonical_object_property_name,
@@ -220,11 +221,30 @@ def prepare_visual_property_updates(
     pairs: list[tuple[str, str]],
     *,
     measure_ref: str | None = None,
+    project=None,
 ) -> tuple[dict, list[tuple[str, object, object]]]:
     """Apply a property batch to a copy of the visual for validation."""
     updated = copy.deepcopy(data)
     changes: list[tuple[str, object, object]] = []
-    for prop, value in pairs:
+    ordered_pairs = sorted(
+        pairs,
+        key=lambda item: 0 if item[0] in {"type", "visualType"} else 1,
+    )
+    for prop, value in ordered_pairs:
+        if prop in {"type", "visualType"}:
+            old = updated.get("visual", {}).get("visualType")
+            new = _apply_visual_type_update(updated, value)
+            changes.append((prop, old, new))
+            continue
+
+        if prop in {"chart:image.sourceFile", "image.sourceFile"}:
+            if project is None:
+                raise ValueError("image.sourceFile requires project context.")
+            old = _current_image_resource_ref(updated)
+            _set_visual_image_source(updated, project, value)
+            changes.append((prop, old, value))
+            continue
+
         old = get_property(updated, prop, VISUAL_PROPERTIES, measure_ref=measure_ref)
         try:
             set_property(updated, prop, value, VISUAL_PROPERTIES, measure_ref=measure_ref)
@@ -233,3 +253,47 @@ def prepare_visual_property_updates(
         new = get_property(updated, prop, VISUAL_PROPERTIES, measure_ref=measure_ref)
         changes.append((prop, old, new))
     return updated, changes
+
+
+def _apply_visual_type_update(data: dict, visual_type: str) -> str:
+    from pbi.roles import get_visual_roles, normalize_visual_type
+
+    canonical = normalize_visual_type(visual_type)
+    visual = data.setdefault("visual", {})
+    visual["visualType"] = canonical
+    query_state = visual.setdefault("query", {}).setdefault("queryState", {})
+    for role in get_visual_roles(canonical):
+        query_state.setdefault(role["name"], {"projections": []})
+    return canonical
+
+
+def _set_visual_image_source(data: dict, project, resource_ref: str) -> None:
+    set_property(data, "chart:image.sourceType", "image", VISUAL_PROPERTIES)
+    objects = data.setdefault("visual", {}).setdefault("objects", {})
+    entries = objects.setdefault("image", [])
+    if entries:
+        target = entries[0]
+    else:
+        target = {"properties": {}}
+        entries.append(target)
+    target.setdefault("properties", {})["sourceFile"] = build_image_resource_property(project, resource_ref)
+
+
+def _current_image_resource_ref(data: dict) -> str | None:
+    entries = data.get("visual", {}).get("objects", {}).get("image", [])
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        source = entry.get("properties", {}).get("sourceFile", {})
+        image = source.get("image", {}) if isinstance(source, dict) else {}
+        item = (
+            image.get("url", {})
+            .get("expr", {})
+            .get("ResourcePackageItem", {})
+            .get("ItemName")
+        )
+        if item:
+            return item
+    return None

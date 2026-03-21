@@ -110,10 +110,12 @@ def _format_literal(value: str, data_type: str | None = None) -> str:
             return f"{raw}L"
 
     if normalized_type in {"decimal", "currency"}:
-        return f"{raw}M"
+        if re.fullmatch(r"-?\d+(?:\.\d+)?", raw):
+            return _format_double_literal(raw, force_fraction=True)
 
     if normalized_type in {"double", "number"}:
-        return f"{raw}D"
+        if re.fullmatch(r"-?\d+(?:\.\d+)?", raw):
+            return _format_double_literal(raw)
 
     escaped = raw.replace("'", "''")
     return f"'{escaped}'"
@@ -142,3 +144,9 @@ def _looks_like_date(value: str) -> bool:
 
 def _looks_like_number(value: str) -> bool:
     return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", value))
+
+
+def _format_double_literal(raw: str, *, force_fraction: bool = False) -> str:
+    if force_fraction and "." not in raw:
+        raw = f"{raw}.0"
+    return f"{raw}D"

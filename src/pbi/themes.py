@@ -16,6 +16,12 @@ from typing import Any
 import yaml
 
 from pbi.project import Project
+from pbi.resources import (
+    add_or_update_resource_item,
+    get_or_create_resource_package,
+    normalize_resource_item,
+    normalize_resource_packages,
+)
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.theme_audit import (
     ThemeAuditResult,
@@ -890,88 +896,21 @@ def _write_report(project: Project, data: dict) -> None:
 
 def _ensure_resource_entry(report: dict, theme_name: str) -> None:
     """Ensure resourcePackages contains the theme file reference."""
-    packages = report.setdefault("resourcePackages", [])
-
-    # Find or create RegisteredResources package
-    reg_pkg = None
-    for pkg in packages:
-        if pkg.get("name") == "RegisteredResources":
-            reg_pkg = pkg
-            break
-
-    if reg_pkg is None:
-        reg_pkg = {
-            "name": "RegisteredResources",
-            "type": "RegisteredResources",
-            "items": [],
-        }
-        packages.append(reg_pkg)
-
-    items = reg_pkg.setdefault("items", [])
-
-    expected = f"{theme_name}.json"
-
-    # Check if theme already registered — fix name/path to full filename
-    for item in items:
-        item_name = item.get("name", "")
-        if item_name == theme_name or item_name == expected:
-            if item.get("name") != expected:
-                item["name"] = expected
-            if item.get("path") != expected:
-                item["path"] = expected
-            return
-
-    items.append({
-        "type": "CustomTheme",
-        "name": expected,
-        "path": expected,
-    })
+    add_or_update_resource_item(
+        report,
+        item_type="CustomTheme",
+        name=f"{theme_name}.json",
+        path=f"{theme_name}.json",
+    )
 
 
 def _normalize_resource_packages(report: dict) -> None:
     """Normalize legacy resourcePackages entries to the published schema shape."""
-    packages = report.get("resourcePackages", [])
-    normalized = []
-
-    for pkg in packages:
-        if not isinstance(pkg, dict):
-            continue
-        inner = pkg.get("resourcePackage", pkg)
-        if not isinstance(inner, dict):
-            continue
-
-        entry = {
-            "name": inner.get("name", ""),
-            "type": _coerce_package_type(inner.get("type"), inner.get("name", "")),
-            "items": [
-                _normalize_resource_item(item)
-                for item in inner.get("items", [])
-                if isinstance(item, dict)
-            ],
-        }
-        if "id" in inner:
-            entry["id"] = inner["id"]
-        if "disabled" in inner:
-            entry["disabled"] = inner["disabled"]
-        normalized.append(entry)
-
-    if normalized != packages:
-        report["resourcePackages"] = normalized
+    normalize_resource_packages(report)
 
 
 def _normalize_resource_item(item: dict) -> dict:
-    entry = dict(item)
-    entry["type"] = _coerce_item_type(
-        item.get("type"),
-        path=item.get("path", ""),
-    )
-    # Ensure CustomTheme items have full filename in both name and path
-    if entry["type"] == "CustomTheme" and "name" in entry:
-        name = entry["name"]
-        filename = name if name.endswith(".json") else f"{name}.json"
-        entry["name"] = filename
-        entry["path"] = filename
-    return entry
+    return normalize_resource_item(item)
 
 
 def _coerce_package_type(raw_type: object, name: str) -> str:
@@ -987,8 +926,6 @@ def _coerce_package_type(raw_type: object, name: str) -> str:
 def _coerce_item_type(raw_type: object, *, path: str) -> str:
     if isinstance(raw_type, str):
         return raw_type
-    if raw_type == 202:
-        return "CustomTheme"
     if path.endswith(".json"):
         return "CustomTheme"
     return "CustomTheme"

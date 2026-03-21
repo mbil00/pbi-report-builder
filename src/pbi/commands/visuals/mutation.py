@@ -25,7 +25,12 @@ def visual_set(
 
     try:
         pairs = parse_property_assignments(assignments)
-        updated, changes = prepare_visual_property_updates(vis.data, pairs, measure_ref=for_measure)
+        updated, changes = prepare_visual_property_updates(
+            vis.data,
+            pairs,
+            measure_ref=for_measure,
+            project=_proj,
+        )
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -112,7 +117,7 @@ def visual_set_all(
             ]
         for vis in visuals:
             try:
-                updated, changes = prepare_visual_property_updates(vis.data, pairs)
+                updated, changes = prepare_visual_property_updates(vis.data, pairs, project=proj)
             except ValueError as e:
                 console.print(f"[red]Error:[/red] {vis.name}: {e}")
                 raise typer.Exit(1)
