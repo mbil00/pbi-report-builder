@@ -130,17 +130,46 @@ class Relationship:
 
 
 @dataclass
+class PerspectiveTable:
+    table: str
+    include_all: bool = False
+    columns: list[str] = field(default_factory=list)
+    measures: list[str] = field(default_factory=list)
+    hierarchies: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Perspective:
+    name: str
+    tables: list[PerspectiveTable] = field(default_factory=list)
+    definition_path: Path | None = None
+
+    def find_table(self, name: str) -> PerspectiveTable:
+        """Find a perspective table entry by name (case-insensitive)."""
+        name_lower = name.lower()
+        for table in self.tables:
+            if table.table.lower() == name_lower:
+                return table
+        available = ", ".join(f'"{table.table}"' for table in self.tables)
+        raise ValueError(
+            f'Table "{name}" not found in perspective "{self.name}". '
+            f'Available: {available or "(none)"}'
+        )
+
+
+@dataclass
 class SemanticModel:
     folder: Path
     tables: list[SemanticTable] = field(default_factory=list)
     relationships: list[Relationship] = field(default_factory=list)
+    perspectives: list[Perspective] = field(default_factory=list)
     model_path: Path | None = None
     time_intelligence_enabled: bool | None = None
 
     @classmethod
     def load(cls, project_root: Path) -> SemanticModel:
         """Find and load the semantic model from a project root."""
-        from .parser import _parse_model_tmdl, _parse_relationships_tmdl, _parse_table_tmdl
+        from .parser import _parse_model_tmdl, _parse_perspective_tmdl, _parse_relationships_tmdl, _parse_table_tmdl
 
         sm_folders = list(project_root.glob("*.SemanticModel"))
         if not sm_folders:
@@ -163,6 +192,13 @@ class SemanticModel:
         rel_file = sm_folder / "definition" / "relationships.tmdl"
         if rel_file.exists():
             model.relationships = _parse_relationships_tmdl(rel_file)
+
+        perspectives_dir = sm_folder / "definition" / "perspectives"
+        if perspectives_dir.exists():
+            for tmdl_file in sorted(perspectives_dir.glob("*.tmdl")):
+                perspective = _parse_perspective_tmdl(tmdl_file)
+                if perspective is not None:
+                    model.perspectives.append(perspective)
 
         return model
 
@@ -233,6 +269,20 @@ class SemanticModel:
             raise ValueError(f'Table "{name}" not found. Did you mean: {suggestion}?')
         available = ", ".join(f'"{n}"' for n in table_names)
         raise ValueError(f'Table "{name}" not found. Available: {available}')
+
+    def find_perspective(self, name: str) -> Perspective:
+        """Find a perspective by name (case-insensitive)."""
+        name_lower = name.lower()
+        for perspective in self.perspectives:
+            if perspective.name.lower() == name_lower:
+                return perspective
+        names = [perspective.name for perspective in self.perspectives]
+        close = difflib.get_close_matches(name, names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{item}"' for item in close)
+            raise ValueError(f'Perspective "{name}" not found. Did you mean: {suggestion}?')
+        available = ", ".join(f'"{item}"' for item in names)
+        raise ValueError(f'Perspective "{name}" not found. Available: {available or "(none)"}')
 
     def resolve_field(self, field_ref: str) -> tuple[str, str, str]:
         """Resolve 'Table.Field' to (table_name, field_name, field_type)."""

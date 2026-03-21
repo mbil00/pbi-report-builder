@@ -13,12 +13,14 @@ model_column_app = typer.Typer(help="Semantic model column operations.", no_args
 model_measure_app = typer.Typer(help="Semantic model measure operations.", no_args_is_help=True)
 model_relationship_app = typer.Typer(help="Semantic model relationship operations.", no_args_is_help=True)
 model_hierarchy_app = typer.Typer(help="Semantic model hierarchy operations.", no_args_is_help=True)
+model_perspective_app = typer.Typer(help="Semantic model perspective operations.", no_args_is_help=True)
 model_table_app = typer.Typer(help="Semantic model table operations.", no_args_is_help=True)
 
 model_app.add_typer(model_column_app, name="column")
 model_app.add_typer(model_measure_app, name="measure")
 model_app.add_typer(model_relationship_app, name="relationship")
 model_app.add_typer(model_hierarchy_app, name="hierarchy")
+model_app.add_typer(model_perspective_app, name="perspective")
 model_app.add_typer(model_table_app, name="table")
 
 

@@ -29,6 +29,7 @@ def model_get(
     enabled = model.time_intelligence_enabled
     console.print("[bold]Model[/bold]")
     console.print(f"[dim]Time Intelligence:[/dim] {enabled if enabled is not None else '(none)'}")
+    console.print(f"[dim]Perspectives:[/dim] {len(model.perspectives)}")
 
 
 @model_app.command("set")
@@ -164,6 +165,10 @@ def model_apply(
         console.print(f"{prefix}Created hierarchy [cyan]{ref}[/cyan]")
     for ref in result.hierarchies_updated:
         console.print(f"{prefix}Updated hierarchy [cyan]{ref}[/cyan]")
+    for ref in result.perspectives_created:
+        console.print(f"{prefix}Created perspective [cyan]{ref}[/cyan]")
+    for ref in result.perspectives_updated:
+        console.print(f"{prefix}Updated perspective [cyan]{ref}[/cyan]")
     for error in result.errors:
         console.print(f"[red]Error:[/red] {error}")
 

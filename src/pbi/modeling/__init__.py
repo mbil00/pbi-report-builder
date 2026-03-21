@@ -1,7 +1,8 @@
 """Focused semantic-model submodules."""
 
 from .parser import _parse_tmdl_name
-from .schema import Column, Hierarchy, HierarchyLevel, Measure, SemanticModel, SemanticTable
+from .schema import Column, Hierarchy, HierarchyLevel, Measure, Perspective, PerspectiveTable, SemanticModel, SemanticTable
+from .writes_perspectives import PerspectiveMemberSpec, create_perspective, delete_perspective, set_perspective
 from .writes import (
     TmdlEditSession,
     create_calculated_column,
@@ -36,6 +37,9 @@ __all__ = [
     "Hierarchy",
     "HierarchyLevel",
     "Measure",
+    "Perspective",
+    "PerspectiveMemberSpec",
+    "PerspectiveTable",
     "SemanticModel",
     "SemanticTable",
     "TmdlEditSession",
@@ -44,10 +48,12 @@ __all__ = [
     "create_calculated_table",
     "create_hierarchy",
     "create_measure",
+    "create_perspective",
     "create_relationship",
     "delete_calculated_column",
     "delete_hierarchy",
     "delete_measure",
+    "delete_perspective",
     "delete_relationship",
     "edit_calculated_column_expression",
     "edit_measure_expression",
@@ -61,6 +67,7 @@ __all__ = [
     "set_column_hidden",
     "set_field_format",
     "set_member_property",
+    "set_perspective",
     "set_table_property",
     "set_time_intelligence_enabled",
     "set_relationship_property",

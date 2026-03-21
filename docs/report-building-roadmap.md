@@ -304,6 +304,10 @@ Close the gap between simple theme editing and the fuller `visualStyles` pattern
 
 This is not about service administration. It is about model features that directly affect what can be built in reports.
 
+### Status
+
+In progress. Perspectives are now first-class in the semantic-model layer, CLI, and model export/apply round-trip. Remaining work is row-level security, partitions, and broader model-wide metadata.
+
 ### Goal
 
 Add first-class model editing for report-relevant semantic features that are currently absent.

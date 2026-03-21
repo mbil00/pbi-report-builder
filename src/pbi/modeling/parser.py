@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .schema import Column, Hierarchy, HierarchyLevel, Measure, Relationship, SemanticTable
+from .schema import Column, Hierarchy, HierarchyLevel, Measure, Perspective, PerspectiveTable, Relationship, SemanticTable
 
 # Known TMDL property names that can appear inside column/measure blocks.
 # Used to distinguish metadata lines from DAX expression continuation.
@@ -255,6 +255,65 @@ def _parse_model_tmdl(path: Path) -> dict[str, bool | None]:
         elif normalized in {"0", "false"}:
             settings["time_intelligence_enabled"] = False
     return settings
+
+
+def _parse_perspective_tmdl(path: Path) -> Perspective | None:
+    """Parse one perspective TMDL file."""
+    content = path.read_text(encoding="utf-8-sig")
+    lines = content.splitlines()
+
+    perspective_name: str | None = None
+    tables: list[PerspectiveTable] = []
+    current_table: PerspectiveTable | None = None
+
+    def _flush_table() -> None:
+        nonlocal current_table
+        if current_table is not None:
+            tables.append(current_table)
+        current_table = None
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("///"):
+            continue
+
+        indent = 0
+        for ch in line:
+            if ch == "\t":
+                indent += 1
+            elif ch == " ":
+                indent += 0.25
+            else:
+                break
+        indent = int(indent)
+
+        if indent == 0 and stripped.startswith("perspective "):
+            perspective_name = _parse_tmdl_name(stripped[len("perspective "):])
+            continue
+
+        if indent == 1 and stripped.startswith("perspectiveTable "):
+            _flush_table()
+            current_table = PerspectiveTable(table=_parse_tmdl_name(stripped[len("perspectiveTable "):]))
+            continue
+
+        if current_table is None or indent < 2:
+            continue
+
+        if stripped == "includeAll":
+            current_table.include_all = True
+        elif stripped.startswith("perspectiveColumn "):
+            current_table.columns.append(_parse_tmdl_name(stripped[len("perspectiveColumn "):]))
+        elif stripped.startswith("perspectiveMeasure "):
+            current_table.measures.append(_parse_tmdl_name(stripped[len("perspectiveMeasure "):]))
+        elif stripped.startswith("perspectiveHierarchy "):
+            current_table.hierarchies.append(_parse_tmdl_name(stripped[len("perspectiveHierarchy "):]))
+
+    _flush_table()
+
+    if perspective_name is None:
+        return None
+
+    return Perspective(name=perspective_name, tables=tables, definition_path=path)
 
 
 def _parse_relationships_tmdl(path: Path) -> list[Relationship]:

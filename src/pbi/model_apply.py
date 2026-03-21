@@ -11,11 +11,13 @@ import yaml
 from pbi.model import (
     Column,
     Measure,
+    PerspectiveMemberSpec,
     SemanticModel,
     TmdlEditSession,
     create_calculated_column,
     create_hierarchy,
     create_measure,
+    create_perspective,
     create_relationship,
     delete_hierarchy,
     edit_calculated_column_expression,
@@ -26,6 +28,7 @@ from pbi.model import (
     set_column_hidden,
     set_field_format,
     set_member_property,
+    set_perspective,
     set_relationship_property,
 )
 
@@ -44,6 +47,8 @@ class ModelApplyResult:
     relationships_updated: list[str] = field(default_factory=list)
     hierarchies_created: list[str] = field(default_factory=list)
     hierarchies_updated: list[str] = field(default_factory=list)
+    perspectives_created: list[str] = field(default_factory=list)
+    perspectives_updated: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -60,6 +65,8 @@ class ModelApplyResult:
             or self.relationships_updated
             or self.hierarchies_created
             or self.hierarchies_updated
+            or self.perspectives_created
+            or self.perspectives_updated
         )
 
 
@@ -133,6 +140,17 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
+    perspectives_spec = spec.get("perspectives")
+    if perspectives_spec is not None:
+        _apply_perspectives(
+            project_root,
+            perspectives_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
+
     model_spec = spec.get("model")
     if model_spec is not None:
         _apply_model_settings(
@@ -155,7 +173,7 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
-    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies"}
+    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "perspectives"}
     if not known_keys.intersection(spec.keys()):
         result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
 
@@ -707,3 +725,87 @@ def _apply_hierarchies(
                         result.hierarchies_updated.append(label)
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"hierarchies.{table_name}.{name}: {e}")
+
+
+def _apply_perspectives(
+    project_root: Path,
+    perspectives_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+    edit_session: TmdlEditSession,
+) -> None:
+    """Apply declarative perspective changes."""
+    if not isinstance(perspectives_spec, dict):
+        result.errors.append("'perspectives' must be a mapping of perspective name to perspective specs.")
+        return
+
+    for perspective_name, entry in perspectives_spec.items():
+        if not isinstance(entry, dict):
+            result.errors.append(f"perspectives.{perspective_name}: expected a mapping.")
+            continue
+        tables = entry.get("tables")
+        if not isinstance(tables, dict):
+            result.errors.append(f"perspectives.{perspective_name}.tables: expected a mapping.")
+            continue
+
+        spec = PerspectiveMemberSpec()
+        invalid = False
+        for table_name, table_entry in tables.items():
+            if not isinstance(table_entry, dict):
+                result.errors.append(f"perspectives.{perspective_name}.tables.{table_name}: expected a mapping.")
+                invalid = True
+                continue
+
+            if table_entry.get("includeAll") is True:
+                spec.include_all_tables.append(str(table_name))
+
+            for key, target in (
+                ("columns", spec.columns),
+                ("measures", spec.measures),
+                ("hierarchies", spec.hierarchies),
+            ):
+                values = table_entry.get(key, [])
+                if values in (None, []):
+                    continue
+                if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+                    result.errors.append(
+                        f"perspectives.{perspective_name}.tables.{table_name}.{key}: expected a list of strings."
+                    )
+                    invalid = True
+                    continue
+                target.extend(f"{table_name}.{item}" for item in values)
+        if invalid:
+            continue
+
+        try:
+            try:
+                existing = model.find_perspective(str(perspective_name))
+            except ValueError:
+                existing = None
+
+            if existing is None:
+                name, created = create_perspective(
+                    project_root,
+                    str(perspective_name),
+                    spec,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                if created:
+                    result.perspectives_created.append(name)
+            else:
+                name, changed = set_perspective(
+                    project_root,
+                    existing.name,
+                    spec,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                if changed:
+                    result.perspectives_updated.append(name)
+        except (FileNotFoundError, ValueError) as e:
+            result.errors.append(f"perspectives.{perspective_name}: {e}")

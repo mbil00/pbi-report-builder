@@ -193,6 +193,8 @@ pbi model measure list Facts                  # list measures (use --full for co
 pbi model fields Sales                        # list both columns and measures
 pbi model search "revenue"                    # search across all tables
 pbi model get                                 # model-level settings
+pbi model perspective list                    # list perspectives
+pbi model perspective get "Exec View"         # inspect included tables, columns, measures, hierarchies
 pbi model table get Date                      # table metadata incl. date-table status
 pbi model relationship list                   # list relationships
 pbi model path Sales Products                 # show join path between tables
@@ -204,6 +206,11 @@ pbi model format "Sales.OrderDate" "dd/mm/yyyy"
 # Time intelligence / date table
 pbi model table set Date dateTable=Date       # mark Date[Date] as the date table
 pbi model set timeIntelligence=off            # disable auto date/time and remove local date tables
+
+# Perspectives
+pbi model perspective create "Exec View" --include-all Sales --measure Sales.Revenue
+pbi model perspective set "Exec View" --column Date.Year --hierarchy Date.Calendar
+pbi model perspective delete "Exec View" --force
 ```
 
 **Measures:**

@@ -108,4 +108,22 @@ def export_model_yaml(
     if hierarchies_section:
         spec["hierarchies"] = hierarchies_section
 
+    perspectives_section: dict = {}
+    for perspective in loaded_model.perspectives:
+        tables_entry: dict = {}
+        for perspective_table in perspective.tables:
+            entry: dict = {}
+            if perspective_table.include_all:
+                entry["includeAll"] = True
+            if perspective_table.columns:
+                entry["columns"] = perspective_table.columns
+            if perspective_table.measures:
+                entry["measures"] = perspective_table.measures
+            if perspective_table.hierarchies:
+                entry["hierarchies"] = perspective_table.hierarchies
+            tables_entry[perspective_table.table] = entry
+        perspectives_section[perspective.name] = {"tables": tables_entry}
+    if perspectives_section:
+        spec["perspectives"] = perspectives_section
+
     return yaml.dump(spec, default_flow_style=False, sort_keys=False, allow_unicode=True)

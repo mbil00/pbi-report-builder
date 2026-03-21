@@ -72,6 +72,8 @@ pbi map --pages                    # pages only, no model
 pbi map --model                    # model only
 pbi model get                      # model settings
 pbi model set timeIntelligence=off
+pbi model perspective list
+pbi model perspective get "Exec View"
 pbi model table get Date
 pbi model table set Date dateTable=Date
 pbi model relationship list         # table relationships
@@ -87,7 +89,7 @@ cat sales.yaml | pbi apply         # apply from stdin
 # Model YAML apply
 pbi model apply model.yaml
 cat model.yaml | pbi model apply --dry-run
-# model.yaml supports model.timeIntelligence and tables.<name>.dateTable
+# model.yaml supports model.timeIntelligence, tables.<name>.dateTable, and perspectives
 
 # Styles (reusable formatting presets)
 pbi style create card-style --from-visual "Sales" kpiStrip
