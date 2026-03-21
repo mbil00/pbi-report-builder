@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Annotated
 
 import typer
@@ -136,13 +137,20 @@ def nav_set_url(
 def nav_clear(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Clear a visual's configured action."""
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
-    changed = _clear_action_state(vis.data)
+    preview = copy.deepcopy(vis.data)
+    changed = _clear_action_state(preview)
     if not changed:
         console.print(f'[dim]No change:[/dim] [cyan]{vis.name}[/cyan] has no action configured')
         return
+    if not force:
+        confirm = typer.confirm(f'Clear navigation on "{vis.name}"?')
+        if not confirm:
+            raise typer.Abort()
+    _clear_action_state(vis.data)
     vis.save()
     console.print(f'Cleared navigation on "[cyan]{vis.name}[/cyan]"')

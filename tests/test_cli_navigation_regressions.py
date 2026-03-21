@@ -109,6 +109,7 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
                     "Demo",
                     "source1",
                     "target1",
+                    "--force",
                     "--project",
                     str(root / "Sample.pbip"),
                 ],
@@ -182,7 +183,7 @@ class NavigationCommandTests(unittest.TestCase):
 
             clear_result = runner.invoke(
                 app,
-                ["nav", "clear", "Home", "bookmarkButton", "--project", str(root / "Sample.pbip")],
+                ["nav", "clear", "Home", "bookmarkButton", "--force", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
 

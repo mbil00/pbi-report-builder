@@ -7,9 +7,14 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from pbi.bookmarks import create_bookmark
 from pbi.cli import app
+from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
+from pbi.formatting import GradientStop, build_gradient_format, set_conditional_format
 from pbi.images import add_image
+from pbi.interactions import set_interaction
 from pbi.project import _read_json, _write_json
+from pbi.properties import VISUAL_PROPERTIES, set_property
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -385,3 +390,126 @@ table 'Measures Table'
             self.assertEqual(result.exit_code, 0, result.stdout)
             updated = json.loads((visual.folder / "visual.json").read_text(encoding="utf-8-sig"))
             self.assertEqual(updated["visual"]["visualType"], "clusteredColumnChart")
+
+
+class DestructiveClearForceRegressionTests(unittest.TestCase):
+    def test_nav_clear_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Home")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "bookmarkButton"
+            visual.save()
+            bookmark = create_bookmark(
+                project,
+                display_name="Show Details",
+                page=page,
+                visuals=project.get_visuals(page),
+            )
+            set_property(visual.data, "action.type", "Bookmark", VISUAL_PROPERTIES)
+            set_property(visual.data, "action.bookmark", bookmark["name"], VISUAL_PROPERTIES)
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["nav", "clear", "Home", "bookmarkButton", "--force", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+    def test_interaction_clear_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            source = project.create_visual(page, "barChart")
+            target = project.create_visual(page, "cardVisual")
+            source.data["name"] = "source1"
+            target.data["name"] = "target1"
+            source.save()
+            target.save()
+            set_interaction(page, "source1", "target1", "DataFilter")
+
+            result = runner.invoke(
+                app,
+                ["interaction", "clear", "Demo", "source1", "target1", "--force", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+    def test_visual_sort_clear_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "barChart")
+            visual.data["name"] = "chart1"
+            project.set_sort(visual, "Product", "Category", descending=False)
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["visual", "sort", "clear", "Demo", "chart1", "--force", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+    def test_visual_format_clear_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Test")
+            visual = project.create_visual(page, "tableEx")
+            visual.data["name"] = "table1"
+            value = build_gradient_format(
+                "T",
+                "F",
+                GradientStop("#FFF", 0),
+                GradientStop("#000", 100),
+            )
+            set_conditional_format(visual.data, "values", "backColor", value, column="T.F")
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["visual", "format", "clear", "Test", "table1", "values.backColor", "--force", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+    def test_page_drillthrough_clear_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Details")
+            configure_drillthrough(page, [("Product", "Category", "column")])
+            page.save()
+
+            result = runner.invoke(
+                app,
+                ["page", "drillthrough", "clear", "Details", "--force", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+    def test_page_tooltip_clear_accepts_force(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Tooltip")
+            configure_tooltip_page(page, [("Product", "Category", "column")], width=320, height=240)
+            page.save()
+
+            result = runner.invoke(
+                app,
+                ["page", "tooltip", "clear", "Tooltip", "--force", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)

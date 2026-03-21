@@ -93,6 +93,7 @@ def interaction_clear(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     source: Annotated[str, typer.Argument(help="Source visual name or index.")],
     target: Annotated[str | None, typer.Argument(help="Target visual (omit to remove all from source).")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Clear custom interactions from a visual."""
@@ -107,10 +108,28 @@ def interaction_clear(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    existing = pg.data.get("visualInteractions", [])
+    if target:
+        match_count = sum(
+            1
+            for entry in existing
+            if entry.get("source") == src_vis.name and entry.get("target") == tgt_vis.name
+        )
+    else:
+        match_count = sum(1 for entry in existing if entry.get("source") == src_vis.name)
+
+    if not match_count:
+        console.print("[yellow]No matching interactions found.[/yellow]")
+        return
+
+    if not force:
+        scope = f'-> "{tgt_vis.name}"' if tgt_vis else "(all targets)"
+        confirm = typer.confirm(f'Clear {match_count} interaction(s) from "{src_vis.name}" {scope}?')
+        if not confirm:
+            raise typer.Abort()
+
     removed = remove_interaction(pg, src_vis.name, tgt_vis.name if tgt_vis else None)
     if removed:
         pg.save()
         scope = f'-> "{tgt_vis.name}"' if tgt_vis else "(all targets)"
         console.print(f'Cleared {removed} interaction(s) from [cyan]{src_vis.name}[/cyan] {scope}')
-    else:
-        console.print("[yellow]No matching interactions found.[/yellow]")

@@ -981,6 +981,7 @@ class VisualSetRegressionTests(unittest.TestCase):
                     "clear",
                     "Demo",
                     "chart1",
+                    "--force",
                     "--project",
                     str(root / "Sample.pbip"),
                 ],

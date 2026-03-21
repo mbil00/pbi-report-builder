@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Annotated
 
 import typer
@@ -151,6 +152,7 @@ def visual_format_clear(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name or index.")],
     prop: Annotated[str, typer.Argument(help="Property as object.prop (e.g. dataPoint.fill).")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Clear conditional formatting from a visual property."""
@@ -164,11 +166,19 @@ def visual_format_clear(
         raise typer.Exit(1)
     obj_name, prop_name = prop[:dot], prop[dot + 1 :]
 
-    if clear_conditional_format(vis.data, obj_name, prop_name):
-        vis.save()
-        console.print(f"Cleared conditional formatting from [cyan]{prop}[/cyan].")
-    else:
+    preview = copy.deepcopy(vis.data)
+    if not clear_conditional_format(preview, obj_name, prop_name):
         console.print(f"[dim]No conditional formatting on {prop}.[/dim]")
+        return
+
+    if not force:
+        confirm = typer.confirm(f"Clear conditional formatting from {prop}?")
+        if not confirm:
+            raise typer.Abort()
+
+    clear_conditional_format(vis.data, obj_name, prop_name)
+    vis.save()
+    console.print(f"Cleared conditional formatting from [cyan]{prop}[/cyan].")
 
 
 @visual_app.command("column")

@@ -60,12 +60,20 @@ def visual_sort_set(
 def visual_sort_clear(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
     visual: Annotated[str, typer.Argument(help="Visual name or index.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Clear a visual's sort definition."""
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
-    if proj.clear_sort(vis):
-        console.print("Cleared sort definition.")
-    else:
+    if not proj.get_sort(vis):
         console.print("[dim]No sort definition to clear.[/dim]")
+        return
+
+    if not force:
+        confirm = typer.confirm(f'Clear sort definition from "{vis.name}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    proj.clear_sort(vis)
+    console.print("Cleared sort definition.")

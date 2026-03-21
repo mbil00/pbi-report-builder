@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -658,18 +659,28 @@ def page_set_drillthrough(
 @page_drillthrough_app.command("clear")
 def page_clear_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Clear drillthrough configuration from a page."""
     from pbi.drillthrough import clear_drillthrough
+    from pbi.project import Page
 
     _proj, pg = _get_page(project, page)
 
-    if clear_drillthrough(pg):
-        pg.save()
-        console.print(f'Cleared drillthrough from "[cyan]{pg.display_name}[/cyan]"')
-    else:
+    preview = Page(folder=pg.folder, data=copy.deepcopy(pg.data))
+    if not clear_drillthrough(preview):
         console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
+        return
+
+    if not force:
+        confirm = typer.confirm(f'Clear drillthrough from "{pg.display_name}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    clear_drillthrough(pg)
+    pg.save()
+    console.print(f'Cleared drillthrough from "[cyan]{pg.display_name}[/cyan]"')
 
 
 @page_tooltip_app.command("set")
@@ -697,18 +708,28 @@ def page_set_tooltip(
 @page_tooltip_app.command("clear")
 def page_clear_tooltip(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Clear tooltip configuration from a page."""
     from pbi.drillthrough import clear_tooltip_page
+    from pbi.project import Page
 
     _proj, pg = _get_page(project, page)
 
-    if clear_tooltip_page(pg):
-        pg.save()
-        console.print(f'Cleared tooltip config from "[cyan]{pg.display_name}[/cyan]"')
-    else:
+    preview = Page(folder=pg.folder, data=copy.deepcopy(pg.data))
+    if not clear_tooltip_page(preview):
         console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
+        return
+
+    if not force:
+        confirm = typer.confirm(f'Clear tooltip configuration from "{pg.display_name}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    clear_tooltip_page(pg)
+    pg.save()
+    console.print(f'Cleared tooltip config from "[cyan]{pg.display_name}[/cyan]"')
 
 
 # ── Page import ──────────────────────────────────────────────
