@@ -117,14 +117,15 @@ pbi visual tree "Dashboard"
 pbi visual tree "Dashboard" --json
 
 # Navigation helpers
-pbi nav set-page "Sales Overview" navButton "Executive Summary"
-pbi nav set-bookmark "Sales Overview" toggleBtn "Show Details"
-pbi nav set-back "Drillthrough" backButton
-pbi nav set-url "Sales Overview" helpBtn "https://docs.example.com"
-pbi nav set-drillthrough "Sales Overview" detailsBtn "Product Details"
-pbi nav set-tooltip "Sales Overview" revenueChart "Sales Tooltip"
-pbi nav clear-tooltip "Sales Overview" revenueChart
-pbi nav clear "Sales Overview" helpBtn
+pbi nav page set "Sales Overview" navButton "Executive Summary"
+pbi nav bookmark set "Sales Overview" toggleBtn "Show Details"
+pbi nav back set "Drillthrough" backButton
+pbi nav url set "Sales Overview" helpBtn "https://docs.example.com"
+pbi nav drillthrough set "Sales Overview" detailsBtn "Product Details"
+pbi nav action get "Sales Overview" helpBtn
+pbi nav tooltip set "Sales Overview" revenueChart "Sales Tooltip"
+pbi nav tooltip clear "Sales Overview" revenueChart
+pbi nav action clear "Sales Overview" helpBtn
 
 # Layout
 pbi visual arrange align "Sales" s1 s2 s3 --distribute horizontal --margin 16

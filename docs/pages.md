@@ -150,11 +150,11 @@ pbi page tooltip clear "Sales Tooltip"
 To link a visual to a tooltip page:
 
 ```bash
-pbi nav set-tooltip "Sales Overview" revenueChart "Sales Tooltip"
+pbi nav tooltip set "Sales Overview" revenueChart "Sales Tooltip"
 ```
 
 To wire a drillthrough button:
 
 ```bash
-pbi nav set-drillthrough "Sales Overview" detailsBtn "Product Details"
+pbi nav drillthrough set "Sales Overview" detailsBtn "Product Details"
 ```

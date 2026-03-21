@@ -558,7 +558,7 @@ pages:
 
 
 class DestructiveClearForceRegressionTests(unittest.TestCase):
-    def test_nav_clear_accepts_force(self) -> None:
+    def test_nav_action_clear_accepts_force(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -579,7 +579,7 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
 
             result = runner.invoke(
                 app,
-                ["nav", "clear", "Home", "bookmarkButton", "--force", "--project", str(root / "Sample.pbip")],
+                ["nav", "action", "clear", "Home", "bookmarkButton", "--force", "--project", str(root / "Sample.pbip")],
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)

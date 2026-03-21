@@ -197,13 +197,13 @@ class RealReportFixtureTests(unittest.TestCase):
 
             set_page_result = runner.invoke(
                 app,
-                ["nav", "set-page", page, "navHelp", "Regional Detail", "--project", str(pbip)],
+                ["nav", "page", "set", page, "navHelp", "Regional Detail", "--project", str(pbip)],
             )
             self.assertEqual(set_page_result.exit_code, 0, set_page_result.stdout)
 
             set_bookmark_result = runner.invoke(
                 app,
-                ["nav", "set-bookmark", page, "navToRegional", "Hide Slicers", "--project", str(pbip)],
+                ["nav", "bookmark", "set", page, "navToRegional", "Hide Slicers", "--project", str(pbip)],
             )
             self.assertEqual(set_bookmark_result.exit_code, 0, set_bookmark_result.stdout)
 
@@ -211,7 +211,8 @@ class RealReportFixtureTests(unittest.TestCase):
                 app,
                 [
                     "nav",
-                    "set-url",
+                    "url",
+                    "set",
                     page,
                     "navFocusOnline",
                     "https://example.com/support",
@@ -249,7 +250,7 @@ class RealReportFixtureTests(unittest.TestCase):
 
             clear_result = runner.invoke(
                 app,
-                ["nav", "clear", page, "navFocusOnline", "--force", "--project", str(pbip)],
+                ["nav", "action", "clear", page, "navFocusOnline", "--force", "--project", str(pbip)],
             )
             self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
 
@@ -279,7 +280,7 @@ class RealReportFixtureTests(unittest.TestCase):
         self.assertIn("320", tooltip_result.stdout)
         self.assertIn("240", tooltip_result.stdout)
 
-    def test_real_fixture_nav_set_drillthrough_and_tooltip(self) -> None:
+    def test_real_fixture_nav_drillthrough_and_tooltip_commands(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
@@ -290,7 +291,8 @@ class RealReportFixtureTests(unittest.TestCase):
                 app,
                 [
                     "nav",
-                    "set-drillthrough",
+                    "drillthrough",
+                    "set",
                     "Executive Overview",
                     "navToProduct",
                     "Product Detail",
@@ -306,7 +308,8 @@ class RealReportFixtureTests(unittest.TestCase):
                 app,
                 [
                     "nav",
-                    "set-tooltip",
+                    "tooltip",
+                    "set",
                     "Executive Overview",
                     "revenueByMonth",
                     "Tooltip - Order Context",
@@ -315,6 +318,20 @@ class RealReportFixtureTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(set_tooltip_result.exit_code, 0, set_tooltip_result.stdout)
+
+            get_action_result = runner.invoke(
+                app,
+                ["nav", "action", "get", "Executive Overview", "navToProduct", "--project", str(pbip)],
+            )
+            self.assertEqual(get_action_result.exit_code, 0, get_action_result.stdout)
+            self.assertIn("Drillthrough", get_action_result.stdout)
+
+            get_tooltip_result = runner.invoke(
+                app,
+                ["nav", "tooltip", "get", "Executive Overview", "revenueByMonth", "--project", str(pbip)],
+            )
+            self.assertEqual(get_tooltip_result.exit_code, 0, get_tooltip_result.stdout)
+            self.assertIn("ReportPage", get_tooltip_result.stdout)
 
             reloaded = Project.find(pbip)
             overview = reloaded.find_page("Executive Overview")
@@ -337,7 +354,8 @@ class RealReportFixtureTests(unittest.TestCase):
                 app,
                 [
                     "nav",
-                    "clear-tooltip",
+                    "tooltip",
+                    "clear",
                     "Executive Overview",
                     "revenueByMonth",
                     "--force",

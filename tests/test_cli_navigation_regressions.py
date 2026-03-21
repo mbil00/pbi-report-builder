@@ -349,7 +349,7 @@ bookmarks:
             self.assertIn("state.sections", result.stdout)
 
 class NavigationCommandTests(unittest.TestCase):
-    def test_nav_set_page_resolves_target_page_and_clears_old_action(self) -> None:
+    def test_nav_page_set_resolves_target_page_and_clears_old_action(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -364,7 +364,7 @@ class NavigationCommandTests(unittest.TestCase):
 
             result = runner.invoke(
                 app,
-                ["nav", "set-page", "Home", "navButton", "Details", "--project", str(root / "Sample.pbip")],
+                ["nav", "page", "set", "Home", "navButton", "Details", "--project", str(root / "Sample.pbip")],
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)
@@ -376,7 +376,7 @@ class NavigationCommandTests(unittest.TestCase):
             self.assertEqual(get_property(updated.data, "action.page", VISUAL_PROPERTIES), details.name)
             self.assertIsNone(get_property(updated.data, "action.url", VISUAL_PROPERTIES))
 
-    def test_nav_set_drillthrough_validates_target_and_sets_action(self) -> None:
+    def test_nav_drillthrough_set_validates_target_and_sets_action(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -391,7 +391,7 @@ class NavigationCommandTests(unittest.TestCase):
 
             result = runner.invoke(
                 app,
-                ["nav", "set-drillthrough", "Home", "drillBtn", "Details", "--project", str(root / "Sample.pbip")],
+                ["nav", "drillthrough", "set", "Home", "drillBtn", "Details", "--project", str(root / "Sample.pbip")],
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)
@@ -403,7 +403,7 @@ class NavigationCommandTests(unittest.TestCase):
             self.assertEqual(get_property(updated.data, "action.drillthrough", VISUAL_PROPERTIES), details.name)
             self.assertIsNone(get_property(updated.data, "action.page", VISUAL_PROPERTIES))
 
-    def test_nav_set_tooltip_and_clear_tooltip(self) -> None:
+    def test_nav_tooltip_set_get_and_clear(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -418,9 +418,17 @@ class NavigationCommandTests(unittest.TestCase):
 
             set_result = runner.invoke(
                 app,
-                ["nav", "set-tooltip", "Home", "chart1", "Tip", "--project", str(root / "Sample.pbip")],
+                ["nav", "tooltip", "set", "Home", "chart1", "Tip", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            get_result = runner.invoke(
+                app,
+                ["nav", "tooltip", "get", "Home", "chart1", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("ReportPage", get_result.stdout)
+            self.assertIn(tip.name, get_result.stdout)
 
             reloaded = Project.find(root / "Sample.pbip")
             updated = reloaded.find_visual(reloaded.find_page("Home"), "chart1")
@@ -430,7 +438,7 @@ class NavigationCommandTests(unittest.TestCase):
 
             clear_result = runner.invoke(
                 app,
-                ["nav", "clear-tooltip", "Home", "chart1", "--force", "--project", str(root / "Sample.pbip")],
+                ["nav", "tooltip", "clear", "Home", "chart1", "--force", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
 
@@ -473,7 +481,7 @@ class NavigationCommandTests(unittest.TestCase):
             self.assertIn("360", tip_result.stdout)
             self.assertIn("Product.Category", tip_result.stdout)
 
-    def test_nav_set_bookmark_and_clear(self) -> None:
+    def test_nav_bookmark_set_action_get_and_clear(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -493,7 +501,8 @@ class NavigationCommandTests(unittest.TestCase):
                 app,
                 [
                     "nav",
-                    "set-bookmark",
+                    "bookmark",
+                    "set",
                     "Home",
                     "bookmarkButton",
                     "Show Details",
@@ -503,6 +512,14 @@ class NavigationCommandTests(unittest.TestCase):
             )
             self.assertEqual(set_result.exit_code, 0, set_result.stdout)
 
+            get_result = runner.invoke(
+                app,
+                ["nav", "action", "get", "Home", "bookmarkButton", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("Bookmark", get_result.stdout)
+            self.assertIn(bookmark["name"], get_result.stdout)
+
             refreshed = Project.find(root / "Sample.pbip")
             updated = refreshed.find_visual(refreshed.find_page("Home"), "bookmarkButton")
             self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "Bookmark")
@@ -510,7 +527,7 @@ class NavigationCommandTests(unittest.TestCase):
 
             clear_result = runner.invoke(
                 app,
-                ["nav", "clear", "Home", "bookmarkButton", "--force", "--project", str(root / "Sample.pbip")],
+                ["nav", "action", "clear", "Home", "bookmarkButton", "--force", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
 
@@ -518,7 +535,7 @@ class NavigationCommandTests(unittest.TestCase):
             updated = refreshed.find_visual(refreshed.find_page("Home"), "bookmarkButton")
             self.assertEqual(get_property(updated.data, "action.bookmark", VISUAL_PROPERTIES), None)
 
-    def test_nav_set_url_and_back(self) -> None:
+    def test_nav_url_set_and_back_set(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -532,7 +549,8 @@ class NavigationCommandTests(unittest.TestCase):
                 app,
                 [
                     "nav",
-                    "set-url",
+                    "url",
+                    "set",
                     "Home",
                     "urlButton",
                     "https://example.com/docs",
@@ -552,7 +570,7 @@ class NavigationCommandTests(unittest.TestCase):
 
             back_result = runner.invoke(
                 app,
-                ["nav", "set-back", "Home", "urlButton", "--project", str(root / "Sample.pbip")],
+                ["nav", "back", "set", "Home", "urlButton", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(back_result.exit_code, 0, back_result.stdout)
 

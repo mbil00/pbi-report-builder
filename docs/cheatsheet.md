@@ -363,14 +363,16 @@ pbi image prune --force                     # remove unreferenced images
 
 ```bash
 # Set button/visual click actions
-pbi nav set-page "Overview" myButton "Detail View"          # navigate to page
-pbi nav set-bookmark "Overview" myButton "Show North"       # apply bookmark
-pbi nav set-back "Detail" backButton                        # navigate back
-pbi nav set-url "Overview" linkButton "https://example.com"
-pbi nav set-drillthrough "Overview" detailsBtn "Detail View"
-pbi nav set-tooltip "Overview" revenueChart "Card Tip"
-pbi nav clear-tooltip "Overview" revenueChart
-pbi nav clear "Overview" myButton                           # remove action
+pbi nav page set "Overview" myButton "Detail View"          # navigate to page
+pbi nav bookmark set "Overview" myButton "Show North"       # apply bookmark
+pbi nav back set "Detail" backButton                        # navigate back
+pbi nav url set "Overview" linkButton "https://example.com"
+pbi nav drillthrough set "Overview" detailsBtn "Detail View"
+pbi nav action get "Overview" myButton
+pbi nav tooltip set "Overview" revenueChart "Card Tip"
+pbi nav tooltip get "Overview" revenueChart
+pbi nav tooltip clear "Overview" revenueChart
+pbi nav action clear "Overview" myButton                    # remove action
 
 # Bookmarks
 pbi bookmark create "Show North" "Overview" --hide chart2 chart3

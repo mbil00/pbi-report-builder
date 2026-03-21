@@ -31,7 +31,7 @@ Bookmarks also integrate directly with reusable page templates and `pbi nav`:
 pbi page template create "Executive Intro" corp-intro --global
 
 # Wire a button to a bookmark
-pbi nav set-bookmark "Sales Overview" toggleBtn "Minimal View"
+pbi nav bookmark set "Sales Overview" toggleBtn "Minimal View"
 ```
 
 ## Capture Flags

@@ -3,16 +3,33 @@
 from __future__ import annotations
 
 import copy
+import json
 from typing import Annotated
 
 import typer
+from rich import box
+from rich.table import Table
 
-from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 
 from .common import ProjectOpt, console
 from .visuals.helpers import resolve_visual_target
 
 nav_app = typer.Typer(help="Navigation and button action operations.", no_args_is_help=True)
+nav_action_app = typer.Typer(help="Inspect or clear the current visual action.", no_args_is_help=True)
+nav_page_app = typer.Typer(help="Set page navigation actions.", no_args_is_help=True)
+nav_bookmark_app = typer.Typer(help="Set bookmark actions.", no_args_is_help=True)
+nav_back_app = typer.Typer(help="Set back actions.", no_args_is_help=True)
+nav_url_app = typer.Typer(help="Set URL actions.", no_args_is_help=True)
+nav_drillthrough_app = typer.Typer(help="Set drillthrough actions.", no_args_is_help=True)
+nav_tooltip_app = typer.Typer(help="Inspect or manage report-page tooltips.", no_args_is_help=True)
+nav_app.add_typer(nav_action_app, name="action")
+nav_app.add_typer(nav_page_app, name="page")
+nav_app.add_typer(nav_bookmark_app, name="bookmark")
+nav_app.add_typer(nav_back_app, name="back")
+nav_app.add_typer(nav_url_app, name="url")
+nav_app.add_typer(nav_drillthrough_app, name="drillthrough")
+nav_app.add_typer(nav_tooltip_app, name="tooltip")
 
 
 def _clear_action_state(visual_data: dict) -> bool:
@@ -102,8 +119,44 @@ def _clear_report_page_tooltip(visual_data: dict) -> bool:
     return changed
 
 
-@nav_app.command("set-page")
-def nav_set_page(
+def _read_action_state(visual_data: dict) -> dict | None:
+    action_type = get_property(visual_data, "action.type", VISUAL_PROPERTIES)
+    if not action_type:
+        return None
+    state = {"type": action_type}
+    for key in ("page", "bookmark", "drillthrough", "url", "tooltip"):
+        value = get_property(visual_data, f"action.{key}", VISUAL_PROPERTIES)
+        if value is not None:
+            state[key] = value
+    return state
+
+
+def _read_report_page_tooltip_state(visual_data: dict) -> dict | None:
+    tooltip_type = get_property(visual_data, "tooltip.type", VISUAL_PROPERTIES)
+    tooltip_section = get_property(visual_data, "tooltip.section", VISUAL_PROPERTIES)
+    tooltip_show = get_property(visual_data, "tooltip.show", VISUAL_PROPERTIES)
+    if tooltip_type is None and tooltip_section is None and tooltip_show is None:
+        return None
+    state: dict[str, object] = {}
+    if tooltip_show is not None:
+        state["show"] = tooltip_show
+    if tooltip_type is not None:
+        state["type"] = tooltip_type
+    if tooltip_section is not None:
+        state["section"] = tooltip_section
+    return state
+
+
+def _print_state_table(title: str, rows: list[tuple[str, object]]) -> None:
+    table = Table(title=title, box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    for key, value in rows:
+        table.add_row(key, "" if value is None else str(value))
+    console.print(table)
+
+
+def _nav_set_page(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     target_page: Annotated[str, typer.Argument(help="Target page name, display name, or index.")],
@@ -125,8 +178,7 @@ def nav_set_page(
     )
 
 
-@nav_app.command("set-bookmark")
-def nav_set_bookmark(
+def _nav_set_bookmark(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
@@ -156,8 +208,7 @@ def nav_set_bookmark(
     )
 
 
-@nav_app.command("set-back")
-def nav_set_back(
+def _nav_set_back(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
@@ -170,8 +221,7 @@ def nav_set_back(
     console.print(f'Set navigation on "[cyan]{vis.name}[/cyan]" -> [cyan]Back[/cyan]')
 
 
-@nav_app.command("set-url")
-def nav_set_url(
+def _nav_set_url(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     url: Annotated[str, typer.Argument(help="Target URL.")],
@@ -185,8 +235,7 @@ def nav_set_url(
     console.print(f'Set navigation on "[cyan]{vis.name}[/cyan]" -> [cyan]{url}[/cyan]')
 
 
-@nav_app.command("set-drillthrough")
-def nav_set_drillthrough(
+def _nav_set_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     target_page: Annotated[str, typer.Argument(help="Target drillthrough page name, display name, or index.")],
@@ -213,8 +262,7 @@ def nav_set_drillthrough(
     )
 
 
-@nav_app.command("set-tooltip")
-def nav_set_tooltip(
+def _nav_set_tooltip(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     target_page: Annotated[str, typer.Argument(help="Target tooltip page name, display name, or index.")],
@@ -240,8 +288,7 @@ def nav_set_tooltip(
     )
 
 
-@nav_app.command("clear-tooltip")
-def nav_clear_tooltip(
+def _nav_clear_tooltip(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
@@ -263,8 +310,7 @@ def nav_clear_tooltip(
     console.print(f'Cleared tooltip on "[cyan]{vis.name}[/cyan]"')
 
 
-@nav_app.command("clear")
-def nav_clear(
+def _nav_clear_action(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
     visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
     force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
@@ -284,3 +330,142 @@ def nav_clear(
     _clear_action_state(vis.data)
     vis.save()
     console.print(f'Cleared navigation on "[cyan]{vis.name}[/cyan]"')
+
+
+@nav_action_app.command("get")
+def nav_action_get(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show the current action configured on a visual."""
+    _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    state = _read_action_state(vis.data)
+    if state is None:
+        console.print(f'[yellow]No action configured on "[cyan]{vis.name}[/cyan]".[/yellow]')
+        raise typer.Exit(0)
+    if raw:
+        console.print_json(json.dumps(state, indent=2))
+        return
+    rows = [("Type", state.get("type"))]
+    for key in ("page", "bookmark", "drillthrough", "url", "tooltip"):
+        if key in state:
+            rows.append((key.capitalize(), state[key]))
+    _print_state_table(vis.name, rows)
+
+
+@nav_action_app.command("clear")
+def nav_action_clear(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Clear a visual's configured action."""
+    _nav_clear_action(page, visual, force, project)
+
+
+@nav_page_app.command("set")
+def nav_page_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    target_page: Annotated[str, typer.Argument(help="Target page name, display name, or index.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to navigate to another page."""
+    _nav_set_page(page, visual, target_page, tooltip, project)
+
+
+@nav_bookmark_app.command("set")
+def nav_bookmark_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    bookmark: Annotated[str, typer.Argument(help="Bookmark name or display name.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to apply a bookmark."""
+    _nav_set_bookmark(page, visual, bookmark, tooltip, project)
+
+
+@nav_back_app.command("set")
+def nav_back_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to navigate back."""
+    _nav_set_back(page, visual, tooltip, project)
+
+
+@nav_url_app.command("set")
+def nav_url_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    url: Annotated[str, typer.Argument(help="Target URL.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to open a URL."""
+    _nav_set_url(page, visual, url, tooltip, project)
+
+
+@nav_drillthrough_app.command("set")
+def nav_drillthrough_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    target_page: Annotated[str, typer.Argument(help="Target drillthrough page name, display name, or index.")],
+    tooltip: Annotated[str | None, typer.Option("--tooltip", help="Optional button tooltip.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual action to drill through to a drillthrough page."""
+    _nav_set_drillthrough(page, visual, target_page, tooltip, project)
+
+
+@nav_tooltip_app.command("get")
+def nav_tooltip_get(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show the current report-page tooltip configured on a visual."""
+    _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    state = _read_report_page_tooltip_state(vis.data)
+    if state is None:
+        console.print(f'[yellow]No tooltip configured on "[cyan]{vis.name}[/cyan]".[/yellow]')
+        raise typer.Exit(0)
+    if raw:
+        console.print_json(json.dumps(state, indent=2))
+        return
+    rows = []
+    for key in ("show", "type", "section"):
+        if key in state:
+            rows.append((key.capitalize(), state[key]))
+    _print_state_table(vis.name, rows)
+
+
+@nav_tooltip_app.command("set")
+def nav_tooltip_set(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    target_page: Annotated[str, typer.Argument(help="Target tooltip page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Set a visual to use a report-page tooltip."""
+    _nav_set_tooltip(page, visual, target_page, project)
+
+
+@nav_tooltip_app.command("clear")
+def nav_tooltip_clear(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index containing the source visual.")],
+    visual: Annotated[str, typer.Argument(help="Source visual name or index.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Clear a visual's configured report-page tooltip."""
+    _nav_clear_tooltip(page, visual, force, project)
+

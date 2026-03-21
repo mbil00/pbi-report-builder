@@ -329,8 +329,8 @@ pbi visual resize "Sales" chart --width 940 --height 400
 pbi visual bind "Sales" chart Values Sales.Revenue
 pbi visual arrange align "Sales" s1 s2 s3 s4 --distribute horizontal --margin 16
 pbi visual arrange align "Sales" chart1 chart2 --align top --match-height
-pbi nav set-page "Sales" nextBtn "Details"
-pbi nav set-bookmark "Sales" toggleBtn "Minimal View"
+pbi nav page set "Sales" nextBtn "Details"
+pbi nav bookmark set "Sales" toggleBtn "Minimal View"
 ```
 
 ## Preview (Layout Mockups)

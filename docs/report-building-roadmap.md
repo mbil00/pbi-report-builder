@@ -182,7 +182,7 @@ Completed with:
 
 ### Related actions
 
-- strengthen `nav set-bookmark` workflows
+- strengthen `nav bookmark set` workflows
 - support bookmark-driven show/hide patterns cleanly in templates/components
 
 ### Exit Criteria
@@ -216,8 +216,8 @@ Make page-to-page behavior authorable enough for full report navigation design.
 
 Completed with:
 
-- first-class `nav set-drillthrough`
-- first-class `nav set-tooltip` and `nav clear-tooltip`
+- first-class `nav drillthrough set`
+- first-class `nav tooltip set` and `nav tooltip clear`
 - `page drillthrough get` and `page tooltip get` inspection commands
 - richer `page get` binding summaries for tooltip and drillthrough pages
 - export/apply remapping for visual page-linked properties (`action.page`,
