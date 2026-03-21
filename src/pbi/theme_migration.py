@@ -74,11 +74,15 @@ def migrate_theme(
         for visual in project.get_visuals(page):
             if "visualGroup" in visual.data:
                 continue
+            match_counts = {
+                replacement.old_color: _count_visual_color_matches(visual.data, replacement.old_color)
+                for replacement in result.replacements
+            }
             changed = _migrate_visual_colors(visual.data, color_map, dry_run=dry_run)
             if changed and not dry_run:
                 visual.save()
             for replacement in result.replacements:
-                replacement.count += _count_visual_color_matches(visual.data, replacement.old_color)
+                replacement.count += match_counts[replacement.old_color]
 
     return result
 
