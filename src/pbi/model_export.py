@@ -18,8 +18,18 @@ def export_model_yaml(
     loaded_model = model or SemanticModel.load(project_root)
     spec: dict = {}
 
+    model_section: dict = {}
     if loaded_model.time_intelligence_enabled is not None:
-        spec["model"] = {"timeIntelligence": loaded_model.time_intelligence_enabled}
+        model_section["timeIntelligence"] = loaded_model.time_intelligence_enabled
+    annotations = {
+        key: value
+        for key, value in loaded_model.annotations.items()
+        if key != "__PBI_TimeIntelligenceEnabled"
+    }
+    if annotations:
+        model_section["annotations"] = annotations
+    if model_section:
+        spec["model"] = model_section
 
     tables_section: dict = {}
     for table in loaded_model.tables:
@@ -107,6 +117,22 @@ def export_model_yaml(
             hierarchies_section[table.name] = table_hierarchies
     if hierarchies_section:
         spec["hierarchies"] = hierarchies_section
+
+    partitions_section: dict = {}
+    for table in loaded_model.tables:
+        if not table.partitions:
+            continue
+        partitions_section[table.name] = [
+            {
+                "name": partition.name,
+                "sourceType": partition.source_type,
+                "mode": partition.mode,
+                "source": partition.source_expression,
+            }
+            for partition in table.partitions
+        ]
+    if partitions_section:
+        spec["partitions"] = partitions_section
 
     roles_section: dict = {}
     for role in loaded_model.roles:

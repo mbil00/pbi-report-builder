@@ -56,11 +56,22 @@ class Hierarchy:
 
 
 @dataclass
+class Partition:
+    name: str
+    table: str
+    source_type: str
+    mode: str = "import"
+    source_expression: str = ""
+    definition_path: Path | None = None
+
+
+@dataclass
 class SemanticTable:
     name: str
     columns: list[Column] = field(default_factory=list)
     measures: list[Measure] = field(default_factory=list)
     hierarchies: list[Hierarchy] = field(default_factory=list)
+    partitions: list[Partition] = field(default_factory=list)
     definition_path: Path | None = None
     data_category: str = ""
 
@@ -115,6 +126,20 @@ class SemanticTable:
             raise ValueError(f'Measure "{name}" not found in table "{self.name}". Did you mean: {suggestion}?')
         available = ", ".join(f'"{n}"' for n in meas_names)
         raise ValueError(f'Measure "{name}" not found in table "{self.name}". Available: {available}')
+
+    def find_partition(self, name: str) -> Partition:
+        """Find a partition by name (case-insensitive)."""
+        name_lower = name.lower()
+        for partition in self.partitions:
+            if partition.name.lower() == name_lower:
+                return partition
+        names = [p.name for p in self.partitions]
+        close = difflib.get_close_matches(name, names, n=3, cutoff=0.5)
+        if close:
+            suggestion = ", ".join(f'"{n}"' for n in close)
+            raise ValueError(f'Partition "{name}" not found in table "{self.name}". Did you mean: {suggestion}?')
+        available = ", ".join(f'"{n}"' for n in names)
+        raise ValueError(f'Partition "{name}" not found in table "{self.name}". Available: {available or "(none)"}')
 
 
 @dataclass
@@ -210,6 +235,7 @@ class SemanticModel:
     relationships: list[Relationship] = field(default_factory=list)
     roles: list[ModelRole] = field(default_factory=list)
     perspectives: list[Perspective] = field(default_factory=list)
+    annotations: dict[str, str] = field(default_factory=dict)
     model_path: Path | None = None
     time_intelligence_enabled: bool | None = None
 
@@ -235,6 +261,7 @@ class SemanticModel:
         if model.model_path is not None:
             model_settings = _parse_model_tmdl(model.model_path)
             model.time_intelligence_enabled = model_settings.get("time_intelligence_enabled")
+            model.annotations = dict(model_settings.get("annotations", {}))
         tables_dir = sm_folder / "definition" / "tables"
         if tables_dir.exists():
             for tmdl_file in sorted(tables_dir.glob("*.tmdl")):

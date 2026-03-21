@@ -193,8 +193,12 @@ pbi model measure list Facts                  # list measures (use --full for co
 pbi model fields Sales                        # list both columns and measures
 pbi model search "revenue"                    # search across all tables
 pbi model get                                 # model-level settings
+pbi model annotation list                     # list model annotations
+pbi model annotation get PBI_QueryOrder       # inspect one model annotation
 pbi model role list                           # list RLS roles
 pbi model role get "Finance Readers"          # inspect permission, filters, and members
+pbi model partition list                      # list partitions across the model
+pbi model partition get Sales Sales           # inspect one partition source
 pbi model perspective list                    # list perspectives
 pbi model perspective get "Exec View"         # inspect included tables, columns, measures, hierarchies
 pbi model table get Date                      # table metadata incl. date-table status
@@ -221,6 +225,15 @@ pbi model role filter set "Finance Readers" Department 'Department[Division] = "
 pbi model role member create "Finance Readers" finance@example.com --type group
 pbi model role filter clear "Finance Readers" Department
 pbi model role delete "Finance Readers" --force
+
+# Partitions
+pbi model partition create Sales Sales 'ROW("x", 1)' --source-type calculated
+pbi model partition set Sales Sales sourceType=m --from-file ./partitions/sales.m
+pbi model partition delete Sales Sales --force
+
+# Model annotations
+pbi model annotation set PBI_ProTooling '["DevMode"]'
+pbi model annotation delete PBI_ProTooling --force
 ```
 
 **Measures:**

@@ -20,6 +20,7 @@ from pbi.model import (
     create_calculated_column,
     create_hierarchy,
     create_measure,
+    create_partition,
     create_perspective,
     create_role,
     create_relationship,
@@ -27,11 +28,13 @@ from pbi.model import (
     edit_calculated_column_expression,
     edit_measure_expression,
     mark_as_date_table,
+    set_model_annotation,
     set_table_property,
     set_time_intelligence_enabled,
     set_column_hidden,
     set_field_format,
     set_member_property,
+    set_partition,
     set_perspective,
     set_role,
     set_relationship_property,
@@ -52,6 +55,8 @@ class ModelApplyResult:
     relationships_updated: list[str] = field(default_factory=list)
     hierarchies_created: list[str] = field(default_factory=list)
     hierarchies_updated: list[str] = field(default_factory=list)
+    partitions_created: list[str] = field(default_factory=list)
+    partitions_updated: list[str] = field(default_factory=list)
     roles_created: list[str] = field(default_factory=list)
     roles_updated: list[str] = field(default_factory=list)
     perspectives_created: list[str] = field(default_factory=list)
@@ -72,6 +77,8 @@ class ModelApplyResult:
             or self.relationships_updated
             or self.hierarchies_created
             or self.hierarchies_updated
+            or self.partitions_created
+            or self.partitions_updated
             or self.roles_created
             or self.roles_updated
             or self.perspectives_created
@@ -149,6 +156,17 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
+    partitions_spec = spec.get("partitions")
+    if partitions_spec is not None:
+        _apply_partitions(
+            project_root,
+            partitions_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+            edit_session=edit_session,
+        )
+
     roles_spec = spec.get("roles")
     if roles_spec is not None:
         _apply_roles(
@@ -193,7 +211,7 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
-    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "roles", "perspectives"}
+    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "partitions", "roles", "perspectives"}
     if not known_keys.intersection(spec.keys()):
         result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
 
@@ -217,6 +235,8 @@ def _apply_model_settings(
         result.errors.append("'model' must be a mapping.")
         return
 
+    changed = False
+
     if "timeIntelligence" in model_spec:
         value = model_spec["timeIntelligence"]
         if not isinstance(value, bool):
@@ -234,6 +254,30 @@ def _apply_model_settings(
                     result.model_updated.append("Model")
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"model.timeIntelligence: {e}")
+
+    annotations = model_spec.get("annotations")
+    if annotations is not None:
+        if not isinstance(annotations, dict):
+            result.errors.append("model.annotations: expected a mapping.")
+        else:
+            for name, value in annotations.items():
+                if not isinstance(value, str):
+                    result.errors.append(f"model.annotations.{name}: expected a string.")
+                    continue
+                try:
+                    _, annotation_changed = set_model_annotation(
+                        project_root,
+                        str(name),
+                        value,
+                        dry_run=dry_run,
+                        model=model,
+                        edit_session=edit_session,
+                    )
+                    changed = changed or annotation_changed
+                except (FileNotFoundError, ValueError) as e:
+                    result.errors.append(f"model.annotations.{name}: {e}")
+            if changed and "Model" not in result.model_updated:
+                result.model_updated.append("Model")
 
 
 def _apply_tables(
@@ -745,6 +789,88 @@ def _apply_hierarchies(
                         result.hierarchies_updated.append(label)
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"hierarchies.{table_name}.{name}: {e}")
+
+
+def _apply_partitions(
+    project_root: Path,
+    partitions_spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+    edit_session: TmdlEditSession,
+) -> None:
+    """Apply declarative partition changes."""
+    if not isinstance(partitions_spec, dict):
+        result.errors.append("'partitions' must be a mapping of table name to partition specs.")
+        return
+
+    for table_name, entries in partitions_spec.items():
+        if not isinstance(entries, list):
+            result.errors.append(f"partitions.{table_name}: expected a list.")
+            continue
+        try:
+            table = model.find_table(str(table_name))
+        except ValueError as e:
+            result.errors.append(f"partitions.{table_name}: {e}")
+            continue
+
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                result.errors.append(f"partitions.{table_name}[{index}]: expected a mapping.")
+                continue
+            name = entry.get("name")
+            source_type = entry.get("sourceType")
+            source = entry.get("source")
+            mode = entry.get("mode", "import")
+            if not isinstance(name, str) or not name.strip():
+                result.errors.append(f"partitions.{table_name}[{index}].name: expected a non-empty string.")
+                continue
+            if not isinstance(source_type, str):
+                result.errors.append(f"partitions.{table_name}[{index}].sourceType: expected a string.")
+                continue
+            if not isinstance(source, str):
+                result.errors.append(f"partitions.{table_name}[{index}].source: expected a string.")
+                continue
+            if not isinstance(mode, str):
+                result.errors.append(f"partitions.{table_name}[{index}].mode: expected a string.")
+                continue
+
+            try:
+                try:
+                    existing = table.find_partition(name)
+                except ValueError:
+                    existing = None
+                if existing is None:
+                    table_label, partition_label, created = create_partition(
+                        project_root,
+                        table.name,
+                        name,
+                        source,
+                        source_type=source_type,
+                        mode=mode,
+                        dry_run=dry_run,
+                        model=model,
+                        edit_session=edit_session,
+                    )
+                    if created:
+                        result.partitions_created.append(f"{table_label}.{partition_label}")
+                else:
+                    table_label, partition_label, changed = set_partition(
+                        project_root,
+                        table.name,
+                        existing.name,
+                        source_expression=source,
+                        source_type=source_type,
+                        mode=mode,
+                        dry_run=dry_run,
+                        model=model,
+                        edit_session=edit_session,
+                    )
+                    if changed:
+                        result.partitions_updated.append(f"{table_label}.{partition_label}")
+            except (FileNotFoundError, ValueError) as e:
+                result.errors.append(f"partitions.{table_name}[{index}]: {e}")
 
 
 def _apply_roles(

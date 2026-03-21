@@ -71,9 +71,13 @@ pbi map --page "Sales Overview"    # single page detail
 pbi map --pages                    # pages only, no model
 pbi map --model                    # model only
 pbi model get                      # model settings
+pbi model annotation list
+pbi model annotation get PBI_QueryOrder
 pbi model set timeIntelligence=off
 pbi model role list
 pbi model role get "Finance Readers"
+pbi model partition list
+pbi model partition get Sales Sales
 pbi model perspective list
 pbi model perspective get "Exec View"
 pbi model table get Date
@@ -91,7 +95,7 @@ cat sales.yaml | pbi apply         # apply from stdin
 # Model YAML apply
 pbi model apply model.yaml
 cat model.yaml | pbi model apply --dry-run
-# model.yaml supports model.timeIntelligence, tables.<name>.dateTable, roles, and perspectives
+# model.yaml supports model.timeIntelligence, model.annotations, tables.<name>.dateTable, partitions, roles, and perspectives
 
 # Styles (reusable formatting presets)
 pbi style create card-style --from-visual "Sales" kpiStrip

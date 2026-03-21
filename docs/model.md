@@ -32,12 +32,16 @@ pbi model set timeIntelligence=off
 Manage perspectives and RLS roles:
 
 ```bash
+pbi model annotation list
+pbi model annotation set PBI_ProTooling '["DevMode"]'
 pbi model perspective list
 pbi model perspective create "Exec View" --include-all Sales --measure Sales.Revenue
 pbi model role list
 pbi model role create "Finance Readers"
 pbi model role filter set "Finance Readers" Department 'Department[Division] = "Corporate"'
 pbi model role member create "Finance Readers" finance@example.com --type group
+pbi model partition list
+pbi model partition get Sales Sales
 ```
 
 ## Relationships
@@ -191,9 +195,11 @@ columns:
 Rules:
 
 - `model:` currently supports `timeIntelligence: true|false`
+- `model.annotations:` is a mapping of model annotation name to raw TMDL literal value
 - `tables:` supports table-level metadata such as `dataCategory` and `dateTable`
 - `measures:` is a mapping of table name to a list of measure specs
 - `columns:` is a mapping of table name to a mapping of column name to spec
+- `partitions:` is a mapping of table name to a list of partition specs
 - `roles:` is a mapping of role name to `permission`, `filters`, and `members`
 - `perspectives:` is a mapping of perspective name to table membership specs
 - calculated columns require `expression` and `dataType`
@@ -212,6 +218,30 @@ roles:
     - name: finance@example.com
     - name: finance-group@example.com
       type: group
+```
+
+Partition example:
+
+```yaml
+partitions:
+  Sales:
+  - name: Sales
+    sourceType: m
+    mode: import
+    source: |
+      let
+          Source = Csv.Document(File.Contents("sales.csv"))
+      in
+          Source
+```
+
+Model annotation example:
+
+```yaml
+model:
+  timeIntelligence: false
+  annotations:
+    PBI_ProTooling: '["DevMode"]'
 ```
 
 ## Recommended workflow

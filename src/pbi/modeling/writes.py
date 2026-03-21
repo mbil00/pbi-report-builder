@@ -300,6 +300,49 @@ def set_time_intelligence_enabled(
     return changed
 
 
+def set_model_annotation(
+    project_root: Path,
+    annotation_name: str,
+    annotation_value: str,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, bool]:
+    """Set a model-level annotation."""
+    loaded_model = model or SemanticModel.load(project_root)
+    model_path = _get_model_tmdl_path(loaded_model)
+    changed = _update_model_annotation(
+        model_path,
+        annotation_name=annotation_name,
+        annotation_value=annotation_value,
+        dry_run=dry_run,
+        edit_session=edit_session,
+    )
+    return annotation_name, changed
+
+
+def delete_model_annotation(
+    project_root: Path,
+    annotation_name: str,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, bool]:
+    """Delete a model-level annotation."""
+    loaded_model = model or SemanticModel.load(project_root)
+    model_path = _get_model_tmdl_path(loaded_model)
+    lines = _get_tmdl_lines(model_path, edit_session)
+    for idx, line in enumerate(lines):
+        if not line.strip().startswith(f"annotation {annotation_name} ="):
+            continue
+        del lines[idx]
+        _commit_tmdl_lines(model_path, _collapse_blank_lines(lines), dry_run=dry_run, session=edit_session)
+        return annotation_name, True
+    return annotation_name, False
+
+
 def set_field_format(
     project_root: Path,
     field_ref: str,

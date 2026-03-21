@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import textwrap
 
 from .schema import (
     Column,
@@ -10,6 +11,7 @@ from .schema import (
     HierarchyLevel,
     Measure,
     ModelRole,
+    Partition,
     Perspective,
     PerspectiveTable,
     Relationship,
@@ -60,11 +62,16 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     columns: list[Column] = []
     measures: list[Measure] = []
     hierarchies: list[Hierarchy] = []
+    partitions: list[Partition] = []
 
     current_type: str | None = None
     current_name = ""
     current_props: dict[str, str] = {}
     current_expr = ""
+    current_partition_type = ""
+    current_partition_source: list[str] = []
+    current_partition_source_inline = ""
+    partition_source_block = False
 
     # Hierarchy parsing state
     current_levels: list[HierarchyLevel] = []
@@ -87,6 +94,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     def _flush() -> None:
         nonlocal current_type, current_name, current_props, current_expr
         nonlocal current_levels
+        nonlocal current_partition_type, current_partition_source, current_partition_source_inline, partition_source_block
         if current_type == "column" and table_name:
             columns.append(
                 Column(
@@ -133,10 +141,28 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 )
             )
             current_levels = []
+        elif current_type == "partition" and table_name:
+            expression = current_partition_source_inline
+            if partition_source_block:
+                expression = textwrap.dedent("\n".join(current_partition_source)).strip("\n")
+            partitions.append(
+                Partition(
+                    name=current_name,
+                    table=table_name,
+                    source_type=current_partition_type or "m",
+                    mode=current_props.get("mode", "import"),
+                    source_expression=expression,
+                    definition_path=path,
+                )
+            )
         current_type = None
         current_name = ""
         current_props = {}
         current_expr = ""
+        current_partition_type = ""
+        current_partition_source = []
+        current_partition_source_inline = ""
+        partition_source_block = False
 
     for line in lines:
         stripped = line.strip()
@@ -191,10 +217,34 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_name = _parse_tmdl_name(stripped[10:])
                 current_levels = []
                 continue
-            if stripped.startswith(("partition ", "annotation ")):
+            if stripped.startswith("partition "):
+                _flush()
+                current_type = "partition"
+                rest = stripped[len("partition "):]
+                eq_pos = rest.find("=")
+                current_name = _parse_tmdl_name(rest)
+                if eq_pos >= 0:
+                    current_partition_type = rest[eq_pos + 1 :].strip()
+                continue
+            if stripped.startswith("annotation "):
                 _flush()
                 current_type = None
                 continue
+
+        if current_type == "partition" and indent >= 2:
+            if stripped.startswith("mode:"):
+                current_props["mode"] = stripped.partition(":")[2].strip()
+            elif stripped.startswith("source ="):
+                value = stripped[len("source ="):].strip()
+                if value:
+                    current_partition_source_inline = value
+                    partition_source_block = False
+                else:
+                    current_partition_source = []
+                    partition_source_block = True
+            elif partition_source_block and indent >= 3:
+                current_partition_source.append(line)
+            continue
 
         if current_type == "hierarchy" and indent >= 2:
             if indent == 2:
@@ -242,14 +292,17 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
 
     return SemanticTable(
         name=table_name, columns=columns, measures=measures,
-        hierarchies=hierarchies, definition_path=path,
+        hierarchies=hierarchies, partitions=partitions, definition_path=path,
         data_category=table_props.get("dataCategory", ""),
     )
 
 
 def _parse_model_tmdl(path: Path) -> dict[str, bool | None]:
     """Parse model-level settings needed by the CLI."""
-    settings: dict[str, bool | None] = {"time_intelligence_enabled": None}
+    settings: dict[str, bool | None | dict[str, str]] = {
+        "time_intelligence_enabled": None,
+        "annotations": {},
+    }
     content = path.read_text(encoding="utf-8-sig")
     for line in content.splitlines():
         stripped = line.strip()
@@ -259,6 +312,7 @@ def _parse_model_tmdl(path: Path) -> dict[str, bool | None]:
         name, sep, value = rest.partition("=")
         if not sep:
             continue
+        settings["annotations"][name.strip()] = value.strip()
         if name.strip() != "__PBI_TimeIntelligenceEnabled":
             continue
         normalized = value.strip().strip('"').lower()
