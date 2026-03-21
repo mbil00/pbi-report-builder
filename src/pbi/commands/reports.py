@@ -27,9 +27,10 @@ report_custom_visual_app = typer.Typer(help="Organization custom visual operatio
 report_data_source_variables_app = typer.Typer(help="Report dataSourceVariables operations.", no_args_is_help=True)
 report_app.add_typer(report_annotation_app, name="annotation")
 report_app.add_typer(report_object_app, name="object")
-report_app.add_typer(report_resource_app, name="resource")
-report_app.add_typer(report_custom_visual_app, name="custom-visual")
-report_app.add_typer(report_data_source_variables_app, name="data-source-variables")
+# Power-user features — fully functional but hidden from default --help
+report_app.add_typer(report_resource_app, name="resource", hidden=True)
+report_app.add_typer(report_custom_visual_app, name="custom-visual", hidden=True)
+report_app.add_typer(report_data_source_variables_app, name="data-source-variables", hidden=True)
 report_resource_app.add_typer(report_resource_package_app, name="package")
 report_resource_app.add_typer(report_resource_item_app, name="item")
 
