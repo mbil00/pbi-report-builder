@@ -288,15 +288,16 @@ def _apply_measures(
             if not isinstance(name, str) or not name.strip():
                 result.errors.append(f"measures.{table_name}: measure entry missing non-empty 'name'.")
                 continue
-            if not isinstance(expression, str) or not expression.strip():
-                result.errors.append(f"measures.{table_name}.{name}: missing non-empty 'expression'.")
-                continue
 
             try:
                 table = model.find_table(str(table_name))
                 existing = _find_measure(table, name)
+                has_expression = isinstance(expression, str) and bool(expression.strip())
                 changed = False
                 if existing is None:
+                    if not has_expression:
+                        result.errors.append(f"measures.{table_name}.{name}: missing non-empty 'expression'.")
+                        continue
                     create_measure(
                         project_root,
                         table.name,
@@ -320,18 +321,21 @@ def _apply_measures(
                     result.measures_created.append(f"{table.name}.{name}")
                     continue
 
-                table_name_resolved, measure_name, expr_changed = edit_measure_expression(
-                    project_root,
-                    table.name,
-                    existing.name,
-                    expression,
-                    dry_run=dry_run,
-                    model=model,
-                    edit_session=edit_session,
-                )
-                changed = changed or expr_changed
-                if expr_changed and not dry_run:
-                    existing.expression = expression
+                table_name_resolved = table.name
+                measure_name = existing.name
+                if has_expression:
+                    table_name_resolved, measure_name, expr_changed = edit_measure_expression(
+                        project_root,
+                        table.name,
+                        existing.name,
+                        expression,
+                        dry_run=dry_run,
+                        model=model,
+                        edit_session=edit_session,
+                    )
+                    changed = changed or expr_changed
+                    if expr_changed and not dry_run:
+                        existing.expression = expression
                 if isinstance(fmt, str):
                     _, _, _, fmt_changed = set_field_format(
                         project_root,
@@ -345,7 +349,7 @@ def _apply_measures(
                     if fmt_changed and not dry_run:
                         existing.format_string = fmt
                 ref = f"{table_name_resolved}.{measure_name}"
-                for meta_key, tmdl_key in (("description", "description"), ("displayFolder", "displayFolder")):
+                for meta_key, tmdl_key in (("displayFolder", "displayFolder"),):
                     meta_val = entry.get(meta_key)
                     if isinstance(meta_val, str):
                         _, _, _, meta_changed = set_member_property(
@@ -353,6 +357,12 @@ def _apply_measures(
                             dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         changed = changed or meta_changed
+                        if meta_changed and not dry_run:
+                            existing.display_folder = meta_val
+                if isinstance(entry.get("description"), str):
+                    result.errors.append(
+                        f'measures.{table_name}.{name}.description: Property "description" is not supported by Power BI TMDL for columns or measures.'
+                    )
                 if changed:
                     result.measures_updated.append(ref)
             except (FileNotFoundError, ValueError) as e:
@@ -518,7 +528,6 @@ def _apply_column_entry(
         if hidden_changed and not dry_run and existing is not None:
             existing.is_hidden = hidden
     for meta_key, tmdl_key in (
-        ("description", "description"),
         ("displayFolder", "displayFolder"),
         ("sortByColumn", "sortByColumn"),
         ("summarizeBy", "summarizeBy"),
@@ -531,6 +540,19 @@ def _apply_column_entry(
                 dry_run=dry_run, model=model, edit_session=edit_session,
             )
             changed = changed or meta_changed
+            if meta_changed and not dry_run and existing is not None:
+                if meta_key == "displayFolder":
+                    existing.display_folder = meta_val
+                elif meta_key == "sortByColumn":
+                    existing.sort_by_column = meta_val
+                elif meta_key == "summarizeBy":
+                    existing.summarize_by = meta_val
+                elif meta_key == "dataCategory":
+                    existing.data_category = meta_val
+    if isinstance(entry.get("description"), str):
+        result.errors.append(
+            f'columns.{table_name}.{column_name}.description: Property "description" is not supported by Power BI TMDL for columns or measures.'
+        )
     if changed:
         result.columns_updated.append(ref)
 

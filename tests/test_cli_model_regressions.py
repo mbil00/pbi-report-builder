@@ -39,7 +39,6 @@ table Sales
                                 "name": "Total Revenue",
                                 "expression": "SUM ( Sales[Revenue] ) + 1",
                                 "format": "#,0",
-                                "description": "'updated'",
                                 "displayFolder": "'KPIs'",
                             }
                         ]
@@ -57,7 +56,6 @@ table Sales
             content = table_path.read_text(encoding="utf-8")
             self.assertIn("SUM ( Sales[Revenue] ) + 1", content)
             self.assertIn("formatString: #,0", content)
-            self.assertIn("description: 'updated'", content)
             self.assertIn("displayFolder: 'KPIs'", content)
 
 

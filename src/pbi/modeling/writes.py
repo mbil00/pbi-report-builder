@@ -14,7 +14,7 @@ from .schema import SemanticModel
 
 
 _MEMBER_PROPERTY_WHITELIST = frozenset({
-    "description", "displayFolder", "sortByColumn",
+    "displayFolder", "sortByColumn",
     "summarizeBy", "dataCategory", "formatString",
 })
 
@@ -140,6 +140,10 @@ def set_member_property(
 
     Returns (table_name, field_name, field_type, changed).
     """
+    if property_name == "description":
+        raise ValueError(
+            'Property "description" is not supported by Power BI TMDL for columns or measures.'
+        )
     if property_name not in _MEMBER_PROPERTY_WHITELIST:
         raise ValueError(
             f'Property "{property_name}" is not writable. '
@@ -702,14 +706,20 @@ def _starts_new_table_block(stripped: str) -> bool:
 
 def _block_property_insert_index(lines: list[str], start: int, end: int) -> int:
     """Choose an insertion point within a member block before annotations/variations."""
+    blank_before_body: int | None = None
     for idx in range(start + 1, end):
         stripped = lines[idx].strip()
         if not stripped:
+            if blank_before_body is None:
+                blank_before_body = idx
             continue
         if _indent_level(lines[idx]) < 2:
             continue
         if stripped.startswith(("annotation ", "variation ")):
-            return idx
+            return blank_before_body if blank_before_body is not None else idx
+        blank_before_body = None
+    if blank_before_body is not None:
+        return blank_before_body
     return end
 
 

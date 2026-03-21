@@ -14,7 +14,7 @@ from pbi.formatting import GradientStop, build_gradient_format, set_conditional_
 from pbi.images import add_image
 from pbi.interactions import set_interaction
 from pbi.project import _read_json, _write_json
-from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -390,6 +390,171 @@ table 'Measures Table'
             self.assertEqual(result.exit_code, 0, result.stdout)
             updated = json.loads((visual.folder / "visual.json").read_text(encoding="utf-8-sig"))
             self.assertEqual(updated["visual"]["visualType"], "clusteredColumnChart")
+
+
+class ModelHeavyAuthoringRegressionTests(unittest.TestCase):
+    def test_page_rename_command_updates_display_name(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Page 1")
+
+            result = runner.invoke(
+                app,
+                ["page", "rename", "Page 1", "Finance Overview", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            project.clear_caches()
+            page = project.find_page("Finance Overview")
+            self.assertEqual(page.display_name, "Finance Overview")
+
+    def test_model_hierarchy_list_without_table_lists_all_hierarchies(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            write_model_table(
+                root,
+                "Date.tmdl",
+                """
+table Date
+\tcolumn Year
+\t\tdataType: int64
+\tcolumn Month
+\t\tdataType: string
+\thierarchy Calendar
+\t\tlevel Year
+\t\t\tcolumn: Year
+\t\tlevel Month
+\t\t\tcolumn: Month
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                ["model", "hierarchy", "list", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Date", result.stdout)
+            self.assertIn("Calendar", result.stdout)
+
+    def test_model_measure_list_without_table_shows_display_folders_in_json(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tdisplayFolder: KPIs
+\t\tlineageTag: m-1
+                """,
+            )
+            write_model_table(
+                root,
+                "Finance.tmdl",
+                """
+table Finance
+\tmeasure Margin = 1
+\t\tdisplayFolder: Ratios
+\t\tlineageTag: m-2
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                ["model", "measure", "list", "--json", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            rows = json.loads(result.stdout)
+            self.assertEqual(
+                rows,
+                [
+                    {
+                        "table": "Finance",
+                        "name": "Margin",
+                        "expression": "1",
+                        "format": "",
+                        "displayFolder": "Ratios",
+                    },
+                    {
+                        "table": "Sales",
+                        "name": "Revenue",
+                        "expression": "SUM(Sales[Amount])",
+                        "format": "",
+                        "displayFolder": "KPIs",
+                    },
+                ],
+            )
+
+    def test_apply_visual_title_string_shorthand_sets_title_properties(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+
+            yaml_content = """
+version: 1
+pages:
+  - name: Demo
+    visuals:
+      - name: chart1
+        type: cardVisual
+        title: Revenue Overview
+            """.strip()
+
+            result = runner.invoke(
+                app,
+                ["apply", "-", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            project.clear_caches()
+            visual = project.find_visual(project.find_page("Demo"), "chart1")
+            self.assertTrue(get_property(visual.data, "title.show", VISUAL_PROPERTIES))
+            self.assertEqual(get_property(visual.data, "title.text", VISUAL_PROPERTIES), "Revenue Overview")
+
+    def test_apply_reports_interaction_overrides_explicitly(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+
+            yaml_content = """
+version: 1
+pages:
+  - name: Demo
+    visuals:
+      - name: slicer-scenario
+        type: barChart
+      - name: card-actual
+        type: cardVisual
+    interactions:
+      - source: slicer-scenario
+        target: card-actual
+        type: NoFilter
+            """.strip()
+
+            result = runner.invoke(
+                app,
+                ["apply", "-", "--project", str(root / "Sample.pbip")],
+                input=yaml_content,
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Set interaction:", result.stdout)
+            self.assertIn("slicer-scenario", result.stdout)
+            self.assertIn("card-actual", result.stdout)
+            self.assertIn("NoFilter", result.stdout)
 
 
 class DestructiveClearForceRegressionTests(unittest.TestCase):

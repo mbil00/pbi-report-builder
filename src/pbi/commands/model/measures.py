@@ -22,39 +22,68 @@ from .base import (
 
 @model_measure_app.command("list")
 def model_measures(
-    table_name: Annotated[str, typer.Argument(help="Table name.")],
+    table_name: Annotated[str | None, typer.Argument(help="Table name (omit to list across all tables).")] = None,
     full: Annotated[bool, typer.Option("--full", help="Show complete expressions without truncation.")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """List measures (facts) in a table."""
+    """List measures in one table or across the whole model."""
     _, model = get_model(project)
-    try:
-        sem_table = model.find_table(table_name)
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+    tables = model.tables
+    if table_name is not None:
+        try:
+            tables = [model.find_table(table_name)]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    rows = []
+    for sem_table in tables:
+        for measure in sem_table.measures:
+            rows.append(
+                {
+                    "table": sem_table.name,
+                    "name": measure.name,
+                    "expression": measure.expression,
+                    "format": measure.format_string,
+                    "displayFolder": measure.display_folder,
+                }
+            )
+
+    if not rows:
+        if table_name is None:
+            console.print("[yellow]No measures found in the model. Use `pbi model measure create` to add one.[/yellow]")
+        else:
+            console.print(f'[yellow]No measures in "{tables[0].name}". Use `pbi model measure create` to add one.[/yellow]')
+        raise typer.Exit(0)
 
     if as_json:
         import json
 
-        rows = [{"name": measure.name, "expression": measure.expression, "format": measure.format_string} for measure in sem_table.measures]
         console.print_json(json.dumps(rows, indent=2))
         return
 
-    table = Table(title=f'Measures in "{sem_table.name}"', box=box.SIMPLE)
+    title = f'Measures in "{tables[0].name}"' if table_name is not None else "Measures"
+    table = Table(title=title, box=box.SIMPLE)
+    if table_name is None:
+        table.add_column("Table", style="dim")
     table.add_column("Measure", style="cyan")
     if full:
         table.add_column("Expression")
     else:
         table.add_column("Expression", max_width=60)
     table.add_column("Format", style="dim")
+    table.add_column("Folder", style="dim")
 
-    for measure in sem_table.measures:
-        expr = measure.expression if full else (
-            measure.expression[:57] + "..." if len(measure.expression) > 60 else measure.expression
+    for row in rows:
+        expr_value = row["expression"]
+        expr = expr_value if full else (
+            expr_value[:57] + "..." if len(expr_value) > 60 else expr_value
         )
-        table.add_row(measure.name, expr, measure.format_string)
+        values = [row["name"], expr, row["format"], row["displayFolder"] or ""]
+        if table_name is None:
+            values.insert(0, row["table"])
+        table.add_row(*values)
 
     console.print(table)
 
@@ -187,7 +216,7 @@ def model_measure_set(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set metadata properties on a measure (description, displayFolder, etc.)."""
+    """Set metadata properties on a measure (displayFolder, formatString, etc.)."""
     from pbi.model import set_member_property
 
     proj = get_project(project)

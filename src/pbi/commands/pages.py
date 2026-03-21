@@ -380,6 +380,24 @@ def page_copy(
     )
 
 
+@page_app.command("rename")
+def page_rename(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    new_name: Annotated[str, typer.Argument(help="New display name.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Rename a page by updating its display name."""
+    _proj, pg = _get_page(project, page)
+    old_name = pg.display_name
+    if old_name == new_name:
+        console.print(f'[dim]No change:[/dim] [cyan]{old_name}[/cyan] is already named "{new_name}"')
+        return
+
+    pg.data["displayName"] = new_name
+    pg.save()
+    console.print(f'Renamed page "[cyan]{old_name}[/cyan]" [dim]->[/dim] "[cyan]{new_name}[/cyan]"')
+
+
 @page_app.command("delete")
 def page_delete(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],

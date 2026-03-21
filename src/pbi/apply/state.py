@@ -24,6 +24,7 @@ class ApplyResult:
     properties_set: int = 0
     bindings_added: int = 0
     filters_added: int = field(default=0)
+    interactions_set: list[tuple[str, str, str, str]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     rolled_back: bool = False

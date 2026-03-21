@@ -287,6 +287,7 @@ def apply_interactions_spec(
 
         if dry_run:
             result.properties_set += 1
+            result.interactions_set.append((page.display_name, str(source), str(target), str(interaction_type)))
             continue
 
         try:
@@ -294,5 +295,6 @@ def apply_interactions_spec(
             target_visual = page_state.find_visual(target)
             set_interaction(page, source_visual.name, target_visual.name, interaction_type)
             result.properties_set += 1
+            result.interactions_set.append((page.display_name, source_visual.name, target_visual.name, interaction_type))
         except ValueError as e:
             result.errors.append(f"{context}: interaction {source}->{target}: {e}")

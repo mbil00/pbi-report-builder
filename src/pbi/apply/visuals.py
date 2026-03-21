@@ -21,6 +21,7 @@ from .visual_support import (
     apply_raw_visual_payload,
     apply_textbox_content,
     count_dry_run_changes,
+    expand_visual_shorthand,
     parse_position,
     parse_size,
     raw_object_roots,
@@ -44,6 +45,7 @@ def apply_visual(
     page_state: _PageVisualState,
 ) -> None:
     """Apply a single visual specification."""
+    vis_spec = expand_visual_shorthand(vis_spec)
     page_name = page.display_name
     vis_name = vis_spec.get("name")
     vis_id = vis_spec.get("id")

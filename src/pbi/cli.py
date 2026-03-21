@@ -191,6 +191,12 @@ def apply_cmd(
     if result.visuals_deleted:
         for p, v in result.visuals_deleted:
             console.print(f'{prefix}Deleted visual "[cyan]{v}[/cyan]" on "{p}" (not in YAML)')
+    if result.interactions_set:
+        for page_name, source, target, interaction_type in result.interactions_set:
+            console.print(
+                f'{prefix}Set interaction: [cyan]{source}[/cyan] [dim]->[/dim] '
+                f'[cyan]{target}[/cyan] on "{page_name}" [dim]=[/dim] {interaction_type}'
+            )
 
     if result.properties_set or result.bindings_added or result.filters_added:
         parts = []

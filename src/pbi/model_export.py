@@ -41,8 +41,6 @@ def export_model_yaml(
             entry: dict = {"name": m.name, "expression": m.expression}
             if m.format_string:
                 entry["format"] = m.format_string
-            if m.description:
-                entry["description"] = m.description
             if m.display_folder:
                 entry["displayFolder"] = m.display_folder
             table_measures.append(entry)
@@ -69,8 +67,6 @@ def export_model_yaml(
                 entry["hidden"] = True
             if c.summarize_by and c.summarize_by != "none":
                 entry["summarizeBy"] = c.summarize_by
-            if c.description:
-                entry["description"] = c.description
             if c.display_folder:
                 entry["displayFolder"] = c.display_folder
             if c.sort_by_column:

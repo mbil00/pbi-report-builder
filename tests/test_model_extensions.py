@@ -72,7 +72,7 @@ def _write_model(root: Path, content: str) -> Path:
 
 
 class MetadataWriteTests(unittest.TestCase):
-    def test_set_member_property_description_on_measure(self):
+    def test_set_member_property_rejects_description(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_project(root)
@@ -81,16 +81,10 @@ table Sales
 \tmeasure Revenue = SUM(Sales[Amount])
 \t\tlineageTag: m-1
 """)
-            table, field, ftype, changed = set_member_property(
-                root, "Sales.Revenue", "description", "Total revenue from sales",
-            )
-            self.assertTrue(changed)
-            self.assertEqual(ftype, "measure")
-
-            # Verify written
-            model = SemanticModel.load(root)
-            m = model.find_table("Sales").find_measure("Revenue")
-            self.assertEqual(m.description, "Total revenue from sales")
+            with self.assertRaisesRegex(ValueError, "not supported by Power BI TMDL"):
+                set_member_property(
+                    root, "Sales.Revenue", "description", "Total revenue from sales",
+                )
 
     def test_set_member_property_display_folder_on_column(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,6 +134,31 @@ table Date
             c = model.find_table("Date").find_column("MonthName")
             self.assertEqual(c.sort_by_column, "MonthNumber")
 
+    def test_set_member_property_inserts_before_annotation_separator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn OrderDate
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: OrderDate
+
+\t\tannotation SummarizationSetBy = Automatic
+""")
+            _, _, _, changed = set_member_property(
+                root, "Sales.OrderDate", "displayFolder", "Dates",
+            )
+            self.assertTrue(changed)
+
+            content = path.read_text(encoding="utf-8")
+            self.assertIn(
+                "\t\tsourceColumn: OrderDate\n\t\tdisplayFolder: Dates\n\n\t\tannotation SummarizationSetBy = Automatic",
+                content,
+            )
+
     def test_set_member_property_rejects_unknown_property(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -162,11 +181,11 @@ table Sales
             _write_table(root, "Sales.tmdl", """
 table Sales
 \tmeasure Revenue = SUM(Sales[Amount])
-\t\tdescription: existing
+\t\tdisplayFolder: existing
 \t\tlineageTag: m-1
 """)
             _, _, _, changed = set_member_property(
-                root, "Sales.Revenue", "description", "existing",
+                root, "Sales.Revenue", "displayFolder", "existing",
             )
             self.assertFalse(changed)
 
@@ -321,8 +340,8 @@ table Sales
                 "description=Order placement date",
                 "--project", str(root / "Sample.pbip"),
             ])
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("description", result.stdout)
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("not supported by Power BI TMDL", result.stdout)
 
     def test_measure_set_cli(self):
         runner = CliRunner()
@@ -1028,7 +1047,7 @@ table Sales
             m = spec["measures"]["Sales"][0]
             self.assertEqual(m["name"], "Revenue")
             self.assertEqual(m["format"], "0")
-            self.assertEqual(m["description"], "Total revenue")
+            self.assertNotIn("description", m)
             self.assertEqual(m["displayFolder"], "KPIs")
 
     def test_export_columns_with_metadata(self):
@@ -1239,8 +1258,6 @@ table Sales
                 "measures": {
                     "Sales": [{
                         "name": "Revenue",
-                        "expression": "SUM(Sales[Amount])",
-                        "description": "Total revenue",
                         "displayFolder": "KPIs",
                     }],
                 },
@@ -1248,10 +1265,39 @@ table Sales
             result = apply_model_yaml(root, yaml_content)
             self.assertTrue(result.has_changes)
             self.assertIn("Sales.Revenue", result.measures_updated)
+            self.assertEqual(result.errors, [])
 
             model = SemanticModel.load(root)
             m = model.find_table("Sales").find_measure("Revenue")
-            self.assertEqual(m.description, "Total revenue")
+            self.assertEqual(m.display_folder, "KPIs")
+
+    def test_apply_measure_description_reports_clear_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m-1
+""")
+            yaml_content = yaml.safe_dump({
+                "measures": {
+                    "Sales": [{
+                        "name": "Revenue",
+                        "description": "Total revenue",
+                        "displayFolder": "KPIs",
+                    }],
+                },
+            }, sort_keys=False)
+            result = apply_model_yaml(root, yaml_content)
+            self.assertIn("Sales.Revenue", result.measures_updated)
+            self.assertEqual(
+                result.errors,
+                ['measures.Sales.Revenue.description: Property "description" is not supported by Power BI TMDL for columns or measures.'],
+            )
+
+            model = SemanticModel.load(root)
+            m = model.find_table("Sales").find_measure("Revenue")
             self.assertEqual(m.display_folder, "KPIs")
 
     def test_apply_column_metadata(self):
@@ -1278,6 +1324,7 @@ table Date
                         "MonthName": {
                             "sortByColumn": "MonthNumber",
                             "displayFolder": "Calendar",
+                            "summarizeBy": "none",
                         },
                     },
                 },
@@ -1290,6 +1337,7 @@ table Date
             c = model.find_table("Date").find_column("MonthName")
             self.assertEqual(c.sort_by_column, "MonthNumber")
             self.assertEqual(c.display_folder, "Calendar")
+            self.assertEqual(c.summarize_by, "none")
 
     def test_apply_relationships(self):
         with tempfile.TemporaryDirectory() as tmp:

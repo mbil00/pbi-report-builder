@@ -54,6 +54,17 @@ def apply_nested_properties(
             result.errors.append(f"{context}: {prop_name}: {e}")
 
 
+def expand_visual_shorthand(spec: dict[str, Any]) -> dict[str, Any]:
+    """Expand convenient visual YAML shorthands into canonical property mappings."""
+    title = spec.get("title")
+    if not isinstance(title, str):
+        return spec
+
+    expanded = dict(spec)
+    expanded["title"] = {"show": True, "text": title}
+    return expanded
+
+
 def raw_object_roots(raw_pbir: dict) -> set[str]:
     """Return YAML object roots projected from the raw visual payload."""
     visual = raw_pbir.get("visual", {})
