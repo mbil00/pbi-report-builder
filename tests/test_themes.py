@@ -10,7 +10,9 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pbi.cli import app
+from pbi.formatting import GradientStop, build_gradient_format, build_rules_format
 from pbi.schema_refs import REPORT_SCHEMA
+from pbi.theme_formatting import get_theme_conditional_formats
 from pbi.themes import (
     THEME_CASCADE,
     ThemePreset,
@@ -42,6 +44,7 @@ from pbi.themes import (
     save_theme_preset,
     set_theme_property,
     set_visual_style_property,
+    set_visual_style_value,
 )
 
 
@@ -1159,6 +1162,82 @@ class TestThemeStyleSetCommand(unittest.TestCase):
             self.assertEqual(raw.exit_code, 0, raw.stdout)
             parsed = json.loads(raw.stdout)
             self.assertEqual(parsed["legend"][0]["complex"]["expr"]["ThemeDataColor"]["ColorId"], 2)
+
+
+class TestThemeConditionalFormattingHelpers(unittest.TestCase):
+    def test_extracts_theme_conditional_formats(self) -> None:
+        data = create_theme("Theme CF")
+        set_visual_style_value(
+            data,
+            "columnChart",
+            "dataPoint",
+            "fill",
+            build_gradient_format(
+                "Sales",
+                "Revenue",
+                GradientStop("#FFFFFF", 0),
+                GradientStop("#000000", 100),
+            ),
+            role="Series",
+        )
+        set_visual_style_value(
+            data,
+            "tableEx",
+            "values",
+            "fontColor",
+            build_rules_format(
+                "Status",
+                "State",
+                [{"value": "Open", "color": "#FF0000"}],
+            ),
+        )
+
+        formats = get_theme_conditional_formats(data)
+        self.assertEqual(len(formats), 2)
+        first = next(item for item in formats if item.visual_type == "columnChart")
+        self.assertEqual(first.role, "Series")
+        self.assertEqual(first.format.format_type, "gradient2")
+        second = next(item for item in formats if item.visual_type == "tableEx")
+        self.assertEqual(second.format.format_type, "rules")
+
+
+class TestThemeFormatCommand(unittest.TestCase):
+    def test_measure_get_set_clear(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            pbip = _scaffold_project(Path(tmp), theme_data=create_theme("Theme CF"))
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "theme",
+                    "format",
+                    "set",
+                    "card",
+                    "labels.color",
+                    "--mode",
+                    "measure",
+                    "--source",
+                    "Palette.ColorMeasure",
+                    "-p",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+            self.assertIn("measure", set_result.stdout)
+
+            get_result = runner.invoke(app, ["theme", "format", "get", "card", "--json", "-p", str(pbip)])
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            rows = json.loads(get_result.stdout)
+            self.assertEqual(rows[0]["property"], "labels.color")
+            self.assertEqual(rows[0]["source"], "Palette.ColorMeasure")
+
+            clear_result = runner.invoke(
+                app,
+                ["theme", "format", "clear", "card", "labels.color", "--force", "-p", str(pbip)],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+            self.assertIn("Cleared", clear_result.stdout)
 
 
 class TestThemeStyleDeleteCommand(unittest.TestCase):

@@ -235,6 +235,15 @@ def get_conditional_formats(visual_data: dict) -> list[ConditionalFormatInfo]:
     return results
 
 
+def parse_conditional_value(
+    obj_name: str,
+    prop_name: str,
+    value: Any,
+) -> ConditionalFormatInfo | None:
+    """Public wrapper for conditional-format parsing from one property value."""
+    return _parse_conditional_value(obj_name, prop_name, value)
+
+
 def _parse_conditional_value(
     obj_name: str, prop_name: str, value: Any,
 ) -> ConditionalFormatInfo | None:

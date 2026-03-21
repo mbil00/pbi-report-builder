@@ -146,6 +146,7 @@ pbi visual arrange align "Sales" chart1 chart2 --align top --match-height
 # Stateful operations
 pbi visual sort set "Sales Overview" revenueChart Sales.Revenue --direction desc
 pbi visual format set "Sales Overview" revenueChart dataPoint.fill --mode measure --source Sales.ColorMeasure
+pbi theme format set columnChart dataPoint.fill --mode gradient --source Sales.SalesAmount --min-color "#FFF7E6" --min-value 0 --max-color "#C50F1F" --max-value 5000
 
 # Theme migration
 pbi theme migrate old-theme.json new-theme.json

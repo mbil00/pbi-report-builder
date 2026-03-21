@@ -242,29 +242,87 @@ def set_visual_style_property(
 
     encoded = parse_theme_style_value(value, schema_type)
 
-    visual_styles = data.setdefault("visualStyles", {})
-    visual_type_entry = visual_styles.setdefault(visual_type, {})
-    data_role = visual_type_entry.setdefault(role, {})
-    entries: list[dict] = data_role.setdefault(object_name, [{}])
+    set_visual_style_value(
+        data,
+        visual_type,
+        object_name,
+        property_name,
+        encoded,
+        selector=selector,
+        role=role,
+    )
 
-    target: dict | None = None
-    if selector:
-        for entry in entries:
-            if entry.get("$id") == selector:
-                target = entry
-                break
-        if target is None:
-            target = {"$id": selector}
-            entries.append(target)
-    else:
-        for entry in entries:
-            if "$id" not in entry:
-                target = entry
-                break
-        if target is None:
-            target = entries[0]
 
-    target[property_name] = encoded
+def set_visual_style_value(
+    data: dict,
+    visual_type: str,
+    object_name: str,
+    property_name: str,
+    value: Any,
+    *,
+    selector: str | None = None,
+    role: str = "*",
+) -> None:
+    """Set an already-encoded value in visualStyles[visual_type][role][object_name]."""
+    target = _get_or_create_visual_style_entry(
+        data,
+        visual_type,
+        object_name,
+        selector=selector,
+        role=role,
+    )
+    target[property_name] = value
+
+
+def clear_visual_style_property(
+    data: dict,
+    visual_type: str,
+    object_name: str,
+    property_name: str,
+    *,
+    selector: str | None = None,
+    role: str = "*",
+) -> bool:
+    """Remove one property from visualStyles and clean up empty containers."""
+    visual_styles = data.get("visualStyles")
+    if not isinstance(visual_styles, dict):
+        return False
+    visual_type_entry = visual_styles.get(visual_type)
+    if not isinstance(visual_type_entry, dict):
+        return False
+    role_entry = visual_type_entry.get(role)
+    if not isinstance(role_entry, dict):
+        return False
+    entries = role_entry.get(object_name)
+    if not isinstance(entries, list):
+        return False
+
+    removed = False
+    to_remove: list[int] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            continue
+        if selector is not None:
+            if entry.get("$id") != selector:
+                continue
+        elif "$id" in entry:
+            continue
+        if property_name in entry:
+            del entry[property_name]
+            removed = True
+        if not entry or tuple(entry.keys()) == ("$id",):
+            to_remove.append(index)
+
+    for index in reversed(to_remove):
+        entries.pop(index)
+
+    if not entries:
+        role_entry.pop(object_name, None)
+    if not role_entry:
+        visual_type_entry.pop(role, None)
+    if not visual_type_entry:
+        visual_styles.pop(visual_type, None)
+    return removed
 
 
 def delete_visual_style(
@@ -308,3 +366,31 @@ def delete_visual_style(
             del visual_styles[visual_type]
         return True
     return False
+
+
+def _get_or_create_visual_style_entry(
+    data: dict,
+    visual_type: str,
+    object_name: str,
+    *,
+    selector: str | None = None,
+    role: str = "*",
+) -> dict:
+    """Return a writable entry for one visualStyles object branch."""
+    visual_styles = data.setdefault("visualStyles", {})
+    visual_type_entry = visual_styles.setdefault(visual_type, {})
+    data_role = visual_type_entry.setdefault(role, {})
+    entries: list[dict] = data_role.setdefault(object_name, [{}])
+
+    if selector:
+        for entry in entries:
+            if entry.get("$id") == selector:
+                return entry
+        target = {"$id": selector}
+        entries.append(target)
+        return target
+
+    for entry in entries:
+        if "$id" not in entry:
+            return entry
+    return entries[0]

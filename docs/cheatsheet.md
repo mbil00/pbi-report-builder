@@ -350,6 +350,17 @@ pbi theme style delete columnChart --force   # remove type overrides
 pbi theme style delete columnChart --role Series --force  # remove one role branch
 pbi theme style delete * categoryAxis --force  # remove specific object
 
+# Theme conditional formatting defaults
+pbi theme format get                         # list theme CF across visual types
+pbi theme format set columnChart dataPoint.fill \
+  --mode gradient --source Sales.SalesAmount \
+  --min-color "#FFF7E6" --min-value 0 \
+  --max-color "#C50F1F" --max-value 5000
+pbi theme format set tableEx values.fontColor \
+  --mode rules --source Status.State \
+  --rule "Open=#C50F1F" --rule "Closed=#107C10"
+pbi theme format clear columnChart dataPoint.fill --force
+
 # YAML round-trip also supports the active custom theme
 pbi export > report.yaml                     # full export may include top-level theme:
 pbi diff report.yaml                         # theme.* paths are diffed too

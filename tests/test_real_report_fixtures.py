@@ -18,6 +18,7 @@ from pbi.model_apply import apply_model_yaml
 from pbi.model_export import export_model_yaml
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.project import Project
+from pbi.themes import create_theme
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "real-report-fixtures"
@@ -1164,6 +1165,90 @@ class RealReportFixtureTests(unittest.TestCase):
                 get_property(revenue_by_month.data, "background.color", VISUAL_PROPERTIES),
                 "#FFF8E7",
             )
+
+    def test_real_fixture_theme_conditional_format_round_trip(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp) / "source"
+            target_root = Path(tmp) / "target"
+            shutil.copytree(KITCHEN_SINK_DIR, source_root)
+            shutil.copytree(KITCHEN_SINK_DIR, target_root)
+            source_pbip = source_root / KITCHEN_SINK_PBIP.name
+            target_pbip = target_root / KITCHEN_SINK_PBIP.name
+
+            theme_path = Path(tmp) / "fixture-theme.json"
+            theme_path.write_text(
+                json.dumps(create_theme("Fixture Theme"), indent=2),
+                encoding="utf-8",
+            )
+
+            apply_theme_result = runner.invoke(
+                app,
+                ["theme", "apply", str(theme_path), "--project", str(source_pbip)],
+            )
+            self.assertEqual(apply_theme_result.exit_code, 0, apply_theme_result.stdout)
+
+            format_set_result = runner.invoke(
+                app,
+                [
+                    "theme",
+                    "format",
+                    "set",
+                    "clusteredColumnChart",
+                    "dataPoint.fill",
+                    "--mode",
+                    "gradient",
+                    "--source",
+                    "Sales.SalesAmount",
+                    "--min-color",
+                    "#FFF7E6",
+                    "--min-value",
+                    "0",
+                    "--max-color",
+                    "#C50F1F",
+                    "--max-value",
+                    "5000",
+                    "--project",
+                    str(source_pbip),
+                ],
+            )
+            self.assertEqual(format_set_result.exit_code, 0, format_set_result.stdout)
+            self.assertIn("gradient", format_set_result.stdout)
+
+            format_get_result = runner.invoke(
+                app,
+                [
+                    "theme",
+                    "format",
+                    "get",
+                    "clusteredColumnChart",
+                    "--json",
+                    "--project",
+                    str(source_pbip),
+                ],
+            )
+            self.assertEqual(format_get_result.exit_code, 0, format_get_result.stdout)
+            rows = json.loads(format_get_result.stdout)
+            self.assertEqual(rows[0]["mode"], "gradient2")
+            self.assertEqual(rows[0]["source"], "Sales.SalesAmount")
+
+            exported = export_yaml(Project.find(source_pbip))
+            parsed = yaml.safe_load(exported)
+            self.assertIn("theme", parsed)
+            self.assertEqual(
+                parsed["theme"]["visualStyles"]["clusteredColumnChart"]["*"]["dataPoint"][0]["fill"]["solid"]["color"]["expr"]["FillRule"]["Input"]["Column"]["Property"],
+                "SalesAmount",
+            )
+
+            theme_only = yaml.safe_dump({"version": 1, "theme": parsed["theme"], "pages": []}, sort_keys=False)
+            apply_result = apply_yaml(Project.find(target_pbip), theme_only)
+            self.assertEqual(apply_result.errors, [])
+
+            diff_path = Path(tmp) / "fixture-theme-roundtrip.yaml"
+            diff_path.write_text(theme_only, encoding="utf-8")
+            diff_result = runner.invoke(app, ["diff", str(diff_path), "--project", str(target_pbip)])
+            self.assertEqual(diff_result.exit_code, 0, diff_result.stdout)
+            self.assertIn("No differences found.", diff_result.stdout)
 
     def test_kitchen_sink_apply_yaml_mutates_real_visual_property(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

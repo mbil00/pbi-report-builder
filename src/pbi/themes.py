@@ -36,6 +36,7 @@ from pbi.theme_styles import (
     THEME_PALETTE_KEYS,
     _cascade_visual_styles_colors,
     _validate_hex_color,
+    clear_visual_style_property,
     decode_theme_style_value,
     delete_visual_style,
     encode_theme_style_value,
@@ -44,6 +45,7 @@ from pbi.theme_styles import (
     list_visual_style_types,
     parse_style_assignment,
     set_visual_style_property,
+    set_visual_style_value,
 )
 
 

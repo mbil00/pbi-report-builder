@@ -16,6 +16,8 @@ theme_preset_app = typer.Typer(help="Saved theme preset operations.", no_args_is
 theme_app.add_typer(theme_preset_app, name="preset")
 theme_style_app = typer.Typer(help="Visual style overrides in the theme.", no_args_is_help=True)
 theme_app.add_typer(theme_style_app, name="style")
+theme_format_app = typer.Typer(help="Theme-level conditional formatting operations.", no_args_is_help=True)
+theme_app.add_typer(theme_format_app, name="format")
 
 
 def _format_style_value(value: object) -> str:
@@ -1028,3 +1030,247 @@ def theme_style_delete(
         console.print(f'Deleted visual style overrides for "[cyan]{target}[/cyan]"')
     else:
         console.print(f'[yellow]No visual style overrides for "{target}".[/yellow]')
+
+
+@theme_format_app.command("get")
+def theme_format_get(
+    visual_type: Annotated[Optional[str], typer.Argument(help="Visual type to inspect (omit to list all).")] = None,
+    role: Annotated[Optional[str], typer.Option("--role", help="visualStyles role branch to inspect.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show conditional formatting defined in theme visualStyles."""
+    import json as json_mod
+
+    from pbi.theme_formatting import get_theme_conditional_formats
+    from pbi.themes import get_theme_data
+
+    proj = get_project(project)
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    formats = get_theme_conditional_formats(data, visual_type=visual_type, role=role)
+    if not formats:
+        console.print("[dim]No theme conditional formatting.[/dim]")
+        return
+
+    if as_json:
+        rows = [
+            {
+                "visualType": item.visual_type,
+                "role": item.role,
+                "selector": item.selector,
+                "property": f"{item.format.object_name}.{item.format.property_name}",
+                "mode": item.format.format_type,
+                "source": item.format.field_ref,
+                "details": item.format.details,
+            }
+            for item in formats
+        ]
+        console.print_json(json_mod.dumps(rows, indent=2))
+        return
+
+    table = Table(title="Theme Conditional Formatting", box=box.SIMPLE)
+    table.add_column("Visual Type", style="cyan")
+    table.add_column("Role", style="dim")
+    table.add_column("Property")
+    table.add_column("Mode")
+    table.add_column("Source", style="bold")
+    table.add_column("Selector", style="dim")
+    table.add_column("Details", style="dim")
+    for item in formats:
+        table.add_row(
+            item.visual_type,
+            item.role,
+            f"{item.format.object_name}.{item.format.property_name}",
+            item.format.format_type,
+            item.format.field_ref,
+            item.selector,
+            item.format.details,
+        )
+    console.print(table)
+
+
+@theme_format_app.command("set")
+def theme_format_set(
+    visual_type: Annotated[str, typer.Argument(help="Visual type (or * for wildcard defaults).")],
+    prop: Annotated[str, typer.Argument(help="Property as object.prop (e.g. dataPoint.fill).")],
+    mode: Annotated[str, typer.Option("--mode", help="Formatting mode: measure, gradient, or rules.")],
+    source: Annotated[str, typer.Option("--source", help="Source field: Table.Measure or Table.Field.")],
+    role: Annotated[str, typer.Option("--role", help="visualStyles role branch (default: *).")] = "*",
+    selector: Annotated[str | None, typer.Option("--selector", help="Theme style $id selector to target.")] = None,
+    min_color: Annotated[str | None, typer.Option("--min-color", help="Gradient minimum color (#hex).")] = None,
+    min_value: Annotated[float | None, typer.Option("--min-value", help="Gradient minimum value.")] = None,
+    mid_color: Annotated[str | None, typer.Option("--mid-color", help="Gradient midpoint color (#hex).")] = None,
+    mid_value: Annotated[float | None, typer.Option("--mid-value", help="Gradient midpoint value.")] = None,
+    max_color: Annotated[str | None, typer.Option("--max-color", help="Gradient maximum color (#hex).")] = None,
+    max_value: Annotated[float | None, typer.Option("--max-value", help="Gradient maximum value.")] = None,
+    rule: Annotated[list[str] | None, typer.Option("--rule", help="Rules mode: value=color pair (repeatable).")] = None,
+    else_color: Annotated[str | None, typer.Option("--else-color", help="Rules mode fallback color.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set theme-level conditional formatting on a visualStyles property."""
+    from pbi.commands.common import resolve_field_type
+    from pbi.formatting import GradientStop, build_gradient_format, build_measure_format, build_rules_format
+    from pbi.themes import clear_visual_style_property, get_theme_data, save_theme_data, set_visual_style_value
+
+    proj = get_project(project)
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    dot = prop.find(".")
+    if dot == -1:
+        console.print("[red]Error:[/red] Property must be object.prop format (e.g. dataPoint.fill).")
+        raise typer.Exit(1)
+    obj_name, prop_name = prop[:dot], prop[dot + 1 :]
+
+    if mode not in {"measure", "gradient", "rules"}:
+        console.print("[red]Error:[/red] --mode must be 'measure', 'gradient', or 'rules'.")
+        raise typer.Exit(1)
+
+    if mode == "measure":
+        src_dot = source.find(".")
+        if src_dot == -1:
+            console.print("[red]Error:[/red] --source must be Table.Measure format for --mode measure.")
+            raise typer.Exit(1)
+        src_entity, src_prop = source[:src_dot], source[src_dot + 1 :]
+        value = build_measure_format(src_entity, src_prop)
+    else:
+        src_dot = source.find(".")
+        if src_dot == -1:
+            console.print("[red]Error:[/red] --source must be Table.Field format.")
+            raise typer.Exit(1)
+        src_entity, src_prop, src_field_type = resolve_field_type(proj, source, "auto")
+
+        if mode == "rules":
+            if not rule:
+                console.print("[red]Error:[/red] Rules mode requires at least one --rule value=color pair.")
+                raise typer.Exit(1)
+            parsed_rules = []
+            for raw_rule in rule:
+                eq = raw_rule.find("=")
+                if eq == -1:
+                    console.print(
+                        f'[red]Error:[/red] Invalid rule "{raw_rule}". Use value=color format (e.g. Compliant=#2B7A4B).'
+                    )
+                    raise typer.Exit(1)
+                parsed_rules.append({"value": raw_rule[:eq], "color": raw_rule[eq + 1 :]})
+            value = build_rules_format(
+                src_entity,
+                src_prop,
+                parsed_rules,
+                else_color=else_color,
+                field_type=src_field_type,
+            )
+        else:
+            if min_color is None or min_value is None or max_color is None or max_value is None:
+                console.print(
+                    "[red]Error:[/red] Gradient mode requires --min-color, --min-value, --max-color, and --max-value."
+                )
+                raise typer.Exit(1)
+            min_c = min_color if min_color.startswith("#") else f"#{min_color}"
+            max_c = max_color if max_color.startswith("#") else f"#{max_color}"
+            mid_stop = None
+            if mid_color is not None and mid_value is not None:
+                mid_c = mid_color if mid_color.startswith("#") else f"#{mid_color}"
+                mid_stop = GradientStop(mid_c, mid_value)
+            elif mid_color is not None or mid_value is not None:
+                console.print("[red]Error:[/red] Both --mid-color and --mid-value are required for a 3-stop gradient.")
+                raise typer.Exit(1)
+            value = build_gradient_format(
+                src_entity,
+                src_prop,
+                min_stop=GradientStop(min_c, min_value),
+                max_stop=GradientStop(max_c, max_value),
+                mid_stop=mid_stop,
+                field_type=src_field_type,
+            )
+
+    clear_visual_style_property(data, visual_type, obj_name, prop_name, selector=selector, role=role)
+    set_visual_style_value(
+        data,
+        visual_type,
+        obj_name,
+        prop_name,
+        value,
+        selector=selector,
+        role=role,
+    )
+    save_theme_data(proj, data)
+
+    selector_label = f" [{selector}]" if selector else ""
+    role_label = f" ({role})" if role != "*" else ""
+    if mode == "measure":
+        console.print(
+            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = measure [bold]{src_entity}.{src_prop}[/bold]"
+        )
+    elif mode == "rules":
+        console.print(
+            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = rules by [bold]{src_entity}.{src_prop}[/bold]"
+        )
+    else:
+        console.print(
+            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = gradient by [bold]{src_entity}.{src_prop}[/bold]"
+        )
+
+
+@theme_format_app.command("clear")
+def theme_format_clear(
+    visual_type: Annotated[str, typer.Argument(help="Visual type (or * for wildcard defaults).")],
+    prop: Annotated[str, typer.Argument(help="Property as object.prop (e.g. dataPoint.fill).")],
+    role: Annotated[str, typer.Option("--role", help="visualStyles role branch (default: *).")] = "*",
+    selector: Annotated[str | None, typer.Option("--selector", help="Theme style $id selector to target.")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Clear theme-level conditional formatting from one visualStyles property."""
+    from pbi.formatting import parse_conditional_value
+    from pbi.themes import clear_visual_style_property, get_theme_data, get_visual_style_entries, save_theme_data
+
+    proj = get_project(project)
+    try:
+        data = get_theme_data(proj)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    dot = prop.find(".")
+    if dot == -1:
+        console.print("[red]Error:[/red] Property must be object.prop format (e.g. dataPoint.fill).")
+        raise typer.Exit(1)
+    obj_name, prop_name = prop[:dot], prop[dot + 1 :]
+
+    entries = get_visual_style_entries(data, visual_type, role=role) or {}
+    raw_value = None
+    for entry in entries.get(obj_name, []):
+        if selector is not None:
+            if entry.get("$id") != selector:
+                continue
+        elif "$id" in entry:
+            continue
+        raw_value = entry.get(prop_name)
+        break
+
+    if parse_conditional_value(obj_name, prop_name, raw_value) is None:
+        console.print(f"[dim]No conditional formatting on {visual_type}:{prop}.[/dim]")
+        return
+
+    target = f"{visual_type}:{prop}"
+    if selector:
+        target += f" [{selector}]"
+    if role != "*":
+        target += f" ({role})"
+    if not force:
+        confirm = typer.confirm(f"Clear conditional formatting from {target}?")
+        if not confirm:
+            raise typer.Abort()
+
+    clear_visual_style_property(data, visual_type, obj_name, prop_name, selector=selector, role=role)
+    save_theme_data(proj, data)
+    console.print(f"Cleared conditional formatting from [cyan]{target}[/cyan].")

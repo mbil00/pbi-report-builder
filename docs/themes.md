@@ -91,6 +91,27 @@ Notes:
 - Values may be plain scalars (`true`, `12`, `RightCenter`) or inline JSON for complex nested payloads.
 - `--raw` dumps the underlying JSON structure instead of the flattened table view.
 
+## pbi theme format
+
+Theme conditional formatting uses the same `measure`, `gradient`, and `rules` vocabulary as `pbi visual format`, but writes the defaults into theme `visualStyles`.
+
+```bash
+pbi theme format get
+pbi theme format get columnChart --json
+pbi theme format set columnChart dataPoint.fill \
+  --mode gradient \
+  --source Sales.SalesAmount \
+  --min-color "#FFF7E6" --min-value 0 \
+  --max-color "#C50F1F" --max-value 5000
+pbi theme format clear columnChart dataPoint.fill --force
+```
+
+Notes:
+
+- `--role` targets a specific `visualStyles` role branch.
+- `--selector` targets a specific `$id` entry inside the object array.
+- `theme format` is the author-friendly path for conditional formatting; `theme style` remains the low-level escape hatch for arbitrary JSON shapes.
+
 ## YAML `theme:` round-trip
 
 `pbi export`, `pbi apply`, and `pbi diff` now support a top-level `theme:` section for the active custom theme.

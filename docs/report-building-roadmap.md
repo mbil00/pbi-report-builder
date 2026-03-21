@@ -278,7 +278,7 @@ Theme support is already valuable, but it is not yet complete enough to treat th
 
 ### Status
 
-In progress. Nested `visualStyles` values, role-branch editing, and top-level YAML `theme:` export/apply/diff are now implemented. Remaining work is theme-level conditional formatting and broader real-fixture parity coverage.
+Complete. Themes now support nested `visualStyles` values, role-branch editing, theme-level conditional-format defaults, top-level YAML `theme:` export/apply/diff, and real-fixture round-trip coverage.
 
 ### Goal
 
