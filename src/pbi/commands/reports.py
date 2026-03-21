@@ -20,8 +20,14 @@ from .common import ProjectOpt, console, get_project, parse_property_assignments
 report_app = typer.Typer(help="Report metadata operations.", no_args_is_help=True)
 report_annotation_app = typer.Typer(help="Report annotation operations.", no_args_is_help=True)
 report_object_app = typer.Typer(help="Report-level object and array operations.", no_args_is_help=True)
+report_resource_app = typer.Typer(help="Report resource package operations.", no_args_is_help=True)
+report_resource_package_app = typer.Typer(help="Resource package operations.", no_args_is_help=True)
+report_resource_item_app = typer.Typer(help="Resource item operations.", no_args_is_help=True)
 report_app.add_typer(report_annotation_app, name="annotation")
 report_app.add_typer(report_object_app, name="object")
+report_app.add_typer(report_resource_app, name="resource")
+report_resource_app.add_typer(report_resource_package_app, name="package")
+report_resource_app.add_typer(report_resource_item_app, name="item")
 
 _REPORT_OBJECT_KEYS = (
     "annotations",
@@ -454,3 +460,268 @@ def report_object_clear(
     data.pop(key, None)
     _save_report_json(proj, data)
     console.print(f'Cleared report object "[cyan]{key}[/cyan]"')
+
+
+@report_resource_package_app.command("list")
+def report_resource_package_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List report resource packages."""
+    from pbi.report_resources import list_resource_packages
+
+    proj = get_project(project)
+    rows = list_resource_packages(proj)
+
+    if as_json:
+        console.print_json(
+            json.dumps(
+                [
+                    {
+                        "name": row.name,
+                        "type": row.package_type,
+                        "items": row.item_count,
+                        "disabled": row.disabled,
+                    }
+                    for row in rows
+                ],
+                indent=2,
+            )
+        )
+        return
+
+    if not rows:
+        console.print("[yellow]No resource packages. Use `pbi report resource package create` to add one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title="Resource Packages", box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Type", style="dim")
+    table.add_column("Items", justify="right")
+    table.add_column("Disabled")
+    for row in rows:
+        table.add_row(row.name, row.package_type, str(row.item_count), "yes" if row.disabled else "")
+    console.print(table)
+
+
+@report_resource_package_app.command("get")
+def report_resource_package_get(
+    name: Annotated[str, typer.Argument(help="Resource package name.")],
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show one resource package."""
+    from pbi.report_resources import get_resource_package
+
+    proj = get_project(project)
+    try:
+        pkg = get_resource_package(proj, name)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if raw:
+        console.print_json(json.dumps(pkg, indent=2))
+        return
+
+    table = Table(title=str(pkg.get("name", name)), box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    table.add_row("Name", str(pkg.get("name", "")))
+    table.add_row("Type", str(pkg.get("type", "")))
+    table.add_row("Items", str(len(pkg.get("items", []))))
+    if "disabled" in pkg:
+        table.add_row("Disabled", "yes" if pkg.get("disabled") else "")
+    console.print(table)
+
+
+@report_resource_package_app.command("create")
+def report_resource_package_create(
+    name: Annotated[str, typer.Argument(help="Resource package name.")],
+    package_type: Annotated[str, typer.Option("--type", help="Package type.")] = "RegisteredResources",
+    disabled: Annotated[bool, typer.Option("--disabled", help="Create the package in a disabled state.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Create a report resource package."""
+    from pbi.report_resources import create_resource_package
+
+    proj = get_project(project)
+    try:
+        create_resource_package(proj, name, package_type=package_type, disabled=disabled)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    console.print(f'Created resource package "[cyan]{name}[/cyan]"')
+
+
+@report_resource_package_app.command("delete")
+def report_resource_package_delete(
+    name: Annotated[str, typer.Argument(help="Resource package name.")],
+    drop_files: Annotated[bool, typer.Option("--drop-files", help="Also delete RegisteredResources files for this package.")] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete a report resource package."""
+    from pbi.report_resources import delete_resource_package, get_resource_package
+
+    proj = get_project(project)
+    try:
+        pkg = get_resource_package(proj, name)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not force:
+        confirm = typer.confirm(f'Delete "{pkg.get("name", name)}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        deleted = delete_resource_package(proj, name, drop_files=drop_files)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    console.print(f'Deleted resource package "[cyan]{deleted.get("name", name)}[/cyan]"')
+
+
+@report_resource_item_app.command("list")
+def report_resource_item_list(
+    package: Annotated[str, typer.Argument(help="Resource package name.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List items within one resource package."""
+    from pbi.report_resources import list_resource_items
+
+    proj = get_project(project)
+    try:
+        rows = list_resource_items(proj, package)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json:
+        console.print_json(
+            json.dumps(
+                [
+                    {
+                        "package": row.package_name,
+                        "name": row.name,
+                        "path": row.path,
+                        "type": row.item_type,
+                    }
+                    for row in rows
+                ],
+                indent=2,
+            )
+        )
+        return
+
+    if not rows:
+        console.print("[yellow]No resource items. Use `pbi report resource item set` to add one.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=package, box=box.SIMPLE)
+    table.add_column("Name", style="cyan")
+    table.add_column("Path")
+    table.add_column("Type", style="dim")
+    for row in rows:
+        table.add_row(row.name, row.path, row.item_type)
+    console.print(table)
+
+
+@report_resource_item_app.command("get")
+def report_resource_item_get(
+    package: Annotated[str, typer.Argument(help="Resource package name.")],
+    item: Annotated[str, typer.Argument(help="Resource item name or path.")],
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show one resource item."""
+    from pbi.report_resources import get_resource_item
+
+    proj = get_project(project)
+    try:
+        entry = get_resource_item(proj, package, item)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if raw:
+        console.print_json(json.dumps(entry, indent=2))
+        return
+
+    table = Table(title=str(entry.get("name", item)), box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    table.add_row("Name", str(entry.get("name", "")))
+    table.add_row("Path", str(entry.get("path", "")))
+    table.add_row("Type", str(entry.get("type", "")))
+    console.print(table)
+
+
+@report_resource_item_app.command("set")
+def report_resource_item_set(
+    package: Annotated[str, typer.Argument(help="Resource package name.")],
+    stored_path: Annotated[str, typer.Argument(help="Stored path for the resource item within the package.")],
+    item_type: Annotated[str, typer.Option("--type", help="Resource item type.")],
+    name: Annotated[str | None, typer.Option("--name", "-n", help="Display name for the item.")] = None,
+    from_file: Annotated[Path | None, typer.Option("--from-file", help="Copy a file into RegisteredResources before registering it.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Create or update one resource item."""
+    from pbi.report_resources import set_resource_item
+
+    proj = get_project(project)
+    try:
+        entry, created = set_resource_item(
+            proj,
+            package,
+            stored_path,
+            item_type=item_type,
+            name=name,
+            source_path=from_file,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if created:
+        console.print(
+            f'Created resource item "[cyan]{entry.get("name", stored_path)}[/cyan]" in package "[cyan]{package}[/cyan]"'
+        )
+    else:
+        console.print(
+            f'Set resource item "[cyan]{entry.get("name", stored_path)}[/cyan]" in package "[cyan]{package}[/cyan]"'
+        )
+
+
+@report_resource_item_app.command("delete")
+def report_resource_item_delete(
+    package: Annotated[str, typer.Argument(help="Resource package name.")],
+    item: Annotated[str, typer.Argument(help="Resource item name or path.")],
+    drop_file: Annotated[bool, typer.Option("--drop-file", help="Also delete the RegisteredResources file for this item.")] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete one resource item."""
+    from pbi.report_resources import delete_resource_item, get_resource_item
+
+    proj = get_project(project)
+    try:
+        entry = get_resource_item(proj, package, item)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not force:
+        confirm = typer.confirm(f'Delete "{entry.get("name", item)}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        deleted = delete_resource_item(proj, package, item, drop_file=drop_file)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    console.print(f'Deleted resource item "[cyan]{deleted.get("name", item)}[/cyan]"')

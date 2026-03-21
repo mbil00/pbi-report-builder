@@ -203,6 +203,147 @@ class ReportCommandTests(unittest.TestCase):
                 ],
             )
 
+    def test_report_resource_package_create_list_get_and_delete(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pbip_path, report_path = self._make_report_project(root)
+
+            create_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "package",
+                    "create",
+                    "BrandAssets",
+                    "--type",
+                    "RegisteredResources",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+            list_result = runner.invoke(
+                app,
+                ["report", "resource", "package", "list", "--json", "--project", str(pbip_path)],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            rows = json.loads(list_result.stdout)
+            package_row = next(row for row in rows if row["name"] == "BrandAssets")
+            self.assertEqual(package_row["type"], "RegisteredResources")
+            self.assertEqual(package_row["items"], 0)
+
+            get_result = runner.invoke(
+                app,
+                ["report", "resource", "package", "get", "BrandAssets", "--raw", "--project", str(pbip_path)],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            pkg = json.loads(get_result.stdout)
+            self.assertEqual(pkg["name"], "BrandAssets")
+            self.assertEqual(pkg["type"], "RegisteredResources")
+
+            delete_result = runner.invoke(
+                app,
+                ["report", "resource", "package", "delete", "BrandAssets", "--force", "--project", str(pbip_path)],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            self.assertNotIn("resourcePackages", report)
+
+    def test_report_resource_item_set_list_get_and_delete_with_file_copy(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pbip_path, report_path = self._make_report_project(root)
+            source = root / "legend.svg"
+            source.write_text("<svg></svg>\n", encoding="utf-8")
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "item",
+                    "set",
+                    "RegisteredResources",
+                    "legend.svg",
+                    "--type",
+                    "Image",
+                    "--name",
+                    "Legend",
+                    "--from-file",
+                    str(source),
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            registered = root / "Sample.Report" / "StaticResources" / "RegisteredResources" / "legend.svg"
+            self.assertTrue(registered.exists())
+
+            list_result = runner.invoke(
+                app,
+                ["report", "resource", "item", "list", "RegisteredResources", "--json", "--project", str(pbip_path)],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            rows = json.loads(list_result.stdout)
+            self.assertEqual(
+                rows,
+                [
+                    {
+                        "package": "RegisteredResources",
+                        "name": "Legend",
+                        "path": "legend.svg",
+                        "type": "Image",
+                    }
+                ],
+            )
+
+            get_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "item",
+                    "get",
+                    "RegisteredResources",
+                    "legend.svg",
+                    "--raw",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertEqual(
+                json.loads(get_result.stdout),
+                {"name": "Legend", "path": "legend.svg", "type": "Image"},
+            )
+
+            delete_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "item",
+                    "delete",
+                    "RegisteredResources",
+                    "legend.svg",
+                    "--drop-file",
+                    "--force",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+            self.assertFalse(registered.exists())
+
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            self.assertEqual(report["resourcePackages"][0]["items"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

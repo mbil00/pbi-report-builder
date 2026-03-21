@@ -201,6 +201,88 @@ class RealReportFixtureTests(unittest.TestCase):
             reloaded = Project.find(pbip)
             self.assertNotIn("annotations", reloaded.get_report_meta())
 
+    def test_kitchen_sink_report_resource_commands_manage_registered_resources(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+            source = copied_root / "qa-shape.json"
+            source.write_text('{"type":"FeatureCollection","features":[]}\n', encoding="utf-8")
+
+            package_list_result = runner.invoke(
+                app,
+                ["report", "resource", "package", "list", "--json", "--project", str(pbip)],
+            )
+            self.assertEqual(package_list_result.exit_code, 0, package_list_result.stdout)
+            package_rows = json.loads(package_list_result.stdout)
+            registered = next(row for row in package_rows if row["name"] == "RegisteredResources")
+            self.assertEqual(registered["items"], 2)
+
+            item_set_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "item",
+                    "set",
+                    "RegisteredResources",
+                    "qa-shape.json",
+                    "--type",
+                    "ShapeMap",
+                    "--name",
+                    "QA Shape",
+                    "--from-file",
+                    str(source),
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(item_set_result.exit_code, 0, item_set_result.stdout)
+
+            item_get_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "item",
+                    "get",
+                    "RegisteredResources",
+                    "qa-shape.json",
+                    "--raw",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(item_get_result.exit_code, 0, item_get_result.stdout)
+            self.assertEqual(
+                json.loads(item_get_result.stdout),
+                {"name": "QA Shape", "path": "qa-shape.json", "type": "ShapeMap"},
+            )
+
+            registered_path = (
+                copied_root / "01-kitchen-sink.Report" / "StaticResources" / "RegisteredResources" / "qa-shape.json"
+            )
+            self.assertTrue(registered_path.exists())
+
+            delete_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "resource",
+                    "item",
+                    "delete",
+                    "RegisteredResources",
+                    "qa-shape.json",
+                    "--drop-file",
+                    "--force",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+            self.assertFalse(registered_path.exists())
+
     def test_kitchen_sink_bookmark_cli_reports_expected_fixture_state(self) -> None:
         runner = CliRunner()
 
