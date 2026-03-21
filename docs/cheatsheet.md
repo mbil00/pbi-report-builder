@@ -338,13 +338,22 @@ pbi theme preset clone "corporate" --to-project  # clone global → project
 # Visual style overrides (default formatting per visual type)
 pbi theme style list                         # list types with style overrides
 pbi theme style get columnChart              # show all overrides for a type
+pbi theme style get columnChart --role Series  # inspect one role branch
+pbi theme style get columnChart --all-roles    # inspect every role branch
 pbi theme style get * categoryAxis           # show specific object properties
 pbi theme style get --raw                    # dump full visualStyles JSON
 pbi theme style set columnChart legend.show=true legend.position=RightCenter
 pbi theme style set * background.show=true background.transparency=0
+pbi theme style set columnChart --role Series 'legend.complex={"expr":{"ThemeDataColor":{"ColorId":2}}}'
 pbi theme style set * filterCard.border[Applied]=true  # with $id selector
 pbi theme style delete columnChart --force   # remove type overrides
+pbi theme style delete columnChart --role Series --force  # remove one role branch
 pbi theme style delete * categoryAxis --force  # remove specific object
+
+# YAML round-trip also supports the active custom theme
+pbi export > report.yaml                     # full export may include top-level theme:
+pbi diff report.yaml                         # theme.* paths are diffed too
+pbi apply report.yaml                        # theme is applied before report/page/visual overrides
 
 # Apply, export, delete, migrate
 pbi theme apply corporate-theme.json        # apply custom theme from file

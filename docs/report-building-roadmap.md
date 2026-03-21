@@ -276,6 +276,10 @@ Complete.
 
 Theme support is already valuable, but it is not yet complete enough to treat themes as a primary authoring layer for all report styling.
 
+### Status
+
+In progress. Nested `visualStyles` values, role-branch editing, and top-level YAML `theme:` export/apply/diff are now implemented. Remaining work is theme-level conditional formatting and broader real-fixture parity coverage.
+
 ### Goal
 
 Close the gap between simple theme editing and the fuller `visualStyles` patterns exported by Power BI Desktop.

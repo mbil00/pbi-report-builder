@@ -5,6 +5,7 @@ from __future__ import annotations
 import yaml
 
 from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
+from pbi.theme_roundtrip import apply_theme_spec as _apply_theme_spec
 
 from .pages import apply_page
 from .ops import (
@@ -50,8 +51,17 @@ def apply_yaml(
 
     try:
         try:
+            theme_spec = spec.get("theme")
             report_spec = spec.get("report")
             if page_filter is None:
+                if theme_spec is not None and not isinstance(theme_spec, dict):
+                    result.errors.append("'theme' must be a mapping.")
+                elif isinstance(theme_spec, dict) and theme_spec:
+                    session.ensure_snapshot(project)
+                    changed, touched = _apply_theme_spec(project, theme_spec, dry_run=dry_run)
+                    if changed:
+                        result.properties_set += touched
+
                 if report_spec is not None and not isinstance(report_spec, dict):
                     result.errors.append("'report' must be a mapping.")
                 elif isinstance(report_spec, dict) and report_spec:

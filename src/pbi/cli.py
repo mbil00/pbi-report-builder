@@ -478,6 +478,23 @@ def diff_cmd(
         raise typer.Exit(1)
 
     has_diffs = False
+    if page is None and isinstance(spec.get("theme"), dict):
+        current_theme = yaml_mod.safe_load(export_yaml(proj)).get("theme", {})
+        yaml_theme = spec.get("theme", {})
+        current_flat = flatten_diff_spec(current_theme)
+        yaml_flat = flatten_diff_spec(yaml_theme)
+        theme_diffs = []
+        for key, proposed in yaml_flat.items():
+            curr = str(current_flat.get(key, ""))
+            proposed_text = str(proposed)
+            if curr != proposed_text:
+                theme_diffs.append((key, curr or "(none)", proposed_text))
+        if theme_diffs:
+            has_diffs = True
+            console.print("\n[bold]Theme[/bold]")
+            for prop, old, new in theme_diffs:
+                label = f"theme.{prop}" if prop else "theme"
+                console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
     if page is None and isinstance(spec.get("report"), dict):
         current_report = yaml_mod.safe_load(export_yaml(proj)).get("report", {})
         yaml_report = spec.get("report", {})

@@ -2,6 +2,8 @@
 
 Themes control the default color palette, fonts, and visual formatting across the entire report. A project has a base theme (built-in) and optionally a custom theme (JSON file).
 
+Theme defaults sit below explicit report/page/visual overrides. In the YAML round-trip workflow, `theme:` is applied before `report:`, page, and visual sections so later overrides can intentionally win.
+
 ## pbi theme list
 
 ```bash
@@ -67,6 +69,54 @@ pbi theme migrate ./old-corporate.json ./new-corporate.json
 ```
 
 This is essential after applying a new theme, because visuals with per-visual property overrides (explicit colors set via `pbi visual set` or YAML) keep their old colors. `migrate` replaces those overrides with the new theme's colors.
+
+## pbi theme style
+
+Theme `visualStyles` can be inspected and edited directly.
+
+```bash
+pbi theme style list
+pbi theme style get columnChart
+pbi theme style get columnChart --role Series
+pbi theme style get columnChart --all-roles
+pbi theme style set columnChart legend.show=true
+pbi theme style set columnChart --role Series 'legend.complex={"expr":{"ThemeDataColor":{"ColorId":2}}}'
+pbi theme style delete columnChart --role Series --force
+```
+
+Notes:
+
+- `--role` targets one `visualStyles[visualType][role]` branch. The default branch is `*`.
+- `--all-roles` expands inspection across every branch for the visual type.
+- Values may be plain scalars (`true`, `12`, `RightCenter`) or inline JSON for complex nested payloads.
+- `--raw` dumps the underlying JSON structure instead of the flattened table view.
+
+## YAML `theme:` round-trip
+
+`pbi export`, `pbi apply`, and `pbi diff` now support a top-level `theme:` section for the active custom theme.
+
+```yaml
+version: 1
+theme:
+  name: Corporate
+  visualStyles:
+    columnChart:
+      Series:
+        legend:
+          - complex:
+              expr:
+                ThemeDataColor:
+                  ColorId: 2
+pages:
+  - name: Demo
+```
+
+Rules:
+
+- Full-report export includes `theme:` when a custom theme is applied.
+- Page-only export omits `theme:`.
+- `pbi apply` creates a custom theme on the target project if needed, then merges the YAML section into it.
+- `pbi diff` reports theme changes as `theme.<path>`.
 
 ## Theme JSON Structure
 

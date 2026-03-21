@@ -23,6 +23,7 @@ from pbi.roundtrip import (
     prune_visual_pbir,
 )
 from pbi.styles import apply_style_reference, match_style_preset
+from pbi.theme_roundtrip import export_theme_spec
 
 
 def export_page(project: Project, page: Page) -> dict:
@@ -90,6 +91,9 @@ def export_pages(project: Project, page_filter: str | None = None) -> dict:
         page = project.find_page(page_filter)
         pages = [page]
     else:
+        theme_spec = export_theme_spec(project)
+        if theme_spec:
+            result["theme"] = theme_spec
         report_spec = export_report_spec(project)
         if report_spec:
             result["report"] = report_spec

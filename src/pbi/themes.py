@@ -40,6 +40,7 @@ from pbi.theme_styles import (
     delete_visual_style,
     encode_theme_style_value,
     get_visual_style_entries,
+    list_visual_style_roles,
     list_visual_style_types,
     parse_style_assignment,
     set_visual_style_property,

@@ -17,6 +17,7 @@ from pbi.project import Project
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.styles import create_style
+from pbi.themes import apply_theme, create_theme
 
 
 class YamlRoundTripTests(unittest.TestCase):
@@ -108,6 +109,51 @@ class YamlRoundTripTests(unittest.TestCase):
             )
             self.assertEqual(target_report["dataSourceVariables"], '{"region":"EMEA"}')
             self.assertEqual(target_report["resourcePackages"][0]["items"][0]["path"], "logo.png")
+
+    def test_full_report_round_trip_preserves_theme_section_and_creates_theme_on_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            source.create_page("Demo")
+
+            theme = create_theme("Corporate")
+            theme["visualStyles"] = {
+                "columnChart": {
+                    "*": {"legend": [{"show": True}]},
+                    "Series": {
+                        "legend": [
+                            {
+                                "complex": {
+                                    "expr": {"ThemeDataColor": {"ColorId": 2}},
+                                    "fallback": {"solid": {"color": "#123456"}},
+                                }
+                            }
+                        ]
+                    },
+                }
+            }
+            theme_file = root / "corporate-theme.json"
+            theme_file.write_text(json.dumps(theme, indent=2) + "\n", encoding="utf-8")
+            apply_theme(source, theme_file)
+
+            parsed = yaml.safe_load(export_yaml(source))
+            self.assertIn("theme", parsed)
+            self.assertEqual(parsed["theme"]["name"], "Corporate")
+            self.assertEqual(
+                parsed["theme"]["visualStyles"]["columnChart"]["Series"]["legend"][0]["complex"]["fallback"]["solid"]["color"],
+                "#123456",
+            )
+
+            target = self._make_project(root / "target")
+            result = apply_yaml(target, yaml.safe_dump(parsed, sort_keys=False))
+            self.assertEqual(result.errors, [])
+
+            target_spec = yaml.safe_load(export_yaml(target))
+            self.assertIn("theme", target_spec)
+            self.assertEqual(
+                target_spec["theme"]["visualStyles"]["columnChart"]["Series"]["legend"][0]["complex"]["expr"]["ThemeDataColor"]["ColorId"],
+                2,
+            )
 
     def test_round_trip_preserves_topn_filters_via_raw_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

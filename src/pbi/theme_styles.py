@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -111,16 +112,37 @@ def decode_theme_style_value(raw: Any) -> Any:
     """Decode a theme visualStyles value to a human-readable form."""
     if isinstance(raw, dict) and "solid" in raw:
         return raw["solid"].get("color", raw)
+    if isinstance(raw, dict):
+        return {key: decode_theme_style_value(value) for key, value in raw.items()}
+    if isinstance(raw, list):
+        return [decode_theme_style_value(value) for value in raw]
     return raw
 
 
-def get_visual_style_entries(data: dict, visual_type: str) -> dict[str, list[dict]] | None:
-    """Return the objects dict for a visual type (unwrapping the '*' data role level)."""
+def get_visual_style_entries(
+    data: dict,
+    visual_type: str,
+    *,
+    role: str = "*",
+) -> dict[str, list[dict]] | None:
+    """Return the objects dict for one visual type and role branch."""
     visual_styles = data.get("visualStyles", {})
     visual_type_entry = visual_styles.get(visual_type)
     if visual_type_entry is None:
         return None
-    return visual_type_entry.get("*")
+    role_entry = visual_type_entry.get(role)
+    if not isinstance(role_entry, dict):
+        return None
+    return role_entry
+
+
+def list_visual_style_roles(data: dict, visual_type: str) -> list[str]:
+    """Return sorted role branches for one visual type."""
+    visual_styles = data.get("visualStyles", {})
+    visual_type_entry = visual_styles.get(visual_type)
+    if not isinstance(visual_type_entry, dict):
+        return []
+    return sorted(key for key, value in visual_type_entry.items() if isinstance(value, dict))
 
 
 def list_visual_style_types(data: dict) -> list[str]:
@@ -160,6 +182,36 @@ def _cascade_visual_styles_colors(data: dict, color_map: dict[str, str]) -> int:
     return count
 
 
+def parse_theme_style_value(value: str, schema_type: str | list[str] | None = None) -> Any:
+    """Parse a CLI value into visualStyles JSON, allowing inline JSON for complex shapes."""
+    raw = value.strip()
+    if raw and raw[0] in "{[\"":
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+        else:
+            return _normalize_theme_style_value(parsed)
+    return encode_theme_style_value(raw, schema_type)
+
+
+def _normalize_theme_style_value(value: Any) -> Any:
+    """Normalize inline JSON theme values for consistent storage."""
+    if isinstance(value, dict):
+        normalized = {key: _normalize_theme_style_value(raw) for key, raw in value.items()}
+        solid = normalized.get("solid")
+        if (
+            isinstance(solid, dict)
+            and isinstance(solid.get("color"), str)
+            and solid["color"].startswith("#")
+        ):
+            solid["color"] = _validate_hex_color(solid["color"])
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_theme_style_value(item) for item in value]
+    return value
+
+
 def set_visual_style_property(
     data: dict,
     visual_type: str,
@@ -168,8 +220,9 @@ def set_visual_style_property(
     value: str,
     *,
     selector: str | None = None,
+    role: str = "*",
 ) -> None:
-    """Set a property in visualStyles[visual_type]['*'][object_name]."""
+    """Set a property in visualStyles[visual_type][role][object_name]."""
     from pbi.visual_schema import get_property_type, validate_object, validate_property
 
     schema_type: str | list[str] | None = None
@@ -187,11 +240,11 @@ def set_visual_style_property(
                 console.print(f"[yellow]Warning:[/yellow] {warning}")
         schema_type = get_property_type(visual_type, object_name, property_name)
 
-    encoded = encode_theme_style_value(value, schema_type)
+    encoded = parse_theme_style_value(value, schema_type)
 
     visual_styles = data.setdefault("visualStyles", {})
     visual_type_entry = visual_styles.setdefault(visual_type, {})
-    data_role = visual_type_entry.setdefault("*", {})
+    data_role = visual_type_entry.setdefault(role, {})
     entries: list[dict] = data_role.setdefault(object_name, [{}])
 
     target: dict | None = None
@@ -218,13 +271,15 @@ def delete_visual_style(
     data: dict,
     visual_type: str,
     object_name: str | None = None,
+    *,
+    role: str | None = "*",
 ) -> bool:
     """Remove a visual type entry or specific object from visualStyles."""
     visual_styles = data.get("visualStyles")
     if not visual_styles:
         return False
 
-    if object_name is None:
+    if object_name is None and role is None:
         if visual_type in visual_styles:
             del visual_styles[visual_type]
             return True
@@ -233,13 +288,22 @@ def delete_visual_style(
     visual_type_entry = visual_styles.get(visual_type)
     if not visual_type_entry:
         return False
-    data_role = visual_type_entry.get("*")
+    if object_name is None:
+        data_role = visual_type_entry.get(role or "*")
+        if not data_role:
+            return False
+        del visual_type_entry[role or "*"]
+        if not visual_type_entry:
+            del visual_styles[visual_type]
+        return True
+
+    data_role = visual_type_entry.get(role or "*")
     if not data_role:
         return False
     if object_name in data_role:
         del data_role[object_name]
         if not data_role:
-            del visual_type_entry["*"]
+            del visual_type_entry[role or "*"]
         if not visual_type_entry:
             del visual_styles[visual_type]
         return True
