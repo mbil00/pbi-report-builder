@@ -73,6 +73,18 @@ class RealReportFixtureTests(unittest.TestCase):
         self.assertIn("- name: Tooltip - Order Context  # hidden", result.stdout)
         self.assertIn("- name: Hidden QA Page  # hidden", result.stdout)
 
+    def test_kitchen_sink_map_page_cli_limits_output_to_selected_page(self) -> None:
+        result = CliRunner().invoke(
+            app,
+            ["map", "--page", "Hidden QA Page", "--project", str(KITCHEN_SINK_PBIP)],
+        )
+
+        self.assertEqual(result.exit_code, 0, result.stdout)
+        self.assertIn("- name: Hidden QA Page  # hidden", result.stdout)
+        self.assertIn("qaChart", result.stdout)
+        self.assertNotIn("- name: Executive Overview", result.stdout)
+        self.assertNotIn("- group: Navigation", result.stdout)
+
     def test_kitchen_sink_validate_cli_reports_known_overlap_warnings(self) -> None:
         result = CliRunner().invoke(app, ["validate", "--project", str(KITCHEN_SINK_PBIP)])
 
@@ -98,6 +110,80 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, f"{pbip}: {result.stdout}")
             self.assertIn("No differences found.", result.stdout)
 
+    def test_kitchen_sink_report_get_and_set_cli(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            get_result = runner.invoke(
+                app,
+                ["report", "get", "--project", str(pbip)],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("settings.pagesPosition", get_result.stdout)
+            self.assertIn("Bottom", get_result.stdout)
+            self.assertIn("settings.useEnhancedTooltips", get_result.stdout)
+            self.assertIn("True", get_result.stdout)
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "set",
+                    "settings.useEnhancedTooltips=false",
+                    "settings.pagesPosition=PagesPane",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+            self.assertIn("settings.useEnhancedTooltips: True -> False", set_result.stdout)
+            self.assertIn("settings.pagesPosition: Bottom -> PagesPane", set_result.stdout)
+
+            reloaded = Project.find(pbip)
+            report_meta = reloaded.get_report_meta()
+            self.assertFalse(report_meta["settings"]["useEnhancedTooltips"])
+            self.assertEqual(report_meta["settings"]["pagesPosition"], "PagesPane")
+
+    def test_model_heavy_model_cli_inspection_commands(self) -> None:
+        runner = CliRunner()
+
+        deps_result = runner.invoke(
+            app,
+            ["model", "deps", "GL_Actuals.Actual Amount", "--project", str(MODEL_HEAVY_PBIP)],
+        )
+        self.assertEqual(deps_result.exit_code, 0, deps_result.stdout)
+        self.assertIn("GL_Actuals.Amount (column)", deps_result.stdout)
+        self.assertIn("Forecast.Actual YoY (measure)", deps_result.stdout)
+
+        search_result = runner.invoke(
+            app,
+            ["model", "search", "Actual", "--project", str(MODEL_HEAVY_PBIP)],
+        )
+        self.assertEqual(search_result.exit_code, 0, search_result.stdout)
+        self.assertIn("GL_Actuals.Actual Amount", search_result.stdout)
+        self.assertIn("Forecast.Actual vs Budget", search_result.stdout)
+
+        path_result = runner.invoke(
+            app,
+            ["model", "path", "GL_Actuals", "Account", "--project", str(MODEL_HEAVY_PBIP)],
+        )
+        self.assertEqual(path_result.exit_code, 0, path_result.stdout)
+        self.assertIn("Path (1 hop)", path_result.stdout)
+        self.assertIn("GL_Actuals.AccountKey", path_result.stdout)
+        self.assertIn("Account.AccountKey", path_result.stdout)
+
+        check_result = runner.invoke(
+            app,
+            ["model", "check", "--project", str(MODEL_HEAVY_PBIP)],
+        )
+        self.assertEqual(check_result.exit_code, 0, check_result.stdout)
+        self.assertIn("11 warning(s), 6 info(s)", check_result.stdout)
+        self.assertIn("Auto-detected relationship", check_result.stdout)
+        self.assertIn("Inactive relationship", check_result.stdout)
+
     def test_model_heavy_model_export_apply_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             copied_root = Path(tmp) / MODEL_HEAVY_DIR.name
@@ -109,6 +195,43 @@ class RealReportFixtureTests(unittest.TestCase):
 
             self.assertEqual(result.errors, [])
             self.assertEqual(before, after)
+
+    def test_page_import_from_real_fixture_copies_resources(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / MODEL_HEAVY_DIR.name
+            shutil.copytree(MODEL_HEAVY_DIR, copied_root)
+            pbip = copied_root / MODEL_HEAVY_PBIP.name
+
+            target_project = Project.find(pbip)
+            before_pages = [page.display_name for page in target_project.get_pages()]
+
+            import_result = runner.invoke(
+                app,
+                [
+                    "page",
+                    "import",
+                    "--from-project",
+                    str(KITCHEN_SINK_PBIP),
+                    "--page",
+                    "Product Detail",
+                    "--name",
+                    "Imported Product Detail",
+                    "--include-resources",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(import_result.exit_code, 0, import_result.stdout)
+            self.assertIn('Imported "Product Detail" from 01-kitchen-sink as "Imported Product Detail"', import_result.stdout)
+            self.assertIn("Copied 1 image resource(s)", import_result.stdout)
+
+            reloaded = Project.find(pbip)
+            after_pages = [page.display_name for page in reloaded.get_pages()]
+            self.assertEqual(len(after_pages), len(before_pages) + 1)
+            self.assertIn("Imported Product Detail", after_pages)
+            imported_page = reloaded.find_page("Imported Product Detail")
+            self.assertEqual(len(reloaded.get_visuals(imported_page)), 7)
 
     def test_kitchen_sink_component_create_and_apply_cli(self) -> None:
         runner = CliRunner()
