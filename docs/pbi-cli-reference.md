@@ -32,6 +32,8 @@ For deterministic automation, use exact page names and exact visual names. Frien
 ```bash
 # Property reads
 pbi report get layoutOptimization settings.pagesPosition
+pbi report annotation get README
+pbi report object get resourcePackages
 pbi page get "Sales Overview"                          # overview with background, visual count
 pbi page get "Sales Overview" width displayOption      # specific properties
 pbi visual get "Sales Overview" revenueChart --full    # everything in one call
@@ -42,6 +44,8 @@ pbi visual page-diff "Sales Overview" "Executive Summary"
 
 # Property writes
 pbi report set settings.useEnhancedTooltips=true settings.pagesPosition=Bottom
+pbi report annotation set README "Owned by BI team"
+pbi report object set objects --from-file report-objects.json
 pbi page set "Sales Overview" width=1440 displayOption=FitToWidth
 pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue"
 

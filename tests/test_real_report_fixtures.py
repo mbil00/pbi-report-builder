@@ -150,6 +150,57 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertFalse(report_meta["settings"]["useEnhancedTooltips"])
             self.assertEqual(report_meta["settings"]["pagesPosition"], "PagesPane")
 
+    def test_kitchen_sink_report_object_and_annotation_commands(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            list_result = runner.invoke(
+                app,
+                ["report", "object", "list", "--json", "--project", str(pbip)],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            rows = json.loads(list_result.stdout)
+            resource_row = next(row for row in rows if row["name"] == "resourcePackages")
+            self.assertTrue(resource_row["present"])
+            self.assertEqual(resource_row["type"], "array")
+
+            get_result = runner.invoke(
+                app,
+                ["report", "object", "get", "resourcePackages", "--raw", "--project", str(pbip)],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            packages = json.loads(get_result.stdout)
+            self.assertEqual(packages[0]["name"], "SharedResources")
+            self.assertEqual(packages[1]["name"], "RegisteredResources")
+
+            set_annotation_result = runner.invoke(
+                app,
+                ["report", "annotation", "set", "README", "Kitchen sink fixture", "--project", str(pbip)],
+            )
+            self.assertEqual(set_annotation_result.exit_code, 0, set_annotation_result.stdout)
+
+            get_annotation_result = runner.invoke(
+                app,
+                ["report", "annotation", "get", "README", "--raw", "--project", str(pbip)],
+            )
+            self.assertEqual(get_annotation_result.exit_code, 0, get_annotation_result.stdout)
+            self.assertEqual(
+                json.loads(get_annotation_result.stdout),
+                {"name": "README", "value": "Kitchen sink fixture"},
+            )
+
+            delete_annotation_result = runner.invoke(
+                app,
+                ["report", "annotation", "delete", "README", "--force", "--project", str(pbip)],
+            )
+            self.assertEqual(delete_annotation_result.exit_code, 0, delete_annotation_result.stdout)
+
+            reloaded = Project.find(pbip)
+            self.assertNotIn("annotations", reloaded.get_report_meta())
+
     def test_kitchen_sink_bookmark_cli_reports_expected_fixture_state(self) -> None:
         runner = CliRunner()
 
