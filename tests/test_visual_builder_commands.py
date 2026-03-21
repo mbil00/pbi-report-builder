@@ -207,10 +207,13 @@ table Sales
 
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("Preset:", result.stdout)
+            self.assertIn("Title:", result.stdout)
 
             reloaded = Project.find(root / "Sample.pbip")
             page = reloaded.find_page("Demo")
             visual = reloaded.find_visual(page, "revenueChart")
+            self.assertTrue(get_property(visual.data, "title.show", VISUAL_PROPERTIES))
+            self.assertEqual(get_property(visual.data, "title.text", VISUAL_PROPERTIES), "Revenue by Year")
             self.assertTrue(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
             self.assertTrue(get_property(visual.data, "border.show", VISUAL_PROPERTIES))
             self.assertEqual(get_property(visual.data, "border.radius", VISUAL_PROPERTIES), 6)
@@ -316,6 +319,8 @@ table Date
             reloaded = Project.find(root / "Sample.pbip")
             page = reloaded.find_page("Demo")
             visual = reloaded.find_visual(page, "yearSlicer")
+            self.assertTrue(get_property(visual.data, "title.show", VISUAL_PROPERTIES))
+            self.assertEqual(get_property(visual.data, "title.text", VISUAL_PROPERTIES), "Year")
             self.assertFalse(get_property(visual.data, "header.show", VISUAL_PROPERTIES))
             self.assertFalse(get_property(visual.data, "slicerHeader.show", VISUAL_PROPERTIES))
             self.assertTrue(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
@@ -350,6 +355,125 @@ table Date
             page = reloaded.find_page("Demo")
             with self.assertRaises(ValueError):
                 reloaded.find_visual(page, "badCard")
+
+    def test_visual_create_donut_builders_require_category_and_measure_value(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tcolumn Region
+\t\tdataType: string
+\t\tsourceColumn: Region
+
+\tmeasure Revenue = 1
+\t\tformatString: #,0
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "donutChart",
+                    "--name",
+                    "revenueDonut",
+                    "--bind",
+                    "Category=Sales.Region",
+                    "--bind",
+                    "Y=Sales.Revenue",
+                    "--preset",
+                    "chart",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            page = reloaded.find_page("Demo")
+            visual = reloaded.find_visual(page, "revenueDonut")
+            self.assertTrue(get_property(visual.data, "legend.show", VISUAL_PROPERTIES))
+            self.assertEqual(get_property(visual.data, "title.text", VISUAL_PROPERTIES), "Revenue by Region")
+
+    def test_visual_create_slicer_rejects_measure_bindings(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+\tmeasure Revenue = 1
+\t\tformatString: #,0
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "slicer",
+                    "--name",
+                    "badSlicer",
+                    "--bind",
+                    "Values=Sales.Revenue",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn('Role "Values" must use a column', result.stdout)
+
+    def test_visual_create_card_rejects_column_data_bindings(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            project.create_page("Demo")
+            write_model_table(
+                root,
+                "Date.tmdl",
+                """
+table Date
+\tcolumn Year
+\t\tdataType: int64
+\t\tsourceColumn: Year
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "create",
+                    "Demo",
+                    "cardVisual",
+                    "--name",
+                    "badCard",
+                    "--bind",
+                    "Data=Date.Year",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn('Role "Data" must use a measure', result.stdout)
 
     def test_visual_create_auto_sorts_chart_category_from_sort_by_column(self) -> None:
         runner = CliRunner()
@@ -513,7 +637,8 @@ table Sales
                 ],
             )
             self.assertEqual(explicit_result.exit_code, 0, explicit_result.stdout)
-            self.assertNotIn("(auto)", explicit_result.stdout)
+            self.assertIn("Sort: Date.MonthName Ascending", explicit_result.stdout)
+            self.assertNotIn("Sort: Date.MonthName Ascending (auto)", explicit_result.stdout)
 
             disabled_result = runner.invoke(
                 app,

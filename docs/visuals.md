@@ -68,6 +68,8 @@ pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --sort Date.Month
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --preset chart
+pbi visual create "Sales Overview" donutChart --name revenueMix \
+  --bind Category=Sales.Channel --bind Y=Sales.Revenue --preset chart
 pbi visual create "Sales Overview" tableEx --name detailTable --bind Values=Product.Category
 pbi visual create "Sales Overview" slicer --name yearSlicer --bind Values=Date.Year --preset slicer
 pbi visual move "Sales Overview" revenueChart --x 40 --y 80
@@ -94,6 +96,11 @@ When `--sort` is omitted, builder-aware create also uses semantic-model metadata
 to infer a default ascending sort for chart categories and slicer values when
 the bound column has `sortByColumn` metadata. Use `--no-auto-sort` to disable
 that inference.
+
+For common builder families, `pbi visual create` also infers a title when you
+do not pass `--title`. Builder validation is stricter than low-level
+`pbi visual bind`: unsupported role combinations and clearly invalid
+column-vs-measure placements are rejected up front.
 
 ## Layout Helpers
 

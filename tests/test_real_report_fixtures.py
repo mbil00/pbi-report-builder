@@ -475,6 +475,159 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertEqual(get_property(slicer_year.data, "title.text", VISUAL_PROPERTIES), "Fiscal Year")
             self.assertEqual(get_property(slicer_year.data, "border.color", VISUAL_PROPERTIES), "#B85C00")
 
+    def test_model_heavy_builder_create_extends_real_fixture_and_round_trips(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / MODEL_HEAVY_DIR.name
+            shutil.copytree(MODEL_HEAVY_DIR, copied_root)
+            pbip = copied_root / MODEL_HEAVY_PBIP.name
+
+            project = Project.find(pbip)
+            builder_page = project.create_page("Builder Smoke")
+
+            commands = [
+                [
+                    "visual",
+                    "create",
+                    "Builder Smoke",
+                    "lineClusteredColumnComboChart",
+                    "--name",
+                    "builderCombo",
+                    "--x",
+                    "20",
+                    "--y",
+                    "20",
+                    "--bind",
+                    "Category=Department.Division",
+                    "--bind",
+                    "Y=GL_Actuals.Actual Amount",
+                    "--bind",
+                    "Y2=Budget.Budget Amount",
+                    "--preset",
+                    "chart",
+                    "--project",
+                    str(pbip),
+                ],
+                [
+                    "visual",
+                    "create",
+                    "Builder Smoke",
+                    "donutChart",
+                    "--name",
+                    "builderDonut",
+                    "--x",
+                    "700",
+                    "--y",
+                    "20",
+                    "--bind",
+                    "Category=Account.AccountGroup",
+                    "--bind",
+                    "Y=GL_Actuals.Actual Amount",
+                    "--preset",
+                    "chart",
+                    "--project",
+                    str(pbip),
+                ],
+                [
+                    "visual",
+                    "create",
+                    "Builder Smoke",
+                    "pivotTable",
+                    "--name",
+                    "builderMatrix",
+                    "--x",
+                    "20",
+                    "--y",
+                    "400",
+                    "--width",
+                    "1240",
+                    "--height",
+                    "260",
+                    "--bind",
+                    "Rows=Department.Division",
+                    "--bind",
+                    "Values=Forecast.Actual vs Budget",
+                    "--preset",
+                    "table",
+                    "--project",
+                    str(pbip),
+                ],
+                [
+                    "visual",
+                    "create",
+                    "Builder Smoke",
+                    "cardVisual",
+                    "--name",
+                    "builderCard",
+                    "--x",
+                    "700",
+                    "--y",
+                    "320",
+                    "--bind",
+                    "Data=Forecast.Actual vs Budget",
+                    "--preset",
+                    "card",
+                    "--project",
+                    str(pbip),
+                ],
+                [
+                    "visual",
+                    "create",
+                    "Builder Smoke",
+                    "slicer",
+                    "--name",
+                    "builderScenario",
+                    "--x",
+                    "980",
+                    "--y",
+                    "320",
+                    "--bind",
+                    "Values=Scenario.ScenarioName",
+                    "--preset",
+                    "slicer",
+                    "--project",
+                    str(pbip),
+                ],
+            ]
+
+            for argv in commands:
+                result = runner.invoke(app, argv)
+                self.assertEqual(result.exit_code, 0, result.stdout)
+
+            validate_result = runner.invoke(
+                app,
+                ["validate", "--project", str(pbip)],
+            )
+            self.assertEqual(validate_result.exit_code, 0, validate_result.stdout)
+            self.assertNotIn("[red bold]", validate_result.stdout)
+
+            reloaded = Project.find(pbip)
+            builder_page = reloaded.find_page(builder_page.display_name)
+            created_visuals = {visual.name: visual for visual in reloaded.get_visuals(builder_page)}
+            self.assertEqual(
+                set(created_visuals),
+                {"builderCombo", "builderDonut", "builderMatrix", "builderCard", "builderScenario"},
+            )
+            self.assertEqual(
+                get_property(created_visuals["builderScenario"].data, "title.text", VISUAL_PROPERTIES),
+                "ScenarioName",
+            )
+            self.assertEqual(
+                get_property(created_visuals["builderCard"].data, "title.text", VISUAL_PROPERTIES),
+                "Actual vs Budget",
+            )
+            self.assertEqual(
+                reloaded.get_sort(created_visuals["builderScenario"]),
+                [],
+            )
+
+            before = export_yaml(reloaded, page_filter="Builder Smoke")
+            result = apply_yaml(reloaded, before, page_filter="Builder Smoke")
+            after = export_yaml(Project.find(pbip), page_filter="Builder Smoke")
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(before, after)
+
     def test_kitchen_sink_component_create_and_apply_cli(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

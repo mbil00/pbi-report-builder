@@ -78,6 +78,8 @@ pbi visual create "Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --sort Date.Month
 pbi visual create "Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --preset chart
+pbi visual create "Overview" donutChart --name revenueMix \
+  --bind Category=Sales.Channel --bind Y=Sales.Revenue --preset chart
 pbi visual create "Overview" slicer --name yearSlicer --bind Values=Date.Year --preset slicer
 pbi visual create "Overview" clusteredColumnChart --name monthlyRevenue \
   --bind Category=Date.MonthName --bind Y=Sales.Revenue   # auto-sorts via sortByColumn

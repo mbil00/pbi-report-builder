@@ -32,6 +32,8 @@ The project should eventually be able to:
 
 ## Phase 1: Visual Builders
 
+Status: completed
+
 This is the biggest authoring gap today. The CLI can mutate visuals well, but creating safe, complete visual queries still relies too much on generic bindings.
 
 ### Goal
@@ -73,7 +75,7 @@ Add visual-type-specific builders so common visuals can be created from semantic
 
 #### Slice 1: Builder-aware `visual create`
 
-Status: in progress
+Status: completed
 
 - extend `pbi visual create` to accept repeatable role bindings in one command
 - allow initial sort setup during creation
@@ -91,7 +93,7 @@ for the most common authoring flow.
 
 #### Slice 2: Common visual presets
 
-Status: in progress
+Status: completed
 
 - add builder presets for:
   - clustered/stacked column and bar
@@ -108,6 +110,7 @@ Initial implementation shipped:
 - explicit `--preset table`
 - explicit `--preset slicer`
 - explicit `--preset card`
+- donut/pie support inside the chart builder family
 
 Current behavior:
 
@@ -119,6 +122,8 @@ Current behavior:
 
 #### Slice 3: Semantic-model-driven helpers
 
+Status: completed
+
 - infer column vs measure roles more reliably from the semantic model
 - infer sort defaults for date/category axes
 - add typed literal and aggregation helpers where PBIR requires them
@@ -129,12 +134,22 @@ Initial implementation shipped:
   when the bound model column defines `sortByColumn`
 - explicit `--sort` still wins
 - `--no-auto-sort` disables inference
+- auto-titles for the common builder families
+- stricter builder role/type validation for common visual families
 
 #### Slice 4: Fixture-backed parity
+
+Status: completed
 
 - create builder tests against real PBIP fixtures
 - verify builder-created visuals survive export/diff/apply round-trips
 - promote supported builders from “partial” to “supported” only after fixture coverage exists
+
+Completed with:
+
+- builder smoke coverage on copied real PBIP fixtures
+- validate/export/apply round-trip coverage for builder-created visuals
+- unit coverage for chart, combo, donut, slicer, card, table, and matrix builder paths
 
 ## Phase 2: Bookmark And State Parity
 

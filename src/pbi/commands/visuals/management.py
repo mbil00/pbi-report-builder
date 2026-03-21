@@ -10,6 +10,7 @@ from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import resolve_visual_target, _set_visual_image_source
 from pbi.visual_builders import (
+    apply_auto_title,
     apply_builder_preset,
     apply_initial_sort,
     apply_role_bindings,
@@ -145,6 +146,10 @@ def visual_create(
             proj.delete_visual(vis)
             raise typer.Exit(1)
 
+    inferred_title: str | None = None
+    if bind and not title:
+        inferred_title = apply_auto_title(vis, bound_fields)
+
     applied_preset: list[tuple[str, str]] = []
     if preset:
         try:
@@ -185,6 +190,9 @@ def visual_create(
             for field in bound_fields
         )
         console.print(f"[dim]Bindings:[/dim] {bindings_str}")
+
+    if inferred_title:
+        console.print(f"[dim]Title:[/dim] {inferred_title} [dim](auto)[/dim]")
 
     if applied_preset:
         console.print(f"[dim]Preset:[/dim] {preset}")
