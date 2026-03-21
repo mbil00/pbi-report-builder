@@ -14,6 +14,10 @@ pbi bookmark create "Layout Only" "Sales Overview" --no-capture-data
 pbi bookmark set "Minimal View" --hide sidebar
 pbi bookmark set "Minimal View" --show detailTable --show filterPanel
 
+pbi bookmark group list
+pbi bookmark group create "Main Views" "Overview State" "Minimal View"
+pbi bookmark group delete "Main Views" --force
+
 pbi bookmark delete "Minimal View" --force
 ```
 
@@ -40,3 +44,5 @@ This matches the rest of the CLI's boolean convention.
 ## Template / YAML Notes
 
 Bookmarks can be declared in apply-compatible YAML and are preserved when saving a page template. Page template application rewrites bookmark page references to the target page automatically.
+
+Bookmark groups are stored in `definition/bookmarks/bookmarks.json` and control bookmark ordering plus grouped presentation in Power BI.

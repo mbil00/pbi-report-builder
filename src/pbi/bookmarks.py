@@ -27,6 +27,15 @@ class BookmarkInfo:
     target_visuals: list[str] = field(default_factory=list)
     suppress_data: bool = False
     suppress_display: bool = False
+    group: str | None = None
+
+
+@dataclass(frozen=True)
+class BookmarkGroupInfo:
+    """Summary of a bookmark group in bookmarks.json metadata."""
+
+    name: str
+    children: list[str] = field(default_factory=list)
 
 
 def _bookmarks_dir(project: Project) -> Path:
@@ -59,6 +68,10 @@ def list_bookmarks(project: Project) -> list[BookmarkInfo]:
     if not bm_dir.exists():
         return []
 
+    meta = _load_meta(project)
+    order = _bookmark_order(meta)
+    group_lookup = _bookmark_group_lookup(meta)
+
     result = []
     for f in sorted(bm_dir.glob("*.bookmark.json")):
         try:
@@ -77,16 +90,37 @@ def list_bookmarks(project: Project) -> list[BookmarkInfo]:
             target_visuals=options.get("targetVisualNames", []),
             suppress_data=options.get("suppressData", False),
             suppress_display=options.get("suppressDisplay", False),
+            group=group_lookup.get(data.get("name", "")),
         ))
 
     # Sort by bookmark order if available
-    meta = _load_meta(project)
-    order = _bookmark_order(meta)
     if order:
         order_map = {name: i for i, name in enumerate(order)}
         result.sort(key=lambda b: order_map.get(b.name, 999))
 
     return result
+
+
+def list_bookmark_groups(project: Project) -> list[BookmarkGroupInfo]:
+    """List bookmark groups defined in bookmarks metadata."""
+    meta = _load_meta(project)
+    groups: list[BookmarkGroupInfo] = []
+    for item in meta.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children")
+        if not isinstance(children, list):
+            continue
+        name = item.get("displayName") or item.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        groups.append(
+            BookmarkGroupInfo(
+                name=name,
+                children=[child for child in children if isinstance(child, str)],
+            )
+        )
+    return groups
 
 
 def get_bookmark(project: Project, identifier: str) -> dict:
@@ -329,6 +363,85 @@ def delete_bookmark(project: Project, identifier: str) -> str:
     return display_name
 
 
+def create_bookmark_group(
+    project: Project,
+    display_name: str,
+    bookmark_identifiers: list[str],
+) -> BookmarkGroupInfo:
+    """Create a bookmark group from existing bookmark ids/display names."""
+    if len(bookmark_identifiers) < 2:
+        raise ValueError("Bookmark groups require at least 2 bookmarks.")
+
+    meta = _load_meta(project)
+    children: list[str] = []
+    standalone_names = _standalone_bookmark_names(meta)
+    existing_groups = {group.name.lower() for group in list_bookmark_groups(project)}
+    if display_name.lower() in existing_groups:
+        raise ValueError(f'Bookmark group "{display_name}" already exists.')
+
+    for identifier in bookmark_identifiers:
+        data, _path = _find_bookmark_file(project, identifier)
+        bookmark_name = data.get("name", "")
+        if not bookmark_name:
+            raise ValueError(f'Bookmark "{identifier}" has no internal identifier.')
+        if bookmark_name in children:
+            raise ValueError(f'Bookmark "{identifier}" was provided more than once.')
+        if bookmark_name not in standalone_names:
+            group_name = _bookmark_group_lookup(meta).get(bookmark_name)
+            if group_name:
+                raise ValueError(
+                    f'Bookmark "{data.get("displayName", identifier)}" is already in group "{group_name}".'
+                )
+        children.append(bookmark_name)
+
+    filtered_items: list[dict] = []
+    for item in meta.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        if item.get("name") in children and "children" not in item:
+            continue
+        filtered_items.append(item)
+
+    filtered_items.append({
+        "displayName": display_name,
+        "children": children,
+    })
+    meta["items"] = filtered_items
+    _save_meta(project, meta)
+    return BookmarkGroupInfo(name=display_name, children=children)
+
+
+def delete_bookmark_group(project: Project, identifier: str) -> BookmarkGroupInfo:
+    """Delete a bookmark group and restore its children as standalone bookmarks."""
+    meta = _load_meta(project)
+    items = meta.get("items", [])
+    updated: list[dict] = []
+    removed: BookmarkGroupInfo | None = None
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children")
+        if isinstance(children, list):
+            display_name = item.get("displayName") or item.get("name")
+            if display_name == identifier:
+                removed = BookmarkGroupInfo(
+                    name=str(display_name),
+                    children=[child for child in children if isinstance(child, str)],
+                )
+                for child in removed.children:
+                    updated.append({"name": child})
+                continue
+        updated.append(item)
+
+    if removed is None:
+        raise FileNotFoundError(f'Bookmark group "{identifier}" not found')
+
+    meta["items"] = updated
+    _save_meta(project, meta)
+    return removed
+
+
 def _find_bookmark_file(project: Project, identifier: str) -> tuple[dict, Path]:
     """Find a bookmark file by name or display name. Returns (data, path)."""
     bm_dir = _bookmarks_dir(project)
@@ -401,6 +514,38 @@ def _bookmark_order(meta: dict) -> list[str]:
         if isinstance(name, str):
             order.append(name)
     return order
+
+
+def _bookmark_group_lookup(meta: dict) -> dict[str, str]:
+    """Map bookmark ids to their containing group display name."""
+    result: dict[str, str] = {}
+    for item in meta.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children")
+        if not isinstance(children, list):
+            continue
+        display_name = item.get("displayName") or item.get("name")
+        if not isinstance(display_name, str) or not display_name:
+            continue
+        for child in children:
+            if isinstance(child, str):
+                result[child] = display_name
+    return result
+
+
+def _standalone_bookmark_names(meta: dict) -> set[str]:
+    """Return bookmark ids that are standalone top-level items."""
+    result: set[str] = set()
+    for item in meta.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        if "children" in item:
+            continue
+        name = item.get("name")
+        if isinstance(name, str):
+            result.add(name)
+    return result
 
 
 def _remove_bookmark_from_meta(items: list[dict], bookmark_name: str) -> list[dict]:

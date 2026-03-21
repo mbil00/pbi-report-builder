@@ -6,7 +6,14 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from pbi.bookmarks import create_bookmark, get_bookmark, update_bookmark_visuals
+from pbi.bookmarks import (
+    create_bookmark,
+    create_bookmark_group,
+    get_bookmark,
+    list_bookmark_groups,
+    list_bookmarks,
+    update_bookmark_visuals,
+)
 from pbi.cli import app
 from pbi.interactions import get_interactions, set_interaction
 from pbi.project import Project, _write_json
@@ -117,6 +124,92 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
             self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
             page = Project.find(root / "Sample.pbip").find_page("Demo")
             self.assertEqual(get_interactions(page), [])
+
+    def test_bookmark_group_create_list_and_delete_round_trip(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "button1"
+            visual.save()
+
+            create_bookmark(project, "Default", page, [visual])
+            create_bookmark(project, "Filtered", page, [visual], hidden_visuals=["button1"])
+
+            create_result = runner.invoke(
+                app,
+                [
+                    "bookmark",
+                    "group",
+                    "create",
+                    "Main Views",
+                    "Default",
+                    "Filtered",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+            list_result = runner.invoke(
+                app,
+                ["bookmark", "group", "list", "--json", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            self.assertIn('"name": "Main Views"', list_result.stdout)
+
+            bookmark_rows = list_bookmarks(Project.find(root / "Sample.pbip"))
+            self.assertEqual([row.group for row in bookmark_rows], ["Main Views", "Main Views"])
+
+            delete_result = runner.invoke(
+                app,
+                [
+                    "bookmark",
+                    "group",
+                    "delete",
+                    "Main Views",
+                    "--force",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
+
+            groups = list_bookmark_groups(Project.find(root / "Sample.pbip"))
+            self.assertEqual(groups, [])
+            bookmark_rows = list_bookmarks(Project.find(root / "Sample.pbip"))
+            self.assertEqual([row.group for row in bookmark_rows], [None, None])
+
+    def test_bookmark_get_and_list_show_group_membership(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "button1"
+            visual.save()
+
+            first = create_bookmark(project, "Default", page, [visual])
+            second = create_bookmark(project, "Focus", page, [visual])
+            create_bookmark_group(project, "Views", [first["name"], second["name"]])
+
+            list_result = runner.invoke(
+                app,
+                ["bookmark", "list", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(list_result.exit_code, 0, list_result.stdout)
+            self.assertIn("Views", list_result.stdout)
+
+            get_result = runner.invoke(
+                app,
+                ["bookmark", "get", "Default", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertIn("Group", get_result.stdout)
+            self.assertIn("Views", get_result.stdout)
 
 class NavigationCommandTests(unittest.TestCase):
     def test_nav_set_page_resolves_target_page_and_clears_old_action(self) -> None:

@@ -153,6 +153,8 @@ Completed with:
 
 ## Phase 2: Bookmark And State Parity
 
+Status: in progress
+
 Current bookmark support is useful but shallow. Power BI bookmarks matter because they are the main way reports encode guided user state.
 
 ### Goal
@@ -167,6 +169,11 @@ Expand bookmarks from simple visibility snapshots to full authorable report-stat
 - preserve and edit grouped-visual behavior
 - add bookmark grouping support
 - improve bookmark inspection so diffs are understandable
+
+Initial implementation shipped:
+
+- bookmark group metadata authoring via `bookmark group list/create/delete`
+- bookmark list/get now surface group membership
 
 ### Related actions
 

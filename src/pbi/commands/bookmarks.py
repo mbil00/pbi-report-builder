@@ -11,6 +11,8 @@ from rich.table import Table
 from .common import ProjectOpt, console, get_project
 
 bookmark_app = typer.Typer(help="Bookmark operations.", no_args_is_help=True)
+bookmark_group_app = typer.Typer(help="Bookmark group operations.", no_args_is_help=True)
+bookmark_app.add_typer(bookmark_group_app, name="group")
 
 
 @bookmark_app.command("list")
@@ -40,6 +42,7 @@ def bookmark_list(
                 "targets": bm.target_visuals or [],
                 "suppressData": bm.suppress_data,
                 "suppressDisplay": bm.suppress_display,
+                "group": bm.group,
             })
         console.print_json(json_mod.dumps(rows, indent=2))
         return
@@ -48,6 +51,7 @@ def bookmark_list(
     table.add_column("Name", style="cyan")
     table.add_column("Display Name")
     table.add_column("Active Page")
+    table.add_column("Group", style="dim")
     table.add_column("Targets", style="dim")
     table.add_column("Options", style="dim")
 
@@ -62,6 +66,7 @@ def bookmark_list(
             bookmark.name[:16] + "..." if len(bookmark.name) > 16 else bookmark.name,
             bookmark.display_name,
             bookmark.active_section[:16] + "..." if len(bookmark.active_section) > 16 else bookmark.active_section,
+            bookmark.group or "-",
             targets,
             ", ".join(opts) or "-",
         )
@@ -93,6 +98,13 @@ def bookmark_get(
 
     exploration = data.get("explorationState", {})
     options = data.get("options", {})
+    group_lookup = None
+    try:
+        from pbi.bookmarks import _bookmark_group_lookup, _load_meta
+
+        group_lookup = _bookmark_group_lookup(_load_meta(proj))
+    except Exception:
+        group_lookup = None
 
     table = Table(title=data.get("displayName", ""), box=box.SIMPLE)
     table.add_column("Property", style="cyan")
@@ -101,6 +113,10 @@ def bookmark_get(
     table.add_row("Name", data.get("name", ""))
     table.add_row("Display Name", data.get("displayName", ""))
     table.add_row("Active Section", exploration.get("activeSection", ""))
+    if group_lookup is not None:
+        group_name = group_lookup.get(data.get("name", ""))
+        if group_name:
+            table.add_row("Group", group_name)
 
     if options:
         table.add_section()
@@ -126,6 +142,87 @@ def bookmark_get(
                 table.add_row(f"[dim]{section_name}[/dim] {vis_name}", mode)
 
     console.print(table)
+
+
+@bookmark_group_app.command("list")
+def bookmark_group_list(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """List bookmark groups."""
+    import json as json_mod
+
+    from pbi.bookmarks import list_bookmark_groups
+
+    proj = get_project(project)
+    groups = list_bookmark_groups(proj)
+    if not groups:
+        console.print("[yellow]No bookmark groups. Use `pbi bookmark group create` to add one.[/yellow]")
+        raise typer.Exit(0)
+
+    if as_json:
+        rows = [{"name": group.name, "children": group.children} for group in groups]
+        console.print_json(json_mod.dumps(rows, indent=2))
+        return
+
+    table = Table(box=box.SIMPLE)
+    table.add_column("Group", style="cyan")
+    table.add_column("Bookmarks")
+    table.add_column("Count", style="dim")
+
+    for group in groups:
+        table.add_row(group.name, ", ".join(group.children), str(len(group.children)))
+
+    console.print(table)
+
+
+@bookmark_group_app.command("create")
+def bookmark_group_create(
+    name: Annotated[str, typer.Argument(help="Display name for the bookmark group.")],
+    bookmarks: Annotated[list[str], typer.Argument(help="Bookmarks to include in the group (at least 2).")],
+    project: ProjectOpt = None,
+) -> None:
+    """Create a bookmark group from existing bookmarks."""
+    from pbi.bookmarks import create_bookmark_group
+
+    proj = get_project(project)
+    try:
+        group = create_bookmark_group(proj, name, bookmarks)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(
+        f'Created bookmark group "[cyan]{group.name}[/cyan]" '
+        f'with [cyan]{len(group.children)}[/cyan] bookmark(s)'
+    )
+
+
+@bookmark_group_app.command("delete")
+def bookmark_group_delete(
+    group: Annotated[str, typer.Argument(help="Bookmark group display name.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Delete a bookmark group and restore its bookmarks as standalone items."""
+    from pbi.bookmarks import delete_bookmark_group
+
+    proj = get_project(project)
+    if not force:
+        confirm = typer.confirm(f'Delete bookmark group "{group}"?')
+        if not confirm:
+            raise typer.Abort()
+
+    try:
+        removed = delete_bookmark_group(proj, group)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(
+        f'Deleted bookmark group "[cyan]{removed.name}[/cyan]" '
+        f'([cyan]{len(removed.children)}[/cyan] bookmark(s) restored)'
+    )
 
 
 @bookmark_app.command("create")
