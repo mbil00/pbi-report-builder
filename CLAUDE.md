@@ -14,6 +14,8 @@ Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/
 
 **Scope narrowing:** Use `--page` and `--visual` optional flags to narrow scope (see filter commands). Default scope is report-level. `--visual` requires `--page`.
 
+**Subgroup grammar:** Prefer noun subgroups before verbs when a feature has variants, e.g. `page tooltip set`, `bookmark group create`, `nav page set`, `nav action get`, `nav tooltip clear`.
+
 **Common flags:**
 - `--project, -p` — all commands (via `ProjectOpt`)
 - `--json` — all list commands, parameter name `as_json`
