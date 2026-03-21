@@ -426,6 +426,58 @@ class ReportCommandTests(unittest.TestCase):
             report = json.loads(report_path.read_text(encoding="utf-8-sig"))
             self.assertNotIn("organizationCustomVisuals", report)
 
+    def test_report_data_source_variables_get_set_and_clear(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pbip_path, report_path = self._make_report_project(root)
+            payload_path = root / "variables.json"
+            payload_path.write_text('{"region":"EMEA"}\n', encoding="utf-8")
+
+            set_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "data-source-variables",
+                    "set",
+                    "--from-file",
+                    str(payload_path),
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            get_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "data-source-variables",
+                    "get",
+                    "--raw",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertEqual(get_result.stdout.strip(), '{"region":"EMEA"}')
+
+            clear_result = runner.invoke(
+                app,
+                [
+                    "report",
+                    "data-source-variables",
+                    "clear",
+                    "--force",
+                    "--project",
+                    str(pbip_path),
+                ],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+
+            report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+            self.assertNotIn("dataSourceVariables", report)
+
 
 if __name__ == "__main__":
     unittest.main()

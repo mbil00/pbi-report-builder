@@ -15,6 +15,7 @@ from pbi.bookmarks import export_bookmarks
 from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
+from pbi.report_roundtrip import export_report_spec
 from pbi.roundtrip import (
     export_bindings,
     export_object_properties,
@@ -88,6 +89,10 @@ def export_pages(project: Project, page_filter: str | None = None) -> dict:
     if page_filter:
         page = project.find_page(page_filter)
         pages = [page]
+    else:
+        report_spec = export_report_spec(project)
+        if report_spec:
+            result["report"] = report_spec
 
     result["pages"] = [export_page(project, p) for p in pages]
     bookmark_page = pages[0] if page_filter and pages else None

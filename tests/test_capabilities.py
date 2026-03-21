@@ -19,7 +19,6 @@ class CapabilityMatrixTests(unittest.TestCase):
         payload = [cap.to_dict() for cap in list_capabilities()]
         text = json.dumps(payload)
         self.assertIn("supported", text)
-        self.assertIn("partial", text)
         self.assertIn("blocked", text)
 
 

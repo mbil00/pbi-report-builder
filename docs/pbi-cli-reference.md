@@ -37,6 +37,7 @@ pbi report object get resourcePackages
 pbi report resource package get RegisteredResources
 pbi report resource item get RegisteredResources logo.png
 pbi report custom-visual get "Org Timeline"
+pbi report data-source-variables get
 pbi page get "Sales Overview"                          # overview with background, visual count
 pbi page get "Sales Overview" width displayOption      # specific properties
 pbi visual get "Sales Overview" revenueChart --full    # everything in one call
@@ -52,6 +53,7 @@ pbi report object set objects --from-file report-objects.json
 pbi report resource package create BrandAssets --type RegisteredResources
 pbi report resource item set RegisteredResources logo.png --type Image --name Logo --from-file ./logo.png
 pbi report custom-visual set "Org Timeline" store/org-timeline.pbiviz --disabled
+pbi report data-source-variables set --from-file variables.json
 pbi page set "Sales Overview" width=1440 displayOption=FitToWidth
 pbi visual set "Sales Overview" revenueChart title.show=true title.text="Revenue"
 

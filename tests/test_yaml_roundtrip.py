@@ -66,6 +66,49 @@ class YamlRoundTripTests(unittest.TestCase):
             self.assertEqual(visuals[0].position["x"], 9.5)
             self.assertEqual(visuals[0].position["width"], 300.75)
 
+    def test_full_report_round_trip_preserves_report_section_and_page_export_omits_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            source.create_page("Demo")
+            report = source.get_report_meta()
+            report["annotations"] = [{"name": "README", "value": "hello"}]
+            report["organizationCustomVisuals"] = [{"name": "Org Timeline", "path": "store/org.pbiviz"}]
+            report["dataSourceVariables"] = '{"region":"EMEA"}'
+            report["resourcePackages"] = [
+                {
+                    "name": "RegisteredResources",
+                    "type": "RegisteredResources",
+                    "items": [{"name": "logo.png", "path": "logo.png", "type": "Image"}],
+                }
+            ]
+            (source.definition_folder / "report.json").write_text(
+                json.dumps(report) + "\n",
+                encoding="utf-8",
+            )
+
+            parsed = yaml.safe_load(export_yaml(source))
+            self.assertIn("report", parsed)
+            self.assertEqual(parsed["report"]["annotations"][0]["name"], "README")
+            self.assertEqual(parsed["report"]["organizationCustomVisuals"][0]["name"], "Org Timeline")
+            self.assertEqual(parsed["report"]["dataSourceVariables"], '{"region":"EMEA"}')
+
+            page_only = yaml.safe_load(export_yaml(source, page_filter="Demo"))
+            self.assertNotIn("report", page_only)
+
+            target = self._make_project(root / "target")
+            result = apply_yaml(target, yaml.safe_dump(parsed, sort_keys=False))
+            self.assertEqual(result.errors, [])
+
+            target_report = target.get_report_meta()
+            self.assertEqual(target_report["annotations"], [{"name": "README", "value": "hello"}])
+            self.assertEqual(
+                target_report["organizationCustomVisuals"],
+                [{"name": "Org Timeline", "path": "store/org.pbiviz"}],
+            )
+            self.assertEqual(target_report["dataSourceVariables"], '{"region":"EMEA"}')
+            self.assertEqual(target_report["resourcePackages"][0]["items"][0]["path"], "logo.png")
+
     def test_round_trip_preserves_topn_filters_via_raw_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

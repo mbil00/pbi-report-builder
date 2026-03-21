@@ -246,7 +246,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         domain="Report",
         feature="Report-level metadata and settings",
-        status="partial",
+        status="supported",
         commands=(
             "pbi report get", "pbi report set", "pbi report properties",
             "pbi report annotation list", "pbi report annotation get",
@@ -259,11 +259,13 @@ CAPABILITIES: tuple[Capability, ...] = (
             "pbi report resource item set", "pbi report resource item delete",
             "pbi report custom-visual list", "pbi report custom-visual get",
             "pbi report custom-visual set", "pbi report custom-visual delete",
+            "pbi report data-source-variables get", "pbi report data-source-variables set",
+            "pbi report data-source-variables clear",
         ),
         pbi_support="PBIR exposes report metadata beyond themes, including settings, resources, and other report-level objects.",
-        cli_support="The report command group now covers scalar settings, first-class report annotations, top-level object/array inspection and mutation, dedicated resource package/item flows for `resourcePackages`, and first-class organization custom visual editing for `organizationCustomVisuals`.",
-        gap="`dataSourceVariables` and a few specialized report-level arrays still rely on generic object editing rather than dedicated helpers.",
-        next_step="Add dedicated helpers for the remaining specialized report-level arrays where generic object editing is still too low-level.",
+        cli_support="The report command group now covers scalar settings, first-class report annotations, top-level object/array inspection and mutation, dedicated resource package/item flows for `resourcePackages`, first-class organization custom visual editing for `organizationCustomVisuals`, dedicated `dataSourceVariables` commands, and full-report YAML `report:` round-trip via export/apply/diff.",
+        gap="Additional convenience helpers may still be worthwhile for niche report-level payloads, but the core report authoring surface is implemented.",
+        next_step="Polish specialized helpers only where real report authoring workflows expose friction.",
         schema_refs=(REPORT_SCHEMA,),
     ),
 )

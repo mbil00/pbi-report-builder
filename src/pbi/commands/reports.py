@@ -24,10 +24,12 @@ report_resource_app = typer.Typer(help="Report resource package operations.", no
 report_resource_package_app = typer.Typer(help="Resource package operations.", no_args_is_help=True)
 report_resource_item_app = typer.Typer(help="Resource item operations.", no_args_is_help=True)
 report_custom_visual_app = typer.Typer(help="Organization custom visual operations.", no_args_is_help=True)
+report_data_source_variables_app = typer.Typer(help="Report dataSourceVariables operations.", no_args_is_help=True)
 report_app.add_typer(report_annotation_app, name="annotation")
 report_app.add_typer(report_object_app, name="object")
 report_app.add_typer(report_resource_app, name="resource")
 report_app.add_typer(report_custom_visual_app, name="custom-visual")
+report_app.add_typer(report_data_source_variables_app, name="data-source-variables")
 report_resource_app.add_typer(report_resource_package_app, name="package")
 report_resource_app.add_typer(report_resource_item_app, name="item")
 
@@ -851,3 +853,84 @@ def report_custom_visual_delete(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
     console.print(f'Deleted organization custom visual "[cyan]{deleted.get("name", identifier)}[/cyan]"')
+
+
+@report_data_source_variables_app.command("get")
+def report_data_source_variables_get(
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Print the raw variable payload.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Show report data source variable overrides."""
+    proj = get_project(project)
+    data = proj.get_report_meta()
+    value = data.get("dataSourceVariables")
+    if not isinstance(value, str) or not value:
+        console.print("[yellow]No data source variables configured.[/yellow]")
+        raise typer.Exit(0)
+
+    if raw:
+        console.print(value)
+        return
+
+    table = Table(title="dataSourceVariables", box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    preview = value if len(value) <= 120 else f"{value[:117]}..."
+    table.add_row("Length", str(len(value)))
+    table.add_row("Preview", preview)
+    console.print(table)
+
+
+@report_data_source_variables_app.command("set")
+def report_data_source_variables_set(
+    value: Annotated[str | None, typer.Argument(help="Raw dataSourceVariables payload.", show_default=False)] = None,
+    from_file: Annotated[Path | None, typer.Option("--from-file", help="Read the payload from a file.")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Set report data source variable overrides."""
+    proj = get_project(project)
+    try:
+        if value is not None and from_file is not None:
+            raise ValueError("Provide either an inline payload or --from-file, not both.")
+        if from_file is not None:
+            payload = from_file.read_text(encoding="utf-8")
+        elif value is not None:
+            payload = value
+        else:
+            raise ValueError("Provide a payload inline or via --from-file.")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    data = proj.get_report_meta()
+    data.setdefault("$schema", REPORT_SCHEMA)
+    old = data.get("dataSourceVariables")
+    if old == payload:
+        console.print("[dim]No change:[/dim] [cyan]dataSourceVariables[/cyan] already matches the requested value")
+        return
+
+    data["dataSourceVariables"] = payload
+    _save_report_json(proj, data)
+    console.print("Set report data source variables")
+
+
+@report_data_source_variables_app.command("clear")
+def report_data_source_variables_clear(
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Clear report data source variable overrides."""
+    proj = get_project(project)
+    data = proj.get_report_meta()
+    if "dataSourceVariables" not in data:
+        console.print("[dim]No change:[/dim] [cyan]dataSourceVariables[/cyan] is not configured")
+        return
+
+    if not force:
+        confirm = typer.confirm('Clear report object "dataSourceVariables"?')
+        if not confirm:
+            raise typer.Abort()
+
+    data.pop("dataSourceVariables", None)
+    _save_report_json(proj, data)
+    console.print("Cleared report data source variables")

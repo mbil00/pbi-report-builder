@@ -255,6 +255,8 @@ Expose the report objects and metadata that materially affect report behavior an
 - `report object list|get|set|clear` for top-level report arrays/objects
 - `report resource package ...` and `report resource item ...`
 - `report custom-visual list|get|set|delete` for `organizationCustomVisuals`
+- `report data-source-variables get|set|clear`
+- full-report YAML `report:` export/apply/diff round-trip for report-level metadata
 
 ### Exit Criteria
 
@@ -265,6 +267,10 @@ Expose the report objects and metadata that materially affect report behavior an
 
 - real-fixture tests for report metadata round-trip
 - diff/apply coverage for report-level arrays and resources
+
+### Status
+
+Complete.
 
 ## Phase 5: Theme And Style Completeness
 

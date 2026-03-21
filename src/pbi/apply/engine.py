@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import yaml
 
+from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
+
 from .pages import apply_page
 from .ops import (
     apply_bookmarks_spec as _apply_bookmarks,
@@ -48,6 +50,16 @@ def apply_yaml(
 
     try:
         try:
+            report_spec = spec.get("report")
+            if page_filter is None:
+                if report_spec is not None and not isinstance(report_spec, dict):
+                    result.errors.append("'report' must be a mapping.")
+                elif isinstance(report_spec, dict) and report_spec:
+                    session.ensure_snapshot(project)
+                    changed, touched = _apply_report_spec(project, report_spec, dry_run=dry_run)
+                    if changed:
+                        result.properties_set += touched
+
             for page_spec in pages_spec:
                 if not isinstance(page_spec, dict):
                     result.errors.append(f"Each page must be a mapping, got: {type(page_spec).__name__}")

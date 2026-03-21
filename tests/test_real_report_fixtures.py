@@ -113,6 +113,43 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, f"{pbip}: {result.stdout}")
             self.assertIn("No differences found.", result.stdout)
 
+    def test_real_fixture_report_section_apply_and_diff(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            parsed = {
+                "version": 1,
+                "pages": [],
+                "report": {
+                    "annotations": [{"name": "README", "value": "Kitchen sink"}],
+                    "organizationCustomVisuals": [{"name": "Retail Timeline", "path": "org/RetailTimeline.pbiviz"}],
+                    "dataSourceVariables": '{"region":"EMEA"}',
+                },
+            }
+            spec = yaml.safe_dump(parsed, sort_keys=False)
+
+            diff_result = runner.invoke(app, ["diff", "-", "--project", str(pbip)], input=spec)
+            self.assertEqual(diff_result.exit_code, 0, diff_result.stdout)
+            self.assertIn("Report", diff_result.stdout)
+            self.assertIn("report.annotations[0].name", diff_result.stdout)
+            self.assertIn("report.organizationCustomVisuals[0].name", diff_result.stdout)
+            self.assertIn("report.dataSourceVariables", diff_result.stdout)
+
+            result = apply_yaml(Project.find(pbip), spec)
+            self.assertEqual(result.errors, [])
+
+            reloaded = Project.find(pbip)
+            report = reloaded.get_report_meta()
+            self.assertEqual(report["annotations"], [{"name": "README", "value": "Kitchen sink"}])
+            self.assertEqual(
+                report["organizationCustomVisuals"],
+                [{"name": "Retail Timeline", "path": "org/RetailTimeline.pbiviz"}],
+            )
+            self.assertEqual(report["dataSourceVariables"], '{"region":"EMEA"}')
+
     def test_kitchen_sink_report_get_and_set_cli(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

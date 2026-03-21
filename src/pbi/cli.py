@@ -462,7 +462,7 @@ def diff_cmd(
     """Show what 'pbi apply' would change, property by property."""
     from pbi.bookmarks import export_bookmarks
     from pbi.commands.visuals.helpers import flatten_diff_spec, flatten_visual_diff_spec
-    from pbi.export import export_visual_spec
+    from pbi.export import export_visual_spec, export_yaml
 
     proj = get_project(project)
     try:
@@ -478,6 +478,23 @@ def diff_cmd(
         raise typer.Exit(1)
 
     has_diffs = False
+    if page is None and isinstance(spec.get("report"), dict):
+        current_report = yaml_mod.safe_load(export_yaml(proj)).get("report", {})
+        yaml_report = spec.get("report", {})
+        current_flat = flatten_diff_spec(current_report)
+        yaml_flat = flatten_diff_spec(yaml_report)
+        report_diffs = []
+        for key, proposed in yaml_flat.items():
+            curr = str(current_flat.get(key, ""))
+            proposed_text = str(proposed)
+            if curr != proposed_text:
+                report_diffs.append((key, curr or "(none)", proposed_text))
+        if report_diffs:
+            has_diffs = True
+            console.print("\n[bold]Report[/bold]")
+            for prop, old, new in report_diffs:
+                label = f"report.{prop}" if prop else "report"
+                console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
     for page_spec in spec["pages"]:
         page_name = page_spec.get("name", "")
         if page and page_name.lower() != page.lower():
