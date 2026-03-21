@@ -66,7 +66,10 @@ pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart --wi
 pbi visual create "Sales Overview" card --name kpiCard --title "Total Revenue"
 pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --sort Date.Month
+pbi visual create "Sales Overview" clusteredColumnChart --name revenueChart \
+  --bind Category=Date.Month --bind Y=Sales.Revenue --preset chart
 pbi visual create "Sales Overview" tableEx --name detailTable --bind Values=Product.Category
+pbi visual create "Sales Overview" slicer --name yearSlicer --bind Values=Date.Year --preset slicer
 pbi visual move "Sales Overview" revenueChart --x 40 --y 80
 pbi visual resize "Sales Overview" revenueChart --width 720 --height 420
 pbi visual resize "Sales Overview" revenueChart --height 300           # width unchanged
@@ -79,7 +82,13 @@ pbi visual delete "Sales Overview" revenueChart --force
 `pbi visual create` now supports repeatable `--bind Role=Table.Field` plus
 `--sort Table.Field`, so common visuals can be scaffolded and made usable in one
 command. For common types, width and height also default to more practical
-authoring sizes than the generic `300 x 200`.
+authoring sizes than the generic `300 x 200`. Use `--preset` for a better
+starting format on supported families:
+
+- `chart` for bar/column/line/combo charts
+- `table` for table and matrix
+- `slicer` for slicers
+- `card` for card visuals
 
 ## Layout Helpers
 

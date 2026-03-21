@@ -76,6 +76,9 @@ pbi visual create "Overview" clusteredBarChart    # create visual
 pbi visual create "Overview" cardVisual --name kpi1 --title "Revenue"
 pbi visual create "Overview" clusteredColumnChart --name revenueChart \
   --bind Category=Date.Month --bind Y=Sales.Revenue --sort Date.Month
+pbi visual create "Overview" clusteredColumnChart --name revenueChart \
+  --bind Category=Date.Month --bind Y=Sales.Revenue --preset chart
+pbi visual create "Overview" slicer --name yearSlicer --bind Values=Date.Year --preset slicer
 pbi visual rename "Overview" kpi1 "revenueCard"  # give visual a friendly name
 pbi visual copy "Overview" chart1 --to-page "Detail"   # copy to another page
 pbi visual delete "Overview" chart1 --force       # delete visual

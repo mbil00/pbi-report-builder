@@ -91,6 +91,8 @@ for the most common authoring flow.
 
 #### Slice 2: Common visual presets
 
+Status: in progress
+
 - add builder presets for:
   - clustered/stacked column and bar
   - line and combo
@@ -99,6 +101,21 @@ for the most common authoring flow.
   - card/KPI
 - set safer defaults for titles, legends, and common layout choices
 - expose preset-aware help and validation
+
+Initial implementation shipped:
+
+- explicit `--preset chart`
+- explicit `--preset table`
+- explicit `--preset slicer`
+- explicit `--preset card`
+
+Current behavior:
+
+- chart presets hide legends for single-series charts and keep them when a
+  `Series` role is bound
+- slicer presets hide both the visual header and slicer header
+- table presets apply a cleaner default grid layout
+- card presets apply basic panel styling
 
 #### Slice 3: Semantic-model-driven helpers
 

@@ -9,7 +9,12 @@ import typer
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import resolve_visual_target, _set_visual_image_source
-from pbi.visual_builders import apply_initial_sort, apply_role_bindings, get_default_visual_size
+from pbi.visual_builders import (
+    apply_builder_preset,
+    apply_initial_sort,
+    apply_role_bindings,
+    get_default_visual_size,
+)
 
 
 @visual_app.command("create")
@@ -24,6 +29,7 @@ def visual_create(
     title: Annotated[str | None, typer.Option("--title", help="Set title text (also enables title.show).")] = None,
     image: Annotated[str | None, typer.Option("--image", help="Bind an image visual to a registered resource name or path.")] = None,
     bind: Annotated[list[str], typer.Option("--bind", help="Bind a role as Role=Table.Field. Repeat to create a usable visual in one command.")] = [],
+    preset: Annotated[str | None, typer.Option("--preset", help="Apply a builder preset for common visual families: chart, table, slicer, card.")] = None,
     sort: Annotated[str | None, typer.Option("--sort", help="Set initial sort field as Table.Field.")] = None,
     descending: Annotated[bool, typer.Option("--descending/--ascending", help="Sort direction for --sort (default: ascending).")] = False,
     field_type: Annotated[str, typer.Option("--field-type", help="Field type used for --bind/--sort: auto, column, or measure.")] = "auto",
@@ -44,6 +50,9 @@ def visual_create(
     if from_ref:
         if bind:
             console.print("[red]Error:[/red] --bind cannot be combined with --from.")
+            raise typer.Exit(1)
+        if preset:
+            console.print("[red]Error:[/red] --preset cannot be combined with --from.")
             raise typer.Exit(1)
         if sort:
             console.print("[red]Error:[/red] --sort cannot be combined with --from.")
@@ -131,6 +140,15 @@ def visual_create(
             proj.delete_visual(vis)
             raise typer.Exit(1)
 
+    applied_preset: list[tuple[str, str]] = []
+    if preset:
+        try:
+            applied_preset = apply_builder_preset(vis, preset, bound_fields=bound_fields)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            proj.delete_visual(vis)
+            raise typer.Exit(1)
+
     sort_details: tuple[str, str, str, str] | None = None
     if sort:
         try:
@@ -158,6 +176,9 @@ def visual_create(
             for field in bound_fields
         )
         console.print(f"[dim]Bindings:[/dim] {bindings_str}")
+
+    if applied_preset:
+        console.print(f"[dim]Preset:[/dim] {preset}")
 
     if sort_details is not None:
         sort_entity, sort_prop, _field_type, direction = sort_details

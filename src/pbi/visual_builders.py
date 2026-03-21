@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pbi.commands.common import resolve_field_type
+from pbi.properties import VISUAL_PROPERTIES, set_property
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,20 @@ DEFAULT_VISUAL_SIZES: dict[str, tuple[int, int]] = {
     "pivotTable": (560, 360),
     "slicer": (220, 120),
     "tableEx": (520, 320),
+}
+
+PRESET_COMPATIBILITY: dict[str, set[str]] = {
+    "chart": {
+        "clusteredBarChart",
+        "clusteredColumnChart",
+        "lineChart",
+        "lineClusteredColumnComboChart",
+        "stackedBarChart",
+        "stackedColumnChart",
+    },
+    "table": {"tableEx", "pivotTable"},
+    "slicer": {"slicer"},
+    "card": {"cardVisual"},
 }
 
 
@@ -94,3 +109,67 @@ def apply_initial_sort(
     project.set_sort(visual, entity, prop, field_type=resolved_field_type, descending=descending)
     direction = "Descending" if descending else "Ascending"
     return entity, prop, resolved_field_type, direction
+
+
+def apply_builder_preset(
+    visual,
+    preset: str,
+    *,
+    bound_fields: list[BoundField] | None = None,
+) -> list[tuple[str, str]]:
+    """Apply a preset to a newly-created visual and return applied properties."""
+    normalized = preset.strip().lower()
+    if normalized not in PRESET_COMPATIBILITY:
+        raise ValueError(
+            f'Unknown preset "{preset}". Use one of: {", ".join(sorted(PRESET_COMPATIBILITY))}.'
+        )
+    if visual.visual_type not in PRESET_COMPATIBILITY[normalized]:
+        supported = ", ".join(sorted(PRESET_COMPATIBILITY[normalized]))
+        raise ValueError(
+            f'Preset "{normalized}" is not supported for {visual.visual_type}. '
+            f"Supported types: {supported}"
+        )
+
+    assignments = _preset_assignments(normalized, bound_fields or [])
+    for prop, value in assignments:
+        set_property(visual.data, prop, value, VISUAL_PROPERTIES)
+    visual.save()
+    return assignments
+
+
+def _preset_assignments(preset: str, bound_fields: list[BoundField]) -> list[tuple[str, str]]:
+    """Return canonical property assignments for a builder preset."""
+    if preset == "chart":
+        has_series = any(field.role == "Series" for field in bound_fields)
+        return [
+            ("background.show", "true"),
+            ("border.show", "true"),
+            ("border.radius", "6"),
+            ("header.show", "false"),
+            ("legend.show", "true" if has_series else "false"),
+        ]
+    if preset == "table":
+        return [
+            ("background.show", "true"),
+            ("border.show", "true"),
+            ("border.radius", "4"),
+            ("header.show", "false"),
+            ("grid.horizontal", "true"),
+            ("grid.vertical", "false"),
+        ]
+    if preset == "slicer":
+        return [
+            ("background.show", "true"),
+            ("border.show", "true"),
+            ("border.radius", "6"),
+            ("header.show", "false"),
+            ("slicerHeader.show", "false"),
+        ]
+    if preset == "card":
+        return [
+            ("background.show", "true"),
+            ("border.show", "true"),
+            ("border.radius", "8"),
+            ("header.show", "false"),
+        ]
+    raise ValueError(f"Unsupported preset {preset}")
