@@ -62,12 +62,15 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         domain="Pages",
         feature="Tooltip and drillthrough pages",
-        status="partial",
-        commands=("pbi page tooltip set", "pbi page tooltip clear", "pbi page drillthrough set", "pbi page drillthrough clear"),
+        status="supported",
+        commands=(
+            "pbi page tooltip set", "pbi page tooltip get", "pbi page tooltip clear",
+            "pbi page drillthrough set", "pbi page drillthrough get", "pbi page drillthrough clear",
+        ),
         pbi_support="Power BI supports tooltip and drillthrough pages with binding metadata and filter flow.",
-        cli_support="Page binding, sizing, hidden-page behavior, and drillthrough filter wiring are implemented.",
-        gap="The CLI does not yet cover the full behavioral surface of these page types or every exported binding variant.",
-        next_step="Expand page-binding support based on exact binding parameter patterns seen in exported PBIR samples.",
+        cli_support="Tooltip and drillthrough page authoring, inspection, hidden-page behavior, sizing, filter wiring, shorthand YAML compile, and real-fixture round-trip coverage are implemented.",
+        gap="The remaining opportunity is ergonomic helpers for common page-type recipes rather than missing core PBIR support.",
+        next_step="Add higher-level scaffolds for common tooltip and drillthrough page layouts.",
         schema_refs=(PAGE_SCHEMA,),
     ),
     Capability(
@@ -200,12 +203,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         status="supported",
         commands=(
             "pbi interaction list", "pbi interaction set", "pbi interaction clear",
-            "pbi nav set-page", "pbi nav set-bookmark", "pbi nav set-back", "pbi nav set-url", "pbi nav clear",
+            "pbi nav set-page", "pbi nav set-bookmark", "pbi nav set-back", "pbi nav set-url",
+            "pbi nav set-drillthrough", "pbi nav set-tooltip", "pbi nav clear-tooltip", "pbi nav clear",
         ),
         pbi_support="Power BI supports interactions, button actions, page nav, bookmarks, drillthrough, and tooltips.",
-        cli_support="Interaction edges and dedicated navigation builders for page nav, bookmark toggle, back button, and web URL actions are implemented.",
-        gap="Drillthrough action wiring and tooltip target binding are not yet first-class nav commands.",
-        next_step="Add nav set-drillthrough and nav set-tooltip for the remaining action types.",
+        cli_support="Interaction edges and dedicated navigation builders for page nav, bookmark toggle, back button, web URL, drillthrough actions, and report-page tooltip targeting are implemented.",
+        gap="The remaining work is recipe-level authoring convenience, not missing action primitives.",
+        next_step="Add reusable action/layout recipes on top of the supported nav primitives.",
         schema_refs=(PAGE_SCHEMA, VISUAL_CONTAINER_SCHEMA),
     ),
     Capability(

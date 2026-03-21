@@ -259,6 +259,99 @@ class RealReportFixtureTests(unittest.TestCase):
             self.assertIsNone(get_property(nav_focus_online.data, "action.url", VISUAL_PROPERTIES))
             self.assertIsNone(get_property(nav_focus_online.data, "action.bookmark", VISUAL_PROPERTIES))
 
+    def test_real_fixture_page_binding_commands_report_tooltip_and_drillthrough_details(self) -> None:
+        runner = CliRunner()
+
+        drill_result = runner.invoke(
+            app,
+            ["page", "drillthrough", "get", "Product Detail", "--project", str(KITCHEN_SINK_PBIP)],
+        )
+        self.assertEqual(drill_result.exit_code, 0, drill_result.stdout)
+        self.assertIn("Type", drill_result.stdout)
+        self.assertIn("Drillthrough", drill_result.stdout)
+
+        tooltip_result = runner.invoke(
+            app,
+            ["page", "tooltip", "get", "Tooltip - Order Context", "--project", str(KITCHEN_SINK_PBIP)],
+        )
+        self.assertEqual(tooltip_result.exit_code, 0, tooltip_result.stdout)
+        self.assertIn("Tooltip", tooltip_result.stdout)
+        self.assertIn("320", tooltip_result.stdout)
+        self.assertIn("240", tooltip_result.stdout)
+
+    def test_real_fixture_nav_set_drillthrough_and_tooltip(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_root = Path(tmp) / KITCHEN_SINK_DIR.name
+            shutil.copytree(KITCHEN_SINK_DIR, copied_root)
+            pbip = copied_root / KITCHEN_SINK_PBIP.name
+
+            set_drill_result = runner.invoke(
+                app,
+                [
+                    "nav",
+                    "set-drillthrough",
+                    "Executive Overview",
+                    "navToProduct",
+                    "Product Detail",
+                    "--tooltip",
+                    "Open detail",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_drill_result.exit_code, 0, set_drill_result.stdout)
+
+            set_tooltip_result = runner.invoke(
+                app,
+                [
+                    "nav",
+                    "set-tooltip",
+                    "Executive Overview",
+                    "revenueByMonth",
+                    "Tooltip - Order Context",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(set_tooltip_result.exit_code, 0, set_tooltip_result.stdout)
+
+            reloaded = Project.find(pbip)
+            overview = reloaded.find_page("Executive Overview")
+            product_detail = reloaded.find_page("Product Detail")
+            tooltip_page = reloaded.find_page("Tooltip - Order Context")
+
+            nav_to_product = reloaded.find_visual(overview, "navToProduct")
+            self.assertEqual(get_property(nav_to_product.data, "action.type", VISUAL_PROPERTIES), "Drillthrough")
+            self.assertEqual(
+                get_property(nav_to_product.data, "action.drillthrough", VISUAL_PROPERTIES),
+                product_detail.name,
+            )
+            self.assertEqual(get_property(nav_to_product.data, "action.tooltip", VISUAL_PROPERTIES), "Open detail")
+
+            revenue_by_month = reloaded.find_visual(overview, "revenueByMonth")
+            self.assertEqual(get_property(revenue_by_month.data, "tooltip.type", VISUAL_PROPERTIES), "ReportPage")
+            self.assertEqual(get_property(revenue_by_month.data, "tooltip.section", VISUAL_PROPERTIES), tooltip_page.name)
+
+            clear_tooltip_result = runner.invoke(
+                app,
+                [
+                    "nav",
+                    "clear-tooltip",
+                    "Executive Overview",
+                    "revenueByMonth",
+                    "--force",
+                    "--project",
+                    str(pbip),
+                ],
+            )
+            self.assertEqual(clear_tooltip_result.exit_code, 0, clear_tooltip_result.stdout)
+
+            reloaded = Project.find(pbip)
+            revenue_by_month = reloaded.find_visual(reloaded.find_page("Executive Overview"), "revenueByMonth")
+            self.assertIsNone(get_property(revenue_by_month.data, "tooltip.type", VISUAL_PROPERTIES))
+            self.assertIsNone(get_property(revenue_by_month.data, "tooltip.section", VISUAL_PROPERTIES))
+
     def test_model_heavy_model_cli_inspection_commands(self) -> None:
         runner = CliRunner()
 

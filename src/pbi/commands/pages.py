@@ -180,6 +180,14 @@ def page_get(
     project: ProjectOpt = None,
 ) -> None:
     """Show page details or one or more specific properties."""
+    from pbi.drillthrough import (
+        get_drillthrough_fields,
+        get_tooltip_fields,
+        is_cross_report_drillthrough,
+        is_drillthrough,
+        is_tooltip_page,
+    )
+
     _proj, pg = _get_page(project, page)
 
     if props:
@@ -223,19 +231,29 @@ def page_get(
     table.add_row("Visuals", str(len(visuals)))
 
     # Drillthrough/tooltip info
-    page_binding = pg.data.get("pageBinding")
-    if page_binding:
-        binding_type = page_binding.get("type", "")
-        table.add_row("Binding Type", binding_type)
-        data_fields = page_binding.get("dataFields", [])
-        if data_fields:
-            refs = []
-            for df in data_fields:
-                col = df.get("Column", {})
-                entity = col.get("Entity", "?")
-                prop = col.get("Property", "?")
-                refs.append(f"{entity}.{prop}")
-            table.add_row("Binding Fields", ", ".join(refs))
+    if is_drillthrough(pg):
+        table.add_row("Binding Type", "Drillthrough")
+        drill_fields = get_drillthrough_fields(pg)
+        if drill_fields:
+            table.add_row(
+                "Binding Fields",
+                ", ".join(
+                    f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
+                    for entity, prop, field_type in drill_fields
+                ),
+            )
+        table.add_row("Cross Report", "yes" if is_cross_report_drillthrough(pg) else "")
+    elif is_tooltip_page(pg):
+        table.add_row("Binding Type", "Tooltip")
+        tooltip_fields = get_tooltip_fields(pg)
+        if tooltip_fields:
+            table.add_row(
+                "Binding Fields",
+                ", ".join(
+                    f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
+                    for entity, prop, field_type in tooltip_fields
+                ),
+            )
 
     console.print(table)
 
@@ -674,6 +692,35 @@ def page_set_drillthrough(
     )
 
 
+@page_drillthrough_app.command("get")
+def page_get_drillthrough(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Show drillthrough configuration for a page."""
+    from pbi.drillthrough import get_drillthrough_fields, is_cross_report_drillthrough, is_drillthrough
+
+    _proj, pg = _get_page(project, page)
+    if not is_drillthrough(pg):
+        console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=pg.display_name, box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    table.add_row("Type", "Drillthrough")
+    table.add_row("Cross Report", "yes" if is_cross_report_drillthrough(pg) else "")
+    fields = get_drillthrough_fields(pg)
+    table.add_row(
+        "Fields",
+        ", ".join(
+            f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
+            for entity, prop, field_type in fields
+        ) or "(none)",
+    )
+    console.print(table)
+
+
 @page_drillthrough_app.command("clear")
 def page_clear_drillthrough(
     page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
@@ -721,6 +768,36 @@ def page_set_tooltip(
     console.print(
         f'Set "[cyan]{pg.display_name}[/cyan]" as tooltip page ({width}x{height})'
     )
+
+
+@page_tooltip_app.command("get")
+def page_get_tooltip(
+    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
+    project: ProjectOpt = None,
+) -> None:
+    """Show tooltip configuration for a page."""
+    from pbi.drillthrough import get_tooltip_fields, is_tooltip_page
+
+    _proj, pg = _get_page(project, page)
+    if not is_tooltip_page(pg):
+        console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=pg.display_name, box=box.SIMPLE)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value")
+    table.add_row("Type", "Tooltip")
+    table.add_row("Width", str(pg.width))
+    table.add_row("Height", str(pg.height))
+    fields = get_tooltip_fields(pg)
+    table.add_row(
+        "Fields",
+        ", ".join(
+            f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
+            for entity, prop, field_type in fields
+        ) or "(none)",
+    )
+    console.print(table)
 
 
 @page_tooltip_app.command("clear")

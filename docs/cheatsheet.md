@@ -61,8 +61,10 @@ pbi page export "Overview" -o overview.yaml      # export one page
 **Page types (drillthrough & tooltip):**
 ```bash
 pbi page drillthrough set "Detail" Products.Category   # make drillthrough page
+pbi page drillthrough get "Detail"                     # inspect drillthrough fields
 pbi page drillthrough clear "Detail"                    # revert to normal page
 pbi page tooltip set "Card Tip"                         # make tooltip page
+pbi page tooltip get "Card Tip"                         # inspect tooltip settings
 pbi page tooltip clear "Card Tip"                       # revert to normal page
 ```
 
@@ -365,6 +367,9 @@ pbi nav set-page "Overview" myButton "Detail View"          # navigate to page
 pbi nav set-bookmark "Overview" myButton "Show North"       # apply bookmark
 pbi nav set-back "Detail" backButton                        # navigate back
 pbi nav set-url "Overview" linkButton "https://example.com"
+pbi nav set-drillthrough "Overview" detailsBtn "Detail View"
+pbi nav set-tooltip "Overview" revenueChart "Card Tip"
+pbi nav clear-tooltip "Overview" revenueChart
 pbi nav clear "Overview" myButton                           # remove action
 
 # Bookmarks

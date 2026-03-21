@@ -133,6 +133,7 @@ Each section creates a shape visual (background), a textbox visual (title), and 
 
 ```bash
 pbi page drillthrough set "Product Details" Product.Category
+pbi page drillthrough get "Product Details"
 pbi page drillthrough set "Shared Details" Product.Category --cross-report
 pbi page drillthrough clear "Product Details"
 ```
@@ -141,6 +142,7 @@ pbi page drillthrough clear "Product Details"
 
 ```bash
 pbi page tooltip set "Sales Tooltip"
+pbi page tooltip get "Sales Tooltip"
 pbi page tooltip set "Sales Tooltip" Product.Category --width 400 --height 300
 pbi page tooltip clear "Sales Tooltip"
 ```
@@ -148,5 +150,11 @@ pbi page tooltip clear "Sales Tooltip"
 To link a visual to a tooltip page:
 
 ```bash
-pbi visual set "Sales Overview" revenueChart tooltip.type=ReportPage tooltip.section=<tooltip-page-folder-name>
+pbi nav set-tooltip "Sales Overview" revenueChart "Sales Tooltip"
+```
+
+To wire a drillthrough button:
+
+```bash
+pbi nav set-drillthrough "Sales Overview" detailsBtn "Product Details"
 ```

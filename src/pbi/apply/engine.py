@@ -12,6 +12,7 @@ from .state import (
     ApplyResult,
     ApplySession as _ApplySession,
 )
+from .visuals import finalize_visual_page_refs as _finalize_visual_page_refs
 from pbi.project import Project
 from pbi.styles import StylePreset
 
@@ -69,6 +70,8 @@ def apply_yaml(
                     style_cache=style_cache,
                     session=session,
                 )
+
+            _finalize_visual_page_refs(project, pages_spec, session=session)
 
             bookmarks_spec = spec.get("bookmarks", [])
             if isinstance(bookmarks_spec, list) and bookmarks_spec:

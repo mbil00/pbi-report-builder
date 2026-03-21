@@ -16,6 +16,7 @@ from pbi.bookmarks import (
     update_bookmark_visuals,
 )
 from pbi.cli import app
+from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.interactions import get_interactions, set_interaction
 from pbi.project import Project, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
@@ -374,6 +375,103 @@ class NavigationCommandTests(unittest.TestCase):
             self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "PageNavigation")
             self.assertEqual(get_property(updated.data, "action.page", VISUAL_PROPERTIES), details.name)
             self.assertIsNone(get_property(updated.data, "action.url", VISUAL_PROPERTIES))
+
+    def test_nav_set_drillthrough_validates_target_and_sets_action(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            home = project.create_page("Home")
+            details = project.create_page("Details")
+            configure_drillthrough(details, [("Product", "Category", "column")])
+            details.save()
+            visual = project.create_visual(home, "shape")
+            visual.data["name"] = "drillBtn"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["nav", "set-drillthrough", "Home", "drillBtn", "Details", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            updated = Project.find(root / "Sample.pbip").find_visual(
+                Project.find(root / "Sample.pbip").find_page("Home"),
+                "drillBtn",
+            )
+            self.assertEqual(get_property(updated.data, "action.type", VISUAL_PROPERTIES), "Drillthrough")
+            self.assertEqual(get_property(updated.data, "action.drillthrough", VISUAL_PROPERTIES), details.name)
+            self.assertIsNone(get_property(updated.data, "action.page", VISUAL_PROPERTIES))
+
+    def test_nav_set_tooltip_and_clear_tooltip(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            home = project.create_page("Home")
+            tip = project.create_page("Tip")
+            configure_tooltip_page(tip, [("Product", "Category", "column")], width=320, height=240)
+            tip.save()
+            visual = project.create_visual(home, "barChart")
+            visual.data["name"] = "chart1"
+            visual.save()
+
+            set_result = runner.invoke(
+                app,
+                ["nav", "set-tooltip", "Home", "chart1", "Tip", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(set_result.exit_code, 0, set_result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            updated = reloaded.find_visual(reloaded.find_page("Home"), "chart1")
+            self.assertEqual(get_property(updated.data, "tooltip.type", VISUAL_PROPERTIES), "ReportPage")
+            self.assertEqual(get_property(updated.data, "tooltip.section", VISUAL_PROPERTIES), tip.name)
+            self.assertEqual(get_property(updated.data, "tooltip.show", VISUAL_PROPERTIES), True)
+
+            clear_result = runner.invoke(
+                app,
+                ["nav", "clear-tooltip", "Home", "chart1", "--force", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
+
+            reloaded = Project.find(root / "Sample.pbip")
+            updated = reloaded.find_visual(reloaded.find_page("Home"), "chart1")
+            self.assertIsNone(get_property(updated.data, "tooltip.type", VISUAL_PROPERTIES))
+            self.assertIsNone(get_property(updated.data, "tooltip.section", VISUAL_PROPERTIES))
+
+    def test_page_drillthrough_and_tooltip_get_show_binding_details(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            drill = project.create_page("Drill")
+            configure_drillthrough(
+                drill,
+                [("Product", "Category", "column"), ("Sales", "Total Revenue", "measure")],
+                cross_report=True,
+            )
+            drill.save()
+            tip = project.create_page("Tip")
+            configure_tooltip_page(tip, [("Product", "Category", "column")], width=360, height=220)
+            tip.save()
+
+            drill_result = runner.invoke(
+                app,
+                ["page", "drillthrough", "get", "Drill", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(drill_result.exit_code, 0, drill_result.stdout)
+            self.assertIn("Cross Report", drill_result.stdout)
+            self.assertIn("Product.Category", drill_result.stdout)
+            self.assertIn("Sales.Total Revenue (measure)", drill_result.stdout)
+
+            tip_result = runner.invoke(
+                app,
+                ["page", "tooltip", "get", "Tip", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(tip_result.exit_code, 0, tip_result.stdout)
+            self.assertIn("Width", tip_result.stdout)
+            self.assertIn("360", tip_result.stdout)
+            self.assertIn("Product.Category", tip_result.stdout)
 
     def test_nav_set_bookmark_and_clear(self) -> None:
         runner = CliRunner()

@@ -28,7 +28,7 @@ from .visual_support import (
     resolve_style_assignments,
 )
 from pbi.project import Project, Page, Visual, sanitize_visual_name
-from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.styles import StylePreset
 
 
@@ -46,6 +46,7 @@ def apply_visual(
 ) -> None:
     """Apply a single visual specification."""
     vis_spec = expand_visual_shorthand(vis_spec)
+    vis_spec = _normalize_visual_page_refs(project, vis_spec)
     page_name = page.display_name
     vis_name = vis_spec.get("name")
     vis_id = vis_spec.get("id")
@@ -266,3 +267,89 @@ def apply_visual(
     if visual_baseline is not None:
         _save_visual_if_changed(project, visual, original_data=visual_baseline, session=session)
     page_state.refresh()
+
+
+def finalize_visual_page_refs(
+    project: Project,
+    pages_spec: list[dict],
+    *,
+    session: _ApplySession,
+) -> None:
+    """Canonicalize page-linked visual refs after all pages have been created."""
+    for page_spec in pages_spec:
+        if not isinstance(page_spec, dict):
+            continue
+        page_name = page_spec.get("name")
+        if not isinstance(page_name, str) or not page_name:
+            continue
+        try:
+            page = project.find_page(page_name)
+        except ValueError:
+            continue
+
+        visuals = project.get_visuals(page)
+        by_id = {visual.folder.name: visual for visual in visuals}
+        by_name = {visual.name: visual for visual in visuals}
+
+        for vis_spec in page_spec.get("visuals", []):
+            if not isinstance(vis_spec, dict):
+                continue
+            visual = None
+            vis_id = vis_spec.get("id")
+            if isinstance(vis_id, str) and vis_id:
+                visual = by_id.get(vis_id)
+            if visual is None:
+                vis_name = vis_spec.get("name")
+                if isinstance(vis_name, str) and vis_name:
+                    visual = by_name.get(vis_name)
+            if visual is None:
+                continue
+
+            original_data = copy.deepcopy(visual.data)
+            changed = False
+            for prop_name in ("action.page", "action.drillthrough", "tooltip.section"):
+                current = get_property(visual.data, prop_name, VISUAL_PROPERTIES)
+                resolved = _resolve_page_ref(project, current)
+                if resolved is not None and resolved != current:
+                    set_property(visual.data, prop_name, resolved, VISUAL_PROPERTIES)
+                    changed = True
+
+            if changed:
+                _save_visual_if_changed(project, visual, original_data=original_data, session=session)
+
+
+def _normalize_visual_page_refs(project: Project, vis_spec: dict) -> dict:
+    """Resolve exported page display names back to target page folder ids."""
+    normalized = copy.deepcopy(vis_spec)
+
+    action = normalized.get("action")
+    if isinstance(action, dict):
+        for key in ("page", "drillthrough"):
+            value = action.get(key)
+            resolved = _resolve_page_ref(project, value)
+            if resolved is not None:
+                action[key] = resolved
+
+    tooltip = normalized.get("tooltip")
+    if isinstance(tooltip, dict):
+        value = tooltip.get("section")
+        resolved = _resolve_page_ref(project, value)
+        if resolved is not None:
+            tooltip["section"] = resolved
+
+    for key in ("action.page", "action.drillthrough", "tooltip.section"):
+        value = normalized.get(key)
+        resolved = _resolve_page_ref(project, value)
+        if resolved is not None:
+            normalized[key] = resolved
+
+    return normalized
+
+
+def _resolve_page_ref(project: Project, value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return project.find_page(value).name
+    except ValueError:
+        return None

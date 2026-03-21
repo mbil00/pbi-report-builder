@@ -78,15 +78,51 @@ def get_drillthrough_fields(page: Page) -> list[tuple[str, str, str]]:
     if binding.get("type") != "Drillthrough":
         return []
 
-    result = []
+    result: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
     for param in binding.get("parameters", []):
-        field_expr = param.get("fieldExpr", {})
-        for key, ftype in [("Column", "column"), ("Measure", "measure")]:
-            if key in field_expr:
-                entity = field_expr[key]["Expression"]["SourceRef"]["Entity"]
-                prop = field_expr[key]["Property"]
-                result.append((entity, prop, ftype))
+        field = _field_from_field_expr(param.get("fieldExpr", {}))
+        if field is not None and field not in seen:
+            result.append(field)
+            seen.add(field)
+
+    if result:
+        return result
+
+    filter_config = page.data.get("filterConfig", {})
+    for filter_obj in filter_config.get("filters", []):
+        if not isinstance(filter_obj, dict):
+            continue
+        if not str(filter_obj.get("name", "")).startswith("drillFilter"):
+            continue
+        field = _field_from_field_expr(filter_obj.get("field", {}))
+        if field is not None and field not in seen:
+            result.append(field)
+            seen.add(field)
     return result
+
+
+def get_tooltip_fields(page: Page) -> list[tuple[str, str, str]]:
+    """Get tooltip auto-match fields as (entity, property, field_type) tuples."""
+    binding = page.data.get("pageBinding", {})
+    if binding.get("type") != "Tooltip":
+        return []
+
+    result: list[tuple[str, str, str]] = []
+    for param in binding.get("parameters", []):
+        field = _field_from_field_expr(param.get("fieldExpr", {}))
+        if field is not None:
+            result.append(field)
+    return result
+
+
+def is_cross_report_drillthrough(page: Page) -> bool:
+    """Check if a drillthrough page is configured for cross-report use."""
+    binding = page.data.get("pageBinding", {})
+    return (
+        binding.get("type") == "Drillthrough"
+        and binding.get("referenceScope") == "CrossReport"
+    )
 
 
 def configure_tooltip_page(
@@ -109,6 +145,13 @@ def configure_tooltip_page(
     page.data["width"] = width
     page.data["height"] = height
     page.data["pageBinding"] = build_tooltip_payload(fields)
+    filter_config = page.data.get("filterConfig", {})
+    filters = filter_config.get("filters", [])
+    if isinstance(filters, list):
+        filter_config["filters"] = [
+            f for f in filters
+            if not str(f.get("name", "")).startswith("drillFilter")
+        ]
 
 
 def clear_tooltip_page(page: Page) -> bool:
@@ -321,3 +364,22 @@ def _resolve_field_ref(
             pass
 
     return entity, prop, field_type
+
+
+def _field_from_field_expr(field_expr: dict) -> tuple[str, str, str] | None:
+    """Extract one field tuple from a pageBinding/filter field expression."""
+    if not isinstance(field_expr, dict):
+        return None
+    for key, field_type in [("Column", "column"), ("Measure", "measure")]:
+        if key not in field_expr:
+            continue
+        expr = field_expr[key]
+        try:
+            entity = expr["Expression"]["SourceRef"]["Entity"]
+            prop = expr["Property"]
+        except (KeyError, TypeError):
+            return None
+        if not isinstance(entity, str) or not isinstance(prop, str):
+            return None
+        return entity, prop, field_type
+    return None

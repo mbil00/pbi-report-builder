@@ -524,6 +524,34 @@ pages:
             self.assertEqual(page.width, 400)
             self.assertEqual(page.height, 300)
 
+    def test_export_apply_round_trip_preserves_visual_report_page_tooltip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            demo = source.create_page("Demo")
+            tip = source.create_page("Tip")
+            configure_tooltip_page(tip, [("Product", "Category", "column")], width=400, height=300)
+            tip.save()
+            visual = source.create_visual(demo, "barChart")
+            visual.data["name"] = "chart1"
+            set_property(visual.data, "tooltip.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "tooltip.type", "ReportPage", VISUAL_PROPERTIES)
+            set_property(visual.data, "tooltip.section", tip.name, VISUAL_PROPERTIES)
+            visual.save()
+
+            parsed = yaml.safe_load(export_yaml(source))
+            self.assertEqual(parsed["pages"][0]["visuals"][0]["tooltip"]["section"], "Tip")
+            spec = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True, width=120)
+            target = self._make_project(root / "target")
+            result = apply_yaml(target, spec)
+
+            self.assertEqual(result.errors, [])
+            demo_page = target.find_page("Demo")
+            chart = target.find_visual(demo_page, "chart1")
+            tip_page = target.find_page("Tip")
+            self.assertEqual(get_property(chart.data, "tooltip.type", VISUAL_PROPERTIES), "ReportPage")
+            self.assertEqual(get_property(chart.data, "tooltip.section", VISUAL_PROPERTIES), tip_page.name)
+
     def test_apply_tooltip_shorthand_compiles_to_canonical_page_binding(self) -> None:
         spec = """\
 version: 1
@@ -567,6 +595,34 @@ pages:
             self.assertEqual(page.data["pageBinding"]["referenceScope"], "CrossReport")
             self.assertEqual(page.data["filterConfig"]["filters"][0]["name"], "drillFilter0")
 
+    def test_export_apply_round_trip_preserves_drillthrough_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            home = source.create_page("Home")
+            drill = source.create_page("Drill")
+            configure_drillthrough(drill, [("Product", "Category", "column")], cross_report=True)
+            drill.save()
+            visual = source.create_visual(home, "actionButton")
+            visual.data["name"] = "btn1"
+            set_property(visual.data, "action.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "action.type", "Drillthrough", VISUAL_PROPERTIES)
+            set_property(visual.data, "action.drillthrough", drill.name, VISUAL_PROPERTIES)
+            visual.save()
+
+            parsed = yaml.safe_load(export_yaml(source))
+            self.assertEqual(parsed["pages"][0]["visuals"][0]["action"]["drillthrough"], "Drill")
+            spec = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True, width=120)
+            target = self._make_project(root / "target")
+            result = apply_yaml(target, spec)
+
+            self.assertEqual(result.errors, [])
+            home_page = target.find_page("Home")
+            button = target.find_visual(home_page, "btn1")
+            drill_page = target.find_page("Drill")
+            self.assertEqual(get_property(button.data, "action.type", VISUAL_PROPERTIES), "Drillthrough")
+            self.assertEqual(get_property(button.data, "action.drillthrough", VISUAL_PROPERTIES), drill_page.name)
+
     def test_apply_drillthrough_shorthand_supports_cross_report(self) -> None:
         spec = """\
 version: 1
@@ -591,6 +647,18 @@ pages:
             self.assertEqual(len(params), 2)
             self.assertEqual(page.data["filterConfig"]["filters"][0]["name"], "drillFilter0")
             self.assertEqual(page.data["filterConfig"]["filters"][1]["name"], "drillFilter1")
+
+    def test_configure_tooltip_page_clears_prior_drillthrough_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._make_project(Path(tmp))
+            page = project.create_page("Switch")
+            configure_drillthrough(page, [("Product", "Category", "column")])
+            configure_tooltip_page(page, [("Product", "Category", "column")], width=320, height=240)
+            page.save()
+
+            self.assertEqual(page.data["type"], "Tooltip")
+            self.assertEqual(page.data["pageBinding"]["type"], "Tooltip")
+            self.assertEqual(page.data.get("filterConfig", {}).get("filters", []), [])
 
 
 if __name__ == "__main__":

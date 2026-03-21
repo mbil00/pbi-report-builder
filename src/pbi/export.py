@@ -117,6 +117,7 @@ def export_visual_spec(project: Project, visual: Visual) -> dict:
 def _export_visual(project: Project, visual: Visual) -> dict:
     """Export a single visual as a dict."""
     pos = visual.position
+    page_lookup = {page.name: page.display_name for page in project.get_pages()}
     result: dict[str, Any] = {}
     result["id"] = visual.folder.name
 
@@ -175,6 +176,8 @@ def _export_visual(project: Project, visual: Visual) -> dict:
             )
         )
 
+    _normalize_exported_visual_page_refs(result, page_lookup)
+
     # Textbox content
     if visual.visual_type == "textbox":
         text_spec = _export_textbox_content(visual.data)
@@ -209,6 +212,25 @@ def _export_visual(project: Project, visual: Visual) -> dict:
         result = apply_style_reference(result, matched_style.name)
 
     return result
+
+
+def _normalize_exported_visual_page_refs(
+    visual_spec: dict[str, Any],
+    page_lookup: dict[str, str],
+) -> None:
+    """Export page-linked visual properties using stable page display names."""
+    action = visual_spec.get("action")
+    if isinstance(action, dict):
+        for key in ("page", "drillthrough"):
+            value = action.get(key)
+            if isinstance(value, str):
+                action[key] = page_lookup.get(value, value)
+
+    tooltip = visual_spec.get("tooltip")
+    if isinstance(tooltip, dict):
+        section = tooltip.get("section")
+        if isinstance(section, str):
+            tooltip["section"] = page_lookup.get(section, section)
 
 
 def _export_textbox_content(visual_data: dict) -> dict[str, Any] | None:

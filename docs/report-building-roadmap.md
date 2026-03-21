@@ -198,6 +198,8 @@ Completed with:
 
 ## Phase 3: Tooltip, Drillthrough, And Action Coverage
 
+Status: completed
+
 Pages and nav are already strong, but the remaining interaction surface still has holes.
 
 ### Goal
@@ -211,6 +213,16 @@ Make page-to-page behavior authorable enough for full report navigation design.
 - richer tooltip page binding coverage
 - richer drillthrough binding coverage
 - helper flows for common navigation/button setups
+
+Completed with:
+
+- first-class `nav set-drillthrough`
+- first-class `nav set-tooltip` and `nav clear-tooltip`
+- `page drillthrough get` and `page tooltip get` inspection commands
+- richer `page get` binding summaries for tooltip and drillthrough pages
+- export/apply remapping for visual page-linked properties (`action.page`,
+  `action.drillthrough`, `tooltip.section`) across projects
+- real-fixture coverage for drillthrough actions and report-page tooltip wiring
 
 ### Exit Criteria
 

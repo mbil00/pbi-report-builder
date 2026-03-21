@@ -121,6 +121,9 @@ pbi nav set-page "Sales Overview" navButton "Executive Summary"
 pbi nav set-bookmark "Sales Overview" toggleBtn "Show Details"
 pbi nav set-back "Drillthrough" backButton
 pbi nav set-url "Sales Overview" helpBtn "https://docs.example.com"
+pbi nav set-drillthrough "Sales Overview" detailsBtn "Product Details"
+pbi nav set-tooltip "Sales Overview" revenueChart "Sales Tooltip"
+pbi nav clear-tooltip "Sales Overview" revenueChart
 pbi nav clear "Sales Overview" helpBtn
 
 # Layout
