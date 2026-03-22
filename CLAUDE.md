@@ -131,6 +131,8 @@ All model subgroups follow the standard CLI verb pattern: `list`, `get`, `set`, 
 
 **Hierarchy:** `model hierarchy list <table>`, `model hierarchy create <table> <name> <columns...>`, `model hierarchy delete <table> <name>`
 
+**Field Parameter:** `model field-parameter create <name> --fields Table.Field... [--labels Label...]` — scaffolds a field parameter table with `isParameterType`, three columns (Name/Fields/Order), and a DAX `NAMEOF` table constructor. Labels default to field names if omitted.
+
 **Other model commands:**
 - `model export [-o file.yaml]` — YAML round-trip through `model apply`
 - `model apply <yaml>` — declarative model changes
@@ -147,6 +149,7 @@ The `model apply` engine supports these top-level sections:
 - **columns:** table-keyed mapping with `format`, `hidden`, `type`, `expression`, `dataType`, `description`, `displayFolder`, `sortByColumn`, `summarizeBy`, `dataCategory`
 - **relationships:** list of `{from, to, crossFilteringBehavior, isActive, ...}` — creates or updates
 - **hierarchies:** table-keyed list of `{name, levels: [col1, col2]}` — creates or delete-and-recreates if levels differ
+- **fieldParameters:** name-keyed mapping with `fields` list of `{field: Table.Field, label: DisplayName}` — creates field parameter tables
 
 ## YAML Apply Features
 
@@ -159,7 +162,7 @@ The apply engine supports these property syntaxes in YAML:
 - **interactions:** page-level `interactions:` list with source/target/type
 - **bookmarks:** top-level `bookmarks:` list with name/page/hide
 - **conditionalFormatting:** `mode: measure`, `mode: gradient` with min/mid/max stops, or `mode: rules` with `rules:` list of `{if, color}` and optional `else:`
-- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), categorical/include/exclude, `type: advanced` with `operator:` (contains, starts-with, is, is-not, greater-than, less-than, is-blank, is-not-blank, is-empty, is-not-empty, and negated variants). Compound: `operator2:`/`value2:`/`logic: and|or`
+- **filters:** `type: topN` (count/by/direction), `type: range` (min/max), categorical/include/exclude, `type: advanced` with `operator:` (contains, starts-with, is, is-not, greater-than, less-than, is-blank, is-not-blank, is-empty, is-not-empty, and negated variants). Compound: `operator2:`/`value2:`/`logic: and|or`. `type: relative` with `operator` (InLast/InThis/InNext), `count`, `unit` (Days/Weeks/Months/Years/Minutes/Hours/etc.), and optional `includeToday`
 - **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
 - **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
 - **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages

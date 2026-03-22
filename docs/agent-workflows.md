@@ -132,6 +132,12 @@ filters:
 - field: Product.Description
   type: advanced
   operator: is-not-blank
+- field: Date.OrderDate
+  type: relative
+  operator: InLast
+  count: 30
+  unit: Days
+  includeToday: true
 ```
 
 ## Styles (Reusable Formatting)

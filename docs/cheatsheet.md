@@ -183,7 +183,7 @@ pbi diff overview.yaml                        # 3. review
 pbi apply overview.yaml                       # 4. apply
 ```
 
-**YAML supports:** visuals, bindings, properties, filters, interactions, conditional formatting, sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
+**YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
 
 ---
 
@@ -245,6 +245,22 @@ pbi model measure create Sales "Total Rev" "SUM(Sales[Revenue])" --format "#,0"
 pbi model measure edit Sales "Total Rev" "SUMX(Sales, Sales[Qty] * Sales[Price])"
 pbi model measure get Sales "Total Rev"       # show full definition
 pbi model measure delete Sales "Total Rev" --force
+```
+
+**Field parameters:**
+```bash
+pbi model field-parameter create "Metric Selector" \
+  --fields Sales.Revenue --fields Sales.Margin --fields Sales.Orders \
+  --labels "Revenue" --labels "Margin" --labels "Orders"
+
+# In model apply YAML:
+# fieldParameters:
+#   Metric Selector:
+#     fields:
+#     - field: Sales.Revenue
+#       label: Revenue
+#     - field: Sales.Margin
+#       label: Margin
 ```
 
 **Calculated columns:**
