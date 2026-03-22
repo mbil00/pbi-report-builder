@@ -40,10 +40,16 @@ def apply_page(
     page_baseline: dict | None = None
 
     page_is_new = False
+    pre_visuals_created = len(result.visuals_created)
+    pre_visuals_updated = len(result.visuals_updated)
+    pre_visuals_deleted = len(result.visuals_deleted)
+    pre_properties_set = result.properties_set
+    pre_bindings_added = result.bindings_added
+    pre_filters_added = result.filters_added
+    pre_interactions_set = len(result.interactions_set)
     try:
         page = project.find_page(page_name)
         page_baseline = copy.deepcopy(page.data)
-        result.pages_updated.append(page_name)
     except ValueError:
         width = page_spec.get("width", 1280)
         height = page_spec.get("height", 720)
@@ -194,3 +200,16 @@ def apply_page(
 
     if not dry_run and page_can_save and page_baseline is not None:
         _save_page_if_changed(project, page, original_data=page_baseline, session=session)
+
+    if not page_is_new:
+        page_had_changes = (
+            len(result.visuals_created) > pre_visuals_created
+            or len(result.visuals_updated) > pre_visuals_updated
+            or len(result.visuals_deleted) > pre_visuals_deleted
+            or result.properties_set > pre_properties_set
+            or result.bindings_added > pre_bindings_added
+            or result.filters_added > pre_filters_added
+            or len(result.interactions_set) > pre_interactions_set
+        )
+        if page_had_changes:
+            result.pages_updated.append(page_name)

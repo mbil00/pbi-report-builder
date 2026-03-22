@@ -140,11 +140,10 @@ def parse_property_assignments(assignments: list[str]) -> list[tuple[str, str]]:
 def resolve_output_path(
     output: Path,
     *,
-    base_dir: Path,
     confine_to: Path | None = None,
 ) -> Path:
-    """Resolve an output path, optionally confining it to a project root."""
-    resolved = output.resolve() if output.is_absolute() else (base_dir / output).resolve()
+    """Resolve an output path relative to CWD, optionally confining it to a project root."""
+    resolved = output.resolve() if output.is_absolute() else (Path.cwd() / output).resolve()
     if confine_to is not None:
         root = confine_to.resolve()
         if resolved != root and root not in resolved.parents:

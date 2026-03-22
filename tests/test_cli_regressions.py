@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -140,10 +141,15 @@ class OutputPathHardeningTests(unittest.TestCase):
             make_project(root)
             out_path = root / "exports" / "maps" / "project.yaml"
 
-            result = runner.invoke(
-                app,
-                ["map", "--output", "exports/maps/project.yaml", "--project", str(root / "Sample.pbip")],
-            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = runner.invoke(
+                    app,
+                    ["map", "--output", "exports/maps/project.yaml", "--project", str(root / "Sample.pbip")],
+                )
+            finally:
+                os.chdir(old_cwd)
 
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertTrue(out_path.exists())
@@ -155,10 +161,15 @@ class OutputPathHardeningTests(unittest.TestCase):
             project = make_project(root)
             project.create_page("Demo")
 
-            result = runner.invoke(
-                app,
-                ["page", "export", "Demo", "--output", "../escape.yaml", "--project", str(root / "Sample.pbip")],
-            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = runner.invoke(
+                    app,
+                    ["page", "export", "Demo", "--output", "../escape.yaml", "--project", str(root / "Sample.pbip")],
+                )
+            finally:
+                os.chdir(old_cwd)
 
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertTrue((root.parent / "escape.yaml").exists())

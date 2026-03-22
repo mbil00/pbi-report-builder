@@ -21,6 +21,7 @@ VISUAL_ROLE_ALIASES: dict[str, dict[str, str]] = {
     "cardVisual": {
         "Values": "Data",
         "Value": "Data",
+        "Fields": "Data",
     },
     "slicer": {"Field": "Values"},
     "advancedSlicerVisual": {"Field": "Values"},

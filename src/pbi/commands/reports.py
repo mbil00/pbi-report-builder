@@ -132,11 +132,16 @@ def _print_object_summary(name: str, value: object) -> None:
 @report_app.command("get")
 def report_get(
     props: Annotated[list[str] | None, typer.Argument(help="Property or properties to read (omit for overview).")] = None,
+    raw: Annotated[bool, typer.Option("--raw", "-r", help="Dump full JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Show report metadata or one or more report properties."""
     proj = get_project(project)
     data = proj.get_report_meta()
+
+    if raw:
+        console.print_json(json.dumps(data, indent=2))
+        return
 
     if props:
         if len(props) == 1:

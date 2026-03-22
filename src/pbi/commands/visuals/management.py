@@ -246,7 +246,7 @@ def visual_rename(
     project: ProjectOpt = None,
 ) -> None:
     """Give a visual a friendly name for easier CLI reference."""
-    _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    proj, pg, vis = resolve_visual_target(project, page, visual)
 
     from pbi.project import sanitize_visual_name
 
@@ -254,6 +254,14 @@ def visual_rename(
     safe = sanitize_visual_name(name)
     vis.data["name"] = safe
     vis.save()
+
+    # Cascade rename to children if this is a group container
+    if "visualGroup" in vis.data:
+        for child in proj.get_visuals(pg):
+            if child.data.get("parentGroupName") == old_name:
+                child.data["parentGroupName"] = safe
+                child.save()
+
     console.print(f'Renamed "{old_name}" [dim]->[/dim] "[cyan]{safe}[/cyan]"')
 
 

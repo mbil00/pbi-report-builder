@@ -457,7 +457,7 @@ def page_export(
     content = export_yaml(proj, page_filter=page)
 
     if output:
-        out_path = resolve_output_path(output, base_dir=proj.root)
+        out_path = resolve_output_path(output)
         out_path.write_text(content, encoding="utf-8")
         console.print(f"Exported to [cyan]{out_path}[/cyan]")
     else:

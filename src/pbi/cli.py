@@ -109,11 +109,39 @@ def map(
     )
 
     if output:
-        out_path = resolve_output_path(output, base_dir=proj.root)
+        out_path = resolve_output_path(output)
         out_path.write_text(content, encoding="utf-8")
         console.print(f"Map written to [cyan]{out_path}[/cyan]")
     else:
         console.print(content, highlight=False, end="")
+
+
+@app.command("export")
+def export_cmd(
+    page: Annotated[Optional[str], typer.Option("--page", help="Export only this page (name, display name, or index).")] = None,
+    output: Annotated[Optional[Path], typer.Option("-o", "--output", help="Output file (default: stdout).")] = None,
+    project: ProjectOpt = None,
+) -> None:
+    """Export full report YAML for use with 'pbi apply'."""
+    from pbi.export import export_yaml
+
+    proj = get_project(project)
+
+    if page:
+        try:
+            proj.find_page(page)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    content = export_yaml(proj, page_filter=page)
+
+    if output:
+        out_path = resolve_output_path(output)
+        out_path.write_text(content, encoding="utf-8")
+        console.print(f"Exported to [cyan]{out_path}[/cyan]")
+    else:
+        typer.echo(content, nl=False)
 
 
 @app.command("apply")
@@ -866,7 +894,7 @@ def render(
 
     # Determine output path
     if output:
-        out_path = resolve_output_path(output, base_dir=proj.root)
+        out_path = resolve_output_path(output)
     else:
         slug = re.sub(r"[^A-Za-z0-9._-]+", "_", pg.display_name).strip("._") or "page"
         out_path = proj.root / f"{slug}.html"

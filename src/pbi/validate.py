@@ -635,7 +635,7 @@ def _validate_layout(
 
     for page_name, _display_name, page_w, page_h, visuals in page_items:
 
-        rects: list[tuple[str, str, int, int, int, int]] = []  # (name, rel, x, y, w, h)
+        rects: list[tuple[str, str, int, int, int, int, str | None]] = []  # (name, rel, x, y, w, h, parentGroup)
 
         for visual_id, visual_data in visuals:
             if "visualGroup" in visual_data:
@@ -647,6 +647,7 @@ def _validate_layout(
             h = int(pos.get("height", 0))
             vis_name = visual_data.get("name", visual_id)
             rel = f"pages/{page_name}/visuals/{visual_id}/visual.json"
+            parent_group = visual_data.get("parentGroupName")
 
             # Zero/negative dimensions
             if w <= 0 or h <= 0:
@@ -670,13 +671,16 @@ def _validate_layout(
                     f'(y={y}, h={h}, page={page_h})',
                 ))
 
-            rects.append((vis_name, rel, x, y, w, h))
+            rects.append((vis_name, rel, x, y, w, h, parent_group))
 
         # Check overlaps (only report significant ones > 10px in both axes)
         for i in range(len(rects)):
             for j in range(i + 1, len(rects)):
-                n1, r1, x1, y1, w1, h1 = rects[i]
-                n2, _r2, x2, y2, w2, h2 = rects[j]
+                n1, r1, x1, y1, w1, h1, g1 = rects[i]
+                n2, _r2, x2, y2, w2, h2, g2 = rects[j]
+                # Skip overlap check for visuals in the same group
+                if g1 and g1 == g2:
+                    continue
                 ox = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
                 oy = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
                 if ox > 10 and oy > 10:
@@ -851,8 +855,8 @@ def _is_known_schema_gap(
     if property_name is None:
         return False
 
-    if visual_type == "tableEx" and ".expr.FillRule." in property_name:
-        return True
-    if visual_type == "pivotTable" and ".expr.Conditional." in property_name:
-        return True
+    # Conditional formatting expressions on table/matrix visuals
+    if visual_type in ("tableEx", "pivotTable"):
+        if ".expr.FillRule." in property_name or ".expr.Conditional." in property_name:
+            return True
     return False

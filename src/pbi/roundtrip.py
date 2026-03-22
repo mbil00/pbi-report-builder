@@ -459,6 +459,20 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
         if isinstance(objects, dict):
             if _bindings_have_widths(exported_visual):
                 objects.pop("columnWidth", None)
+            # Prune textbox paragraphs when text/textStyle shorthand covers them
+            if "text" in exported_visual:
+                general_entries = objects.get("general")
+                if isinstance(general_entries, list):
+                    for entry in general_entries:
+                        if isinstance(entry, dict):
+                            props = entry.get("properties")
+                            if isinstance(props, dict):
+                                props.pop("paragraphs", None)
+                                if not props:
+                                    entry.pop("properties", None)
+                    objects["general"] = [e for e in general_entries if e]
+                    if not objects["general"]:
+                        objects.pop("general", None)
             _prune_exported_object_groups(
                 objects,
                 exported_visual,
@@ -497,6 +511,7 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
     if pruned.get("howCreated") == "InsertVisualButton":
         pruned.pop("howCreated", None)
 
+    _normalize_resource_package_types(pruned)
     return _remove_empty_containers(pruned)
 
 
@@ -583,6 +598,20 @@ def _exported_entries_are_scalar(encoded: Mapping[str, Any]) -> bool:
         elif isinstance(value, list):
             return False
     return True
+
+
+def _normalize_resource_package_types(data: Any) -> None:
+    """Coerce ResourcePackageItem.PackageType floats to int for round-trip parity."""
+    if isinstance(data, dict):
+        if "ResourcePackageItem" in data:
+            rpi = data["ResourcePackageItem"]
+            if isinstance(rpi, dict) and "PackageType" in rpi:
+                rpi["PackageType"] = int(rpi["PackageType"])
+        for value in data.values():
+            _normalize_resource_package_types(value)
+    elif isinstance(data, list):
+        for item in data:
+            _normalize_resource_package_types(item)
 
 
 def _remove_empty_containers(value: Any) -> Any:

@@ -95,7 +95,7 @@ def theme_export(
     from pbi.themes import export_theme
 
     proj = get_project(project)
-    out_path = resolve_output_path(Path(output), base_dir=Path.cwd())
+    out_path = resolve_output_path(Path(output))
 
     try:
         name = export_theme(proj, out_path)
