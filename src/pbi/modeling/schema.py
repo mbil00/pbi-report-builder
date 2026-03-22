@@ -74,6 +74,7 @@ class SemanticTable:
     partitions: list[Partition] = field(default_factory=list)
     definition_path: Path | None = None
     data_category: str = ""
+    is_parameter_type: bool = False
 
     @property
     def date_table_column(self) -> str | None:

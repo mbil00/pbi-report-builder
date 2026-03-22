@@ -184,6 +184,9 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
             continue
 
         if indent == 1:
+            if stripped == "isParameterType":
+                table_props["isParameterType"] = "true"
+                continue
             if ":" in stripped and current_type is None:
                 key, _, val = stripped.partition(":")
                 key = key.strip()
@@ -294,6 +297,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         name=table_name, columns=columns, measures=measures,
         hierarchies=hierarchies, partitions=partitions, definition_path=path,
         data_category=table_props.get("dataCategory", ""),
+        is_parameter_type="isParameterType" in table_props,
     )
 
 
