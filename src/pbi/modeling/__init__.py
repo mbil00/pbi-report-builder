@@ -27,6 +27,7 @@ from .writes_roles import (
     set_role_permission,
     set_role_table_filter,
 )
+from .writes_field_parameters import create_field_parameter
 from .writes_perspectives import PerspectiveMemberSpec, create_perspective, delete_perspective, set_perspective
 from .writes import (
     TmdlEditSession,
@@ -78,6 +79,7 @@ __all__ = [
     "_parse_tmdl_name",
     "create_calculated_column",
     "create_calculated_table",
+    "create_field_parameter",
     "create_hierarchy",
     "create_measure",
     "create_partition",
