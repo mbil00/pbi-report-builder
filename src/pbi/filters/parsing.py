@@ -327,6 +327,113 @@ def _extract_relative_summary(filter_obj: dict) -> str | None:
     return None
 
 
+def _extract_relative_structured(filter_obj: dict) -> dict | None:
+    """Extract structured {operator, count, unit, includeToday} from a relative filter.
+
+    Returns a dict suitable for YAML export, or None if the structure is unrecognized.
+    """
+    filter_type = filter_obj.get("type")
+    where = filter_obj.get("filter", {}).get("Where", [])
+    if not where:
+        return None
+    condition = where[0].get("Condition", {})
+
+    if filter_type == "RelativeDate":
+        # InThis pattern: Comparison with DateSpan(Now(), unit)
+        comparison = condition.get("Comparison")
+        if comparison and comparison.get("ComparisonKind") == 0:
+            right = comparison.get("Right", {})
+            span = right.get("DateSpan", {})
+            if _is_now_expr(span.get("Expression", {})):
+                unit_name = _time_unit_name(span.get("TimeUnit"))
+                if unit_name:
+                    return {"operator": "InThis", "count": 1, "unit": unit_name}
+
+        between = condition.get("Between")
+        if between:
+            lower = between.get("LowerBound", {})
+            upper = between.get("UpperBound", {})
+            result = _match_relative_date_structured(lower, upper)
+            if result:
+                return result
+
+    if filter_type == "RelativeTime":
+        between = condition.get("Between")
+        if between:
+            lower_bound = between.get("LowerBound", {})
+            upper_bound = between.get("UpperBound", {})
+            if _is_now_expr(upper_bound):
+                parsed = _parse_date_add(lower_bound)
+                if parsed and _is_now_expr(parsed[0]) and parsed[1] < 0:
+                    unit_name = _time_unit_name(parsed[2])
+                    if unit_name:
+                        return {"operator": "InLast", "count": abs(parsed[1]), "unit": unit_name}
+            if _is_now_expr(lower_bound):
+                parsed = _parse_date_add(upper_bound)
+                if parsed and _is_now_expr(parsed[0]) and parsed[1] > 0:
+                    unit_name = _time_unit_name(parsed[2])
+                    if unit_name:
+                        return {"operator": "InNext", "count": parsed[1], "unit": unit_name}
+
+    return None
+
+
+def _match_relative_date_structured(lower: dict, upper: dict) -> dict | None:
+    """Extract structured fields from a RelativeDate Between condition."""
+    lower_span = lower.get("DateSpan", {})
+    upper_span = upper.get("DateSpan", {})
+    lower_expr = lower_span.get("Expression", {}) if lower_span else lower
+    upper_expr = upper_span.get("Expression", {}) if upper_span else upper
+    lower_span_unit = lower_span.get("TimeUnit") if lower_span else None
+    upper_span_unit = upper_span.get("TimeUnit") if upper_span else None
+
+    # InLast with includeToday: DateAdd(DateAdd(Now(), 1, Days), -N, Unit) .. Now()
+    if (
+        lower_span_unit == DATE_UNIT_CODES["Days"]
+        and upper_span_unit == DATE_UNIT_CODES["Days"]
+        and _is_now_expr(upper_expr)
+    ):
+        first = _parse_date_add(lower_expr)
+        if first and first[1] < 0:
+            second = _parse_date_add(first[0])
+            if second and _is_now_expr(second[0]) and second[1] == 1 and second[2] == DATE_UNIT_CODES["Days"]:
+                unit_name = _time_unit_name(first[2])
+                if unit_name:
+                    return {"operator": "InLast", "count": abs(first[1]), "unit": unit_name, "includeToday": True}
+
+    # InNext with includeToday: Now() .. DateAdd(DateAdd(Now(), -1, Days), N, Unit)
+    if (
+        lower_span_unit == DATE_UNIT_CODES["Days"]
+        and upper_span_unit == DATE_UNIT_CODES["Days"]
+        and _is_now_expr(lower_expr)
+    ):
+        first = _parse_date_add(upper_expr)
+        if first and first[1] > 0:
+            second = _parse_date_add(first[0])
+            if second and _is_now_expr(second[0]) and second[1] == -1 and second[2] == DATE_UNIT_CODES["Days"]:
+                unit_name = _time_unit_name(first[2])
+                if unit_name:
+                    return {"operator": "InNext", "count": first[1], "unit": unit_name, "includeToday": True}
+
+    # InLast/InNext without includeToday
+    lower_add = _parse_date_add(lower_expr)
+    upper_add = _parse_date_add(upper_expr)
+    if lower_add and upper_add:
+        if (
+            _is_now_expr(lower_add[0])
+            and _is_now_expr(upper_add[0])
+            and lower_add[2] == upper_add[2] == lower_span_unit == upper_span_unit
+        ):
+            unit_name = _time_unit_name(lower_add[2])
+            if unit_name:
+                if lower_add[1] < 0 and upper_add[1] == -1:
+                    return {"operator": "InLast", "count": abs(lower_add[1]), "unit": unit_name, "includeToday": False}
+                if lower_add[1] == 1 and upper_add[1] > 0:
+                    return {"operator": "InNext", "count": upper_add[1], "unit": unit_name, "includeToday": False}
+
+    return None
+
+
 def _match_relative_date_between(lower: dict, upper: dict) -> str | None:
     """Recognize the published relative-date Between patterns."""
     lower_expr = lower.get("Expression", {})

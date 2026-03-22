@@ -8,6 +8,8 @@ from pathlib import Path
 import yaml
 
 from pbi.apply import apply_yaml
+from pbi.export import export_yaml
+from pbi.filters import add_relative_date_filter
 from pbi.project import Project
 
 
@@ -348,3 +350,79 @@ class RelativeFilterApplyTests(unittest.TestCase):
                         any("count" in e for e in result.errors),
                         f"Expected error about 'count' for count={bad_count}, got: {result.errors}",
                     )
+
+
+class RelativeDateFilterExportTests(unittest.TestCase):
+    def test_export_relative_date_produces_structured_yaml(self) -> None:
+        """Exporting a visual with a relative date filter produces type: relative with structured fields."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = _make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "clusteredColumnChart")
+            visual.data["name"] = "chart1"
+            add_relative_date_filter(
+                visual.data,
+                "Sales",
+                "OrderDate",
+                operator="InLast",
+                time_units_count=30,
+                time_unit_type="Days",
+                include_today=False,
+            )
+            visual.save()
+
+            exported = export_yaml(project)
+            parsed = yaml.safe_load(exported)
+
+            pages = parsed.get("pages", [])
+            self.assertEqual(len(pages), 1)
+            visuals = pages[0].get("visuals", [])
+            self.assertEqual(len(visuals), 1)
+            filters = visuals[0].get("filters", [])
+            self.assertEqual(len(filters), 1)
+
+            f = filters[0]
+            self.assertEqual(f.get("type"), "relative", f"Expected type 'relative', got: {f.get('type')!r}")
+            self.assertEqual(f.get("operator"), "InLast")
+            self.assertEqual(f.get("count"), 30)
+            self.assertEqual(f.get("unit"), "Days")
+            self.assertNotIn("raw", f, "Structured relative filter should not have a 'raw' key")
+
+    def test_roundtrip_relative_date_filter(self) -> None:
+        """Relative date filter round-trips cleanly: export then apply produces no errors."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = _make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "clusteredColumnChart")
+            visual.data["name"] = "chart1"
+            add_relative_date_filter(
+                visual.data,
+                "Sales",
+                "OrderDate",
+                operator="InLast",
+                time_units_count=7,
+                time_unit_type="Days",
+                include_today=False,
+            )
+            visual.save()
+
+            exported = export_yaml(project)
+            parsed = yaml.safe_load(exported)
+
+            # Verify includeToday is present and false in the export
+            pages = parsed.get("pages", [])
+            filters = pages[0].get("visuals", [])[0].get("filters", [])
+            self.assertEqual(len(filters), 1)
+            f = filters[0]
+            self.assertIn("includeToday", f, "Expected includeToday key in exported filter")
+            self.assertFalse(f["includeToday"], "Expected includeToday: false")
+
+            # Re-apply to a fresh project
+            with tempfile.TemporaryDirectory() as tmp2:
+                root2 = Path(tmp2)
+                project2 = _make_project(root2)
+                result = apply_yaml(project2, exported)
+                self.assertEqual(result.errors, [], f"Round-trip errors: {result.errors}")
+                self.assertGreaterEqual(result.filters_added, 1)

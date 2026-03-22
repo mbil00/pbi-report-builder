@@ -316,5 +316,13 @@ def _export_filters(data: dict) -> list[dict]:
             entry["hidden"] = True
         if info.is_locked:
             entry["locked"] = True
+        if info.filter_type in ("RelativeDate", "RelativeTime"):
+            from pbi.filters.parsing import _extract_relative_structured
+
+            structured = _extract_relative_structured(f)
+            if structured:
+                entry["type"] = "relative"
+                entry.update(structured)
+                entry.pop("raw", None)
         result.append(entry)
     return result
