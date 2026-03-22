@@ -43,9 +43,23 @@ def export_model_yaml(
     if tables_section:
         spec["tables"] = tables_section
 
+    # Field parameters — detect and export separately
+    field_param_tables: set[str] = set()
+    field_params_section: dict = {}
+    for table in loaded_model.tables:
+        if table.is_parameter_type:
+            field_param_tables.add(table.name)
+            fp_fields = _extract_field_parameter_fields(table)
+            if fp_fields:
+                field_params_section[table.name] = {"fields": fp_fields}
+    if field_params_section:
+        spec["fieldParameters"] = field_params_section
+
     # Measures
     measures_section: dict = {}
     for table in loaded_model.tables:
+        if table.name in field_param_tables:
+            continue
         table_measures = []
         for m in table.measures:
             entry: dict = {"name": m.name, "expression": m.expression}
@@ -62,6 +76,8 @@ def export_model_yaml(
     # Columns (only non-default properties)
     columns_section: dict = {}
     for table in loaded_model.tables:
+        if table.name in field_param_tables:
+            continue
         table_columns: dict = {}
         for c in table.columns:
             entry = {}
@@ -106,6 +122,8 @@ def export_model_yaml(
     # Hierarchies
     hierarchies_section: dict = {}
     for table in loaded_model.tables:
+        if table.name in field_param_tables:
+            continue
         table_hierarchies = []
         for h in table.hierarchies:
             hier_entry: dict = {
@@ -120,6 +138,8 @@ def export_model_yaml(
 
     partitions_section: dict = {}
     for table in loaded_model.tables:
+        if table.name in field_param_tables:
+            continue
         if not table.partitions:
             continue
         partitions_section[table.name] = [
@@ -175,3 +195,17 @@ def export_model_yaml(
         spec["perspectives"] = perspectives_section
 
     return yaml.dump(spec, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+
+def _extract_field_parameter_fields(table) -> list[dict]:
+    """Extract field references from a field parameter table's partition DAX."""
+    import re
+
+    result = []
+    for partition in table.partitions:
+        source = partition.source_expression or ""
+        pattern = r'\(\s*"([^"]+)"\s*,\s*NAMEOF\(\'([^\']+)\'\[([^\]]+)\]\)\s*,\s*(\d+)\s*\)'
+        for match in re.finditer(pattern, source):
+            label, tbl, fld, ordinal = match.groups()
+            result.append({"field": f"{tbl}.{fld}", "label": label})
+    return result

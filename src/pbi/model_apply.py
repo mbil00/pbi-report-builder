@@ -61,6 +61,7 @@ class ModelApplyResult:
     roles_updated: list[str] = field(default_factory=list)
     perspectives_created: list[str] = field(default_factory=list)
     perspectives_updated: list[str] = field(default_factory=list)
+    field_parameters_created: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -83,6 +84,7 @@ class ModelApplyResult:
             or self.roles_updated
             or self.perspectives_created
             or self.perspectives_updated
+            or self.field_parameters_created
         )
 
 
@@ -211,7 +213,17 @@ def apply_model_yaml(
             edit_session=edit_session,
         )
 
-    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "partitions", "roles", "perspectives"}
+    field_params_spec = spec.get("fieldParameters")
+    if field_params_spec is not None:
+        _apply_field_parameters(
+            project_root,
+            field_params_spec,
+            result,
+            dry_run=dry_run,
+            model=model,
+        )
+
+    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "partitions", "roles", "perspectives", "fieldParameters"}
     if not known_keys.intersection(spec.keys()):
         result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
 
@@ -1072,3 +1084,63 @@ def _apply_perspectives(
                     result.perspectives_updated.append(name)
         except (FileNotFoundError, ValueError) as e:
             result.errors.append(f"perspectives.{perspective_name}: {e}")
+
+
+def _apply_field_parameters(
+    project_root: Path,
+    spec: Any,
+    result: ModelApplyResult,
+    *,
+    dry_run: bool,
+    model: SemanticModel,
+) -> None:
+    """Apply fieldParameters section."""
+    if not isinstance(spec, dict):
+        result.errors.append("fieldParameters must be a mapping.")
+        return
+
+    from pbi.model import create_field_parameter
+
+    for param_name, param_spec in spec.items():
+        if not isinstance(param_spec, dict):
+            result.errors.append(f'fieldParameters.{param_name}: must be a mapping.')
+            continue
+
+        fields_list = param_spec.get("fields", [])
+        if not isinstance(fields_list, list) or not fields_list:
+            result.errors.append(f'fieldParameters.{param_name}: requires a non-empty "fields" list.')
+            continue
+
+        field_refs = []
+        labels = []
+        for entry in fields_list:
+            if isinstance(entry, dict):
+                field_refs.append(entry.get("field", ""))
+                labels.append(entry.get("label", entry.get("field", "").split(".")[-1]))
+            elif isinstance(entry, str):
+                field_refs.append(entry)
+                labels.append(entry.split(".")[-1])
+            else:
+                result.errors.append(f'fieldParameters.{param_name}: each field must be a string or mapping.')
+                continue
+
+        # Skip if table already exists as a field parameter
+        try:
+            existing = model.find_table(param_name)
+            if existing.is_parameter_type:
+                continue
+        except ValueError:
+            pass
+
+        try:
+            create_field_parameter(
+                project_root,
+                param_name,
+                fields=field_refs,
+                labels=labels,
+                dry_run=dry_run,
+                model=model,
+            )
+            result.field_parameters_created.append(param_name)
+        except ValueError as e:
+            result.errors.append(f'fieldParameters.{param_name}: {e}')

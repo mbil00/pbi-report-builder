@@ -232,5 +232,96 @@ table Sales
             self.assertIn("Revenue", result.output)
 
 
+import yaml
+from pbi.model_apply import apply_model_yaml
+from pbi.model_export import export_model_yaml
+
+
+class FieldParameterApplyExportTests(unittest.TestCase):
+    def test_model_apply_creates_field_parameter(self) -> None:
+        """fieldParameters section in YAML creates the table."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tlineageTag: t1
+
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m1
+
+\tmeasure Margin = SUM(Sales[Profit])
+\t\tlineageTag: m2
+""")
+            yaml_content = yaml.safe_dump({
+                "fieldParameters": {
+                    "Metric Selector": {
+                        "fields": [
+                            {"field": "Sales.Revenue", "label": "Revenue"},
+                            {"field": "Sales.Margin", "label": "Margin"},
+                        ],
+                    },
+                },
+            }, sort_keys=False)
+
+            result = apply_model_yaml(root, yaml_content)
+            self.assertEqual(result.errors, [], result.errors)
+
+            model = SemanticModel.load(root)
+            table = model.find_table("Metric Selector")
+            self.assertTrue(table.is_parameter_type)
+
+    def test_model_export_includes_field_parameters(self) -> None:
+        """Field parameter tables appear under fieldParameters in export."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tlineageTag: t1
+
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m1
+""")
+            from pbi.model import create_field_parameter
+            create_field_parameter(
+                root, "Metric Selector",
+                fields=["Sales.Revenue"],
+                labels=["Revenue"],
+            )
+
+            exported = yaml.safe_load(export_model_yaml(root))
+            self.assertIn("fieldParameters", exported)
+            self.assertIn("Metric Selector", exported["fieldParameters"])
+
+            # Should NOT appear in generic columns section
+            columns = exported.get("columns", {})
+            self.assertNotIn("Metric Selector", columns)
+
+    def test_model_apply_fieldparameters_in_known_keys(self) -> None:
+        """YAML with only fieldParameters is accepted (not rejected by known_keys check)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tlineageTag: t1
+
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m1
+""")
+            yaml_content = yaml.safe_dump({
+                "fieldParameters": {
+                    "Selector": {
+                        "fields": [{"field": "Sales.Revenue", "label": "Revenue"}],
+                    },
+                },
+            }, sort_keys=False)
+
+            result = apply_model_yaml(root, yaml_content)
+            for err in result.errors:
+                self.assertNotIn("must include at least one of", err)
+
+
 if __name__ == "__main__":
     unittest.main()
