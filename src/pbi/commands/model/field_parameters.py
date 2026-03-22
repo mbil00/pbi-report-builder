@@ -13,17 +13,13 @@ from .base import get_model, model_field_parameter_app
 @model_field_parameter_app.command("create")
 def create_field_parameter_cmd(
     name: Annotated[str, typer.Argument(help="Name for the field parameter table.")],
-    fields: Annotated[list[str], typer.Option("--fields", help="Table.Field references to include.")] = [],
+    fields: Annotated[list[str], typer.Argument(help="Table.Field references to include.")],
     labels: Annotated[list[str] | None, typer.Option("--labels", help="Display labels (one per field).")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview without writing.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Create a field parameter table from model fields."""
     from pbi.model import create_field_parameter
-
-    if not fields:
-        console.print("[red]Error:[/red] At least one --fields is required.")
-        raise typer.Exit(1)
 
     proj, model = get_model(project)
     prefix = "[dim](dry run)[/dim] " if dry_run else ""

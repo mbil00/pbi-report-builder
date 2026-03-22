@@ -250,7 +250,7 @@ pbi model measure delete Sales "Total Rev" --force
 **Field parameters:**
 ```bash
 pbi model field-parameter create "Metric Selector" \
-  --fields Sales.Revenue --fields Sales.Margin --fields Sales.Orders \
+  Sales.Revenue Sales.Margin Sales.Orders \
   --labels "Revenue" --labels "Margin" --labels "Orders"
 
 # In model apply YAML:

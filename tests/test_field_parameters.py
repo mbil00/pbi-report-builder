@@ -221,8 +221,7 @@ table Sales
             result = runner.invoke(app, [
                 "model", "field-parameter", "create",
                 "Metric Selector",
-                "--fields", "Sales.Revenue",
-                "--fields", "Sales.Margin",
+                "Sales.Revenue", "Sales.Margin",
                 "--labels", "Revenue",
                 "--labels", "Margin",
                 "-p", str(root),

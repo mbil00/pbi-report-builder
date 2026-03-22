@@ -131,7 +131,7 @@ All model subgroups follow the standard CLI verb pattern: `list`, `get`, `set`, 
 
 **Hierarchy:** `model hierarchy list <table>`, `model hierarchy create <table> <name> <columns...>`, `model hierarchy delete <table> <name>`
 
-**Field Parameter:** `model field-parameter create <name> --fields Table.Field... [--labels Label...]` — scaffolds a field parameter table with `isParameterType`, three columns (Name/Fields/Order), and a DAX `NAMEOF` table constructor. Labels default to field names if omitted.
+**Field Parameter:** `model field-parameter create <name> <Table.Field...> [--labels Label...]` — scaffolds a field parameter table with `isParameterType`, three columns (Name/Fields/Order), and a DAX `NAMEOF` table constructor. Labels default to field names if omitted.
 
 **Other model commands:**
 - `model export [-o file.yaml]` — YAML round-trip through `model apply`
