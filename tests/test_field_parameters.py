@@ -196,5 +196,41 @@ table Sales
             self.assertFalse(path.exists())
 
 
+from typer.testing import CliRunner
+from pbi.cli import app
+
+runner = CliRunner()
+
+
+class FieldParameterCLITests(unittest.TestCase):
+    def test_cli_create_field_parameter(self) -> None:
+        """CLI creates a field parameter table."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tlineageTag: t1
+
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m1
+
+\tmeasure Margin = SUM(Sales[Profit])
+\t\tlineageTag: m2
+""")
+            result = runner.invoke(app, [
+                "model", "field-parameter", "create",
+                "Metric Selector",
+                "--fields", "Sales.Revenue",
+                "--fields", "Sales.Margin",
+                "--labels", "Revenue",
+                "--labels", "Margin",
+                "-p", str(root),
+            ])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("Created field parameter", result.output)
+            self.assertIn("Revenue", result.output)
+
+
 if __name__ == "__main__":
     unittest.main()

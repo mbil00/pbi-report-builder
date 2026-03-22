@@ -20,12 +20,14 @@ model_role_app = typer.Typer(help="Semantic model role operations.", no_args_is_
 model_role_member_app = typer.Typer(help="Semantic model role member operations.", no_args_is_help=True)
 model_role_filter_app = typer.Typer(help="Semantic model role filter operations.", no_args_is_help=True)
 model_table_app = typer.Typer(help="Semantic model table operations.", no_args_is_help=True)
+model_field_parameter_app = typer.Typer(help="Field parameter operations.", no_args_is_help=True)
 
 model_app.add_typer(model_column_app, name="column")
 model_app.add_typer(model_measure_app, name="measure")
 model_app.add_typer(model_relationship_app, name="relationship")
 model_app.add_typer(model_hierarchy_app, name="hierarchy")
 model_app.add_typer(model_table_app, name="table")
+model_app.add_typer(model_field_parameter_app, name="field-parameter")
 # Power-user features — fully functional but hidden from default --help
 model_app.add_typer(model_annotation_app, name="annotation", hidden=True)
 model_app.add_typer(model_partition_app, name="partition", hidden=True)

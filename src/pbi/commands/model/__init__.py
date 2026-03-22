@@ -6,6 +6,7 @@ from .base import (
     model_app,
     model_annotation_app,
     model_column_app,
+    model_field_parameter_app,
     model_hierarchy_app,
     model_measure_app,
     model_partition_app,
@@ -16,6 +17,7 @@ from .base import (
 )
 import pbi.commands.model.annotations as _model_annotations
 from . import columns as _columns
+from . import field_parameters as _field_parameters
 from . import hierarchies as _hierarchies
 from . import inspection as _inspection
 from . import measures as _measures
@@ -29,6 +31,7 @@ __all__ = [
     "model_app",
     "model_annotation_app",
     "model_column_app",
+    "model_field_parameter_app",
     "model_hierarchy_app",
     "model_measure_app",
     "model_partition_app",
