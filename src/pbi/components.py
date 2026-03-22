@@ -136,6 +136,72 @@ def save_component(
     return path
 
 
+def save_component_from_yaml(
+    project: Project | None,
+    yaml_path: Path,
+    component_name: str,
+    *,
+    description: str | None = None,
+    overwrite: bool = False,
+    global_scope: bool = False,
+) -> Path:
+    """Create a component directly from a YAML spec file."""
+    try:
+        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8-sig"))
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ValueError("YAML must be a mapping with a 'visuals' key.")
+
+    visuals = data.get("visuals", [])
+    if not isinstance(visuals, list) or not visuals:
+        raise ValueError("YAML must contain a non-empty 'visuals' list.")
+
+    # Calculate bounding box from visual positions/sizes
+    max_w, max_h = 0, 0
+    for spec in visuals:
+        if not isinstance(spec, dict):
+            continue
+        rx, ry = _parse_position(spec.get("position", "0, 0"))
+        sw, sh = _parse_size(spec.get("size", "0 x 0"))
+        max_w = max(max_w, rx + sw)
+        max_h = max(max_h, ry + sh)
+
+    parameters = data.get("parameters", {})
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    if global_scope:
+        path = _global_component_path(component_name)
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped components.")
+        path = _component_path(project, component_name)
+
+    if path.exists() and not overwrite:
+        raise FileExistsError(
+            f'Component "{component_name}" already exists. Use --force to replace it.'
+        )
+
+    payload: dict[str, Any] = {
+        "name": _validate_component_name(component_name),
+        "size": f"{max_w} x {max_h}",
+    }
+    if description:
+        payload["description"] = description
+    if parameters:
+        payload["parameters"] = parameters
+    payload["visuals"] = visuals
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True, width=120),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _detect_parameters(visual_specs: list[dict]) -> dict[str, dict[str, Any]]:
     """Auto-detect parameterizable fields from visual specs."""
     parameters: dict[str, dict[str, Any]] = {}

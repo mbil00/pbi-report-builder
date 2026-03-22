@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -15,15 +16,52 @@ component_app = typer.Typer(help="Reusable visual component operations.", no_arg
 
 @component_app.command("create")
 def component_create(
-    page: Annotated[str, typer.Argument(help="Page containing the group.")],
-    group: Annotated[str, typer.Argument(help="Group visual name or index.")],
+    page: Annotated[str | None, typer.Argument(help="Page containing the group.")] = None,
+    group: Annotated[str | None, typer.Argument(help="Group visual name or index.")] = None,
     name: Annotated[str, typer.Option("--name", "-n", help="Component name.")] = "",
+    from_yaml: Annotated[Path | None, typer.Option("--from-yaml", help="Create from YAML spec file.")] = None,
     description: Annotated[str | None, typer.Option("--description", help="Component description.")] = None,
     force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite existing component.")] = False,
     global_scope: Annotated[bool, typer.Option("--global", "-g", help="Save as global component.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Save a visual group as a reusable component."""
+    """Save a visual group as a reusable component, or create from --from-yaml."""
+    if from_yaml:
+        from pbi.components import save_component_from_yaml
+
+        if not name:
+            console.print("[red]Error:[/red] --name is required with --from-yaml.")
+            raise typer.Exit(1)
+
+        proj = get_project(project) if not global_scope else None
+        try:
+            path = save_component_from_yaml(
+                proj, from_yaml, name,
+                description=description,
+                overwrite=force,
+                global_scope=global_scope,
+            )
+        except (FileExistsError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+        scope_label = "global " if global_scope else ""
+        console.print(f'Saved {scope_label}component "[cyan]{name}[/cyan]" from YAML → {path}')
+
+        from pbi.components import get_component
+        comp = get_component(proj, name, global_scope=global_scope)
+        console.print(f"[dim]{len(comp.visuals)} visuals[/dim]")
+        if comp.parameters:
+            console.print("[dim]Parameters:[/dim]")
+            for pname, pdef in comp.parameters.items():
+                default = pdef.get("default", "")
+                console.print(f"  [cyan]{pname}[/cyan] = {default}")
+        return
+
+    if not page or not group:
+        console.print("[red]Error:[/red] Provide page and group arguments, or use --from-yaml.")
+        raise typer.Exit(1)
+
     from pbi.components import save_component
 
     proj = get_project(project)

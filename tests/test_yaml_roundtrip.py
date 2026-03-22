@@ -1052,5 +1052,66 @@ pages:
             self.assertEqual(group_names, ["tile-1", "tile-2"])
 
 
+    def test_component_create_from_yaml(self) -> None:
+        import textwrap
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+
+            spec_content = textwrap.dedent("""\
+                visuals:
+                  - name: bg-shape
+                    type: shape
+                    position: 0, 0
+                    size: 220 x 120
+                  - name: value-card
+                    type: cardVisual
+                    position: 10, 10
+                    size: 200 x 100
+                parameters:
+                  data:
+                    source: value-card.bindings.Data
+                    default: "Sales.Revenue (measure)"
+            """)
+            spec_path = root / "kpi-spec.yaml"
+            spec_path.write_text(spec_content, encoding="utf-8")
+
+            from pbi.components import save_component_from_yaml
+            save_component_from_yaml(project, spec_path, "kpi_tile")
+            comp = get_component(project, "kpi_tile")
+
+            self.assertEqual(len(comp.visuals), 2)
+            self.assertIn("data", comp.parameters)
+            self.assertEqual(comp.size, (220, 120))
+
+    def test_component_create_from_yaml_cli(self) -> None:
+        import textwrap
+        from typer.testing import CliRunner
+        from pbi.cli import app
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._make_project(root)
+
+            spec_content = textwrap.dedent("""\
+                visuals:
+                  - name: label
+                    type: textbox
+                    position: 0, 0
+                    size: 200 x 40
+            """)
+            spec_path = root / "spec.yaml"
+            spec_path.write_text(spec_content, encoding="utf-8")
+
+            result = runner.invoke(
+                app,
+                ["component", "create", "--from-yaml", str(spec_path), "--name", "my-widget",
+                 "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("my-widget", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
