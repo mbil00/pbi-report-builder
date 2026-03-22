@@ -200,6 +200,77 @@ def apply_filters_spec(
                 result.filters_added += 1
             except ValueError as e:
                 result.errors.append(f"{context}: {e}")
+        elif filter_type.lower() == "relative":
+            from pbi.filters import add_relative_date_filter, add_relative_time_filter
+
+            rel_operator = filter_spec.get("operator", "")
+            rel_count = filter_spec.get("count")
+            rel_unit = filter_spec.get("unit", "")
+            include_today = filter_spec.get("includeToday", True)
+
+            time_units = {"Minutes", "Hours"}
+            date_units = {"Days", "Weeks", "CalendarWeeks", "Months", "CalendarMonths", "Years", "CalendarYears"}
+            all_units = time_units | date_units
+            is_time = rel_unit in time_units
+
+            valid_ops = {"InLast", "InNext"} if is_time else {"InLast", "InThis", "InNext"}
+            if rel_operator not in valid_ops:
+                result.errors.append(
+                    f"{context}: relative filter operator must be one of: {', '.join(sorted(valid_ops))}."
+                )
+                continue
+
+            if not rel_count or int(rel_count) <= 0:
+                result.errors.append(f"{context}: relative filter requires a positive 'count'.")
+                continue
+
+            if rel_operator == "InThis":
+                rel_count = 1
+
+            if rel_unit not in all_units:
+                result.errors.append(
+                    f"{context}: relative filter unit '{rel_unit}' not recognized. "
+                    f"Use one of: {', '.join(sorted(all_units))}."
+                )
+                continue
+
+            field_type_name = "column"
+            if project is not None:
+                entity, prop, field_type_name, _ = resolve_apply_field(
+                    field_ref, project, session=session,
+                )
+
+            if field_type_name != "column":
+                result.errors.append(
+                    f"{context}: relative filters only support column fields, not {field_type_name}."
+                )
+                continue
+
+            try:
+                if is_time:
+                    add_relative_time_filter(
+                        data, entity, prop,
+                        operator=rel_operator,
+                        time_units_count=int(rel_count),
+                        time_unit_type=rel_unit,
+                        field_type=field_type_name,
+                        is_hidden=is_hidden,
+                        is_locked=is_locked,
+                    )
+                else:
+                    add_relative_date_filter(
+                        data, entity, prop,
+                        operator=rel_operator,
+                        time_units_count=int(rel_count),
+                        time_unit_type=rel_unit,
+                        include_today=bool(include_today),
+                        field_type=field_type_name,
+                        is_hidden=is_hidden,
+                        is_locked=is_locked,
+                    )
+                result.filters_added += 1
+            except (ValueError, NotImplementedError) as e:
+                result.errors.append(f"{context}: {e}")
         else:
             result.warnings.append(
                 f"{context}: filter type '{filter_type}' not yet supported in apply."
