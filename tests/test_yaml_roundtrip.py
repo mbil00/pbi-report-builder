@@ -10,7 +10,7 @@ import yaml
 
 from pbi.apply import apply_yaml
 from pbi.bookmarks import create_bookmark, create_bookmark_group, export_bookmarks, get_bookmark, list_bookmarks
-from pbi.components import apply_component, get_component, save_component
+from pbi.components import apply_component, apply_component_row, get_component, save_component
 from pbi.roundtrip import export_bindings
 from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
@@ -997,6 +997,59 @@ pages:
             if isinstance(bound_field, list):
                 bound_field = bound_field[0]
             self.assertIn("Budget.Amount", bound_field)
+
+
+    def test_component_row_creates_indexed_instance_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+
+            first = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first.data["name"] = "label"
+            set_textbox_content(first.data, text="Value")
+            first.save()
+            second = project.create_visual(page, "shape", x=0, y=0, width=120, height=50)
+            second.data["name"] = "bg"
+            second.save()
+            group = project.create_group(page, [first, second], display_name="tile")
+
+            save_component(project, page, group, "tile")
+            target = project.create_page("Target")
+            all_created = apply_component_row(project, target, "tile", 3, x=0, y=0, gap=10)
+
+            project.clear_caches()
+            visuals = project.get_visuals(target)
+            groups = [v for v in visuals if "visualGroup" in v.data]
+            group_names = sorted(v.name for v in groups)
+            self.assertEqual(group_names, ["tile-1", "tile-2", "tile-3"])
+
+    def test_component_row_restamp_cleans_up_indexed_instances(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+
+            first = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first.data["name"] = "label"
+            set_textbox_content(first.data, text="Value")
+            first.save()
+            second = project.create_visual(page, "shape", x=0, y=0, width=120, height=50)
+            second.data["name"] = "bg"
+            second.save()
+            group = project.create_group(page, [first, second], display_name="tile")
+
+            save_component(project, page, group, "tile")
+            target = project.create_page("Target")
+
+            apply_component_row(project, target, "tile", 4, x=0, y=0, gap=10)
+            apply_component_row(project, target, "tile", 2, x=0, y=0, gap=10)
+
+            project.clear_caches()
+            visuals = project.get_visuals(target)
+            groups = [v for v in visuals if "visualGroup" in v.data]
+            group_names = sorted(v.name for v in groups)
+            self.assertEqual(group_names, ["tile-1", "tile-2"])
 
 
 if __name__ == "__main__":

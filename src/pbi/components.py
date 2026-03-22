@@ -397,6 +397,7 @@ def apply_component(
     x: int = 0,
     y: int = 0,
     *,
+    instance_name: str | None = None,
     params: dict[str, str] | None = None,
     global_scope: bool = False,
     dry_run: bool = False,
@@ -429,7 +430,7 @@ def apply_component(
     if dry_run:
         return []
 
-    _remove_existing_component_instance(project, page, component_name)
+    _remove_existing_component_instance(project, page, instance_name or component_name)
 
     # Create visuals with absolute positions
     created: list[Visual] = []
@@ -463,7 +464,7 @@ def apply_component(
 
     # Group the created visuals if more than one
     if len(created) >= 2:
-        group = project.create_group(page, created, display_name=component_name)
+        group = project.create_group(page, created, display_name=instance_name or component_name)
         created.append(group)
 
     return created
@@ -515,9 +516,15 @@ def apply_component_row(
     comp = get_component(project, component_name, global_scope=global_scope)
     comp_width = comp.size[0]
 
+    if not dry_run:
+        _remove_existing_component_instance(project, page, component_name)
+        for i in range(1, count + 20):  # generous range to clean up old stamps
+            _remove_existing_component_instance(project, page, f"{component_name}-{i}")
+
     all_created: list[list[Visual]] = []
     for i in range(count):
         offset_x = x + i * (comp_width + gap)
+        instance_name = f"{component_name}-{i + 1}"
 
         # Build per-instance params
         instance_params: dict[str, str] = {}
@@ -529,6 +536,7 @@ def apply_component_row(
         created = apply_component(
             project, page, component_name,
             x=offset_x, y=y,
+            instance_name=instance_name,
             params=instance_params if instance_params else None,
             global_scope=global_scope,
             dry_run=dry_run,
