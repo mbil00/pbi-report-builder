@@ -10,7 +10,8 @@ import yaml
 
 from pbi.apply import apply_yaml
 from pbi.bookmarks import create_bookmark, create_bookmark_group, export_bookmarks, get_bookmark, list_bookmarks
-from pbi.components import apply_component, save_component
+from pbi.components import apply_component, get_component, save_component
+from pbi.roundtrip import export_bindings
 from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
@@ -939,6 +940,63 @@ pages:
             self.assertEqual(page.data["type"], "Tooltip")
             self.assertEqual(page.data["pageBinding"]["type"], "Tooltip")
             self.assertEqual(page.data.get("filterConfig", {}).get("filters", []), [])
+
+
+    def test_component_save_detects_binding_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+
+            card = project.create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
+            card.data["name"] = "kpi-card"
+            project.add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
+            card.save()
+
+            bg = project.create_visual(page, "shape", x=0, y=0, width=220, height=120)
+            bg.data["name"] = "kpi-bg"
+            bg.save()
+
+            group = project.create_group(page, [card, bg], display_name="kpi_tile")
+            save_component(project, page, group, "kpi_tile")
+            comp = get_component(project, "kpi_tile")
+
+            self.assertIn("data", comp.parameters)
+            self.assertEqual(comp.parameters["data"]["default"], "Sales.Revenue (measure)")
+
+    def test_component_apply_substitutes_binding_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._make_project(root)
+            page = project.create_page("Demo")
+
+            card = project.create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
+            card.data["name"] = "kpi-card"
+            project.add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
+            card.save()
+
+            bg = project.create_visual(page, "shape", x=0, y=0, width=220, height=120)
+            bg.data["name"] = "kpi-bg"
+            bg.save()
+
+            group = project.create_group(page, [card, bg], display_name="kpi_tile")
+            save_component(project, page, group, "kpi_tile")
+
+            target = project.create_page("Target")
+            stamped = apply_component(
+                project, target, "kpi_tile",
+                params={"data": "Budget.Amount (measure)"},
+            )
+
+            target_visuals = project.get_visuals(target)
+            cards = [v for v in target_visuals if v.visual_type == "cardVisual"]
+            self.assertEqual(len(cards), 1)
+            bindings = export_bindings(cards[0].data)
+            self.assertIn("Data", bindings)
+            bound_field = bindings["Data"]
+            if isinstance(bound_field, list):
+                bound_field = bound_field[0]
+            self.assertIn("Budget.Amount", bound_field)
 
 
 if __name__ == "__main__":

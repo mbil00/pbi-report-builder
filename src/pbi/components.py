@@ -173,6 +173,22 @@ def _detect_parameters(visual_specs: list[dict]) -> dict[str, dict[str, Any]]:
                     "default": values[0] if len(values) == 1 else values,
                 }
 
+        # Binding field references
+        bindings = spec.get("bindings", {})
+        if isinstance(bindings, dict):
+            for role, fields in bindings.items():
+                field_list = [fields] if isinstance(fields, str) else fields
+                if not isinstance(field_list, list):
+                    continue
+                for field_ref in field_list:
+                    if not isinstance(field_ref, str) or "." not in field_ref:
+                        continue
+                    param_name = _binding_param_name(role, parameters)
+                    parameters[param_name] = {
+                        "source": f"{vis_name}.bindings.{role}",
+                        "default": field_ref,
+                    }
+
     return parameters
 
 
@@ -203,6 +219,17 @@ def _textbox_param_name(vis_name: str, parameters: dict[str, dict[str, Any]]) ->
         candidate = f"text[{vis_name}]#{suffix}"
         suffix += 1
     return candidate
+
+
+def _binding_param_name(role: str, parameters: dict[str, dict[str, Any]]) -> str:
+    """Generate a parameter name for a binding role."""
+    candidate = role.lower()
+    if candidate not in parameters:
+        return candidate
+    suffix = 2
+    while f"{candidate}{suffix}" in parameters:
+        suffix += 1
+    return f"{candidate}{suffix}"
 
 
 def get_component(
@@ -587,16 +614,12 @@ def _apply_spec_to_visual(project: Project, visual: Visual, spec: dict) -> None:
                 for field_ref in fields:
                     if not isinstance(field_ref, str) or "." not in field_ref:
                         continue
-                    dot = field_ref.find(".")
-                    entity = field_ref[:dot]
-                    prop = field_ref[dot + 1:]
-                    # Determine field type - assume column unless it looks like a measure
-                    # (Measures table or parenthesized)
-                    ftype = "column"
-                    if "(" in entity or entity.lower().startswith("measures"):
-                        ftype = "measure"
-                    # Clean entity: "Measures (Measures)" -> entity="Measures", but keep as-is
-                    # The entity in PBI bindings includes the expression table name
+                    is_measure = "(measure)" in field_ref
+                    clean_ref = field_ref.replace("(measure)", "").strip()
+                    dot = clean_ref.find(".")
+                    entity = clean_ref[:dot]
+                    prop = clean_ref[dot + 1:]
+                    ftype = "measure" if is_measure else "column"
                     project.add_binding(visual, role, entity, prop, field_type=ftype)
 
     # Apply isHidden
