@@ -14,4 +14,4 @@ visual_format_app = typer.Typer(help="Visual conditional formatting operations."
 visual_app.add_typer(visual_sort_app, name="sort")
 visual_app.add_typer(visual_format_app, name="format")
 visual_app.add_typer(visual_arrange_app, name="arrange")
-visual_app.add_typer(visual_plugin_app, name="plugin")
+visual_app.add_typer(visual_plugin_app, name="plugin", hidden=True)
