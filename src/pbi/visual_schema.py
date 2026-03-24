@@ -13,10 +13,14 @@ import difflib
 import json
 from functools import lru_cache
 from importlib import resources
+from pathlib import Path
 from typing import Any
 
 
 # ── Schema loading ──────────────────────────────────────────────────
+
+# Custom schemas registered at runtime (merged from .pbi-custom-schemas/)
+_custom_schemas: dict[str, dict] = {}
 
 
 @lru_cache(maxsize=1)
@@ -26,14 +30,41 @@ def _load_schema() -> dict:
     return json.loads(ref.read_text(encoding="utf-8"))
 
 
+def register_custom_schemas(project_root: Path) -> int:
+    """Load custom visual schemas from .pbi-custom-schemas/ into memory.
+
+    Returns the number of custom schemas loaded.
+    """
+    from pbi.custom_visuals import load_custom_schemas
+
+    schemas = load_custom_schemas(project_root)
+    _custom_schemas.update(schemas)
+    return len(schemas)
+
+
+def clear_custom_schemas() -> None:
+    """Remove all registered custom schemas (for testing)."""
+    _custom_schemas.clear()
+
+
 def get_visual_types() -> list[str]:
-    """Return all known visual type names."""
-    return list(_load_schema()["visuals"].keys())
+    """Return all known visual type names (built-in + custom)."""
+    types = list(_load_schema()["visuals"].keys())
+    for vtype in _custom_schemas:
+        if vtype not in types:
+            types.append(vtype)
+    return types
 
 
 def get_visual_schema(visual_type: str) -> dict | None:
-    """Return schema for a visual type, or None if unknown."""
-    return _load_schema()["visuals"].get(visual_type)
+    """Return schema for a visual type, or None if unknown.
+
+    Checks built-in schema first, then registered custom schemas.
+    """
+    builtin = _load_schema()["visuals"].get(visual_type)
+    if builtin is not None:
+        return builtin
+    return _custom_schemas.get(visual_type)
 
 
 def get_object_names(visual_type: str) -> list[str] | None:

@@ -6,7 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+_BUNDLE_PATH = Path(__file__).resolve().parents[1] / "schema-analysis" / "output" / "DESKTOP.MIN.JS"
 
+
+@unittest.skipUnless(_BUNDLE_PATH.exists(), "PBI Desktop bundle not available (schema-analysis/output/DESKTOP.MIN.JS)")
 class VisualCapabilityExtractorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

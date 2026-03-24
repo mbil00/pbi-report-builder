@@ -22,10 +22,19 @@ ProjectOpt = Annotated[
 def get_project(project: Path | None) -> Project:
     """Resolve a PBIP project or exit with a CLI-friendly error."""
     try:
-        return Project.find(project)
+        proj = Project.find(project)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+    # Load custom visual schemas if present
+    try:
+        from pbi.visual_schema import register_custom_schemas
+        register_custom_schemas(proj.root)
+    except Exception:
+        pass
+
+    return proj
 
 
 def normalize_field_type(field_type: str) -> str:
