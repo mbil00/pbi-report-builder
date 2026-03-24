@@ -599,7 +599,7 @@ def _update_member_property(
     lines = _get_tmdl_lines(path, edit_session)
     start, end = _find_member_block(lines, member_kind=member_kind, member_name=member_name)
 
-    replacement = f"\t\t{property_name}: {property_value}"
+    replacement = f"\t\t{property_name}: {_format_tmdl_property_value(property_name, property_value)}"
     for idx in range(start + 1, end):
         if lines[idx].strip().startswith(f"{property_name}:"):
             if lines[idx] == replacement:
@@ -984,6 +984,13 @@ def _format_tmdl_name(name: str) -> str:
 def _format_tmdl_field_ref(table: str, column: str) -> str:
     """Format a Table.Column reference for TMDL relationship blocks."""
     return f"{_format_tmdl_name(table)}.{_format_tmdl_name(column)}"
+
+
+def _format_tmdl_property_value(property_name: str, property_value: str) -> str:
+    """Format TMDL property values, quoting identifier-valued properties when needed."""
+    if property_name == "sortByColumn":
+        return _format_tmdl_name(property_value)
+    return property_value
 
 
 from .writes_hierarchies import create_hierarchy, delete_hierarchy

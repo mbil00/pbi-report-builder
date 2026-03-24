@@ -52,6 +52,48 @@ def _parse_tmdl_name(text: str) -> str:
     return text.split()[0].rstrip("=").strip()
 
 
+def _parse_tmdl_field_ref(text: str) -> tuple[str, str]:
+    """Parse a quoted or unquoted TMDL Table.Column reference."""
+    text = text.strip()
+    if not text:
+        raise ValueError("TMDL field reference cannot be empty.")
+
+    if text.startswith("'"):
+        chars: list[str] = []
+        i = 1
+        while i < len(text):
+            ch = text[i]
+            if ch == "'":
+                if i + 1 < len(text) and text[i + 1] == "'":
+                    chars.append("'")
+                    i += 2
+                    continue
+                i += 1
+                break
+            chars.append(ch)
+            i += 1
+        table = "".join(chars)
+        remainder = text[i:].strip()
+    else:
+        dot = text.find(".")
+        if dot == -1:
+            raise ValueError(f'Invalid TMDL field reference "{text}".')
+        table = text[:dot].strip()
+        remainder = text[dot:]
+
+    if not remainder.startswith("."):
+        raise ValueError(f'Invalid TMDL field reference "{text}".')
+    column = _parse_tmdl_name(remainder[1:])
+    return table, column
+
+
+def _parse_member_property_value(key: str, value: str) -> str:
+    """Normalize parsed member property values that use TMDL identifier syntax."""
+    if key == "sortByColumn":
+        return _parse_tmdl_name(value)
+    return value.strip()
+
+
 def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     """Parse a single table TMDL file."""
     content = path.read_text(encoding="utf-8-sig")
@@ -264,7 +306,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     key, _, val = stripped.partition(":")
                     key = key.strip()
                     if key in ("column", "lineageTag"):
-                        current_level_props[key] = val.strip()
+                        current_level_props[key] = _parse_tmdl_name(val) if key == "column" else val.strip()
             continue
 
         if current_type and indent >= 2:
@@ -278,7 +320,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 key = stripped.partition(":")[0].strip()
                 if key in _TMDL_PROPERTY_NAMES:
                     _, _, val = stripped.partition(":")
-                    current_props[key] = val.strip()
+                    current_props[key] = _parse_member_property_value(key, val)
                 elif current_type == "measure" or (
                     current_type == "column" and current_props.get("__kind") == "calculatedColumn"
                 ):
@@ -484,18 +526,20 @@ def _parse_relationships_tmdl(path: Path) -> list[Relationship]:
         if current_id is not None:
             from_ref = current_props.get("fromColumn", "")
             to_ref = current_props.get("toColumn", "")
-            from_dot = from_ref.find(".")
-            to_dot = to_ref.find(".")
-            if from_dot > 0 and to_dot > 0:
+            try:
+                from_table, from_column = _parse_tmdl_field_ref(from_ref)
+                to_table, to_column = _parse_tmdl_field_ref(to_ref)
                 relationships.append(Relationship(
                     id=current_id,
-                    from_table=from_ref[:from_dot],
-                    from_column=from_ref[from_dot + 1:],
-                    to_table=to_ref[:to_dot],
-                    to_column=to_ref[to_dot + 1:],
+                    from_table=from_table,
+                    from_column=from_column,
+                    to_table=to_table,
+                    to_column=to_column,
                     properties={k: v for k, v in current_props.items()
                                 if k not in ("fromColumn", "toColumn")},
                 ))
+            except ValueError:
+                pass
         current_id = None
         current_props = {}
 

@@ -92,7 +92,7 @@ def _build_hierarchy_block(
         level_name = _format_tmdl_name(column_name)
         lines.append(f"\t\tlevel {level_name}")
         lines.append(f"\t\t\tlineageTag: {uuid.uuid4()}")
-        lines.append(f"\t\t\tcolumn: {column_name}")
+        lines.append(f"\t\t\tcolumn: {_format_tmdl_name(column_name)}")
 
     return lines
 

@@ -492,6 +492,42 @@ relationship abc-123
             rel = model.relationships[0]
             self.assertEqual(rel.to_column, "CalYear")
 
+    def test_rename_column_updates_relationships_with_spaced_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn YearKey = YEAR([DateCol])
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+
+\tcolumn DateCol
+\t\tdataType: dateTime
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: DateCol
+""")
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn YearKey
+\t\tdataType: int64
+\t\tlineageTag: c-3
+\t\tsummarizeBy: none
+\t\tsourceColumn: YearKey
+""")
+            _write_relationships(root, """
+relationship abc-123
+\tfromColumn: Sales.YearKey
+\ttoColumn: Date.YearKey
+""")
+            rename_column(root, "Date", "YearKey", "Fiscal Year Key")
+
+            model = SemanticModel.load(root)
+            rel = model.relationships[0]
+            self.assertEqual(rel.to_column, "Fiscal Year Key")
+
     def test_rename_source_column_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

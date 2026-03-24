@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 from pbi.cli import app
 from pbi.model import (
     SemanticModel,
+    create_calculated_column,
     create_hierarchy,
     create_relationship,
     delete_hierarchy,
@@ -133,6 +134,47 @@ table Date
             model = SemanticModel.load(root)
             c = model.find_table("Date").find_column("MonthName")
             self.assertEqual(c.sort_by_column, "MonthNumber")
+
+    def test_set_member_property_sort_by_spaced_calculated_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn 'Month Name'
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Month Name
+
+\tcolumn DateValue
+\t\tdataType: dateTime
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: DateValue
+""")
+            create_calculated_column(
+                root,
+                "Date",
+                "Month Number",
+                "MONTH([DateValue])",
+                data_type="int64",
+            )
+
+            _, _, _, changed = set_member_property(
+                root, "Date.Month Name", "sortByColumn", "Month Number",
+            )
+            self.assertTrue(changed)
+
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("\tcolumn 'Month Number' = MONTH([DateValue])", content)
+            self.assertIn("\t\tsortByColumn: 'Month Number'", content)
+
+            model = SemanticModel.load(root)
+            month_name = model.find_table("Date").find_column("Month Name")
+            month_number = model.find_table("Date").find_column("Month Number")
+            self.assertEqual(month_name.sort_by_column, "Month Number")
+            self.assertEqual(month_number.kind, "calculatedColumn")
 
     def test_set_member_property_inserts_before_annotation_separator(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -793,6 +835,39 @@ table Date
             self.assertEqual(h.levels[0].column, "Year")
             self.assertEqual(h.levels[1].column, "MonthNumber")
             self.assertEqual(h.levels[2].column, "DayOfMonth")
+
+    def test_create_hierarchy_with_spaced_level_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Year
+
+\tcolumn 'Fiscal Month'
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: Fiscal Month
+""")
+            table, name, created = create_hierarchy(
+                root, "Date", "Fiscal Calendar", ["Year", "Fiscal Month"],
+            )
+            self.assertTrue(created)
+            self.assertEqual((table, name), ("Date", "Fiscal Calendar"))
+
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("\thierarchy 'Fiscal Calendar'", content)
+            self.assertIn("\t\tlevel 'Fiscal Month'", content)
+            self.assertIn("\t\t\tcolumn: 'Fiscal Month'", content)
+
+            model = SemanticModel.load(root)
+            hierarchy = model.find_table("Date").find_hierarchy("Fiscal Calendar")
+            self.assertEqual([level.column for level in hierarchy.levels], ["Year", "Fiscal Month"])
 
     def test_create_hierarchy_validates_columns(self):
         with tempfile.TemporaryDirectory() as tmp:
