@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 from pbi.cli import app
 from pbi.custom_visuals import (
     CustomVisualInfo,
+    auto_install,
     extract_capabilities,
     install_custom_visual,
     load_custom_schemas,
@@ -635,5 +636,109 @@ def test_end_to_end_scan_install_validates():
             roles = get_data_roles("MyCustomChart")
             assert "Category" in roles
             assert "Values" in roles
+    finally:
+        clear_custom_schemas()
+
+
+# ── Auto-install ──────────────────────────────────────────────────
+
+
+def test_auto_install_installs_new_pbiviz():
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _make_project(Path(tmp))
+        cv_dir = proj.report_folder / "CustomVisuals"
+        cv_dir.mkdir(parents=True)
+        _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+        results = auto_install(proj)
+        assert len(results) == 1
+        assert results[0].visual_type == "MyCustomChart"
+
+        schema_file = proj.root / ".pbi-custom-schemas" / "MyCustomChart.json"
+        assert schema_file.exists()
+
+
+def test_auto_install_skips_already_installed():
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _make_project(Path(tmp))
+        cv_dir = proj.report_folder / "CustomVisuals"
+        cv_dir.mkdir(parents=True)
+        _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+        # First run installs
+        results = auto_install(proj)
+        assert len(results) == 1
+
+        # Second run skips (already installed)
+        results = auto_install(proj)
+        assert len(results) == 0
+
+
+def test_auto_install_no_pbiviz_files():
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _make_project(Path(tmp))
+        results = auto_install(proj)
+        assert results == []
+
+
+def test_auto_install_multiple_pbiviz():
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _make_project(Path(tmp))
+        cv_dir = proj.report_folder / "CustomVisuals"
+        cv_dir.mkdir(parents=True)
+        _make_pbiviz(cv_dir / "ChartA.pbiviz", visual_type="ChartA", display_name="Chart A")
+        _make_pbiviz(cv_dir / "ChartB.pbiviz", visual_type="ChartB", display_name="Chart B")
+
+        results = auto_install(proj)
+        types = {r.visual_type for r in results}
+        assert types == {"ChartA", "ChartB"}
+
+
+def test_auto_install_on_project_load():
+    """Verify that get_project() auto-installs custom visual schemas."""
+    clear_custom_schemas()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = _make_project(Path(tmp))
+            cv_dir = proj.report_folder / "CustomVisuals"
+            cv_dir.mkdir(parents=True)
+            _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+            # Simulate what get_project() does
+            newly_installed = auto_install(proj)
+            assert len(newly_installed) == 1
+
+            count = register_custom_schemas(proj.root)
+            assert count == 1
+            assert get_visual_schema("MyCustomChart") is not None
+    finally:
+        clear_custom_schemas()
+
+
+def test_cli_auto_installs_on_any_command():
+    """Any CLI command touching the project triggers auto-install."""
+    clear_custom_schemas()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = _make_project(Path(tmp))
+            _add_visual(proj, "page1", "cv1", "MyCustomChart")
+
+            cv_dir = proj.report_folder / "CustomVisuals"
+            cv_dir.mkdir(parents=True)
+            _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+            # Running any command should auto-install
+            result = runner.invoke(app, ["visual", "plugin", "scan", "-p", str(proj.root)])
+            assert result.exit_code == 0
+            assert "Auto-installed" in result.output
+            assert "MyCustomChart" in result.output
+
+            # Schema file should exist now
+            schema_file = proj.root / ".pbi-custom-schemas" / "MyCustomChart.json"
+            assert schema_file.exists()
+
+            # Running again should NOT auto-install (already done)
+            result = runner.invoke(app, ["visual", "plugin", "scan", "-p", str(proj.root)])
+            assert "Auto-installed" not in result.output
     finally:
         clear_custom_schemas()

@@ -27,7 +27,18 @@ def get_project(project: Path | None) -> Project:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Load custom visual schemas if present
+    # Auto-install custom visual schemas from .pbiviz files, then load all
+    try:
+        from pbi.custom_visuals import auto_install
+        newly_installed = auto_install(proj)
+        for cv in newly_installed:
+            console.print(
+                f'[dim]Auto-installed plugin schema "[cyan]{cv.visual_type}[/cyan]" '
+                f"({cv.role_count} roles, {cv.object_count} objects)[/dim]"
+            )
+    except Exception:
+        pass
+
     try:
         from pbi.visual_schema import register_custom_schemas
         register_custom_schemas(proj.root)

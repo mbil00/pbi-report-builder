@@ -122,6 +122,33 @@ def install_all_from_project(project: Project) -> list[InstalledCustomVisual]:
     return results
 
 
+def auto_install(project: Project) -> list[InstalledCustomVisual]:
+    """Install schemas for .pbiviz files not yet registered.
+
+    Called automatically on project load. Only writes to disk when new
+    .pbiviz files are found that don't have a corresponding schema file.
+    Returns the list of newly installed visuals (empty if nothing new).
+    """
+    installed = set(_list_installed_types(project))
+    pbiviz_files = _find_all_pbiviz_files(project)
+    if not pbiviz_files:
+        return []
+
+    results = []
+    for path in pbiviz_files:
+        try:
+            caps = extract_capabilities(path)
+            vtype = caps["visual_type"]
+            if vtype in installed:
+                continue
+            result = install_custom_visual(project, path)
+            results.append(result)
+            installed.add(vtype)
+        except (ValueError, KeyError, zipfile.BadZipFile, json.JSONDecodeError):
+            continue
+    return results
+
+
 # ── Schema loading (used by visual_schema.py) ─────────────────────
 
 
