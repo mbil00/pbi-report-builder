@@ -42,11 +42,14 @@ pbi validate                                      # Check structural integrity
 Requires Python 3.11+.
 
 ```bash
-# As a global tool
-uv tool install -e /path/to/pbi-report-builder
+# Clone the repo first
+git clone https://github.com/mbil00/pbi-report-builder.git
+cd pbi-report-builder
+
+# Install as a global editable tool
+uv tool install -e .
 
 # Or in a virtual environment
-cd pbi-report-builder
 uv venv && uv pip install -e .
 source .venv/bin/activate
 ```
