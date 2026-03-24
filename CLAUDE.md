@@ -4,7 +4,16 @@ CLI tool for editing Power BI PBIP project files. Agent-first design.
 
 ## Stack
 
-Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/pbi/`, commands in `src/pbi/commands/`. Tests via `python -m pytest tests/`.
+Python 3.11+, Typer (CLI), Rich (output), PyYAML (export/apply). Source in `src/pbi/`, commands in `src/pbi/commands/`.
+
+## Testing
+
+Use `uv` for all test runs so commands execute in the project environment rather than the system Python.
+
+- Full suite: `uv run --with pytest python -m pytest tests/`
+- Targeted unittest-style runs: `uv run python -m unittest tests.test_module.ClassName.test_name -q`
+
+Do not assume `pytest` is installed globally.
 
 ## Command Grammar
 
