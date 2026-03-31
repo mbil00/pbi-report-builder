@@ -7,6 +7,12 @@ from pathlib import Path
 import yaml
 
 from pbi.model import SemanticModel
+from pbi.modeling.desktop_metadata import (
+    normalize_data_category,
+    normalize_model_data_type,
+    normalize_summarize_by,
+    normalize_table_data_category,
+)
 
 
 def export_model_yaml(
@@ -35,7 +41,7 @@ def export_model_yaml(
     for table in loaded_model.tables:
         entry: dict = {}
         if table.data_category:
-            entry["dataCategory"] = table.data_category
+            entry["dataCategory"] = _export_table_data_category(table.data_category)
         if table.date_table_column:
             entry["dateTable"] = table.date_table_column
         if entry:
@@ -86,19 +92,19 @@ def export_model_yaml(
                 if c.expression:
                     entry["expression"] = c.expression
                 if c.data_type and c.data_type != "unknown":
-                    entry["dataType"] = c.data_type
+                    entry["dataType"] = _export_data_type(c.data_type)
             if c.format_string:
                 entry["format"] = c.format_string
             if c.is_hidden:
                 entry["hidden"] = True
             if c.summarize_by and c.summarize_by != "none":
-                entry["summarizeBy"] = c.summarize_by
+                entry["summarizeBy"] = _export_summarize_by(c.summarize_by)
             if c.display_folder:
                 entry["displayFolder"] = c.display_folder
             if c.sort_by_column:
                 entry["sortByColumn"] = c.sort_by_column
             if c.data_category:
-                entry["dataCategory"] = c.data_category
+                entry["dataCategory"] = _export_data_category(c.data_category)
             if entry:
                 table_columns[c.name] = entry
         if table_columns:
@@ -195,6 +201,34 @@ def export_model_yaml(
         spec["perspectives"] = perspectives_section
 
     return yaml.dump(spec, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+
+def _export_data_type(value: str) -> str:
+    try:
+        return normalize_model_data_type(value)
+    except ValueError:
+        return value
+
+
+def _export_summarize_by(value: str) -> str:
+    try:
+        return normalize_summarize_by(value)
+    except ValueError:
+        return value
+
+
+def _export_data_category(value: str) -> str:
+    try:
+        return normalize_data_category(value)
+    except ValueError:
+        return value
+
+
+def _export_table_data_category(value: str) -> str:
+    try:
+        return normalize_table_data_category(value)
+    except ValueError:
+        return value
 
 
 def _extract_field_parameter_fields(table) -> list[dict]:

@@ -20,6 +20,7 @@ from pbi.model import (
     delete_relationship,
     mark_as_date_table,
     set_member_property,
+    set_table_property,
     set_time_intelligence_enabled,
     set_relationship_property,
 )
@@ -135,6 +136,18 @@ table Date
             c = model.find_table("Date").find_column("MonthName")
             self.assertEqual(c.sort_by_column, "MonthNumber")
 
+    def test_set_member_property_rejects_column_only_property_on_measure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m-1
+""")
+            with self.assertRaisesRegex(ValueError, 'not writable on measures'):
+                set_member_property(root, "Sales.Revenue", "summarizeBy", "sum")
+
     def test_set_member_property_sort_by_spaced_calculated_column(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -175,6 +188,149 @@ table Date
             month_number = model.find_table("Date").find_column("Month Number")
             self.assertEqual(month_name.sort_by_column, "Month Number")
             self.assertEqual(month_number.kind, "calculatedColumn")
+
+    def test_set_member_property_rejects_missing_sort_by_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: MonthName
+""")
+            with self.assertRaisesRegex(ValueError, 'Column "MonthNumber" not found'):
+                set_member_property(root, "Date.MonthName", "sortByColumn", "MonthNumber")
+
+    def test_set_member_property_rejects_sort_by_self(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: MonthName
+""")
+            with self.assertRaisesRegex(ValueError, "cannot sort by itself"):
+                set_member_property(root, "Date.MonthName", "sortByColumn", "MonthName")
+
+    def test_set_member_property_normalizes_desktop_summarize_by_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Amount
+""")
+            _, _, _, changed = set_member_property(root, "Sales.Amount", "summarizeBy", "DistinctCount")
+            self.assertTrue(changed)
+
+            model = SemanticModel.load(root)
+            amount = model.find_table("Sales").find_column("Amount")
+            self.assertEqual(amount.summarize_by, "distinctCount")
+
+    def test_set_member_property_rejects_invalid_summarize_by_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Amount
+""")
+            with self.assertRaisesRegex(ValueError, 'Invalid summarizeBy'):
+                set_member_property(root, "Sales.Amount", "summarizeBy", "sideways")
+
+    def test_set_member_property_normalizes_data_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Geo.tmdl", """
+table Geo
+\tcolumn CityName
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CityName
+""")
+            _, _, _, changed = set_member_property(root, "Geo.CityName", "dataCategory", "city")
+            self.assertTrue(changed)
+
+            model = SemanticModel.load(root)
+            city = model.find_table("Geo").find_column("CityName")
+            self.assertEqual(city.data_category, "City")
+
+    def test_set_table_property_rejects_invalid_data_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            with self.assertRaisesRegex(ValueError, 'Invalid table dataCategory'):
+                set_table_property(root, "Date", "dataCategory", "City")
+
+    def test_create_calculated_column_normalizes_desktop_data_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            create_calculated_column(
+                root,
+                "Sales",
+                "Amount Label",
+                'FORMAT([Amount], "0")',
+                data_type="Text",
+            )
+
+            model = SemanticModel.load(root)
+            column = model.find_table("Sales").find_column("Amount Label")
+            self.assertEqual(column.data_type, "string")
+
+    def test_create_calculated_column_rejects_invalid_data_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            with self.assertRaisesRegex(ValueError, 'Invalid dataType'):
+                create_calculated_column(
+                    root,
+                    "Sales",
+                    "Amount Label",
+                    'FORMAT([Amount], "0")',
+                    data_type="sideways",
+                )
 
     def test_set_member_property_inserts_before_annotation_separator(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -701,6 +857,97 @@ table Customers
                     properties={"crossFilteringBehavior": "sideways"},
                 )
 
+    def test_create_relationship_normalizes_desktop_style_values_and_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            create_relationship(
+                root,
+                "Sales.CustomerID",
+                "Customers.CustomerID",
+                properties={
+                    "CrossFilteringBehavior": "BothDirections",
+                    "referentialIntegrity": "TRUE",
+                },
+            )
+
+            model = SemanticModel.load(root)
+            rel = model.relationships[0]
+            self.assertEqual(rel.properties.get("crossFilteringBehavior"), "bothDirections")
+            self.assertEqual(rel.properties.get("relyOnReferentialIntegrity"), "true")
+
+    def test_create_relationship_rejects_unknown_property(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            with self.assertRaisesRegex(ValueError, "Unknown relationship property"):
+                create_relationship(
+                    root,
+                    "Sales.CustomerID",
+                    "Customers.CustomerID",
+                    properties={"sideways": "true"},
+                )
+
+    def test_create_relationship_rejects_security_filter_without_bidirectional_cross_filter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            with self.assertRaisesRegex(ValueError, "securityFilteringBehavior=bothDirections requires bidirectional cross filtering"):
+                create_relationship(
+                    root,
+                    "Sales.CustomerID",
+                    "Customers.CustomerID",
+                    properties={"securityFilteringBehavior": "bothDirections"},
+                )
+
     def test_delete_nonexistent_relationship_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -879,6 +1126,37 @@ table Customers
             ])
             self.assertEqual(result.exit_code, 1, result.stdout)
             self.assertIn("Invalid crossFilteringBehavior", result.stdout)
+
+    def test_relationship_set_cli_rejects_unknown_property(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
+            result = runner.invoke(app, [
+                "model", "relationship", "set",
+                "Sales.CustomerID", "Customers.CustomerID",
+                "sideways=true",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("Unknown relationship property", result.stdout)
 
 
 # ── Phase 3: Hierarchy CRUD ─────────────────────────────────────

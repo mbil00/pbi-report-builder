@@ -69,21 +69,67 @@ def _find_relationship_block(
     return None
 
 
-_TMDL_CFB_MAP = {"singledirection": "oneDirection", "single": "oneDirection"}
+_TMDL_DIRECTION_MAP = {
+    "single": "oneDirection",
+    "singledirection": "oneDirection",
+    "onedirection": "oneDirection",
+    "both": "bothDirections",
+    "bothdirections": "bothDirections",
+    "automatic": "automatic",
+}
+_TMDL_SECURITY_FILTER_MAP = {
+    "single": "oneDirection",
+    "singledirection": "oneDirection",
+    "onedirection": "oneDirection",
+    "both": "bothDirections",
+    "bothdirections": "bothDirections",
+}
+_TMDL_JOIN_ON_DATE_MAP = {
+    "datepartonly": "datePartOnly",
+}
+_RELATIONSHIP_PROPERTY_ALIASES = {
+    "referentialIntegrity": "relyOnReferentialIntegrity",
+}
+_CANONICAL_RELATIONSHIP_PROPERTIES = {
+    "crossFilteringBehavior",
+    "securityFilteringBehavior",
+    "fromCardinality",
+    "toCardinality",
+    "isActive",
+    "joinOnDateBehavior",
+    "relyOnReferentialIntegrity",
+}
 _VALID_CROSS_FILTER_VALUES = {"oneDirection", "bothDirections", "automatic"}
+_VALID_SECURITY_FILTER_VALUES = {"oneDirection", "bothDirections"}
 _VALID_CARDINALITY_VALUES = {"one", "many"}
 _VALID_BOOLEAN_VALUES = {"true", "false"}
+
+
+def _canonical_relationship_property_name(name: str) -> str:
+    stripped = str(name).strip()
+    if stripped in _RELATIONSHIP_PROPERTY_ALIASES:
+        return _RELATIONSHIP_PROPERTY_ALIASES[stripped]
+    lowered = stripped.lower()
+    for candidate in _CANONICAL_RELATIONSHIP_PROPERTIES:
+        if candidate.lower() == lowered:
+            return candidate
+    return stripped
 
 
 def normalize_relationship_properties(properties: dict[str, str] | None) -> dict[str, str]:
     """Normalize writable relationship properties to canonical stored values."""
     normalized: dict[str, str] = {}
-    for key, value in (properties or {}).items():
+    for raw_key, value in (properties or {}).items():
+        key = _canonical_relationship_property_name(raw_key)
         text = str(value).strip()
         if key == "crossFilteringBehavior":
-            normalized[key] = _TMDL_CFB_MAP.get(text.lower(), text)
-        elif key in {"fromCardinality", "toCardinality", "isActive"}:
+            normalized[key] = _TMDL_DIRECTION_MAP.get(text.lower(), text)
+        elif key == "securityFilteringBehavior":
+            normalized[key] = _TMDL_SECURITY_FILTER_MAP.get(text.lower(), text)
+        elif key in {"fromCardinality", "toCardinality", "isActive", "relyOnReferentialIntegrity"}:
             normalized[key] = text.lower()
+        elif key == "joinOnDateBehavior":
+            normalized[key] = _TMDL_JOIN_ON_DATE_MAP.get(text.lower(), text)
         else:
             normalized[key] = text
     return normalized
@@ -92,6 +138,13 @@ def normalize_relationship_properties(properties: dict[str, str] | None) -> dict
 def validate_relationship_properties(properties: dict[str, str] | None) -> None:
     """Validate writable relationship semantics before persisting them."""
     normalized = normalize_relationship_properties(properties)
+
+    unknown_keys = sorted(key for key in normalized if key not in _CANONICAL_RELATIONSHIP_PROPERTIES)
+    if unknown_keys:
+        known = ", ".join(sorted(_CANONICAL_RELATIONSHIP_PROPERTIES))
+        unknown = ", ".join(unknown_keys)
+        raise ValueError(f"Unknown relationship property: {unknown}. Valid properties: {known}.")
+
     cross_filter = normalized.get("crossFilteringBehavior")
     if cross_filter and cross_filter not in _VALID_CROSS_FILTER_VALUES:
         raise ValueError(
@@ -99,9 +152,22 @@ def validate_relationship_properties(properties: dict[str, str] | None) -> None:
             "Valid values: oneDirection, bothDirections, automatic."
         )
 
+    security_filter = normalized.get("securityFilteringBehavior")
+    if security_filter and security_filter not in _VALID_SECURITY_FILTER_VALUES:
+        raise ValueError(
+            f'Invalid securityFilteringBehavior "{security_filter}". '
+            "Valid values: oneDirection, bothDirections."
+        )
+
     is_active = normalized.get("isActive")
     if is_active and is_active not in _VALID_BOOLEAN_VALUES:
         raise ValueError(f'Invalid isActive "{is_active}". Use true or false.')
+
+    referential_integrity = normalized.get("relyOnReferentialIntegrity")
+    if referential_integrity and referential_integrity not in _VALID_BOOLEAN_VALUES:
+        raise ValueError(
+            f'Invalid relyOnReferentialIntegrity "{referential_integrity}". Use true or false.'
+        )
 
     from_cardinality = normalized.get("fromCardinality")
     to_cardinality = normalized.get("toCardinality")
@@ -129,6 +195,17 @@ def validate_relationship_properties(properties: dict[str, str] | None) -> None:
             raise ValueError(
                 "One-to-one relationships cannot use crossFilteringBehavior=oneDirection. "
                 "Use bothDirections or omit the cross-filter setting."
+            )
+
+    if security_filter == "bothDirections":
+        pair = (
+            normalized.get("fromCardinality", "many"),
+            normalized.get("toCardinality", "one"),
+        )
+        if cross_filter == "oneDirection" or (not cross_filter and pair != ("one", "one")):
+            raise ValueError(
+                "securityFilteringBehavior=bothDirections requires bidirectional cross filtering. "
+                "Use crossFilteringBehavior=bothDirections or a one-to-one relationship."
             )
 
 

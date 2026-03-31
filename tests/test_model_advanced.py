@@ -1036,11 +1036,212 @@ table {name}
             validate_result = runner.invoke(app, ["validate", "--project", str(root / "Sample.pbip")])
             self.assertEqual(validate_result.exit_code, 1, validate_result.stdout)
             self.assertIn("Ambiguous active", validate_result.stdout)
-            self.assertIn("relationship paths", validate_result.stdout)
+            self.assertIn("B -> A", validate_result.stdout)
+            self.assertIn("B -> C -> A", validate_result.stdout)
 
             check_result = runner.invoke(app, ["model", "check", "--project", str(root / "Sample.pbip")])
             self.assertEqual(check_result.exit_code, 1, check_result.stdout)
             self.assertIn("Ambiguous active relationship paths", check_result.stdout)
+            self.assertIn("B -> A", check_result.stdout)
+            self.assertIn("B -> C -> A", check_result.stdout)
+
+    def test_validate_reports_missing_relationship_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_relationships(root, """
+relationship rel-1
+\tfromColumn: Sales.CustomerID
+\ttoColumn: Customers.MissingID
+""")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any("Customers.MissingID" in f["message"] for f in errors))
+
+    def test_validate_reports_mismatched_relationship_data_types(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: int64
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any("data types do not match" in f["message"] for f in errors))
+
+    def test_validate_allows_datepartonly_date_datetime_relationship(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn OrderDateTime
+\t\tdataType: dateTime
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: OrderDateTime
+""")
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn Date
+\t\tdataType: date
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+""")
+            _write_relationships(root, """
+relationship rel-1
+\tjoinOnDateBehavior: datePartOnly
+\tfromColumn: Sales.OrderDateTime
+\ttoColumn: Date.Date
+""")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertFalse(any("data types do not match" in f["message"] for f in errors))
+
+    def test_validate_reports_parallel_active_relationship_edges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+
+\tcolumn RegionID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: RegionID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-3
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+
+\tcolumn RegionID
+\t\tdataType: string
+\t\tlineageTag: c-4
+\t\tsummarizeBy: none
+\t\tsourceColumn: RegionID
+""")
+            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
+            create_relationship(root, "Sales.RegionID", "Customers.RegionID")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any("same table edge" in f["message"] for f in errors))
+
+    def test_validate_reports_invalid_column_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sideways
+\t\tsourceColumn: Amount
+""")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any('Invalid summarizeBy "sideways"' in f["message"] for f in errors))
+
+    def test_validate_reports_missing_sort_by_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsortByColumn: MonthNumber
+\t\tsummarizeBy: none
+\t\tsourceColumn: MonthName
+""")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any('sortByColumn references missing column "MonthNumber"' in f["message"] for f in errors))
+
+    def test_validate_reports_sort_by_cycle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tcolumn MonthName
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsortByColumn: MonthNumber
+\t\tsummarizeBy: none
+\t\tsourceColumn: MonthName
+
+\tcolumn MonthNumber
+\t\tdataType: int64
+\t\tlineageTag: c-2
+\t\tsortByColumn: MonthName
+\t\tsummarizeBy: none
+\t\tsourceColumn: MonthNumber
+""")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any("sortByColumn cycle detected" in f["message"] for f in errors))
+
+    def test_validate_reports_invalid_date_table_shape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Date.tmdl", """
+table Date
+\tdataCategory: Time
+
+\tcolumn DateText
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tisKey
+\t\tsummarizeBy: none
+\t\tsourceColumn: DateText
+""")
+            findings = validate_relationships(root)
+            errors = [f for f in findings if f["severity"] == "error"]
+            self.assertTrue(any("must use a date or dateTime data type" in f["message"] for f in errors))
 
     def test_validate_json(self):
         runner = CliRunner()

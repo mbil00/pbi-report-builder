@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .desktop_metadata import (
+    normalize_data_category,
+    normalize_model_data_type,
+    normalize_summarize_by,
+    normalize_table_data_category,
+)
 from .parser import _TMDL_PROPERTY_NAMES, _parse_tmdl_name
 from .schema import SemanticModel
 
@@ -20,6 +26,17 @@ _MEMBER_PROPERTY_WHITELIST = frozenset({
 
 _TABLE_PROPERTY_WHITELIST = frozenset({
     "dataCategory",
+})
+_COLUMN_PROPERTY_WHITELIST = frozenset({
+    "dataCategory",
+    "displayFolder",
+    "formatString",
+    "sortByColumn",
+    "summarizeBy",
+})
+_MEASURE_PROPERTY_WHITELIST = frozenset({
+    "displayFolder",
+    "formatString",
 })
 
 _RESERVED_OBJECT_NAMES = frozenset({
@@ -123,6 +140,47 @@ def validate_measure_name(measure_name: str) -> None:
     validate_model_object_name(measure_name, "measure")
 
 
+def _normalize_member_property_value(
+    loaded_model: SemanticModel,
+    *,
+    table_name: str,
+    field_name: str,
+    field_type: str,
+    property_name: str,
+    property_value: str,
+) -> str:
+    if field_type == "measure":
+        allowed = ", ".join(sorted(_MEASURE_PROPERTY_WHITELIST))
+        if property_name not in _MEASURE_PROPERTY_WHITELIST:
+            raise ValueError(
+                f'Property "{property_name}" is not writable on measures. Allowed: {allowed}'
+            )
+    else:
+        allowed = ", ".join(sorted(_COLUMN_PROPERTY_WHITELIST))
+        if property_name not in _COLUMN_PROPERTY_WHITELIST:
+            raise ValueError(
+                f'Property "{property_name}" is not writable on columns. Allowed: {allowed}'
+            )
+
+    if property_name == "summarizeBy":
+        return normalize_summarize_by(property_value)
+    if property_name == "dataCategory":
+        return normalize_data_category(property_value)
+    if property_name == "sortByColumn":
+        table = loaded_model.find_table(table_name)
+        target = table.find_column(property_value)
+        if target.name.lower() == field_name.lower():
+            raise ValueError(f'Column "{table.name}.{field_name}" cannot sort by itself.')
+        return target.name
+    return property_value
+
+
+def _normalize_table_property_value(property_name: str, property_value: str) -> str:
+    if property_name == "dataCategory":
+        return normalize_table_data_category(property_value)
+    return property_value
+
+
 def _commit_tmdl_lines(
     path: Path,
     lines: list[str],
@@ -169,6 +227,14 @@ def set_member_property(
     table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+    normalized_value = _normalize_member_property_value(
+        loaded_model,
+        table_name=table.name,
+        field_name=field_name,
+        field_type=field_type,
+        property_name=property_name,
+        property_value=property_value,
+    )
 
     member_kind = "measure" if field_type == "measure" else "column"
     updated = _update_member_property(
@@ -176,7 +242,7 @@ def set_member_property(
         member_kind=member_kind,
         member_name=field_name,
         property_name=property_name,
-        property_value=property_value,
+        property_value=normalized_value,
         dry_run=dry_run,
         edit_session=edit_session,
     )
@@ -203,11 +269,12 @@ def set_table_property(
     table = loaded_model.find_table(table_name)
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+    normalized_value = _normalize_table_property_value(property_name, property_value)
 
     updated = _update_table_property(
         table.definition_path,
         property_name=property_name,
-        property_value=property_value,
+        property_value=normalized_value,
         dry_run=dry_run,
         edit_session=edit_session,
     )
@@ -526,13 +593,14 @@ def create_calculated_column(
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
     if any(column.name.lower() == column_name.lower() for column in table.columns):
         raise ValueError(f'Column "{column_name}" already exists in table "{table.name}".')
+    normalized_data_type = normalize_model_data_type(data_type)
 
     lines = _get_tmdl_lines(table.definition_path, edit_session)
     insert_at = _column_insert_index(lines)
     block = _build_calculated_column_block(
         column_name,
         expression,
-        data_type=data_type,
+        data_type=normalized_data_type,
         format_string=format_string,
         lineage_tag=str(uuid.uuid4()),
     )
@@ -1394,6 +1462,146 @@ def create_calculated_table(
 # ── Relationship validation ─────────────────────────────────────
 
 
+def _normalize_existing_model_data_type(data_type: str) -> str:
+    text = (data_type or "").strip()
+    if not text:
+        return ""
+    try:
+        return normalize_model_data_type(text)
+    except ValueError:
+        return text.lower()
+
+
+def _is_date_like_model_type(data_type: str) -> bool:
+    return _normalize_existing_model_data_type(data_type) in {"date", "dateTime"}
+
+
+def _relationship_filter_edges(rel, properties: dict[str, str]) -> list[tuple[str, str]]:
+    cross_filter = properties.get("crossFilteringBehavior", "")
+    pair = (
+        properties.get("fromCardinality", "many"),
+        properties.get("toCardinality", "one"),
+    )
+    if cross_filter == "bothDirections" or (pair == ("one", "one") and cross_filter in {"", "automatic"}):
+        return [
+            (rel.to_table, rel.from_table),
+            (rel.from_table, rel.to_table),
+        ]
+    return [(rel.to_table, rel.from_table)]
+
+
+def _validate_model_metadata(loaded_model: SemanticModel) -> list[dict]:
+    findings: list[dict] = []
+
+    for table in loaded_model.tables:
+        if table.data_category:
+            try:
+                normalize_table_data_category(table.data_category)
+            except ValueError as e:
+                findings.append({
+                    "severity": "error",
+                    "relationship": table.name,
+                    "message": str(e),
+                })
+
+        key_columns = [column for column in table.columns if column.is_key]
+        if table.data_category == "Time":
+            if len(key_columns) > 1:
+                findings.append({
+                    "severity": "error",
+                    "relationship": table.name,
+                    "message": "Date tables can define only one key column.",
+                })
+            if not key_columns:
+                findings.append({
+                    "severity": "error",
+                    "relationship": table.name,
+                    "message": "Date table is missing an isKey date column.",
+                })
+            else:
+                key_column = key_columns[0]
+                if not _is_date_like_model_type(key_column.data_type):
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{key_column.name}",
+                        "message": "Date table key column must use a date or dateTime data type.",
+                    })
+
+        sort_targets: dict[str, str] = {}
+        for column in table.columns:
+            if column.data_type and column.data_type != "unknown":
+                try:
+                    normalize_model_data_type(column.data_type)
+                except ValueError as e:
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{column.name}",
+                        "message": str(e),
+                    })
+
+            if column.summarize_by:
+                try:
+                    normalize_summarize_by(column.summarize_by)
+                except ValueError as e:
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{column.name}",
+                        "message": str(e),
+                    })
+
+            if column.data_category:
+                try:
+                    normalize_data_category(column.data_category)
+                except ValueError as e:
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{column.name}",
+                        "message": str(e),
+                    })
+
+            if column.sort_by_column:
+                try:
+                    target = table.find_column(column.sort_by_column)
+                except ValueError:
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{column.name}",
+                        "message": f'sortByColumn references missing column "{column.sort_by_column}".',
+                    })
+                    continue
+                if target.name.lower() == column.name.lower():
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{column.name}",
+                        "message": "sortByColumn cannot reference the same column.",
+                    })
+                    continue
+                sort_targets[column.name] = target.name
+
+        reported_cycles: set[tuple[str, ...]] = set()
+        for start in sorted(sort_targets):
+            path: list[str] = []
+            index_by_name: dict[str, int] = {}
+            current = start
+            while current in sort_targets:
+                if current in index_by_name:
+                    cycle = tuple(path[index_by_name[current] :] + [current])
+                    rotated = min(tuple(cycle[i:] + cycle[:i]) for i in range(len(cycle) - 1))
+                    if rotated not in reported_cycles:
+                        reported_cycles.add(rotated)
+                        findings.append({
+                            "severity": "error",
+                            "relationship": table.name,
+                            "message": "sortByColumn cycle detected: " + " -> ".join(cycle) + ".",
+                        })
+                    break
+                index_by_name[current] = len(path)
+                path.append(current)
+                current = sort_targets[current]
+
+    return findings
+
+
 def validate_relationships(
     project_root: Path,
     *,
@@ -1405,10 +1613,12 @@ def validate_relationships(
     Severity: "warning" or "info".
     """
     loaded_model = model or SemanticModel.load(project_root)
-    findings: list[dict] = []
+    findings: list[dict] = _validate_model_metadata(loaded_model)
 
     active_adj: dict[str, set[str]] = {}
+    active_edge_labels: dict[tuple[str, str], list[str]] = {}
     active_tables: set[str] = set()
+    table_lookup = {table.name.lower(): table for table in loaded_model.tables}
 
     for rel in loaded_model.relationships:
         label = f"{rel.from_table}.{rel.from_column} -> {rel.to_table}.{rel.to_column}"
@@ -1422,6 +1632,42 @@ def validate_relationships(
                 "relationship": label,
                 "message": str(e),
             })
+
+        from_table = table_lookup.get(rel.from_table.lower())
+        to_table = table_lookup.get(rel.to_table.lower())
+        if from_table is None:
+            findings.append({
+                "severity": "error",
+                "relationship": label,
+                "message": f'Referenced table "{rel.from_table}" does not exist in the semantic model.',
+            })
+            continue
+        if to_table is None:
+            findings.append({
+                "severity": "error",
+                "relationship": label,
+                "message": f'Referenced table "{rel.to_table}" does not exist in the semantic model.',
+            })
+            continue
+
+        try:
+            from_column = from_table.find_column(rel.from_column)
+        except ValueError:
+            findings.append({
+                "severity": "error",
+                "relationship": label,
+                "message": f'Referenced column "{rel.from_table}.{rel.from_column}" does not exist in the semantic model.',
+            })
+            continue
+        try:
+            to_column = to_table.find_column(rel.to_column)
+        except ValueError:
+            findings.append({
+                "severity": "error",
+                "relationship": label,
+                "message": f'Referenced column "{rel.to_table}.{rel.to_column}" does not exist in the semantic model.',
+            })
+            continue
 
         # Check bidirectional cross-filter
         cfb = normalized_props.get("crossFilteringBehavior", "")
@@ -1458,47 +1704,82 @@ def validate_relationships(
                 "message": "Uses datePartOnly join — time component is ignored in joins.",
             })
 
-        if is_active != "false":
-            from_name = rel.from_table
-            to_name = rel.to_table
-            active_tables.add(from_name)
-            active_tables.add(to_name)
-            pair = (
-                normalized_props.get("fromCardinality", "many"),
-                normalized_props.get("toCardinality", "one"),
+        from_type = _normalize_existing_model_data_type(from_column.data_type)
+        to_type = _normalize_existing_model_data_type(to_column.data_type)
+        if (
+            from_type
+            and to_type
+            and from_type != "unknown"
+            and to_type != "unknown"
+            and from_type != to_type
+            and not (
+                jodb == "datePartOnly"
+                and _is_date_like_model_type(from_type)
+                and _is_date_like_model_type(to_type)
             )
-            if cfb == "bothDirections" or (pair == ("one", "one") and cfb in {"", "automatic"}):
-                active_adj.setdefault(from_name, set()).add(to_name)
-                active_adj.setdefault(to_name, set()).add(from_name)
-            else:
-                active_adj.setdefault(to_name, set()).add(from_name)
+        ):
+            findings.append({
+                "severity": "error",
+                "relationship": label,
+                "message": (
+                    "Relationship column data types do not match: "
+                    f"{rel.from_table}.{rel.from_column} is {from_column.data_type}, "
+                    f"but {rel.to_table}.{rel.to_column} is {to_column.data_type}."
+                ),
+            })
 
-    def _has_multiple_active_paths(start: str, end: str) -> bool:
-        paths = 0
+        if is_active != "false":
+            for source_name, target_name in _relationship_filter_edges(rel, normalized_props):
+                active_tables.add(source_name)
+                active_tables.add(target_name)
+                active_adj.setdefault(source_name, set()).add(target_name)
+                active_edge_labels.setdefault((source_name, target_name), []).append(label)
 
-        def _dfs(current: str, seen: set[str]) -> None:
-            nonlocal paths
-            if paths >= 2:
+    for (source_name, target_name), labels in sorted(active_edge_labels.items()):
+        if len(labels) > 1:
+            findings.append({
+                "severity": "error",
+                "relationship": f"{source_name} -> {target_name}",
+                "message": (
+                    "Multiple active relationships propagate filters along the same table edge: "
+                    + "; ".join(sorted(labels))
+                    + "."
+                ),
+            })
+
+    def _find_active_paths(start: str, end: str, *, limit: int = 2) -> list[list[str]]:
+        paths: list[list[str]] = []
+
+        def _dfs(current: str, path: list[str]) -> None:
+            if len(paths) >= limit:
                 return
             if current == end:
-                paths += 1
+                paths.append(path.copy())
                 return
             for neighbor in sorted(active_adj.get(current, set())):
-                if neighbor in seen:
+                if neighbor in path:
                     continue
-                _dfs(neighbor, seen | {neighbor})
+                path.append(neighbor)
+                _dfs(neighbor, path)
+                path.pop()
 
-        _dfs(start, {start})
-        return paths >= 2
+        _dfs(start, [start])
+        return paths
 
     active_table_list = sorted(active_tables)
-    for index, left in enumerate(active_table_list):
-        for right in active_table_list[index + 1 :]:
-            if _has_multiple_active_paths(left, right) or _has_multiple_active_paths(right, left):
+    reported_paths: set[tuple[str, str]] = set()
+    for source_name in active_table_list:
+        for target_name in active_table_list:
+            if source_name == target_name:
+                continue
+            paths = _find_active_paths(source_name, target_name)
+            if len(paths) >= 2 and (source_name, target_name) not in reported_paths:
+                reported_paths.add((source_name, target_name))
+                rendered = "; ".join(" -> ".join(path) for path in paths[:2])
                 findings.append({
                     "severity": "error",
-                    "relationship": f"{left} ↔ {right}",
-                    "message": "Ambiguous active relationship paths detected between these tables.",
+                    "relationship": f"{source_name} -> {target_name}",
+                    "message": f"Ambiguous active relationship paths detected: {rendered}.",
                 })
 
     # Check for tables with shared column names but no relationship
@@ -1512,6 +1793,8 @@ def validate_relationships(
 
     related_pairs: set[tuple[str, str]] = set()
     for rel in loaded_model.relationships:
+        if rel.from_table.lower() not in table_lookup or rel.to_table.lower() not in table_lookup:
+            continue
         ft = rel.from_table
         tt = rel.to_table
         pair = (min(ft, tt), max(ft, tt))
