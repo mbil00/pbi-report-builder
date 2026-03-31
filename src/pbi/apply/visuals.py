@@ -25,6 +25,7 @@ from .visual_support import (
     parse_position,
     parse_size,
     raw_object_roots,
+    record_schema_warnings,
     resolve_style_assignments,
 )
 from pbi.project import Project, Page, Visual, sanitize_visual_name
@@ -157,8 +158,7 @@ def apply_visual(
         try:
             sw = set_property(visual.data, prop_name, str(value), VISUAL_PROPERTIES)
             result.properties_set += 1
-            for warning in sw:
-                result.warnings.append(f"{context}: {warning}")
+            record_schema_warnings(result, context=context, warnings=sw)
         except ValueError as e:
             result.errors.append(f'{context}: style "{style_name}" {prop_name}: {e}')
             return

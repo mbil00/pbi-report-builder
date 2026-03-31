@@ -616,6 +616,8 @@ def _is_known_chart_schema_gap(visual_type: str, obj_key: str, prop_key: str) ->
         return prop_key == "sourceFile.image" or prop_key.startswith("sourceFile.image.")
     if visual_type == "textbox" and obj_key in {"paragraph", "general"}:
         return prop_key == "paragraphs" or prop_key.startswith("paragraphs.")
+    if obj_key == "legend" and prop_key == "seriesOrder":
+        return True
     if visual_type == "tableEx" and ".expr.FillRule." in prop_key:
         return True
     if visual_type == "pivotTable" and ".expr.Conditional." in prop_key:

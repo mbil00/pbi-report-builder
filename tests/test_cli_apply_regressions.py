@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import shutil
 import tempfile
 import unittest
@@ -286,6 +287,79 @@ pages:
             self.assertEqual(updated.visual_type, "textSlicer")
             self.assertEqual(updated.position["x"], 5)
             self.assertEqual(updated.position["y"], 7)
+
+    def test_apply_rolls_back_on_chart_schema_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "badchart",
+                                    "type": "clusteredColumnChart",
+                                    "chart:legnd.show": True,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, yaml_content)
+
+            self.assertTrue(result.errors)
+            self.assertTrue(result.rolled_back)
+            self.assertTrue(any("Schema:" in error for error in result.errors))
+
+            restored = Project.find(root / "Sample.pbip")
+            with self.assertRaises(ValueError):
+                restored.find_page("Demo")
+
+    def test_apply_rolls_back_on_raw_pbir_schema_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = make_project(root / "source")
+            page = source.create_page("Demo")
+            visual = source.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            visual.data["name"] = "card1"
+            visual.save()
+
+            spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
+            exported_visual = spec["pages"][0]["visuals"][0]
+            exported_visual["pbir"] = copy.deepcopy(visual.data)
+            exported_visual["pbir"].setdefault("visual", {}).setdefault("objects", {})["legnd"] = [
+                {
+                    "properties": {
+                        "show": {
+                            "expr": {
+                                "Literal": {
+                                    "Value": "true",
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+
+            target = make_project(root / "target")
+            result = apply_yaml(target, yaml.safe_dump(spec, sort_keys=False))
+
+            self.assertTrue(result.errors)
+            self.assertTrue(result.rolled_back)
+            self.assertTrue(
+                any("Post-apply validation:" in error and "Schema:" in error for error in result.errors)
+            )
+
+            restored = Project.find(root / "target" / "Sample.pbip")
+            with self.assertRaises(ValueError):
+                restored.find_page("Demo")
 
     def test_overwrite_backup_filename_is_sanitized(self) -> None:
         runner = CliRunner()

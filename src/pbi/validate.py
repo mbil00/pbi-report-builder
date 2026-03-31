@@ -25,7 +25,11 @@ class ValidationIssue:
     path: str = ""
 
 
-def validate_project(project: Project) -> list[ValidationIssue]:
+def validate_project(
+    project: Project,
+    *,
+    include_model_checks: bool = True,
+) -> list[ValidationIssue]:
     """Validate the entire project. Returns list of issues found."""
     issues: list[ValidationIssue] = []
     loaded_pages: dict[str, dict] = {}
@@ -100,7 +104,14 @@ def validate_project(project: Project) -> list[ValidationIssue]:
     issues.extend(_validate_layout(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
 
     # Validate cross-table relationships in visual bindings
-    issues.extend(_validate_visual_relationships(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
+    if include_model_checks:
+        issues.extend(
+            _validate_visual_relationships(
+                project,
+                loaded_pages=loaded_pages,
+                loaded_visuals=loaded_visuals,
+            )
+        )
 
     # Validate bookmarks
     bookmarks_dir = project.definition_folder / "bookmarks"
@@ -111,21 +122,22 @@ def validate_project(project: Project) -> list[ValidationIssue]:
         for bm_file in sorted(bookmarks_dir.glob("*.bookmark.json")):
             issues.extend(_validate_bookmark(bm_file))
 
-    try:
-        from pbi.model import validate_relationships
+    if include_model_checks:
+        try:
+            from pbi.model import validate_relationships
 
-        for finding in validate_relationships(project.root):
-            if finding["severity"] != "error":
-                continue
-            issues.append(
-                ValidationIssue(
-                    "definition/relationships.tmdl",
-                    finding["severity"],
-                    f'Model: {finding["relationship"]}: {finding["message"]}',
+            for finding in validate_relationships(project.root):
+                if finding["severity"] != "error":
+                    continue
+                issues.append(
+                    ValidationIssue(
+                        "definition/relationships.tmdl",
+                        finding["severity"],
+                        f'Model: {finding["relationship"]}: {finding["message"]}',
+                    )
                 )
-            )
-    except FileNotFoundError:
-        pass
+        except FileNotFoundError:
+            pass
 
     return issues
 
@@ -870,6 +882,9 @@ def _is_known_schema_gap(
 
     if property_name is None:
         return False
+
+    if object_name == "legend" and property_name == "seriesOrder":
+        return True
 
     # Conditional formatting expressions on table/matrix visuals
     if visual_type in ("tableEx", "pivotTable"):

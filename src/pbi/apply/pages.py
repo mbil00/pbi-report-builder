@@ -17,6 +17,7 @@ from .state import (
 from .visual_support import (
     apply_nested_properties,
     count_dry_run_changes,
+    record_schema_warnings,
 )
 from .visuals import apply_visual
 from pbi.project import Project
@@ -90,8 +91,11 @@ def apply_page(
                     try:
                         sw = set_property(page.data, prop_name, value, PAGE_PROPERTIES)
                         result.properties_set += 1
-                        for warning in sw:
-                            result.warnings.append(f"Page {page_name}: {warning}")
+                        record_schema_warnings(
+                            result,
+                            context=f"Page {page_name}",
+                            warnings=sw,
+                        )
                     except ValueError as e:
                         result.errors.append(f"Page {page_name}: {prop_name}: {e}")
                 else:

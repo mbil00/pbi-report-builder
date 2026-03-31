@@ -6,6 +6,7 @@ import yaml
 
 from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
 from pbi.theme_roundtrip import apply_theme_spec as _apply_theme_spec
+from pbi.validate import ValidationIssue, validate_project
 
 from .pages import apply_page
 from .ops import (
@@ -33,6 +34,11 @@ def apply_yaml(
     result = ApplyResult()
     style_cache: dict[str, StylePreset] = {}
     session = _ApplySession(dry_run=dry_run)
+    baseline_validation = (
+        _validation_issue_keys(validate_project(project, include_model_checks=False))
+        if not dry_run
+        else set()
+    )
 
     try:
         spec = yaml.safe_load(yaml_content)
@@ -101,6 +107,11 @@ def apply_yaml(
 
             if not dry_run:
                 _validate_apply_invariants(project, result)
+                _record_post_apply_validation(
+                    project,
+                    result,
+                    baseline_validation=baseline_validation,
+                )
         except Exception:
             if session.snapshot_dir is not None:
                 session.restore(project)
@@ -142,3 +153,43 @@ def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
         if isinstance(item, dict) and isinstance(item.get("children"), list):
             if not isinstance(item.get("name"), str) or not item.get("name"):
                 result.errors.append("Bookmark groups must include a name identifier.")
+
+
+def _record_post_apply_validation(
+    project: Project,
+    result: ApplyResult,
+    *,
+    baseline_validation: set[tuple[str, str, str, str]],
+) -> None:
+    """Promote new structural/schema validation issues into apply results."""
+    for issue in validate_project(project, include_model_checks=False):
+        identity = _validation_issue_identity(issue)
+        if identity in baseline_validation:
+            continue
+
+        message = f"Post-apply validation: {issue.file}: {issue.message}"
+        if issue.level == "error" or _is_schema_validation_warning(issue):
+            _append_unique(result.errors, message)
+        else:
+            _append_unique(result.warnings, message)
+
+
+def _validation_issue_keys(issues: list[ValidationIssue]) -> set[tuple[str, str, str, str]]:
+    """Normalize validation issues for pre/post apply comparison."""
+    return {_validation_issue_identity(issue) for issue in issues}
+
+
+def _validation_issue_identity(issue: ValidationIssue) -> tuple[str, str, str, str]:
+    """Return a stable identity for diffing validation output."""
+    return (issue.file, issue.level, issue.message, issue.path)
+
+
+def _is_schema_validation_warning(issue: ValidationIssue) -> bool:
+    """Return True when a warning indicates schema-invalid PBIR output."""
+    return issue.level == "warning" and "schema" in issue.message.lower()
+
+
+def _append_unique(messages: list[str], message: str) -> None:
+    """Append a result message only once."""
+    if message not in messages:
+        messages.append(message)

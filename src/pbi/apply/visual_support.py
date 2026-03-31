@@ -18,6 +18,17 @@ from pbi.styles import StylePreset, get_style
 from pbi.textbox import set_textbox_content
 
 
+def record_schema_warnings(
+    result: ApplyResult,
+    *,
+    context: str,
+    warnings: list[str],
+) -> None:
+    """Record schema-derived property warnings with apply context."""
+    for warning in warnings:
+        result.warnings.append(f"{context}: Schema: {warning}")
+
+
 def apply_nested_properties(
     data: dict,
     spec: dict,
@@ -44,8 +55,7 @@ def apply_nested_properties(
         try:
             sw = set_property(data, prop_name, str_value, registry)
             result.properties_set += 1
-            for warning in sw:
-                result.warnings.append(f"{context}: {warning}")
+            record_schema_warnings(result, context=context, warnings=sw)
         except ValueError as e:
             if ignore_selector_errors and "[" in prop_name and "]" in prop_name:
                 continue
