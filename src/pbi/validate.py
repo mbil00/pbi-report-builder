@@ -111,6 +111,22 @@ def validate_project(project: Project) -> list[ValidationIssue]:
         for bm_file in sorted(bookmarks_dir.glob("*.bookmark.json")):
             issues.extend(_validate_bookmark(bm_file))
 
+    try:
+        from pbi.model import validate_relationships
+
+        for finding in validate_relationships(project.root):
+            if finding["severity"] != "error":
+                continue
+            issues.append(
+                ValidationIssue(
+                    "definition/relationships.tmdl",
+                    finding["severity"],
+                    f'Model: {finding["relationship"]}: {finding["message"]}',
+                )
+            )
+    except FileNotFoundError:
+        pass
+
     return issues
 
 

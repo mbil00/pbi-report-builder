@@ -70,6 +70,66 @@ def _find_relationship_block(
 
 
 _TMDL_CFB_MAP = {"singledirection": "oneDirection", "single": "oneDirection"}
+_VALID_CROSS_FILTER_VALUES = {"oneDirection", "bothDirections", "automatic"}
+_VALID_CARDINALITY_VALUES = {"one", "many"}
+_VALID_BOOLEAN_VALUES = {"true", "false"}
+
+
+def normalize_relationship_properties(properties: dict[str, str] | None) -> dict[str, str]:
+    """Normalize writable relationship properties to canonical stored values."""
+    normalized: dict[str, str] = {}
+    for key, value in (properties or {}).items():
+        text = str(value).strip()
+        if key == "crossFilteringBehavior":
+            normalized[key] = _TMDL_CFB_MAP.get(text.lower(), text)
+        elif key in {"fromCardinality", "toCardinality", "isActive"}:
+            normalized[key] = text.lower()
+        else:
+            normalized[key] = text
+    return normalized
+
+
+def validate_relationship_properties(properties: dict[str, str] | None) -> None:
+    """Validate writable relationship semantics before persisting them."""
+    normalized = normalize_relationship_properties(properties)
+    cross_filter = normalized.get("crossFilteringBehavior")
+    if cross_filter and cross_filter not in _VALID_CROSS_FILTER_VALUES:
+        raise ValueError(
+            f'Invalid crossFilteringBehavior "{cross_filter}". '
+            "Valid values: oneDirection, bothDirections, automatic."
+        )
+
+    is_active = normalized.get("isActive")
+    if is_active and is_active not in _VALID_BOOLEAN_VALUES:
+        raise ValueError(f'Invalid isActive "{is_active}". Use true or false.')
+
+    from_cardinality = normalized.get("fromCardinality")
+    to_cardinality = normalized.get("toCardinality")
+    for key, value in (
+        ("fromCardinality", from_cardinality),
+        ("toCardinality", to_cardinality),
+    ):
+        if value and value not in _VALID_CARDINALITY_VALUES:
+            raise ValueError(f'Invalid {key} "{value}". Valid values: one, many.')
+
+    if from_cardinality and not to_cardinality:
+        raise ValueError("Set both fromCardinality and toCardinality together.")
+    if to_cardinality and not from_cardinality:
+        raise ValueError("Set both fromCardinality and toCardinality together.")
+
+    if from_cardinality and to_cardinality:
+        pair = (from_cardinality, to_cardinality)
+        if pair not in {("many", "one"), ("many", "many"), ("one", "one")}:
+            raise ValueError(
+                "Invalid cardinality orientation. Use fromCardinality=many and toCardinality=one "
+                "for standard many-to-one relationships, many/many for many-to-many, or one/one "
+                "for one-to-one."
+            )
+        if pair == ("one", "one") and cross_filter == "oneDirection":
+            raise ValueError(
+                "One-to-one relationships cannot use crossFilteringBehavior=oneDirection. "
+                "Use bothDirections or omit the cross-filter setting."
+            )
 
 
 def _build_relationship_block(
@@ -86,8 +146,6 @@ def _build_relationship_block(
     if properties:
         for key, value in properties.items():
             if key not in ("fromColumn", "toColumn"):
-                if key == "crossFilteringBehavior":
-                    value = _TMDL_CFB_MAP.get(value.lower(), value)
                 lines.append(f"\t{key}: {value}")
     lines.append(f"\tfromColumn: {_format_tmdl_field_ref(from_table, from_column)}")
     lines.append(f"\ttoColumn: {_format_tmdl_field_ref(to_table, to_column)}")
@@ -127,6 +185,9 @@ def create_relationship(
                 f'Relationship from "{source_table.name}.{from_column}" to "{target_table.name}.{to_column}" already exists.'
             )
 
+    normalized_properties = normalize_relationship_properties(properties)
+    validate_relationship_properties(normalized_properties)
+
     rel_id = str(uuid.uuid4())
     block = _build_relationship_block(
         rel_id,
@@ -134,7 +195,7 @@ def create_relationship(
         from_column,
         target_table.name,
         to_column,
-        properties=properties,
+        properties=normalized_properties,
     )
 
     rel_path = _get_relationships_path(project_root, loaded_model)
@@ -227,8 +288,24 @@ def set_relationship_property(
             f'Relationship from "{source_table.name}.{from_column}" to "{target_table.name}.{to_column}" not found.'
         )
 
+    current_properties: dict[str, str] = {}
+    for relationship in loaded_model.relationships:
+        if (
+            relationship.from_table.lower() == source_table.name.lower()
+            and relationship.from_column.lower() == from_column.lower()
+            and relationship.to_table.lower() == target_table.name.lower()
+            and relationship.to_column.lower() == to_column.lower()
+        ):
+            current_properties.update(relationship.properties)
+            break
+
+    normalized_value = normalize_relationship_properties({prop_name: prop_value}).get(prop_name, prop_value)
+    candidate_properties = dict(current_properties)
+    candidate_properties[prop_name] = normalized_value
+    validate_relationship_properties(candidate_properties)
+
     start, end = result
-    replacement = f"\t{prop_name}: {prop_value}"
+    replacement = f"\t{prop_name}: {normalized_value}"
     for index in range(start + 1, end):
         if lines[index].strip().startswith(f"{prop_name}:"):
             if lines[index] == replacement:

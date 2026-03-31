@@ -16,6 +16,7 @@ from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
 from pbi.filters import add_topn_filter
+from pbi.formatting import build_measure_format, set_conditional_format
 from pbi.images import add_image, build_image_resource_property
 from pbi.project import Project
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
@@ -23,6 +24,7 @@ from pbi.schema_refs import REPORT_SCHEMA
 from pbi.styles import create_style
 from pbi.textbox import set_textbox_content
 from pbi.themes import apply_theme, create_theme
+from pbi.validate import validate_project
 
 
 class YamlRoundTripTests(unittest.TestCase):
@@ -186,6 +188,69 @@ class YamlRoundTripTests(unittest.TestCase):
             filters = page.data["filterConfig"]["filters"]
             self.assertEqual(len(filters), 1)
             self.assertEqual(filters[0]["type"], "TopN")
+
+    def test_round_trip_preserves_selector_based_conditional_formatting_via_pbir_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._make_project(root / "source")
+            tables_dir = source.root / "Sample.SemanticModel" / "definition" / "tables"
+            tables_dir.mkdir(parents=True)
+            (tables_dir / "Customers.tmdl").write_text(
+                "\n".join(
+                    [
+                        "table Customers",
+                        "\tcolumn Region",
+                        "\t\tdataType: string",
+                        "\t\tlineageTag: c-1",
+                        "\t\tsummarizeBy: none",
+                        "\t\tsourceColumn: Region",
+                    ]
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+            page = source.create_page("Demo")
+            visual = source.create_visual(page, "tableEx")
+            visual.data["name"] = "table1"
+            source.add_binding(visual, "Values", "Customers", "Region")
+            set_conditional_format(
+                visual.data,
+                "values",
+                "backColor",
+                build_measure_format("Customers", "Region"),
+                column="Customers.Region",
+            )
+            visual.save()
+
+            spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
+            exported = spec["pages"][0]["visuals"][0]
+            self.assertNotIn("chart:values.backColor [Customers.Region]", exported)
+            self.assertIn("pbir", exported)
+
+            target = self._make_project(root / "target")
+            target_tables = target.root / "Sample.SemanticModel" / "definition" / "tables"
+            target_tables.mkdir(parents=True)
+            (target_tables / "Customers.tmdl").write_text(
+                "\n".join(
+                    [
+                        "table Customers",
+                        "\tcolumn Region",
+                        "\t\tdataType: string",
+                        "\t\tlineageTag: c-1",
+                        "\t\tsummarizeBy: none",
+                        "\t\tsourceColumn: Region",
+                    ]
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+            result = apply_yaml(target, yaml.safe_dump(spec, sort_keys=False), overwrite=True)
+            self.assertEqual(result.errors, [])
+            self.assertEqual(result.warnings, [])
+
+            issues = validate_project(target)
+            schema_warnings = [issue.message for issue in issues if issue.message.startswith("Schema:")]
+            self.assertEqual(schema_warnings, [])
 
     def test_round_trip_preserves_rich_bookmarks_and_updates_in_place(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

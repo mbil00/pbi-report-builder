@@ -351,6 +351,7 @@ def export_object_properties(
     objects_path: str,
     skip_objects: set[str] | None = None,
     root_aliases: Mapping[str, str] | None = None,
+    scalar_only: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """Export object collections into canonical nested YAML properties."""
     result: dict[str, dict[str, Any]] = {}
@@ -371,6 +372,8 @@ def export_object_properties(
             selector_id = selector.get("id")
             for prop_name, raw_value in entry.get("properties", {}).items():
                 decoded = decode_pbi_value(raw_value)
+                if scalar_only and isinstance(decoded, (dict, list)):
+                    continue
                 canonical = canonical_object_property_name(
                     obj_key,
                     prop_name,

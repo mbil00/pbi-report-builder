@@ -165,6 +165,19 @@ def model_table_create(
 
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
     console.print(f'{prefix}Created calculated table [cyan]{name}[/cyan]')
+    if dry_run:
+        return
+    try:
+        _, model = get_model(project)
+        created_table = model.find_table(name)
+    except ValueError:
+        return
+    if not created_table.columns:
+        console.print(
+            "[yellow]Warning:[/yellow] "
+            f'Calculated table [cyan]{name}[/cyan] was created without inferred column metadata. '
+            "Field-based model commands may fail until columns are materialized in TMDL."
+        )
 
 
 @model_table_app.command("rename")

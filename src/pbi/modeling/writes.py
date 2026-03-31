@@ -33,6 +33,21 @@ _RESERVED_TABLE_NAMES = frozenset({
     "measures",
 })
 
+_DATATABLE_TYPE_MAP = {
+    "STRING": "string",
+    "TEXT": "string",
+    "DOUBLE": "double",
+    "DECIMAL": "double",
+    "CURRENCY": "double",
+    "INTEGER": "int64",
+    "INT64": "int64",
+    "WHOLE": "int64",
+    "DATETIME": "dateTime",
+    "DATE": "dateTime",
+    "BOOLEAN": "boolean",
+    "BOOL": "boolean",
+}
+
 
 @dataclass
 class TmdlEditSession:
@@ -806,6 +821,118 @@ def _write_tmdl_lines(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _split_top_level_args(text: str) -> list[str]:
+    """Split a function call argument list on top-level commas."""
+    items: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_string = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == '"':
+            current.append(ch)
+            if in_string and i + 1 < len(text) and text[i + 1] == '"':
+                current.append(text[i + 1])
+                i += 2
+                continue
+            in_string = not in_string
+            i += 1
+            continue
+        if not in_string:
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth = max(0, depth - 1)
+            elif ch == "," and depth == 0:
+                items.append("".join(current).strip())
+                current = []
+                i += 1
+                continue
+        current.append(ch)
+        i += 1
+    tail = "".join(current).strip()
+    if tail:
+        items.append(tail)
+    return items
+
+
+def _extract_function_args(expression: str, function_name: str) -> list[str] | None:
+    """Return top-level arguments for a simple FUNCTION(arg1, arg2) expression."""
+    stripped = textwrap.dedent(expression).strip()
+    pattern = re.compile(rf"^{function_name}\s*\((.*)\)\s*$", re.IGNORECASE | re.DOTALL)
+    match = pattern.match(stripped)
+    if match is None:
+        return None
+    return _split_top_level_args(match.group(1))
+
+
+def _infer_calculated_table_columns(expression: str) -> list[tuple[str, str]]:
+    """Infer common calculated-table column definitions from the DAX shape."""
+    row_args = _extract_function_args(expression, "ROW")
+    if row_args is not None:
+        columns: list[tuple[str, str]] = []
+        for index in range(0, len(row_args), 2):
+            if index + 1 >= len(row_args):
+                break
+            name_token = row_args[index].strip()
+            if len(name_token) >= 2 and name_token.startswith('"') and name_token.endswith('"'):
+                columns.append((name_token[1:-1].replace('""', '"'), "string"))
+        return columns
+
+    datatable_args = _extract_function_args(expression, "DATATABLE")
+    if datatable_args is not None:
+        columns = []
+        index = 0
+        while index + 1 < len(datatable_args):
+            name_token = datatable_args[index].strip()
+            type_token = datatable_args[index + 1].strip().upper()
+            if not (len(name_token) >= 2 and name_token.startswith('"') and name_token.endswith('"')):
+                break
+            if type_token not in _DATATABLE_TYPE_MAP:
+                break
+            columns.append((name_token[1:-1].replace('""', '"'), _DATATABLE_TYPE_MAP[type_token]))
+            index += 2
+        return columns
+
+    if _extract_function_args(expression, "CALENDAR") is not None or _extract_function_args(expression, "CALENDARAUTO") is not None:
+        return [("Date", "dateTime")]
+
+    if _extract_function_args(expression, "GENERATESERIES") is not None:
+        return [("Value", "double")]
+
+    addcolumns_args = _extract_function_args(expression, "ADDCOLUMNS")
+    if addcolumns_args is not None and addcolumns_args:
+        columns = _infer_calculated_table_columns(addcolumns_args[0])
+        seen = {name.lower() for name, _data_type in columns}
+        for index in range(1, len(addcolumns_args), 2):
+            if index + 1 >= len(addcolumns_args):
+                break
+            name_token = addcolumns_args[index].strip()
+            if len(name_token) < 2 or not (name_token.startswith('"') and name_token.endswith('"')):
+                continue
+            column_name = name_token[1:-1].replace('""', '"')
+            if column_name.lower() in seen:
+                continue
+            columns.append((column_name, "string"))
+            seen.add(column_name.lower())
+        return columns
+
+    return []
+
+
+def _build_inferred_table_column_block(column_name: str, data_type: str) -> list[str]:
+    """Build a minimal column block for an inferred calculated-table column."""
+    source_column = column_name.replace("]", "]]")
+    return [
+        f"\tcolumn {_format_tmdl_name(column_name)}",
+        f"\t\tdataType: {data_type}",
+        f"\t\tlineageTag: {uuid.uuid4()}",
+        "\t\tsummarizeBy: none",
+        f"\t\tsourceColumn: [{source_column}]",
+    ]
+
+
 def _measure_insert_index(lines: list[str]) -> int:
     """Choose where a new measure block should be inserted in a table file."""
     last_measure_end: int | None = None
@@ -995,7 +1122,14 @@ def _format_tmdl_property_value(property_name: str, property_value: str) -> str:
 
 from .writes_hierarchies import create_hierarchy, delete_hierarchy
 from .writes_refs import find_field_dependents, find_field_references, rename_column, rename_measure, rename_table
-from .writes_relationships import _get_relationships_path, create_relationship, delete_relationship, set_relationship_property
+from .writes_relationships import (
+    _get_relationships_path,
+    create_relationship,
+    delete_relationship,
+    normalize_relationship_properties,
+    set_relationship_property,
+    validate_relationship_properties,
+)
 
 
 def _get_model_tmdl_path(model: SemanticModel) -> Path:
@@ -1224,6 +1358,15 @@ def create_calculated_table(
         "",
     ]
 
+    inferred_columns = _infer_calculated_table_columns(normalized)
+    for index, (column_name, data_type) in enumerate(inferred_columns):
+        tmdl_lines.extend(_build_inferred_table_column_block(column_name, data_type))
+        if index != len(inferred_columns) - 1:
+            tmdl_lines.append("")
+
+    if inferred_columns:
+        tmdl_lines.append("")
+
     # Partition block
     partition_name = _format_tmdl_name(table_name)
     if len(expr_lines) == 1:
@@ -1264,11 +1407,24 @@ def validate_relationships(
     loaded_model = model or SemanticModel.load(project_root)
     findings: list[dict] = []
 
+    active_adj: dict[str, set[str]] = {}
+    active_tables: set[str] = set()
+
     for rel in loaded_model.relationships:
         label = f"{rel.from_table}.{rel.from_column} -> {rel.to_table}.{rel.to_column}"
+        normalized_props = normalize_relationship_properties(rel.properties)
+
+        try:
+            validate_relationship_properties(normalized_props)
+        except ValueError as e:
+            findings.append({
+                "severity": "error",
+                "relationship": label,
+                "message": str(e),
+            })
 
         # Check bidirectional cross-filter
-        cfb = rel.properties.get("crossFilteringBehavior", "")
+        cfb = normalized_props.get("crossFilteringBehavior", "")
         if cfb == "bothDirections":
             findings.append({
                 "severity": "warning",
@@ -1277,7 +1433,7 @@ def validate_relationships(
             })
 
         # Check inactive relationships
-        is_active = rel.properties.get("isActive", "")
+        is_active = normalized_props.get("isActive", "")
         if is_active == "false":
             findings.append({
                 "severity": "info",
@@ -1294,13 +1450,56 @@ def validate_relationships(
             })
 
         # Check joinOnDateBehavior (often auto-created for date tables)
-        jodb = rel.properties.get("joinOnDateBehavior", "")
+        jodb = normalized_props.get("joinOnDateBehavior", "")
         if jodb == "datePartOnly":
             findings.append({
                 "severity": "info",
                 "relationship": label,
                 "message": "Uses datePartOnly join — time component is ignored in joins.",
             })
+
+        if is_active != "false":
+            from_name = rel.from_table
+            to_name = rel.to_table
+            active_tables.add(from_name)
+            active_tables.add(to_name)
+            pair = (
+                normalized_props.get("fromCardinality", "many"),
+                normalized_props.get("toCardinality", "one"),
+            )
+            if cfb == "bothDirections" or (pair == ("one", "one") and cfb in {"", "automatic"}):
+                active_adj.setdefault(from_name, set()).add(to_name)
+                active_adj.setdefault(to_name, set()).add(from_name)
+            else:
+                active_adj.setdefault(to_name, set()).add(from_name)
+
+    def _has_multiple_active_paths(start: str, end: str) -> bool:
+        paths = 0
+
+        def _dfs(current: str, seen: set[str]) -> None:
+            nonlocal paths
+            if paths >= 2:
+                return
+            if current == end:
+                paths += 1
+                return
+            for neighbor in sorted(active_adj.get(current, set())):
+                if neighbor in seen:
+                    continue
+                _dfs(neighbor, seen | {neighbor})
+
+        _dfs(start, {start})
+        return paths >= 2
+
+    active_table_list = sorted(active_tables)
+    for index, left in enumerate(active_table_list):
+        for right in active_table_list[index + 1 :]:
+            if _has_multiple_active_paths(left, right) or _has_multiple_active_paths(right, left):
+                findings.append({
+                    "severity": "error",
+                    "relationship": f"{left} ↔ {right}",
+                    "message": "Ambiguous active relationship paths detected between these tables.",
+                })
 
     # Check for tables with shared column names but no relationship
     table_columns: dict[str, set[str]] = {}

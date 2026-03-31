@@ -350,8 +350,15 @@ def model_check(
         console.print("[green]No issues found.[/green]")
         return
 
+    errors = [finding for finding in findings if finding["severity"] == "error"]
     warnings = [finding for finding in findings if finding["severity"] == "warning"]
     infos = [finding for finding in findings if finding["severity"] == "info"]
+
+    if errors:
+        console.print(f"\n[bold][red]Errors ({len(errors)})[/red][/bold]")
+        for finding in errors:
+            console.print(f"  [red]x[/red] [cyan]{finding['relationship']}[/cyan]")
+            console.print(f"    {finding['message']}")
 
     if warnings:
         console.print(f"\n[bold][yellow]Warnings ({len(warnings)})[/yellow][/bold]")
@@ -365,4 +372,6 @@ def model_check(
             console.print(f"  [dim]-[/dim] [cyan]{finding['relationship']}[/cyan]")
             console.print(f"    [dim]{finding['message']}[/dim]")
 
-    console.print(f"\n[dim]{len(warnings)} warning(s), {len(infos)} info(s)[/dim]")
+    console.print(f"\n[dim]{len(errors)} error(s), {len(warnings)} warning(s), {len(infos)} info(s)[/dim]")
+    if errors:
+        raise typer.Exit(1)

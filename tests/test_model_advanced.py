@@ -770,8 +770,13 @@ table Sales
 
             content = path.read_text()
             self.assertIn("table DateBridge", content)
+            self.assertIn("\tcolumn Date", content)
             self.assertIn("partition DateBridge = calculated", content)
             self.assertIn("CALENDAR", content)
+
+            model = SemanticModel.load(root)
+            table = model.find_table("DateBridge")
+            self.assertEqual([column.name for column in table.columns], ["Date"])
 
     def test_create_calculated_table_multiline(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -791,8 +796,27 @@ table Sales
 )"""
             name, path, _ = create_calculated_table(root, "Numbers", expr)
             content = path.read_text()
+            self.assertIn("\tcolumn Value", content)
             self.assertIn("ADDCOLUMNS", content)
             self.assertIn("GENERATESERIES", content)
+
+    def test_create_calculated_table_row_infers_columns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            create_calculated_table(root, "DimDivision", 'ROW("Contractual Division", "Corporate")')
+
+            model = SemanticModel.load(root)
+            table = model.find_table("DimDivision")
+            self.assertEqual([column.name for column in table.columns], ["Contractual Division"])
 
     def test_create_duplicate_table_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -990,6 +1014,33 @@ table Sales
             ])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No issues", result.stdout)
+
+    def test_validate_reports_ambiguous_active_paths(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            for name in ("A", "B", "C"):
+                _write_table(root, f"{name}.tmdl", f"""
+table {name}
+\tcolumn ID
+\t\tdataType: string
+\t\tlineageTag: {name.lower()}-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: ID
+""")
+            create_relationship(root, "A.ID", "B.ID")
+            create_relationship(root, "A.ID", "C.ID")
+            create_relationship(root, "C.ID", "B.ID")
+
+            validate_result = runner.invoke(app, ["validate", "--project", str(root / "Sample.pbip")])
+            self.assertEqual(validate_result.exit_code, 1, validate_result.stdout)
+            self.assertIn("Ambiguous active", validate_result.stdout)
+            self.assertIn("relationship paths", validate_result.stdout)
+
+            check_result = runner.invoke(app, ["model", "check", "--project", str(root / "Sample.pbip")])
+            self.assertEqual(check_result.exit_code, 1, check_result.stdout)
+            self.assertIn("Ambiguous active relationship paths", check_result.stdout)
 
     def test_validate_json(self):
         runner = CliRunner()

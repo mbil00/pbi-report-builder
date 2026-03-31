@@ -63,9 +63,9 @@ def model_relationships(
 
 @model_relationship_app.command("create")
 def model_relationship_create(
-    from_field: Annotated[str, typer.Argument(help="From column as Table.Column.")],
-    to_field: Annotated[str, typer.Argument(help="To column as Table.Column.")],
-    cross_filter: Annotated[str | None, typer.Option("--cross-filter", help="Cross-filter direction (oneDirection or bothDirections).")] = None,
+    from_field: Annotated[str, typer.Argument(help="From column as Table.Column. Use the many-side column here for standard many-to-one relationships.")],
+    to_field: Annotated[str, typer.Argument(help="To column as Table.Column. Use the one-side column here for standard many-to-one relationships.")],
+    cross_filter: Annotated[str | None, typer.Option("--cross-filter", help="Cross-filter direction. oneDirection flows from the one side to the many side; bothDirections enables bidirectional filtering.")] = None,
     inactive: Annotated[bool, typer.Option("--inactive", help="Create as inactive relationship.")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview the change without writing TMDL files.")] = False,
     project: ProjectOpt = None,
@@ -134,8 +134,8 @@ def model_relationship_delete(
 
 @model_relationship_app.command("set")
 def model_relationship_set(
-    from_field: Annotated[str, typer.Argument(help="From column as Table.Column.")],
-    to_field: Annotated[str, typer.Argument(help="To column as Table.Column.")],
+    from_field: Annotated[str, typer.Argument(help="From column as Table.Column. This should normally be the many-side column.")],
+    to_field: Annotated[str, typer.Argument(help="To column as Table.Column. This should normally be the one-side column.")],
     assignments: Annotated[list[str], typer.Argument(help="Property assignments as key=value.")],
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,

@@ -67,6 +67,37 @@ def apply_bindings(
         else:
             query_state.pop(canonical_role, None)
 
+    _prune_unbound_query_metadata(visual)
+
+
+def _prune_unbound_query_metadata(visual: Visual) -> None:
+    """Remove selector-based object metadata for fields that are no longer bound."""
+    query_state = (
+        visual.data.get("visual", {}).get("query", {}).get("queryState", {})
+    )
+    bound_refs = {
+        str(projection.get("queryRef", "")).lower()
+        for config in query_state.values()
+        if isinstance(config, dict)
+        for projection in config.get("projections", [])
+        if projection.get("queryRef")
+    }
+
+    objects = visual.data.setdefault("visual", {}).setdefault("objects", {})
+    for object_name, entries in list(objects.items()):
+        if not isinstance(entries, list):
+            continue
+        filtered = []
+        for entry in entries:
+            metadata = entry.get("selector", {}).get("metadata")
+            if isinstance(metadata, str) and metadata and metadata.lower() not in bound_refs:
+                continue
+            filtered.append(entry)
+        if filtered:
+            objects[object_name] = filtered
+        else:
+            objects.pop(object_name, None)
+
 
 def apply_sort(
     project: Project,

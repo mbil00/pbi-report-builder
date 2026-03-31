@@ -169,6 +169,7 @@ def _export_visual(project: Project, visual: Visual) -> dict:
                 container_objs,
                 VISUAL_PROPERTIES,
                 objects_path="visualContainerObjects",
+                scalar_only=True,
                 root_aliases={
                     "dropShadow": "shadow",
                     "subTitle": "subtitle",
@@ -188,6 +189,7 @@ def _export_visual(project: Project, visual: Visual) -> dict:
                 VISUAL_PROPERTIES,
                 objects_path="objects",
                 skip_objects={"columnWidth"},
+                scalar_only=True,
                 root_aliases={
                     "categoryAxis": "xAxis",
                     "valueAxis": "yAxis",

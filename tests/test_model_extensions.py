@@ -643,6 +643,64 @@ table Customers
             rel = model.relationships[0]
             self.assertEqual(rel.properties.get("crossFilteringBehavior"), "bothDirections")
 
+    def test_set_relationship_property_rejects_invalid_cardinality_orientation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
+            with self.assertRaisesRegex(ValueError, "Set both fromCardinality and toCardinality together"):
+                set_relationship_property(
+                    root,
+                    "Sales.CustomerID",
+                    "Customers.CustomerID",
+                    "fromCardinality",
+                    "one",
+                )
+
+    def test_create_relationship_rejects_invalid_cross_filter_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            with self.assertRaisesRegex(ValueError, "Invalid crossFilteringBehavior"):
+                create_relationship(
+                    root,
+                    "Sales.CustomerID",
+                    "Customers.CustomerID",
+                    properties={"crossFilteringBehavior": "sideways"},
+                )
+
     def test_delete_nonexistent_relationship_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -790,6 +848,37 @@ table Customers
             ])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("bothDirections", result.stdout)
+
+    def test_relationship_set_cli_rejects_invalid_semantics(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
+            result = runner.invoke(app, [
+                "model", "relationship", "set",
+                "Sales.CustomerID", "Customers.CustomerID",
+                "crossFilteringBehavior=sideways",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("Invalid crossFilteringBehavior", result.stdout)
 
 
 # ── Phase 3: Hierarchy CRUD ─────────────────────────────────────

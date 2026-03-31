@@ -564,3 +564,79 @@ class TestApplyPerformance(unittest.TestCase):
 
             self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
             self.assertEqual(load_mock.call_count, 1)
+
+    def test_apply_bindings_prunes_unbound_column_selector_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root, with_model=True)
+            customers_table = root / "Sample.SemanticModel" / "definition" / "tables" / "Customers.tmdl"
+            customers_table.write_text(
+                "\n".join(
+                    [
+                        "table Customers",
+                        "\tcolumn Region",
+                        "\t\tdataType: string",
+                        "\t\tlineageTag: c-1",
+                        "\t\tsummarizeBy: none",
+                        "\t\tsourceColumn: Region",
+                        "",
+                        "\tcolumn Segment",
+                        "\t\tdataType: string",
+                        "\t\tlineageTag: c-2",
+                        "\t\tsummarizeBy: none",
+                        "\t\tsourceColumn: Segment",
+                    ]
+                ) + "\n",
+                encoding="utf-8",
+            )
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "tableEx")
+            visual.data["name"] = "table1"
+            project.add_binding(visual, "Values", "Customers", "Region")
+            project.add_binding(visual, "Values", "Customers", "Segment")
+            visual.data["visual"].setdefault("objects", {})["columnWidth"] = [
+                {
+                    "selector": {"metadata": "Customers.Region"},
+                    "properties": {"value": {"expr": {"Literal": {"Value": "200D"}}}},
+                },
+                {
+                    "selector": {"metadata": "Customers.Segment"},
+                    "properties": {"value": {"expr": {"Literal": {"Value": "300D"}}}},
+                },
+            ]
+            visual.data["visual"]["objects"]["columnFormatting"] = [
+                {"selector": {"metadata": "Customers.Region"}},
+                {"selector": {"metadata": "Customers.Segment"}},
+            ]
+            visual.save()
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "table1",
+                                    "type": "tableEx",
+                                    "bindings": {"Values": ["Customers.Region"]},
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, yaml_content, overwrite=True)
+            self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
+
+            project.clear_caches()
+            updated = project.find_visual(project.find_page("Demo"), "table1")
+            column_width = updated.data["visual"]["objects"]["columnWidth"]
+            self.assertEqual(len(column_width), 1)
+            self.assertEqual(column_width[0]["selector"]["metadata"], "Customers.Region")
+            column_formatting = updated.data["visual"]["objects"]["columnFormatting"]
+            self.assertEqual(len(column_formatting), 1)
+            self.assertEqual(column_formatting[0]["selector"]["metadata"], "Customers.Region")
