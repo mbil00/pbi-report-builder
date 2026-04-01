@@ -31,6 +31,67 @@ class ConditionalFormatInfo:
     column: str = ""  # Per-column target (empty = all columns)
 
 
+def conditional_source_warning(
+    mode: str,
+    field_ref: str,
+    field_type: str,
+    data_type: str | None,
+) -> str | None:
+    """Return a validation warning for an invalid conditional-format source."""
+    from pbi.visual_analysis import normalize_semantic_data_type
+
+    actual_types = normalize_semantic_data_type(field_type, data_type)
+
+    if mode == "measure" and field_type != "measure":
+        return f'Conditional formatting mode "{mode}" requires a measure source, not {field_ref} ({field_type}).'
+
+    if mode == "gradient" and field_type == "column":
+        if actual_types and actual_types.isdisjoint({"numeric", "integer"}):
+            actual = ", ".join(sorted(actual_types))
+            return (
+                f'Conditional formatting mode "{mode}" requires a numeric source, '
+                f"not {field_ref} ({actual})."
+            )
+
+    return None
+
+
+def conditional_target_warning(
+    visual_type: str | None,
+    object_name: str,
+    property_name: str,
+) -> str | None:
+    """Return a validation warning for an invalid conditional-format target."""
+    if not visual_type or visual_type == "*":
+        return None
+
+    try:
+        from pbi.roles import normalize_visual_type
+        from pbi.visual_schema import get_property_type, validate_object, validate_property
+    except Exception:
+        return None
+
+    canonical_visual_type = normalize_visual_type(visual_type)
+
+    object_warning = validate_object(canonical_visual_type, object_name)
+    if object_warning is not None:
+        return str(object_warning)
+
+    property_warning = validate_property(canonical_visual_type, object_name, property_name)
+    if property_warning is not None:
+        return str(property_warning)
+
+    property_type = get_property_type(canonical_visual_type, object_name, property_name)
+    if property_type is None:
+        return None
+    if isinstance(property_type, list) or property_type != "color":
+        return (
+            f'Conditional formatting target "{object_name}.{property_name}" on '
+            f"{canonical_visual_type} is not a color property."
+        )
+    return None
+
+
 # ── JSON node builders ────────────────────────────────────────────
 
 def _field_expr(entity: str, prop: str, field_type: str = "measure") -> dict:

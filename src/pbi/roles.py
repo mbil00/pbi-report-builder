@@ -303,6 +303,10 @@ def _schema_roles(visual_type: str) -> list[dict]:
     """
     try:
         from pbi.visual_schema import get_data_roles
+        from pbi.visual_analysis import (
+            get_visual_analysis_role,
+            role_accepts_multiple,
+        )
     except Exception:
         return []
 
@@ -318,9 +322,15 @@ def _schema_roles(visual_type: str) -> list[dict]:
         if display.startswith("Role_"):
             display = name
         kind = info.get("kind", 2)
-        desc = f"{display} ({kind_desc.get(kind, 'field')})"
-        multi = kind == 1  # Measure roles typically accept multiple fields
-        roles.append(_role(name, desc, multi=multi))
+        analysis_role = get_visual_analysis_role(visual_type, name)
+        required_types = analysis_role.get("requiredTypes", []) if analysis_role else []
+        required_text = ""
+        if required_types:
+            type_names = sorted({key for item in required_types for key in item.get("rawKeys", [])})
+            if type_names:
+                required_text = f"; types: {', '.join(type_names)}"
+        desc = f"{display} ({kind_desc.get(kind, 'field')}{required_text})"
+        roles.append(_role(name, desc, multi=role_accepts_multiple(visual_type, name)))
     return roles
 
 

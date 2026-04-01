@@ -11,6 +11,7 @@ from rich import box
 from rich.table import Table
 
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
+from pbi.visual_analysis import supports_tooltips, supports_visual_actions
 
 from .common import ProjectOpt, console
 from .visuals.helpers import resolve_visual_target
@@ -32,6 +33,24 @@ nav_app.add_typer(nav_back_app, name="back")
 nav_app.add_typer(nav_url_app, name="url")
 nav_app.add_typer(nav_drillthrough_app, name="drillthrough")
 nav_app.add_typer(nav_tooltip_app, name="tooltip")
+
+
+def _require_visual_actions(vis) -> None:
+    supported = supports_visual_actions(vis.visual_type)
+    if supported is False:
+        console.print(
+            f"[red]Error:[/red] {vis.visual_type} does not support visual actions in the extracted Desktop schema."
+        )
+        raise typer.Exit(1)
+
+
+def _require_visual_tooltips(vis) -> None:
+    supported = supports_tooltips(vis.visual_type)
+    if supported is False:
+        console.print(
+            f"[red]Error:[/red] {vis.visual_type} does not support tooltips in the extracted Desktop schema."
+        )
+        raise typer.Exit(1)
 
 
 def _clear_action_state(visual_data: dict) -> bool:
@@ -167,6 +186,7 @@ def _nav_set_page(
 ) -> None:
     """Set a visual action to navigate to another page."""
     proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_actions(vis)
     try:
         target = proj.find_page(target_page)
     except ValueError as e:
@@ -191,6 +211,7 @@ def _nav_set_bookmark(
     from pbi.bookmarks import get_bookmark
 
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_actions(vis)
     try:
         bookmark_data = get_bookmark(_proj, bookmark)
     except (FileNotFoundError, ValueError) as e:
@@ -221,6 +242,7 @@ def _nav_set_toggle(
     from pbi.bookmarks import get_bookmark_group
 
     proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_actions(vis)
     try:
         bookmark_group = get_bookmark_group(proj, group)
     except FileNotFoundError as e:
@@ -246,6 +268,7 @@ def _nav_set_back(
 ) -> None:
     """Set a visual action to navigate back."""
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_actions(vis)
     _set_action(vis.data, action_type="Back", tooltip=tooltip)
     vis.save()
     console.print(f'Set navigation on "[cyan]{vis.name}[/cyan]" -> [cyan]Back[/cyan]')
@@ -260,6 +283,7 @@ def _nav_set_url(
 ) -> None:
     """Set a visual action to open a URL."""
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_actions(vis)
     _set_action(vis.data, action_type="WebUrl", url=url, tooltip=tooltip)
     vis.save()
     console.print(f'Set navigation on "[cyan]{vis.name}[/cyan]" -> [cyan]{url}[/cyan]')
@@ -276,6 +300,7 @@ def _nav_set_drillthrough(
     from pbi.drillthrough import is_drillthrough
 
     proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_actions(vis)
     try:
         target = proj.find_page(target_page)
     except ValueError as e:
@@ -302,6 +327,7 @@ def _nav_set_tooltip(
     from pbi.drillthrough import is_tooltip_page
 
     proj, _pg, vis = resolve_visual_target(project, page, visual)
+    _require_visual_tooltips(vis)
     try:
         target = proj.find_page(target_page)
     except ValueError as e:

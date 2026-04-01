@@ -58,6 +58,10 @@ from pbi.modeling import (
     set_table_property,
     set_time_intelligence_enabled,
     set_relationship_property,
+    build_tmdl_trace,
+    format_tmdl_trace_report,
+    resolve_tmdl_trace_ref,
+    trace_to_json,
     validate_relationships,
 )
 
@@ -119,5 +123,9 @@ __all__ = [
     "set_table_property",
     "set_time_intelligence_enabled",
     "set_relationship_property",
+    "build_tmdl_trace",
+    "format_tmdl_trace_report",
+    "resolve_tmdl_trace_ref",
+    "trace_to_json",
     "validate_relationships",
 ]

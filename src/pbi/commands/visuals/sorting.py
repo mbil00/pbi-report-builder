@@ -6,7 +6,9 @@ from typing import Annotated
 
 import typer
 
-from ..common import ProjectOpt, console, resolve_field_type
+from pbi.visual_builders import apply_initial_sort
+
+from ..common import ProjectOpt, console
 from .app import visual_sort_app
 from .helpers import resolve_visual_target
 
@@ -46,14 +48,18 @@ def visual_sort_set(
         raise typer.Exit(1)
 
     try:
-        entity, prop, resolved_field_type = resolve_field_type(proj, field, field_type)
+        entity, prop, _resolved_field_type, direction_label = apply_initial_sort(
+            proj,
+            vis,
+            field,
+            field_type=field_type,
+            descending=direction == "desc",
+        )
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    descending = direction == "desc"
-    proj.set_sort(vis, entity, prop, field_type=resolved_field_type, descending=descending)
-    console.print(f'Set sort: [cyan]{entity}.{prop}[/cyan] {"Descending" if descending else "Ascending"}')
+    console.print(f"Set sort: [cyan]{entity}.{prop}[/cyan] {direction_label}")
 
 
 @visual_sort_app.command("clear")

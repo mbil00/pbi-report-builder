@@ -2,6 +2,31 @@
 
 The CLI can inspect and edit the semantic model stored as TMDL in the PBIP project.
 
+## Investigation helpers
+
+For schema or authoring investigations, you can generate a file-location trace for the semantic model:
+
+```bash
+uv run python scripts/extract_tmdl_trace.py --project-root .
+uv run python scripts/inspect_tmdl_trace.py --project-root . --ref measure:Sales.Revenue
+uv run python scripts/inspect_tmdl_trace.py --project-root . --ref relationship:Sales.CustomerID->Customers.CustomerID
+```
+
+The extractor writes `schema-analysis/generated/tmdl.trace.json` by default. The manifest indexes TMDL entities by ref and records their source file, line numbers, and a short snippet.
+
+Common ref formats:
+
+- `table:Sales`
+- `column:Sales.Region`
+- `calculatedColumn:Sales.Bucket`
+- `measure:Sales.Revenue`
+- `hierarchy:Date.Calendar`
+- `partition:Sales.Sales`
+- `annotation:__PBI_TimeIntelligenceEnabled`
+- `relationship:Sales.CustomerID->Customers.CustomerID`
+- `role:Finance Readers`
+- `perspective:Exec View`
+
 ## Inspect the model
 
 ```bash

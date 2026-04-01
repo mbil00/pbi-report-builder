@@ -24,27 +24,68 @@ def apply_bindings(
     bindings: dict,
     result: ApplyResult,
     *,
+    context: str,
     session: _ApplySession,
 ) -> None:
     """Apply data bindings from the YAML spec."""
     from pbi.columns import set_column_width
+    from pbi.commands.common import resolve_field_info
+    from pbi.visual_builders import (
+        BoundField,
+        existing_bound_fields,
+        validate_incremental_bindings,
+    )
 
     query_state = (
         visual.data.setdefault("visual", {}).setdefault("query", {}).setdefault("queryState", {})
     )
+    model = session.get_model(project)
+    parsed_bindings: dict[str, tuple[list[Any], list[BoundField]]] = {}
 
     for role, field_ref in bindings.items():
         canonical_role = normalize_visual_role(visual.visual_type, role)
-        existing_projections = copy.deepcopy(query_state.get(canonical_role, {}).get("projections", []))
         try:
             parsed_items = parse_binding_items(
                 project.root,
                 field_ref,
-                model=session.get_model(project),
+                model=model,
             )
         except ValueError as e:
-            result.errors.append(f"Invalid binding: {e}")
-            continue
+            result.errors.append(f"{context}: invalid binding for role {canonical_role}: {e}")
+            return
+        resolved_fields: list[BoundField] = []
+        for item in parsed_items:
+            try:
+                entity, prop, field_type, data_type = resolve_field_info(
+                    project,
+                    item.field_ref,
+                    item.field_type,
+                    model=model,
+                    strict=True,
+                )
+            except ValueError as e:
+                result.errors.append(f"{context}: invalid binding for role {canonical_role}: {e}")
+                return
+            resolved_fields.append(
+                BoundField(canonical_role, entity, prop, field_type, data_type)
+            )
+        parsed_bindings[canonical_role] = (parsed_items, resolved_fields)
+
+    candidate_fields = [
+        field for field in existing_bound_fields(project, visual)
+        if field.role not in parsed_bindings
+    ]
+    for _role, (_items, resolved_fields) in parsed_bindings.items():
+        candidate_fields.extend(resolved_fields)
+
+    try:
+        validate_incremental_bindings(visual.visual_type, candidate_fields)
+    except ValueError as e:
+        result.errors.append(f"{context}: {e}")
+        return
+
+    for canonical_role, (parsed_items, _resolved_fields) in parsed_bindings.items():
+        existing_projections = copy.deepcopy(query_state.get(canonical_role, {}).get("projections", []))
         new_projections: list[dict[str, Any]] = []
 
         for item in parsed_items:
@@ -104,8 +145,12 @@ def apply_sort(
     visual: Visual,
     sort_spec: str,
     result: ApplyResult,
+    *,
+    context: str,
 ) -> None:
     """Apply sort from a spec like 'Table.Field Descending'."""
+    from pbi.visual_builders import apply_initial_sort
+
     text = str(sort_spec).strip()
     if not text:
         return
@@ -123,18 +168,18 @@ def apply_sort(
     field_ref = text
     dot = field_ref.find(".")
     if dot == -1:
-        result.errors.append(f"Invalid sort field: {sort_spec}")
+        result.errors.append(f"{context}: invalid sort field: {sort_spec}")
         return
-
-    entity = field_ref[:dot]
-    prop = field_ref[dot + 1 :]
-    field_type = "measure" if is_measure else "column"
-
-    project.set_sort(
-        visual,
-        entity,
-        prop,
-        field_type=field_type,
-        descending=(direction == "Descending"),
-    )
+    field_type = "measure" if is_measure else "auto"
+    try:
+        apply_initial_sort(
+            project,
+            visual,
+            field_ref,
+            field_type=field_type,
+            descending=(direction == "Descending"),
+        )
+    except ValueError as e:
+        result.errors.append(f"{context}: {e}")
+        return
     result.properties_set += 1

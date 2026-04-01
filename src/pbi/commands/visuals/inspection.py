@@ -18,6 +18,7 @@ from pbi.properties import (
     list_properties,
     property_aliases_for,
 )
+from pbi.visual_analysis import describe_behavior_features
 
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
@@ -56,6 +57,9 @@ def visual_types(
             console.print(table)
             console.print(f"[dim]Status:[/dim] {info.status}")
             console.print(f"[dim]{info.note}[/dim]")
+            behavior_features = describe_behavior_features(info.visual_type)
+            if behavior_features:
+                console.print(f'[dim]Behavior:[/dim] {", ".join(behavior_features)}')
 
             # Show KPI shorthand documentation for cardVisual
             if info.visual_type == "cardVisual":
@@ -156,6 +160,9 @@ def visual_props(
             f"\n[dim]{schema_count} properties from PBI schema for {visual_type}. "
             f"Schema properties can be set directly (e.g. 'legend.show') or via 'chart:' prefix.[/dim]"
         )
+        behavior_features = describe_behavior_features(visual_type)
+        if behavior_features:
+            console.print(f'[dim]Behavior:[/dim] {", ".join(behavior_features)}')
     else:
         console.print(
             "\n[dim]Use --visual-type <type> to see all schema-derived chart properties for a specific visual type.[/dim]"

@@ -58,8 +58,16 @@ def visual_format_set(
     project: ProjectOpt = None,
 ) -> None:
     """Set conditional formatting on a visual property."""
-    from pbi.formatting import GradientStop, build_gradient_format, build_measure_format, build_rules_format, set_conditional_format
-    from ..common import resolve_field_type
+    from pbi.formatting import (
+        GradientStop,
+        build_gradient_format,
+        build_measure_format,
+        build_rules_format,
+        conditional_source_warning,
+        conditional_target_warning,
+        set_conditional_format,
+    )
+    from ..common import resolve_field_info
 
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
@@ -69,28 +77,56 @@ def visual_format_set(
         raise typer.Exit(1)
     obj_name, prop_name = prop[:dot], prop[dot + 1 :]
 
+    target_warning = conditional_target_warning(vis.visual_type, obj_name, prop_name)
+    if target_warning is not None:
+        console.print(f"[red]Error:[/red] {target_warning}")
+        raise typer.Exit(1)
+
     if mode not in {"measure", "gradient", "rules"}:
         console.print("[red]Error:[/red] --mode must be 'measure', 'gradient', or 'rules'.")
         raise typer.Exit(1)
 
+    src_dot = source.find(".")
+    if src_dot == -1:
+        console.print("[red]Error:[/red] --source must be Table.Field format.")
+        raise typer.Exit(1)
+
+    try:
+        from pbi.model import SemanticModel
+
+        model = SemanticModel.load(proj.root)
+    except (FileNotFoundError, ValueError):
+        model = None
+
+    try:
+        source_field_type = "measure" if mode == "measure" and model is None else "auto"
+        src_entity, src_prop, src_field_type, src_data_type = resolve_field_info(
+            proj,
+            source,
+            source_field_type,
+            model=model,
+            strict=True,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    source_warning = conditional_source_warning(
+        mode,
+        f"{src_entity}.{src_prop}",
+        src_field_type,
+        src_data_type,
+    )
+    if source_warning is not None:
+        console.print(f"[red]Error:[/red] {source_warning}")
+        raise typer.Exit(1)
+
     if mode == "measure":
-        src_dot = source.find(".")
-        if src_dot == -1:
-            console.print("[red]Error:[/red] --source must be Table.Measure format for --mode measure.")
-            raise typer.Exit(1)
-        src_entity, src_prop = source[:src_dot], source[src_dot + 1 :]
         value = build_measure_format(src_entity, src_prop)
         set_conditional_format(vis.data, obj_name, prop_name, value)
         vis.save()
         console.print(f"Set [cyan]{prop}[/cyan] = measure [bold]{src_entity}.{src_prop}[/bold]")
         return
-
-    # Resolve source field for gradient and rules modes
-    src_dot = source.find(".")
-    if src_dot == -1:
-        console.print("[red]Error:[/red] --source must be Table.Field format.")
-        raise typer.Exit(1)
-    src_entity, src_prop, src_field_type = resolve_field_type(proj, source, "auto")
 
     if mode == "rules":
         if not rule:

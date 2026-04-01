@@ -30,6 +30,8 @@ class VisualCapabilityExtractorTests(unittest.TestCase):
         cls.stdout = result.stdout
         cls.summary = json.loads((cls.out_dir / "visual-capabilities.summary.json").read_text(encoding="utf-8"))
         cls.full = json.loads((cls.out_dir / "visual-capabilities.full.json").read_text(encoding="utf-8"))
+        cls.trace = json.loads((cls.out_dir / "visual-capabilities.trace.json").read_text(encoding="utf-8"))
+        cls.analysis = json.loads((cls.out_dir / "visual-capabilities.analysis.json").read_text(encoding="utf-8"))
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -63,6 +65,47 @@ class VisualCapabilityExtractorTests(unittest.TestCase):
         self.assertIn("referenceLabelValue", card_visual["objectNames"])
         self.assertIn("fillCustom", card_visual["objectNames"])
 
+    def test_trace_manifest_records_provider_provenance(self) -> None:
+        meta = self.trace["meta"]
+        self.assertEqual(meta["visualCount"], self.summary["meta"]["visualCount"])
+        self.assertEqual(meta["registryModuleId"], self.summary["meta"]["registryModuleId"])
+        self.assertTrue(meta["registryLocalSymbol"])
+
+        card_visual = self.trace["visuals"]["cardVisual"]
+        self.assertIsInstance(card_visual["registryEntry"]["expression"], str)
+        self.assertTrue(card_visual["registryEntry"]["expression"])
+        self.assertEqual(card_visual["provider"]["kind"], "moduleExport")
+        self.assertIsInstance(card_visual["provider"]["moduleId"], int)
+        self.assertTrue(card_visual["provider"]["exportName"])
+        self.assertTrue(card_visual["provider"]["localSymbol"])
+        self.assertIn("objects:", card_visual["provider"]["snippet"])
+        self.assertIn("dataRoles", card_visual["provider"]["snippet"])
+        shared_refs = {item["rawRef"]: item for item in card_visual["provider"]["importedReferences"]}
+        self.assertIn("l.ZX.accentBar", shared_refs)
+        self.assertEqual(shared_refs["l.ZX.accentBar"]["moduleId"], 697265)
+
+    def test_analysis_manifest_normalizes_roles_properties_and_mappings(self) -> None:
+        meta = self.analysis["meta"]
+        self.assertEqual(meta["visualCount"], self.summary["meta"]["visualCount"])
+
+        line_chart = self.analysis["visuals"]["lineChart"]
+        role_names = [role["name"] for role in line_chart["dataRoles"]]
+        self.assertEqual(role_names, ["Category", "Series", "Y", "Y2", "Rows", "Tooltips"])
+        y_role = next(role for role in line_chart["dataRoles"] if role["name"] == "Y")
+        self.assertTrue(y_role["requiredTypes"])
+        self.assertEqual(y_role["requiredTypes"][0]["kind"], "numeric")
+
+        accent_bar = self.analysis["visuals"]["cardVisual"]["objects"]["accentBar"]
+        self.assertGreaterEqual(accent_bar["propertyCount"], 1)
+        self.assertEqual(accent_bar["properties"]["show"]["type"]["kind"], "bool")
+
+        mappings = line_chart["dataViewMappings"]
+        self.assertGreaterEqual(len(mappings), 1)
+        self.assertIn("matrix", mappings[0]["shapeKinds"])
+        self.assertIn("Y", mappings[0]["roleNames"])
+        self.assertTrue(mappings[0]["dataReductionAlgorithms"])
+        self.assertIn("supportsOnObjectFormatting", line_chart["behavior"])
+
     def test_slicer_and_shape_map_roles_match_desktop_registry(self) -> None:
         slicer = self.full["visuals"]["slicer"]
         self.assertEqual(slicer["dataRoleNames"], ["Values"])
@@ -71,6 +114,26 @@ class VisualCapabilityExtractorTests(unittest.TestCase):
         shape_map = self.full["visuals"]["shapeMap"]
         self.assertEqual(shape_map["dataRoleNames"], ["Category", "Series", "Value", "Tooltips"])
         self.assertIn("defaultColors", shape_map["capabilities"]["objects"])
+
+    def test_trace_inspector_cli_outputs_card_visual_provenance(self) -> None:
+        result = subprocess.run(
+            [
+                "node",
+                "scripts/inspect_visual_capability_trace.js",
+                "--bundle",
+                str(_BUNDLE_PATH),
+                "--visual",
+                "cardVisual",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("Visual: cardVisual", result.stdout)
+        self.assertIn("Provider:", result.stdout)
+        self.assertIn("objects:", result.stdout)
+        self.assertIn("Imported references:", result.stdout)
 
 
 if __name__ == "__main__":

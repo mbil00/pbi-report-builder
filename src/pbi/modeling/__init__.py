@@ -15,6 +15,7 @@ from .schema import (
     SemanticModel,
     SemanticTable,
 )
+from .trace import build_tmdl_trace, format_tmdl_trace_report, resolve_tmdl_trace_ref, trace_to_json
 from .writes_partitions import create_partition, delete_partition, set_partition
 from .writes_roles import (
     RoleSpec,
@@ -75,7 +76,11 @@ __all__ = [
     "RoleTablePermission",
     "SemanticModel",
     "SemanticTable",
+    "build_tmdl_trace",
+    "format_tmdl_trace_report",
+    "resolve_tmdl_trace_ref",
     "TmdlEditSession",
+    "trace_to_json",
     "_parse_tmdl_name",
     "create_calculated_column",
     "create_calculated_table",

@@ -248,10 +248,17 @@ def apply_visual(
         result.properties_set += 1
 
     if "bindings" in vis_spec:
-        apply_bindings(project, visual, vis_spec["bindings"], result, session=session)
+        apply_bindings(
+            project,
+            visual,
+            vis_spec["bindings"],
+            result,
+            context=context,
+            session=session,
+        )
 
     if "sort" in vis_spec:
-        apply_sort(project, visual, vis_spec["sort"], result)
+        apply_sort(project, visual, vis_spec["sort"], result, context=context)
 
     if "filters" in vis_spec:
         _apply_filters(
@@ -271,7 +278,9 @@ def apply_visual(
             result,
             context=context,
             dry_run=dry_run,
+            visual_type=visual.visual_type,
             project=project,
+            model=session.get_model(project),
         )
 
     if "kpis" in vis_spec:

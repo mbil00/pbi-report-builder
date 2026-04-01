@@ -710,6 +710,8 @@ def list_properties(
             continue
         if visual_type and p.visual_types and visual_type not in p.visual_types:
             continue
+        if visual_type and not _visual_type_supports_property(name, registry, visual_type):
+            continue
         result.append((
             name,
             display_type(p.value_type),
@@ -814,3 +816,24 @@ def _derive_group(name: str, prop: PropertyDef) -> str:
     if prop.container_key:
         return "container"
     return "core"
+
+
+def _visual_type_supports_property(
+    prop_name: str,
+    registry: dict[str, PropertyDef],
+    visual_type: str,
+) -> bool:
+    """Return True when a property is supported for a specific visual type."""
+    try:
+        from pbi.visual_analysis import supports_tooltips, supports_visual_actions
+    except Exception:
+        return True
+
+    canonical = normalize_property_name(prop_name, registry)
+    if canonical.startswith("action."):
+        supported = supports_visual_actions(visual_type)
+        return supported is not False
+    if canonical.startswith("tooltip."):
+        supported = supports_tooltips(visual_type)
+        return supported is not False
+    return True

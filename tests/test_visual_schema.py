@@ -28,6 +28,11 @@ from pbi.roles import (
     normalize_visual_role,
 )
 from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, REPORT_SCHEMA
+from pbi.visual_analysis import (
+    supports_sorting,
+    supports_tooltips,
+    supports_visual_actions,
+)
 from pbi.visual_schema import (
     get_data_roles,
     get_object_names,
@@ -485,6 +490,27 @@ class SchemaPropertyListingTests(unittest.TestCase):
         for name, vtype, desc, grp, enum_values in props:
             if "(schema)" in desc:
                 self.assertEqual(grp, "chart", f"{name} should have group 'chart'")
+
+    def test_behavior_filters_action_and_tooltip_properties_by_visual_type(self) -> None:
+        chart_props = list_properties(VISUAL_PROPERTIES, visual_type="clusteredColumnChart")
+        chart_names = {name for name, *_ in chart_props}
+        self.assertIn("tooltip.type", chart_names)
+        self.assertNotIn("action.url", chart_names)
+
+        shape_props = list_properties(VISUAL_PROPERTIES, visual_type="shape")
+        shape_names = {name for name, *_ in shape_props}
+        self.assertIn("action.url", shape_names)
+        self.assertNotIn("tooltip.type", shape_names)
+
+
+class VisualBehaviorAnalysisTests(unittest.TestCase):
+    def test_behavior_support_helpers_reflect_extracted_analysis(self) -> None:
+        self.assertTrue(supports_sorting("clusteredColumnChart"))
+        self.assertFalse(supports_sorting("shape"))
+        self.assertTrue(supports_visual_actions("shape"))
+        self.assertFalse(supports_visual_actions("clusteredColumnChart"))
+        self.assertTrue(supports_tooltips("clusteredColumnChart"))
+        self.assertFalse(supports_tooltips("shape"))
 
 
 # ── Validate.py schema integration ──────────────────────────────────

@@ -12,6 +12,7 @@ from pbi.properties import (
     canonical_object_property_name,
     get_known_default,
     get_property,
+    normalize_property_name,
     set_property,
 )
 from pbi.textbox import (
@@ -20,6 +21,7 @@ from pbi.textbox import (
     textbox_text,
     textbox_text_style_value,
 )
+from pbi.visual_analysis import supports_tooltips, supports_visual_actions
 
 from ..common import console, get_project
 
@@ -257,6 +259,10 @@ def prepare_visual_property_updates(
             changes.append((prop, old, new))
             continue
 
+        unsupported_message = _unsupported_visual_property_message(visual_type, prop)
+        if unsupported_message is not None:
+            raise ValueError(unsupported_message)
+
         if prop in {"chart:image.sourceFile", "image.sourceFile"}:
             if project is None:
                 raise ValueError("image.sourceFile requires project context.")
@@ -349,3 +355,28 @@ def _textbox_style_key(prop: str) -> str | None:
     else:
         return None
     return key if key in {"fontFamily", "fontSize", "fontColor", "bold", "italic"} else None
+
+
+def _unsupported_visual_property_message(
+    visual_type: str | None,
+    prop_name: str,
+) -> str | None:
+    if not visual_type:
+        return None
+
+    canonical = normalize_property_name(prop_name, VISUAL_PROPERTIES)
+    if canonical.startswith("action."):
+        supported = supports_visual_actions(visual_type)
+        if supported is False:
+            return (
+                f"{canonical} is not supported on {visual_type}; "
+                "the extracted Desktop schema does not expose visual actions for this type."
+            )
+    if canonical.startswith("tooltip."):
+        supported = supports_tooltips(visual_type)
+        if supported is False:
+            return (
+                f"{canonical} is not supported on {visual_type}; "
+                "the extracted Desktop schema does not expose tooltip support for this type."
+            )
+    return None

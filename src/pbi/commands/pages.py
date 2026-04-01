@@ -45,7 +45,7 @@ def _resolve_page_fields(proj, fields: list[str]) -> list[tuple[str, str, str]]:
     parsed: list[tuple[str, str, str]] = []
     for field in fields:
         try:
-            parsed.append(resolve_field_type(proj, field, "auto"))
+            parsed.append(resolve_field_type(proj, field, "auto", strict=True))
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)

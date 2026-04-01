@@ -119,7 +119,9 @@ def apply_conditional_formatting(
     *,
     context: str,
     dry_run: bool,
+    visual_type: str | None = None,
     project: Project | None = None,
+    model: Any = None,
 ) -> None:
     """Apply conditional formatting from the YAML spec."""
     from pbi.formatting import (
@@ -127,8 +129,11 @@ def apply_conditional_formatting(
         build_gradient_format,
         build_measure_format,
         build_rules_format,
+        conditional_source_warning,
+        conditional_target_warning,
         set_conditional_format,
     )
+    from pbi.commands.common import resolve_field_info
 
     if not isinstance(cf_spec, dict):
         result.errors.append(
@@ -148,6 +153,11 @@ def apply_conditional_formatting(
         obj_name = prop_path[:dot]
         prop_name = prop_path[dot + 1 :]
 
+        target_warning = conditional_target_warning(visual_type, obj_name, prop_name)
+        if target_warning is not None:
+            result.errors.append(f"{context}: {target_warning}")
+            continue
+
         mode = config.get("mode", "measure")
         source = config.get("source", "")
         src_dot = source.find(".")
@@ -156,15 +166,31 @@ def apply_conditional_formatting(
             continue
         src_entity = source[:src_dot]
         src_prop = source[src_dot + 1 :]
-
         src_field_type = "measure"
-        if project is not None and mode != "measure":
+        src_data_type = None
+        if project is not None:
             try:
-                from pbi.commands.common import resolve_field_type
+                source_field_type = "measure" if mode == "measure" and model is None else "auto"
+                src_entity, src_prop, src_field_type, src_data_type = resolve_field_info(
+                    project,
+                    source,
+                    source_field_type,
+                    model=model,
+                    strict=True,
+                )
+            except ValueError as e:
+                result.errors.append(f"{context}: {e}")
+                continue
 
-                src_entity, src_prop, src_field_type = resolve_field_type(project, source, "auto")
-            except (ValueError, FileNotFoundError):
-                pass
+        source_warning = conditional_source_warning(
+            mode,
+            f"{src_entity}.{src_prop}",
+            src_field_type,
+            src_data_type,
+        )
+        if source_warning is not None:
+            result.errors.append(f"{context}: {source_warning}")
+            continue
 
         if dry_run:
             result.properties_set += 1

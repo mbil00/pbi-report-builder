@@ -219,6 +219,73 @@ class VisualCatalogCliTests(unittest.TestCase):
             "Sales.Total Revenue",
         )
 
+    def test_visual_bind_rejects_schema_invalid_role(self) -> None:
+        create_result = self.runner.invoke(
+            app,
+            ["visual", "create", "Sales", "table", "--project", str(self.pbip_path)],
+        )
+        self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+        bind_result = self.runner.invoke(
+            app,
+            [
+                "visual",
+                "bind",
+                "Sales",
+                "tableEx",
+                "Category",
+                "Sales.Product",
+                "--field-type",
+                "column",
+                "--project",
+                str(self.pbip_path),
+            ],
+        )
+
+        self.assertEqual(bind_result.exit_code, 1, bind_result.stdout)
+        self.assertIn('Role "Category" is not supported for tableEx', bind_result.stdout)
+
+    def test_visual_bind_allows_incremental_chart_binding(self) -> None:
+        create_result = self.runner.invoke(
+            app,
+            ["visual", "create", "Sales", "lineChart", "--project", str(self.pbip_path)],
+        )
+        self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+
+        category_result = self.runner.invoke(
+            app,
+            [
+                "visual",
+                "bind",
+                "Sales",
+                "lineChart",
+                "Category",
+                "Sales.OrderDate",
+                "--field-type",
+                "column",
+                "--project",
+                str(self.pbip_path),
+            ],
+        )
+        self.assertEqual(category_result.exit_code, 0, category_result.stdout)
+
+        value_result = self.runner.invoke(
+            app,
+            [
+                "visual",
+                "bind",
+                "Sales",
+                "lineChart",
+                "Y",
+                "Sales.Total Revenue",
+                "--field-type",
+                "measure",
+                "--project",
+                str(self.pbip_path),
+            ],
+        )
+        self.assertEqual(value_result.exit_code, 0, value_result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

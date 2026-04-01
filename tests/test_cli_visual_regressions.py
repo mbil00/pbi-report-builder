@@ -988,6 +988,61 @@ class VisualSetRegressionTests(unittest.TestCase):
             )
             self.assertEqual(clear_result.exit_code, 0, clear_result.stdout)
 
+    def test_visual_sort_set_rejects_visuals_without_sort_support(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "shape")
+            visual.data["name"] = "shape1"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "sort",
+                    "set",
+                    "Demo",
+                    "shape1",
+                    "Product.Category",
+                    "--field-type",
+                    "column",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("does not support sorting", result.stdout)
+
+    def test_visual_set_rejects_action_properties_for_visuals_without_action_support(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            visual = project.create_visual(page, "barChart")
+            visual.data["name"] = "chart1"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                [
+                    "visual",
+                    "set",
+                    "Demo",
+                    "chart1",
+                    "action.type=WebUrl",
+                    "--project",
+                    str(root / "Sample.pbip"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("does not expose visual actions", result.stdout)
+
 class TestVisualInspect(unittest.TestCase):
     """pbi visual inspect deep dump command."""
 

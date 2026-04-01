@@ -14,6 +14,12 @@ from .common import ProjectOpt, console, get_project, resolve_field_info
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 
 
+def _semantic_types(field_type: str, data_type: str | None) -> set[str]:
+    from pbi.visual_analysis import normalize_semantic_data_type
+
+    return normalize_semantic_data_type(field_type, data_type)
+
+
 def _load_filter_model(project):
     """Best-effort semantic model loader for filter typing."""
     try:
@@ -38,6 +44,7 @@ def _resolve_filter_field(
         field,
         field_type,
         model=model,
+        strict=True,
     )
 
 
@@ -414,6 +421,17 @@ def filter_create(
             raise typer.Exit(1)
         if unit not in valid_units:
             console.print(f"[red]Error:[/red] Unit must be one of: {', '.join(valid_units)}")
+            raise typer.Exit(1)
+        semantic_types = _semantic_types(resolved_field_type, data_type)
+        if resolved_field_type != "column":
+            console.print(
+                f"[red]Error:[/red] Relative filters require a date/time column, not {entity}.{prop}."
+            )
+            raise typer.Exit(1)
+        if model is not None and "dateTime" not in semantic_types:
+            console.print(
+                f"[red]Error:[/red] Relative filters require a date/time column, not {entity}.{prop}."
+            )
             raise typer.Exit(1)
         try:
             if unit in ("Minutes", "Hours"):

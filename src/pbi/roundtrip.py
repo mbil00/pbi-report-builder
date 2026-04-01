@@ -257,15 +257,16 @@ def resolve_binding_ref(
     field_type = "measure" if is_measure else "column"
 
     if not is_measure:
-        try:
-            loaded_model = model
-            if loaded_model is None:
+        loaded_model = model
+        if loaded_model is None:
+            try:
                 from pbi.model import SemanticModel
 
                 loaded_model = SemanticModel.load(project_root)
+            except (FileNotFoundError, ValueError, TypeError):
+                loaded_model = None
+        if loaded_model is not None:
             entity, prop, field_type = loaded_model.resolve_field(clean_ref)
-        except (FileNotFoundError, ValueError, TypeError):
-            pass
 
     return entity, prop, field_type
 

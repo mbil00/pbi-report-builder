@@ -60,12 +60,15 @@ def resolve_field_type(
     proj: Project,
     field: str,
     field_type: str,
+    *,
+    strict: bool = False,
 ) -> tuple[str, str, str]:
     """Resolve Table.Field to entity, prop, and concrete field type."""
     entity, prop, resolved_type, _data_type = resolve_field_info(
         proj,
         field,
         field_type,
+        strict=strict,
     )
     return entity, prop, resolved_type
 
@@ -76,6 +79,7 @@ def resolve_field_info(
     field_type: str,
     *,
     model: Any | None = None,
+    strict: bool = False,
 ) -> tuple[str, str, str, str | None]:
     """Resolve Table.Field to entity, prop, concrete field type, and data type.
 
@@ -86,12 +90,18 @@ def resolve_field_info(
     - `auto` uses the semantic model when available and otherwise falls back to
       treating the field as a column
     """
-    dot = field.find(".")
+    raw_field = field.strip()
+    has_measure_marker = raw_field.endswith("(measure)")
+    normalized_field = raw_field[:-9].strip() if has_measure_marker else raw_field
+
+    dot = normalized_field.find(".")
     if dot == -1:
         raise ValueError("Field must be Table.Field format.")
 
-    entity, prop = field[:dot], field[dot + 1 :]
+    entity, prop = normalized_field[:dot], normalized_field[dot + 1 :]
     mode = normalize_field_type(field_type)
+    if has_measure_marker and mode == "auto":
+        mode = "measure"
 
     if model is None:
         try:
@@ -105,8 +115,10 @@ def resolve_field_info(
         return entity, prop, "column" if mode == "auto" else mode, None
 
     try:
-        resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(field)
-    except (ValueError, KeyError):
+        resolved_entity, resolved_prop, resolved_field_type = model.resolve_field(normalized_field)
+    except (ValueError, KeyError) as exc:
+        if strict:
+            raise ValueError(str(exc)) from exc
         return entity, prop, "column" if mode == "auto" else mode, None
 
     effective_type = mode if mode in {"column", "measure"} else resolved_field_type

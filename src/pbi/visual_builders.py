@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import Counter
 
-from pbi.commands.common import resolve_field_type
+from pbi.commands.common import resolve_field_info, resolve_field_type
 from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.visual_analysis import (
+    allowed_role_names,
+    get_visual_analysis_mappings,
+    role_accepts_multiple,
+    role_type_warning,
+    supports_sorting,
+)
 
 
 @dataclass(frozen=True)
@@ -16,6 +24,7 @@ class BoundField:
     entity: str
     prop: str
     field_type: str
+    data_type: str | None = None
 
 
 DEFAULT_VISUAL_SIZES: dict[str, tuple[int, int]] = {
@@ -84,24 +93,30 @@ def apply_role_bindings(
     field_type: str = "auto",
 ) -> list[BoundField]:
     """Bind one or more fields to a visual, validating known role-backed types."""
-    from pbi.roles import get_visual_type_info, normalize_visual_role
+    from pbi.roles import get_visual_type_info, normalize_visual_role, normalize_visual_type
 
     parsed = parse_role_bindings(bindings)
-    info = get_visual_type_info(visual.visual_type)
-    supported_roles = {entry["name"] for entry in info.roles} if info and info.status == "role-backed" else None
+    canonical_visual_type = normalize_visual_type(visual.visual_type)
+    info = get_visual_type_info(canonical_visual_type)
+    supported_roles = {entry["name"] for entry in info.roles} if info and info.roles else None
 
     resolved: list[BoundField] = []
     for raw_role, field in parsed:
-        canonical_role = normalize_visual_role(visual.visual_type, raw_role)
+        canonical_role = normalize_visual_role(canonical_visual_type, raw_role)
         if supported_roles is not None and canonical_role not in supported_roles:
             raise ValueError(
-                f'Role "{canonical_role}" is not modeled for {visual.visual_type}. '
+                f'Role "{canonical_role}" is not modeled for {canonical_visual_type}. '
                 f'Supported roles: {", ".join(sorted(supported_roles))}'
             )
-        entity, prop, resolved_field_type = resolve_field_type(project, field, field_type)
-        resolved.append(BoundField(canonical_role, entity, prop, resolved_field_type))
+        entity, prop, resolved_field_type, data_type = resolve_field_info(
+            project,
+            field,
+            field_type,
+            strict=True,
+        )
+        resolved.append(BoundField(canonical_role, entity, prop, resolved_field_type, data_type))
 
-    validate_builder_bindings(visual.visual_type, resolved)
+    validate_builder_bindings(canonical_visual_type, resolved)
 
     for field in resolved:
         project.add_binding(
@@ -115,6 +130,21 @@ def apply_role_bindings(
     return resolved
 
 
+def existing_bound_fields(project, visual) -> list[BoundField]:
+    """Resolve existing visual bindings into BoundField records."""
+    existing: list[BoundField] = []
+    for role, entity, prop, field_type in project.get_bindings(visual):
+        resolved_entity, resolved_prop, resolved_field_type, data_type = resolve_field_info(
+            project,
+            f"{entity}.{prop}",
+            field_type,
+        )
+        existing.append(
+            BoundField(role, resolved_entity, resolved_prop, resolved_field_type, data_type)
+        )
+    return existing
+
+
 def apply_initial_sort(
     project,
     visual,
@@ -124,7 +154,17 @@ def apply_initial_sort(
     descending: bool = False,
 ) -> tuple[str, str, str, str]:
     """Apply an initial sort and return the resolved field details."""
-    entity, prop, resolved_field_type = resolve_field_type(project, field, field_type)
+    sorting_supported = supports_sorting(visual.visual_type)
+    if sorting_supported is False:
+        raise ValueError(
+            f"{visual.visual_type} does not support sorting in the extracted Desktop schema."
+        )
+    entity, prop, resolved_field_type = resolve_field_type(
+        project,
+        field,
+        field_type,
+        strict=True,
+    )
     project.set_sort(visual, entity, prop, field_type=resolved_field_type, descending=descending)
     direction = "Descending" if descending else "Ascending"
     return entity, prop, resolved_field_type, direction
@@ -137,6 +177,10 @@ def infer_default_sort(
 ) -> tuple[str, str, str, str] | None:
     """Infer a useful default sort from semantic-model metadata."""
     from pbi.model import SemanticModel
+
+    sorting_supported = supports_sorting(visual.visual_type)
+    if sorting_supported is False:
+        return None
 
     candidate = _find_sort_candidate(visual.visual_type, bound_fields)
     if candidate is None or candidate.field_type != "column":
@@ -267,6 +311,9 @@ def _find_sort_candidate(visual_type: str, bound_fields: list[BoundField]) -> Bo
 
 def validate_builder_bindings(visual_type: str, bound_fields: list[BoundField]) -> None:
     """Validate common builder flows with stricter role/type guidance."""
+    if _validate_schema_bindings(visual_type, bound_fields, complete=True):
+        return
+
     roles = {field.role for field in bound_fields}
 
     if visual_type in CHART_TYPES:
@@ -307,6 +354,137 @@ def validate_builder_bindings(visual_type: str, bound_fields: list[BoundField]) 
         _require_roles(visual_type, roles, {"Data"})
         _ensure_measures(bound_fields, {"Data"})
         _ensure_columns(bound_fields, {"Rows"})
+
+
+def validate_incremental_bindings(visual_type: str, bound_fields: list[BoundField]) -> None:
+    """Validate a partial binding set for the incremental `visual bind` command."""
+    if _validate_schema_bindings(visual_type, bound_fields, complete=False):
+        return
+
+
+def _validate_schema_bindings(
+    visual_type: str,
+    bound_fields: list[BoundField],
+    *,
+    complete: bool,
+) -> bool:
+    """Validate bindings against extracted Desktop role/mapping metadata.
+
+    Returns True when schema-backed validation ran, False when the caller
+    should fall back to handwritten heuristics.
+    """
+    from pbi.visual_analysis import (
+        allowed_role_names,
+        get_visual_analysis_mappings,
+        get_visual_analysis_roles,
+        role_type_warning,
+    )
+
+    analysis_roles = get_visual_analysis_roles(visual_type)
+    if not analysis_roles:
+        return False
+
+    supported_roles = allowed_role_names(visual_type)
+    for field in bound_fields:
+        if field.role not in supported_roles:
+            raise ValueError(
+                f'Role "{field.role}" is not supported for {visual_type}. '
+                f'Supported roles: {", ".join(sorted(supported_roles))}'
+            )
+        warning = role_type_warning(visual_type, field.role, field.field_type, field.data_type)
+        if warning:
+            raise ValueError(warning)
+
+    mappings = get_visual_analysis_mappings(visual_type)
+    if not mappings:
+        return True
+    if not _has_mapping_constraints(mappings):
+        return True
+
+    role_counts = Counter(field.role for field in bound_fields)
+    if not _any_mapping_matches(mappings, role_counts, complete=complete):
+        details = _format_mapping_requirements(mappings)
+        if complete:
+            raise ValueError(
+                f"Bindings do not match any supported Desktop query shape for {visual_type}. "
+                f"Supported role sets: {details}"
+            )
+        raise ValueError(
+            f"Binding would exceed supported Desktop role constraints for {visual_type}. "
+            f"Supported role sets: {details}"
+        )
+
+    return True
+
+
+def _has_mapping_constraints(mappings: list[dict]) -> bool:
+    """Whether the extracted mappings contain usable role cardinality constraints."""
+    return any(mapping.get("conditionSets") for mapping in mappings)
+
+
+def _any_mapping_matches(
+    mappings: list[dict],
+    role_counts: Counter[str],
+    *,
+    complete: bool,
+) -> bool:
+    for mapping in mappings:
+        for condition_set in mapping.get("conditionSets", []):
+            if _condition_set_matches(condition_set, role_counts, complete=complete):
+                return True
+    return False
+
+
+def _condition_set_matches(
+    condition_set: list[dict],
+    role_counts: Counter[str],
+    *,
+    complete: bool,
+) -> bool:
+    constraints = {entry["role"]: entry for entry in condition_set}
+    for role, count in role_counts.items():
+        constraint = constraints.get(role)
+        if constraint is None:
+            continue
+        maximum = constraint.get("max")
+        if isinstance(maximum, int) and count > maximum:
+            return False
+    if not complete:
+        return True
+
+    for role, constraint in constraints.items():
+        count = role_counts.get(role, 0)
+        minimum = constraint.get("min")
+        maximum = constraint.get("max")
+        if isinstance(minimum, int) and count < minimum:
+            return False
+        if isinstance(maximum, int) and count > maximum:
+            return False
+    return True
+
+
+def _format_mapping_requirements(mappings: list[dict]) -> str:
+    fragments: list[str] = []
+    for mapping in mappings[:4]:
+        for condition_set in mapping.get("conditionSets", [])[:4]:
+            parts = []
+            for entry in sorted(condition_set, key=lambda item: item["role"]):
+                role = entry["role"]
+                minimum = entry.get("min")
+                maximum = entry.get("max")
+                if minimum == maximum and minimum is not None:
+                    parts.append(f"{role}={minimum}")
+                elif minimum is not None and maximum is not None:
+                    parts.append(f"{role}={minimum}..{maximum}")
+                elif minimum is not None:
+                    parts.append(f"{role}>={minimum}")
+                elif maximum is not None:
+                    parts.append(f"{role}<={maximum}")
+                else:
+                    parts.append(role)
+            if parts:
+                fragments.append("{" + ", ".join(parts) + "}")
+    return ", ".join(fragments[:8]) or "(none)"
 
 
 def infer_auto_title(visual_type: str, bound_fields: list[BoundField]) -> str | None:

@@ -409,6 +409,25 @@ class NavigationCommandTests(unittest.TestCase):
             self.assertEqual(get_property(updated.data, "action.page", VISUAL_PROPERTIES), details.name)
             self.assertIsNone(get_property(updated.data, "action.url", VISUAL_PROPERTIES))
 
+    def test_nav_page_set_rejects_visuals_without_action_support(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            home = project.create_page("Home")
+            project.create_page("Details")
+            visual = project.create_visual(home, "barChart")
+            visual.data["name"] = "chart1"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["nav", "page", "set", "Home", "chart1", "Details", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("does not support visual actions", result.stdout)
+
     def test_nav_drillthrough_set_validates_target_and_sets_action(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -515,6 +534,27 @@ class NavigationCommandTests(unittest.TestCase):
             updated = reloaded.find_visual(reloaded.find_page("Home"), "chart1")
             self.assertIsNone(get_property(updated.data, "tooltip.type", VISUAL_PROPERTIES))
             self.assertIsNone(get_property(updated.data, "tooltip.section", VISUAL_PROPERTIES))
+
+    def test_nav_tooltip_set_rejects_visuals_without_tooltip_support(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            home = project.create_page("Home")
+            tip = project.create_page("Tip")
+            configure_tooltip_page(tip, [("Product", "Category", "column")], width=320, height=240)
+            tip.save()
+            visual = project.create_visual(home, "shape")
+            visual.data["name"] = "shape1"
+            visual.save()
+
+            result = runner.invoke(
+                app,
+                ["nav", "tooltip", "set", "Home", "shape1", "Tip", "--project", str(root / "Sample.pbip")],
+            )
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("does not support tooltips", result.stdout)
 
     def test_page_drillthrough_and_tooltip_get_show_binding_details(self) -> None:
         runner = CliRunner()
