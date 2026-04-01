@@ -1045,6 +1045,59 @@ table {name}
             self.assertIn("B -> A", check_result.stdout)
             self.assertIn("B -> C -> A", check_result.stdout)
 
+    def test_model_check_accepts_auto_date_table_data_categories(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "LocalDateTable_abc.tmdl", """
+table LocalDateTable_abc
+\tannotation __PBI_LocalDateTable = true
+\tcolumn Date
+\t\tdataType: dateTime
+\t\tdataCategory: PaddedDateTableDates
+\t\tlineageTag: ld-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Date
+\tcolumn Year
+\t\tdataType: int64
+\t\tdataCategory: Years
+\t\tlineageTag: ld-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+\tcolumn Month
+\t\tdataType: string
+\t\tdataCategory: Months
+\t\tlineageTag: ld-3
+\t\tsummarizeBy: none
+\t\tsourceColumn: Month
+\tcolumn MonthNo
+\t\tdataType: int64
+\t\tdataCategory: MonthOfYear
+\t\tlineageTag: ld-4
+\t\tsummarizeBy: none
+\t\tsourceColumn: MonthNo
+\tcolumn Quarter
+\t\tdataType: string
+\t\tdataCategory: Quarters
+\t\tlineageTag: ld-5
+\t\tsummarizeBy: none
+\t\tsourceColumn: Quarter
+\tcolumn QuarterNo
+\t\tdataType: int64
+\t\tdataCategory: QuarterOfYear
+\t\tlineageTag: ld-6
+\t\tsummarizeBy: none
+\t\tsourceColumn: QuarterNo
+""")
+
+            result = runner.invoke(app, [
+                "model", "check",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("No issues", result.stdout)
+
     def test_validate_reports_missing_relationship_column(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
