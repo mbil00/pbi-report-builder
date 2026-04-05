@@ -16,6 +16,7 @@ from pbi.roundtrip import (
     match_existing_projection,
     parse_binding_items,
 )
+from pbi.fields import resolve_field_info
 
 
 def apply_bindings(
@@ -29,7 +30,6 @@ def apply_bindings(
 ) -> None:
     """Apply data bindings from the YAML spec."""
     from pbi.columns import set_column_width
-    from pbi.commands.common import resolve_field_info
     from pbi.visual_builders import (
         BoundField,
         existing_bound_fields,

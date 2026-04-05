@@ -37,6 +37,17 @@ pbi <object> <verb> <target> [key=value...] [--flags]
 
 ---
 
+## Project Bootstrap
+
+```bash
+pbi init                                      # initialize project-local CLI scaffolding
+pbi init -p /path/to/project                  # explicit project path
+```
+
+`pbi init` prepares project-local custom visual schemas and any future CLI scaffolding. Run it after opening a project so custom-visual-aware commands have the schema metadata they need.
+
+---
+
 ## Pages
 
 ```bash

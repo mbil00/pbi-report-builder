@@ -9,7 +9,9 @@ import typer
 from rich import box
 from rich.table import Table
 
-from .common import ProjectOpt, console, get_project, resolve_field_info
+from pbi.fields import resolve_field_info
+
+from .common import ProjectOpt, console, get_project
 
 filter_app = typer.Typer(help="Filter operations.", no_args_is_help=True)
 

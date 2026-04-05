@@ -17,6 +17,7 @@ from pbi.drillthrough import (
     parse_drillthrough_shorthand,
     parse_tooltip_shorthand,
 )
+from pbi.fields import resolve_binding_ref as _resolve_binding_ref
 from pbi.properties import (
     VISUAL_PROPERTIES,
     canonical_object_property_name,
@@ -247,28 +248,7 @@ def resolve_binding_ref(
     model: Any = None,
 ) -> tuple[str, str, str]:
     """Resolve a shorthand binding field ref to entity/prop/type."""
-    is_measure = field_ref.endswith("(measure)")
-    clean_ref = field_ref.replace("(measure)", "").strip()
-    dot = clean_ref.find(".")
-    if dot == -1:
-        raise ValueError(f"field must be Table.Field format: {field_ref}")
-    entity = clean_ref[:dot]
-    prop = clean_ref[dot + 1 :]
-    field_type = "measure" if is_measure else "column"
-
-    if not is_measure:
-        loaded_model = model
-        if loaded_model is None:
-            try:
-                from pbi.model import SemanticModel
-
-                loaded_model = SemanticModel.load(project_root)
-            except (FileNotFoundError, ValueError, TypeError):
-                loaded_model = None
-        if loaded_model is not None:
-            entity, prop, field_type = loaded_model.resolve_field(clean_ref)
-
-    return entity, prop, field_type
+    return _resolve_binding_ref(project_root, field_ref, model=model)
 
 
 def match_existing_projection(

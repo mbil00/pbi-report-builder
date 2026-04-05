@@ -9,6 +9,7 @@ from pbi.project import Project, Page, Visual
 from pbi.filters import get_filters, parse_filter
 from pbi.formatting import get_conditional_formats
 from pbi.properties import decode_pbi_value
+from pbi.visual_queries import get_bindings, get_sort
 
 
 def generate_map(
@@ -210,7 +211,7 @@ def _write_visual(
         lines.append(f"{pad}  title: {_ys(title)}")
 
     # Bindings
-    bindings = project.get_bindings(visual)
+    bindings = get_bindings(visual)
     if bindings:
         lines.append(f"{pad}  bindings:")
         # Group by role
@@ -230,7 +231,7 @@ def _write_visual(
                     lines.append(f"{pad}      - {entity}.{_ys(prop)}{suffix}")
 
     # Sort definition
-    sorts = project.get_sort(visual)
+    sorts = get_sort(visual)
     if sorts:
         entity, prop, ftype, direction = sorts[0]
         suffix = " (measure)" if ftype == "measure" else ""

@@ -5,7 +5,8 @@ from __future__ import annotations
 import difflib
 from dataclasses import dataclass
 
-from pbi.project import Project, _write_json
+from pbi.project import Project
+from pbi.report_io import write_report_json
 from pbi.schema_refs import REPORT_SCHEMA
 
 
@@ -143,4 +144,4 @@ def _find_custom_visual(report: dict, identifier: str) -> dict:
 
 def _save_report(project: Project, report: dict) -> None:
     report.setdefault("$schema", REPORT_SCHEMA)
-    _write_json(project.definition_folder / "report.json", report)
+    write_report_json(project, report)

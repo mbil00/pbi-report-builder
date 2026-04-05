@@ -8,7 +8,10 @@ import typer
 from rich import box
 from rich.table import Table
 
-from ..common import ProjectOpt, console, resolve_field_info
+from pbi.fields import resolve_field_info
+from pbi.visual_queries import add_binding, get_bindings, remove_binding
+
+from ..common import ProjectOpt, console
 from .app import visual_app
 from .helpers import resolve_visual_target
 
@@ -66,7 +69,7 @@ def visual_bind(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    proj.add_binding(vis, canonical_role, entity, prop, field_type=resolved_field_type)
+    add_binding(vis, canonical_role, entity, prop, field_type=resolved_field_type)
     kind = "measure" if resolved_field_type == "measure" else "column"
     console.print(
         f'Bound [cyan]{entity}.{prop}[/cyan] ({kind}) -> '
@@ -88,7 +91,7 @@ def visual_unbind(
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
     canonical_role = normalize_visual_role(vis.visual_type, role)
-    removed = proj.remove_binding(vis, canonical_role, field_ref=field)
+    removed = remove_binding(vis, canonical_role, field_ref=field)
     if removed:
         target = f" ({field})" if field else ""
         console.print(f'Removed {removed} binding(s) from role "[bold]{canonical_role}[/bold]"{target}')
@@ -105,7 +108,7 @@ def visual_bindings(
     """List all data bindings on a visual."""
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
-    bindings = proj.get_bindings(vis)
+    bindings = get_bindings(vis)
     if not bindings:
         console.print("[dim]No data bindings.[/dim]")
         return

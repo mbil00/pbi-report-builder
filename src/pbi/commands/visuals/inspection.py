@@ -19,6 +19,7 @@ from pbi.properties import (
     property_aliases_for,
 )
 from pbi.visual_analysis import describe_behavior_features
+from pbi.visual_queries import get_sort
 
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
@@ -477,7 +478,7 @@ def visual_get(
                 console.print(f"  [cyan]{col.entity}.{col.prop}[/cyan] ({col.role}) → {display}{width_str}")
 
         # Sort
-        sorts = proj.get_sort(vis)
+        sorts = get_sort(vis)
         if sorts:
             console.print("\n[bold]Sort[/bold]")
             for entity, sort_prop, ftype, direction in sorts:
@@ -570,7 +571,7 @@ def visual_get(
                 fields.append(ref)
             table.add_row(f"[dim]Data:[/dim] {role}", ", ".join(fields))
 
-    sorts = proj.get_sort(vis)
+    sorts = get_sort(vis)
     if sorts:
         table.add_section()
         for entity, sort_prop, ftype, direction in sorts:

@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 
 from pbi.visual_builders import apply_initial_sort
+from pbi.visual_queries import clear_sort, get_sort
 
 from ..common import ProjectOpt, console
 from .app import visual_sort_app
@@ -22,7 +23,7 @@ def visual_sort_get(
     """Show a visual's sort definition."""
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
-    sorts = proj.get_sort(vis)
+    sorts = get_sort(vis)
     if not sorts:
         console.print("[dim]No sort definition.[/dim]")
         return
@@ -72,7 +73,7 @@ def visual_sort_clear(
     """Clear a visual's sort definition."""
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
-    if not proj.get_sort(vis):
+    if not get_sort(vis):
         console.print("[dim]No sort definition to clear.[/dim]")
         return
 
@@ -81,5 +82,5 @@ def visual_sort_clear(
         if not confirm:
             raise typer.Abort()
 
-    proj.clear_sort(vis)
+    clear_sort(vis)
     console.print("Cleared sort definition.")

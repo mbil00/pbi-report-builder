@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 
-from pbi.commands.common import resolve_field_info
+from pbi.fields import resolve_field_info
 from pbi.filters import add_categorical_filter
 from pbi.project import Page, Project
 

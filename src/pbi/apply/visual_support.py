@@ -16,6 +16,7 @@ from pbi.properties import (
 from pbi.roundtrip import iter_nested_property_assignments
 from pbi.styles import StylePreset, get_style
 from pbi.textbox import set_textbox_content
+from pbi.fields import resolve_field_info
 
 
 def record_schema_warnings(
@@ -133,8 +134,6 @@ def apply_conditional_formatting(
         conditional_target_warning,
         set_conditional_format,
     )
-    from pbi.commands.common import resolve_field_info
-
     if not isinstance(cf_spec, dict):
         result.errors.append(
             f"{context}: conditionalFormatting must be a mapping of property -> config, not a {type(cf_spec).__name__}."

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import json
 from pathlib import Path
 from typing import Annotated
@@ -11,9 +10,22 @@ import typer
 from rich import box
 from rich.table import Table
 
-from pbi.properties import REPORT_PROPERTIES, get_property, list_properties, set_property
-from pbi.resources import normalize_resource_packages
-from pbi.schema_refs import REPORT_SCHEMA
+from pbi.properties import REPORT_PROPERTIES, get_property, list_properties
+from pbi.report_metadata import (
+    clear_report_data_source_variables,
+    clear_report_object,
+    delete_report_annotation,
+    get_report_annotation,
+    get_report_data_source_variables,
+    get_report_object,
+    list_report_annotations,
+    list_report_objects,
+    resolve_report_object_key,
+    set_report_annotation,
+    set_report_data_source_variables,
+    set_report_object,
+    set_report_properties,
+)
 
 from .common import ProjectOpt, console, get_project, parse_property_assignments
 
@@ -34,22 +46,6 @@ report_app.add_typer(report_data_source_variables_app, name="data-source-variabl
 report_resource_app.add_typer(report_resource_package_app, name="package")
 report_resource_app.add_typer(report_resource_item_app, name="item")
 
-_REPORT_OBJECT_KEYS = (
-    "annotations",
-    "filterConfig",
-    "objects",
-    "organizationCustomVisuals",
-    "resourcePackages",
-    "settings",
-    "themeCollection",
-)
-
-
-def _save_report_json(project, data: dict) -> None:
-    from pbi.project import _write_json
-
-    _write_json(project.definition_folder / "report.json", data)
-
 
 def _load_json_value(payload: str | None, from_file: Path | None) -> object:
     if payload is not None and from_file is not None:
@@ -64,55 +60,6 @@ def _load_json_value(payload: str | None, from_file: Path | None) -> object:
         return json.loads(text)
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON: {e}") from e
-
-
-def _resolve_object_key(name: str) -> str:
-    lowered = name.lower()
-    for key in _REPORT_OBJECT_KEYS:
-        if key.lower() == lowered:
-            return key
-    matches = difflib.get_close_matches(name, _REPORT_OBJECT_KEYS, n=3, cutoff=0.5)
-    if matches:
-        raise ValueError(f'Unknown report object "{name}". Did you mean: {", ".join(matches)}?')
-    raise ValueError(f'Unknown report object "{name}". Available: {", ".join(_REPORT_OBJECT_KEYS)}')
-
-
-def _annotation_rows(data: dict) -> list[dict]:
-    annotations = data.get("annotations", [])
-    if not isinstance(annotations, list):
-        return []
-    rows: list[dict] = []
-    for entry in annotations:
-        if isinstance(entry, dict) and "name" in entry and "value" in entry:
-            rows.append(entry)
-    return rows
-
-
-def _find_annotation(data: dict, identifier: str) -> dict:
-    rows = _annotation_rows(data)
-    lowered = identifier.lower()
-
-    for entry in rows:
-        if str(entry.get("name", "")).lower() == lowered:
-            return entry
-
-    names = [str(entry.get("name", "")) for entry in rows]
-    matches = difflib.get_close_matches(identifier, names, n=3, cutoff=0.5)
-    if matches:
-        raise ValueError(f'Annotation "{identifier}" not found. Did you mean: {", ".join(matches)}?')
-    if names:
-        raise ValueError(f'Annotation "{identifier}" not found. Available: {", ".join(names)}')
-    raise ValueError("No annotations defined. Use `pbi report annotation set` to add one.")
-
-
-def _normalize_report_object_value(key: str, value: object) -> object:
-    if not isinstance(value, (dict, list)):
-        raise ValueError("Report objects must be JSON objects or arrays.")
-    if key == "resourcePackages":
-        wrapper = {"resourcePackages": value}
-        normalize_resource_packages(wrapper)
-        return wrapper["resourcePackages"]
-    return value
 
 
 def _print_object_summary(name: str, value: object) -> None:
@@ -185,10 +132,6 @@ def report_set(
 ) -> None:
     """Set report metadata properties."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    data.setdefault("$schema", REPORT_SCHEMA)
-    data.setdefault("layoutOptimization", "None")
-    data.setdefault("themeCollection", {})
 
     try:
         pairs = parse_property_assignments(assignments)
@@ -196,23 +139,17 @@ def report_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    changed = False
-    for prop, value in pairs:
-        old = get_property(data, prop, REPORT_PROPERTIES)
-        try:
-            set_property(data, prop, value, REPORT_PROPERTIES)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {prop}: {e}")
-            raise typer.Exit(1)
-        new = get_property(data, prop, REPORT_PROPERTIES)
-        if str(old) == str(new):
-            console.print(f"[dim]No change:[/dim] [cyan]{prop}[/cyan] is already {new}")
-        else:
-            console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")
-            changed = True
+    try:
+        changes = set_report_properties(proj, pairs)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    if changed:
-        _save_report_json(proj, data)
+    for change in changes:
+        if not change.changed:
+            console.print(f"[dim]No change:[/dim] [cyan]{change.prop}[/cyan] is already {change.new}")
+        else:
+            console.print(f"[dim]{change.prop}:[/dim] {change.old} [dim]->[/dim] {change.new}")
 
 
 @report_app.command("properties")
@@ -236,10 +173,12 @@ def report_annotation_list(
 ) -> None:
     """List report annotations."""
     proj = get_project(project)
-    rows = _annotation_rows(proj.get_report_meta())
+    rows = list_report_annotations(proj)
 
     if as_json:
-        console.print_json(json.dumps(rows, indent=2))
+        console.print_json(
+            json.dumps([{"name": row.name, "value": row.value} for row in rows], indent=2)
+        )
         return
 
     if not rows:
@@ -250,7 +189,7 @@ def report_annotation_list(
     table.add_column("Name", style="cyan")
     table.add_column("Value")
     for entry in rows:
-        table.add_row(str(entry["name"]), str(entry["value"]))
+        table.add_row(entry.name, entry.value)
     console.print(table)
 
 
@@ -263,20 +202,20 @@ def report_annotation_get(
     """Show one report annotation."""
     proj = get_project(project)
     try:
-        entry = _find_annotation(proj.get_report_meta(), name)
+        entry = get_report_annotation(proj, name)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
     if raw:
-        console.print_json(json.dumps(entry, indent=2))
+        console.print_json(json.dumps({"name": entry.name, "value": entry.value}, indent=2))
         return
 
-    table = Table(title=str(entry["name"]), box=box.SIMPLE)
+    table = Table(title=entry.name, box=box.SIMPLE)
     table.add_column("Property", style="cyan")
     table.add_column("Value")
-    table.add_row("Name", str(entry["name"]))
-    table.add_row("Value", str(entry["value"]))
+    table.add_row("Name", entry.name)
+    table.add_row("Value", entry.value)
     console.print(table)
 
 
@@ -288,28 +227,20 @@ def report_annotation_set(
 ) -> None:
     """Create or update a report annotation."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    data.setdefault("$schema", REPORT_SCHEMA)
-    annotations = data.setdefault("annotations", [])
-    if not isinstance(annotations, list):
-        console.print("[red]Error:[/red] report.annotations is not an array.")
+    try:
+        result = set_report_annotation(proj, name, value)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    for entry in annotations:
-        if isinstance(entry, dict) and str(entry.get("name", "")).lower() == name.lower():
-            old = entry.get("value")
-            if str(old) == value:
-                console.print(f'[dim]No change:[/dim] [cyan]{name}[/cyan] is already {value}')
-                return
-            entry["name"] = name
-            entry["value"] = value
-            _save_report_json(proj, data)
-            console.print(f"[dim]{name}:[/dim] {old} [dim]->[/dim] {value}")
-            return
-
-    annotations.append({"name": name, "value": value})
-    _save_report_json(proj, data)
-    console.print(f'Created report annotation "[cyan]{name}[/cyan]"')
+    if not result.changed:
+        console.print(f'[dim]No change:[/dim] [cyan]{name}[/cyan] is already {value}')
+    elif result.created:
+        console.print(f'Created report annotation "[cyan]{result.annotation.name}[/cyan]"')
+    else:
+        console.print(
+            f"[dim]{result.annotation.name}:[/dim] {result.old_value} [dim]->[/dim] {result.annotation.value}"
+        )
 
 
 @report_annotation_app.command("delete")
@@ -320,37 +251,22 @@ def report_annotation_delete(
 ) -> None:
     """Delete a report annotation."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    annotations = data.get("annotations", [])
-    if not isinstance(annotations, list):
-        console.print("[yellow]No annotations. Use `pbi report annotation set` to add one.[/yellow]")
-        raise typer.Exit(0)
-
-    target = None
-    for entry in annotations:
-        if isinstance(entry, dict) and str(entry.get("name", "")).lower() == name.lower():
-            target = entry
-            break
-
-    if target is None:
-        try:
-            _find_annotation(data, name)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
+    try:
+        target = get_report_annotation(proj, name)
+    except ValueError as e:
+        if "No annotations defined." in str(e):
+            console.print("[yellow]No annotations. Use `pbi report annotation set` to add one.[/yellow]")
+            raise typer.Exit(0)
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    target_name = str(target.get("name", name))
     if not force:
-        confirm = typer.confirm(f'Delete "{target_name}"?')
+        confirm = typer.confirm(f'Delete "{target.name}"?')
         if not confirm:
             raise typer.Abort()
 
-    annotations.remove(target)
-    if not annotations:
-        data.pop("annotations", None)
-    _save_report_json(proj, data)
-    console.print(f'Deleted report annotation "[cyan]{target_name}[/cyan]"')
+    deleted = delete_report_annotation(proj, name)
+    console.print(f'Deleted report annotation "[cyan]{deleted.name}[/cyan]"')
 
 
 @report_object_app.command("list")
@@ -360,21 +276,23 @@ def report_object_list(
 ) -> None:
     """List report-level objects and arrays."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    rows = []
-    for name in _REPORT_OBJECT_KEYS:
-        value = data.get(name)
-        present = isinstance(value, (dict, list))
-        size = len(value) if isinstance(value, (dict, list)) else 0
-        rows.append({
-            "name": name,
-            "present": present,
-            "type": "array" if isinstance(value, list) else ("object" if isinstance(value, dict) else ""),
-            "size": size,
-        })
+    rows = list_report_objects(proj)
 
     if as_json:
-        console.print_json(json.dumps(rows, indent=2))
+        console.print_json(
+            json.dumps(
+                [
+                    {
+                        "name": row.name,
+                        "present": row.present,
+                        "type": row.value_type,
+                        "size": row.size,
+                    }
+                    for row in rows
+                ],
+                indent=2,
+            )
+        )
         return
 
     table = Table(title="Report Objects", box=box.SIMPLE)
@@ -383,7 +301,7 @@ def report_object_list(
     table.add_column("Present")
     table.add_column("Size", justify="right")
     for row in rows:
-        table.add_row(row["name"], row["type"], "yes" if row["present"] else "", str(row["size"]) if row["present"] else "")
+        table.add_row(row.name, row.value_type, "yes" if row.present else "", str(row.size) if row.present else "")
     console.print(table)
 
 
@@ -395,14 +313,12 @@ def report_object_get(
 ) -> None:
     """Show one report-level object or array."""
     proj = get_project(project)
-    data = proj.get_report_meta()
     try:
-        key = _resolve_object_key(name)
+        key, value = get_report_object(proj, name)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    value = data.get(key)
     if not isinstance(value, (dict, list)):
         console.print(f'[yellow]No report object configured for "[cyan]{key}[/cyan]".[/yellow]')
         raise typer.Exit(0)
@@ -423,23 +339,17 @@ def report_object_set(
 ) -> None:
     """Set one top-level report object or array from JSON."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    data.setdefault("$schema", REPORT_SCHEMA)
 
     try:
-        key = _resolve_object_key(name)
-        value = _normalize_report_object_value(key, _load_json_value(payload, from_file))
+        key, changed = set_report_object(proj, name, _load_json_value(payload, from_file))
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    old = data.get(key)
-    if old == value:
+    if not changed:
         console.print(f'[dim]No change:[/dim] [cyan]{key}[/cyan] already matches the provided JSON')
         return
 
-    data[key] = value
-    _save_report_json(proj, data)
     console.print(f'Set report object "[cyan]{key}[/cyan]"')
 
 
@@ -451,14 +361,14 @@ def report_object_clear(
 ) -> None:
     """Remove one top-level report object or array."""
     proj = get_project(project)
-    data = proj.get_report_meta()
     try:
-        key = _resolve_object_key(name)
+        key = resolve_report_object_key(name)
+        _resolved_key, value = get_report_object(proj, name)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if key not in data:
+    if not isinstance(value, (dict, list)):
         console.print(f'[dim]No change:[/dim] [cyan]{key}[/cyan] is not configured')
         return
 
@@ -467,8 +377,7 @@ def report_object_clear(
         if not confirm:
             raise typer.Abort()
 
-    data.pop(key, None)
-    _save_report_json(proj, data)
+    clear_report_object(proj, name)
     console.print(f'Cleared report object "[cyan]{key}[/cyan]"')
 
 
@@ -868,9 +777,8 @@ def report_data_source_variables_get(
 ) -> None:
     """Show report data source variable overrides."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    value = data.get("dataSourceVariables")
-    if not isinstance(value, str) or not value:
+    value = get_report_data_source_variables(proj)
+    if value is None:
         console.print("[yellow]No data source variables configured.[/yellow]")
         raise typer.Exit(0)
 
@@ -908,15 +816,10 @@ def report_data_source_variables_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    data = proj.get_report_meta()
-    data.setdefault("$schema", REPORT_SCHEMA)
-    old = data.get("dataSourceVariables")
-    if old == payload:
+    if not set_report_data_source_variables(proj, payload):
         console.print("[dim]No change:[/dim] [cyan]dataSourceVariables[/cyan] already matches the requested value")
         return
 
-    data["dataSourceVariables"] = payload
-    _save_report_json(proj, data)
     console.print("Set report data source variables")
 
 
@@ -927,8 +830,7 @@ def report_data_source_variables_clear(
 ) -> None:
     """Clear report data source variable overrides."""
     proj = get_project(project)
-    data = proj.get_report_meta()
-    if "dataSourceVariables" not in data:
+    if get_report_data_source_variables(proj) is None:
         console.print("[dim]No change:[/dim] [cyan]dataSourceVariables[/cyan] is not configured")
         return
 
@@ -937,6 +839,5 @@ def report_data_source_variables_clear(
         if not confirm:
             raise typer.Abort()
 
-    data.pop("dataSourceVariables", None)
-    _save_report_json(proj, data)
+    clear_report_data_source_variables(proj)
     console.print("Cleared report data source variables")

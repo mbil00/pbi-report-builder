@@ -31,6 +31,7 @@ from .visual_support import (
 from pbi.project import Project, Page, Visual, sanitize_visual_name
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.styles import StylePreset
+from pbi.visual_groups import create_group_container
 
 
 def apply_visual(
@@ -441,7 +442,8 @@ def _apply_group_visual(
         x, y = parse_position(vis_spec.get("position", "0, 0"))
         w, h = parse_size(vis_spec.get("size", "0 x 0"))
         session.ensure_snapshot(project)
-        visual = project.create_group_container(
+        visual = create_group_container(
+            project,
             page,
             name=str(group_name) if isinstance(group_name, str) else None,
             display_name=vis_spec.get("displayName") if isinstance(vis_spec.get("displayName"), str) else str(group_name or group_id or "group"),

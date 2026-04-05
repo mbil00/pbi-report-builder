@@ -13,6 +13,7 @@ from pbi.apply.visual_support import apply_raw_visual_payload
 from pbi.export import export_visual_spec
 from pbi.project import Page, Project, Visual, sanitize_visual_name
 from pbi.textbox import set_textbox_content
+from pbi.visual_groups import create_group
 
 
 @dataclass(frozen=True)
@@ -530,7 +531,7 @@ def apply_component(
 
     # Group the created visuals if more than one
     if len(created) >= 2:
-        group = project.create_group(page, created, display_name=instance_name or component_name)
+        group = create_group(project, page, created, display_name=instance_name or component_name)
         created.append(group)
 
     return created

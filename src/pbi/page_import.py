@@ -8,7 +8,9 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from pbi.page_authoring import add_page_to_order
 from pbi.project import Project, _read_json, _write_json
+from pbi.report_io import write_report_json
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,7 @@ def import_page(
     new_id, new_dir = _copy_page_directory(target_project, source_page)
     _rewrite_page_identity(new_dir, new_id, target_name)
     _rewrite_visual_identities(new_dir)
-    target_project._add_to_page_order(new_id)
+    add_page_to_order(target_project, new_id)
 
     resource_count = 0
     if include_resources:
@@ -126,7 +128,7 @@ def _copy_page_resources(
     target_res_dir = target_project.report_folder / "StaticResources" / "RegisteredResources"
     target_res_dir.mkdir(parents=True, exist_ok=True)
 
-    from pbi.images import _get_resource_package, _save_report_json, _scan_for_resource_refs
+    from pbi.images import _get_resource_package, _scan_for_resource_refs
     from pbi.resources import add_or_update_resource_item, find_registered_image_item
 
     refs: dict[str, list[str]] = {}
@@ -159,7 +161,7 @@ def _copy_page_resources(
                 name=display_name,
                 path=image_name,
             )
-            _save_report_json(target_project, report_data)
+            write_report_json(target_project, report_data)
         copied += 1
 
     return copied

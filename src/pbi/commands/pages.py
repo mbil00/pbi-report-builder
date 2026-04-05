@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -10,14 +9,28 @@ import typer
 from rich import box
 from rich.table import Table
 
-from pbi.properties import PAGE_PROPERTIES, get_property, list_properties, set_property
+from pbi.page_metadata import (
+    clear_page_drillthrough,
+    clear_page_tooltip,
+    configure_page_drillthrough,
+    configure_page_tooltip,
+    get_page_binding_info,
+    list_pages as list_page_rows,
+    rename_page as rename_page_service,
+    reorder_pages,
+    resolve_page_fields,
+    set_active_page as set_active_page_service,
+    set_all_page_properties,
+    set_page_properties,
+)
+from pbi.page_sections import create_page_section, list_page_sections
+from pbi.properties import PAGE_PROPERTIES, get_property, list_properties
 
 from .common import (
     ProjectOpt,
     console,
     get_project,
     parse_property_assignments,
-    resolve_field_type,
     resolve_output_path,
 )
 
@@ -41,17 +54,6 @@ def _get_page(project: Path | None, page: str):
         raise typer.Exit(1)
 
 
-def _resolve_page_fields(proj, fields: list[str]) -> list[tuple[str, str, str]]:
-    parsed: list[tuple[str, str, str]] = []
-    for field in fields:
-        try:
-            parsed.append(resolve_field_type(proj, field, "auto", strict=True))
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
-    return parsed
-
-
 @page_app.command("list")
 def page_list(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
@@ -59,27 +61,30 @@ def page_list(
 ) -> None:
     """List all pages."""
     proj = get_project(project)
-    pages = proj.get_pages()
-    meta = proj.get_pages_meta()
+    rows = list_page_rows(proj)
 
     if as_json:
         import json
 
-        rows = []
-        for i, pg in enumerate(pages, 1):
-            visuals = proj.get_visuals(pg)
-            rows.append({
-                "index": i,
-                "name": pg.display_name,
-                "folder": pg.name,
-                "width": pg.width,
-                "height": pg.height,
-                "displayOption": pg.display_option,
-                "visibility": pg.visibility,
-                "active": meta.get("activePageName") == pg.name,
-                "visuals": len(visuals),
-            })
-        console.print_json(json.dumps(rows, indent=2))
+        console.print_json(
+            json.dumps(
+                [
+                    {
+                        "index": row.index,
+                        "name": row.display_name,
+                        "folder": row.folder,
+                        "width": row.width,
+                        "height": row.height,
+                        "displayOption": row.display_option,
+                        "visibility": row.visibility,
+                        "active": row.active,
+                        "visuals": row.visual_count,
+                    }
+                    for row in rows
+                ],
+                indent=2,
+            )
+        )
         return
 
     table = Table(box=box.SIMPLE)
@@ -90,18 +95,16 @@ def page_list(
     table.add_column("Visibility")
     table.add_column("Visuals", justify="right")
 
-    for i, page in enumerate(pages, 1):
-        visuals = proj.get_visuals(page)
-        active = meta.get("activePageName") == page.name
-        vis_text = "AlwaysVisible" if page.visibility == "AlwaysVisible" else "[yellow]Hidden[/yellow]"
-        name = f"[bold]{page.display_name}[/bold]" if active else page.display_name
+    for row in rows:
+        vis_text = "AlwaysVisible" if row.visibility == "AlwaysVisible" else "[yellow]Hidden[/yellow]"
+        name = f"[bold]{row.display_name}[/bold]" if row.active else row.display_name
         table.add_row(
-            str(i),
+            str(row.index),
             name,
-            f"{page.width}x{page.height}",
-            page.display_option,
+            f"{row.width}x{row.height}",
+            row.display_option,
             vis_text,
-            str(len(visuals)),
+            str(row.visual_count),
         )
 
     console.print(table)
@@ -114,34 +117,13 @@ def page_reorder(
 ) -> None:
     """Set page order. List all pages in desired order, or a subset to move to front."""
     proj = get_project(project)
-    all_pages = proj.get_pages()
-    all_ids = [p.name for p in all_pages]
+    try:
+        ordered_pages = reorder_pages(proj, pages)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    # Resolve referenced pages
-    resolved_ids: list[str] = []
-    for ref in pages:
-        try:
-            pg = proj.find_page(ref)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
-        if pg.name in resolved_ids:
-            console.print(f'[red]Error:[/red] Page "{pg.display_name}" listed more than once.')
-            raise typer.Exit(1)
-        resolved_ids.append(pg.name)
-
-    # If partial list, append remaining pages in current order
-    if len(resolved_ids) < len(all_ids):
-        for pid in all_ids:
-            if pid not in resolved_ids:
-                resolved_ids.append(pid)
-
-    proj.set_page_order(resolved_ids)
-
-    # Display new order
-    id_to_page = {p.name: p for p in all_pages}
-    for i, pid in enumerate(resolved_ids, 1):
-        pg = id_to_page[pid]
+    for i, pg in enumerate(ordered_pages, 1):
         console.print(f"  {i}. [cyan]{pg.display_name}[/cyan]")
 
 
@@ -151,22 +133,16 @@ def page_set_active(
     project: ProjectOpt = None,
 ) -> None:
     """Set which page opens by default when the report is viewed."""
-    proj, pg = _get_page(project, page)
-    meta = proj.get_pages_meta()
-    old_active = meta.get("activePageName")
+    proj = get_project(project)
+    try:
+        pg, old_name, changed = set_active_page_service(proj, page)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    if old_active == pg.name:
+    if not changed:
         console.print(f'[dim]"{pg.display_name}" is already the active page.[/dim]')
         return
-
-    proj.set_active_page(pg.name)
-
-    old_name = None
-    if old_active:
-        for p in proj.get_pages():
-            if p.name == old_active:
-                old_name = p.display_name
-                break
     if old_name:
         console.print(f'Active page: "{old_name}" [dim]->[/dim] "[cyan]{pg.display_name}[/cyan]"')
     else:
@@ -180,14 +156,6 @@ def page_get(
     project: ProjectOpt = None,
 ) -> None:
     """Show page details or one or more specific properties."""
-    from pbi.drillthrough import (
-        get_drillthrough_fields,
-        get_tooltip_fields,
-        is_cross_report_drillthrough,
-        is_drillthrough,
-        is_tooltip_page,
-    )
-
     _proj, pg = _get_page(project, page)
 
     if props:
@@ -204,8 +172,6 @@ def page_get(
             table.add_row(prop, "" if value is None else str(value))
         console.print(table)
         return
-
-    proj = get_project(project)
 
     table = Table(title=pg.display_name, box=box.SIMPLE)
     table.add_column("Property", style="cyan")
@@ -227,33 +193,23 @@ def page_get(
         table.add_row("Background", str(bg_color))
 
     # Visual count
+    proj = get_project(project)
     visuals = proj.get_visuals(pg)
     table.add_row("Visuals", str(len(visuals)))
 
-    # Drillthrough/tooltip info
-    if is_drillthrough(pg):
-        table.add_row("Binding Type", "Drillthrough")
-        drill_fields = get_drillthrough_fields(pg)
-        if drill_fields:
+    binding = get_page_binding_info(pg)
+    if binding is not None:
+        table.add_row("Binding Type", binding.binding_type)
+        if binding.fields:
             table.add_row(
                 "Binding Fields",
                 ", ".join(
                     f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
-                    for entity, prop, field_type in drill_fields
+                    for entity, prop, field_type in binding.fields
                 ),
             )
-        table.add_row("Cross Report", "yes" if is_cross_report_drillthrough(pg) else "")
-    elif is_tooltip_page(pg):
-        table.add_row("Binding Type", "Tooltip")
-        tooltip_fields = get_tooltip_fields(pg)
-        if tooltip_fields:
-            table.add_row(
-                "Binding Fields",
-                ", ".join(
-                    f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
-                    for entity, prop, field_type in tooltip_fields
-                ),
-            )
+        if binding.binding_type == "Drillthrough":
+            table.add_row("Cross Report", "yes" if binding.cross_report else "")
 
     console.print(table)
 
@@ -273,23 +229,17 @@ def page_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    changed = False
-    for prop, value in pairs:
-        old = get_property(pg.data, prop, PAGE_PROPERTIES)
-        try:
-            set_property(pg.data, prop, value, PAGE_PROPERTIES)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {prop}: {e}")
-            raise typer.Exit(1)
-        new = get_property(pg.data, prop, PAGE_PROPERTIES)
-        if str(old) == str(new):
-            console.print(f"[dim]No change:[/dim] [cyan]{prop}[/cyan] is already {new}")
-        else:
-            console.print(f"[dim]{prop}:[/dim] {old} [dim]->[/dim] {new}")
-            changed = True
+    try:
+        changes = set_page_properties(pg, pairs)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    if changed:
-        pg.save()
+    for change in changes:
+        if not change.changed:
+            console.print(f"[dim]No change:[/dim] [cyan]{change.prop}[/cyan] is already {change.new}")
+        else:
+            console.print(f"[dim]{change.prop}:[/dim] {change.old} [dim]->[/dim] {change.new}")
 
 
 @page_app.command("set-all")
@@ -301,12 +251,11 @@ def page_set_all(
 ) -> None:
     """Set properties on all pages at once."""
     proj = get_project(project)
-    pages = proj.get_pages()
-
+    filtered_pages = proj.get_pages()
     if exclude:
-        pages = [p for p in pages if exclude not in p.display_name]
+        filtered_pages = [page_obj for page_obj in filtered_pages if exclude not in page_obj.display_name]
 
-    if not pages:
+    if not filtered_pages:
         console.print("[yellow]No pages match the filter.[/yellow]")
         raise typer.Exit(0)
 
@@ -316,17 +265,11 @@ def page_set_all(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    count_done = 0
-    for pg in pages:
-        for prop, value in pairs:
-            try:
-                set_property(pg.data, prop, value, PAGE_PROPERTIES)
-            except ValueError as e:
-                console.print(f"[red]Error:[/red] {pg.display_name}: {prop}: {e}")
-                raise typer.Exit(1)
-        if not dry_run:
-            pg.save()
-        count_done += 1
+    try:
+        count_done = set_all_page_properties(proj, pairs, exclude=exclude, dry_run=dry_run)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     props_str = " ".join(f"{prop}={value}" for prop, value in pairs)
     if dry_run:
@@ -407,12 +350,9 @@ def page_rename(
     """Rename a page by updating its display name."""
     _proj, pg = _get_page(project, page)
     old_name = pg.display_name
-    if old_name == new_name:
+    if not rename_page_service(_proj, pg, new_name):
         console.print(f'[dim]No change:[/dim] [cyan]{old_name}[/cyan] is already named "{new_name}"')
         return
-
-    pg.data["displayName"] = new_name
-    pg.save()
     console.print(f'Renamed page "[cyan]{old_name}[/cyan]" [dim]->[/dim] "[cyan]{new_name}[/cyan]"')
 
 
@@ -681,10 +621,13 @@ def page_set_drillthrough(
     from pbi.drillthrough import configure_drillthrough
 
     proj, pg = _get_page(project, page)
-    parsed = _resolve_page_fields(proj, fields)
+    try:
+        parsed = resolve_page_fields(proj, fields)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    configure_drillthrough(pg, parsed, cross_report=cross_report, hide=hide)
-    pg.save()
+    configure_page_drillthrough(pg, parsed, cross_report=cross_report, hide=hide)
 
     field_list = ", ".join(fields)
     cross = " (cross-report)" if cross_report else ""
@@ -698,10 +641,9 @@ def page_get_drillthrough(
     project: ProjectOpt = None,
 ) -> None:
     """Show drillthrough configuration for a page."""
-    from pbi.drillthrough import get_drillthrough_fields, is_cross_report_drillthrough, is_drillthrough
-
     _proj, pg = _get_page(project, page)
-    if not is_drillthrough(pg):
+    binding = get_page_binding_info(pg)
+    if binding is None or binding.binding_type != "Drillthrough":
         console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
         raise typer.Exit(0)
 
@@ -709,13 +651,12 @@ def page_get_drillthrough(
     table.add_column("Property", style="cyan")
     table.add_column("Value")
     table.add_row("Type", "Drillthrough")
-    table.add_row("Cross Report", "yes" if is_cross_report_drillthrough(pg) else "")
-    fields = get_drillthrough_fields(pg)
+    table.add_row("Cross Report", "yes" if binding.cross_report else "")
     table.add_row(
         "Fields",
         ", ".join(
             f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
-            for entity, prop, field_type in fields
+            for entity, prop, field_type in binding.fields
         ) or "(none)",
     )
     console.print(table)
@@ -728,13 +669,9 @@ def page_clear_drillthrough(
     project: ProjectOpt = None,
 ) -> None:
     """Clear drillthrough configuration from a page."""
-    from pbi.drillthrough import clear_drillthrough
-    from pbi.project import Page
-
     _proj, pg = _get_page(project, page)
-
-    preview = Page(folder=pg.folder, data=copy.deepcopy(pg.data))
-    if not clear_drillthrough(preview):
+    binding = get_page_binding_info(pg)
+    if binding is None or binding.binding_type != "Drillthrough":
         console.print("[yellow]Page is not configured as drillthrough.[/yellow]")
         return
 
@@ -743,8 +680,7 @@ def page_clear_drillthrough(
         if not confirm:
             raise typer.Abort()
 
-    clear_drillthrough(pg)
-    pg.save()
+    clear_page_drillthrough(pg)
     console.print(f'Cleared drillthrough from "[cyan]{pg.display_name}[/cyan]"')
 
 
@@ -757,13 +693,14 @@ def page_set_tooltip(
     project: ProjectOpt = None,
 ) -> None:
     """Configure a page as a custom tooltip page."""
-    from pbi.drillthrough import configure_tooltip_page
-
     proj, pg = _get_page(project, page)
-    parsed = _resolve_page_fields(proj, fields or [])
+    try:
+        parsed = resolve_page_fields(proj, fields or [])
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-    configure_tooltip_page(pg, parsed or None, width=width, height=height)
-    pg.save()
+    configure_page_tooltip(pg, parsed or None, width=width, height=height)
 
     console.print(
         f'Set "[cyan]{pg.display_name}[/cyan]" as tooltip page ({width}x{height})'
@@ -776,10 +713,9 @@ def page_get_tooltip(
     project: ProjectOpt = None,
 ) -> None:
     """Show tooltip configuration for a page."""
-    from pbi.drillthrough import get_tooltip_fields, is_tooltip_page
-
     _proj, pg = _get_page(project, page)
-    if not is_tooltip_page(pg):
+    binding = get_page_binding_info(pg)
+    if binding is None or binding.binding_type != "Tooltip":
         console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
         raise typer.Exit(0)
 
@@ -789,12 +725,11 @@ def page_get_tooltip(
     table.add_row("Type", "Tooltip")
     table.add_row("Width", str(pg.width))
     table.add_row("Height", str(pg.height))
-    fields = get_tooltip_fields(pg)
     table.add_row(
         "Fields",
         ", ".join(
             f"{entity}.{prop}{' (measure)' if field_type == 'measure' else ''}"
-            for entity, prop, field_type in fields
+            for entity, prop, field_type in binding.fields
         ) or "(none)",
     )
     console.print(table)
@@ -807,13 +742,9 @@ def page_clear_tooltip(
     project: ProjectOpt = None,
 ) -> None:
     """Clear tooltip configuration from a page."""
-    from pbi.drillthrough import clear_tooltip_page
-    from pbi.project import Page
-
     _proj, pg = _get_page(project, page)
-
-    preview = Page(folder=pg.folder, data=copy.deepcopy(pg.data))
-    if not clear_tooltip_page(preview):
+    binding = get_page_binding_info(pg)
+    if binding is None or binding.binding_type != "Tooltip":
         console.print("[yellow]Page is not configured as a tooltip page.[/yellow]")
         return
 
@@ -822,8 +753,7 @@ def page_clear_tooltip(
         if not confirm:
             raise typer.Abort()
 
-    clear_tooltip_page(pg)
-    pg.save()
+    clear_page_tooltip(pg)
     console.print(f'Cleared tooltip config from "[cyan]{pg.display_name}[/cyan]"')
 
 
@@ -883,8 +813,6 @@ def page_section_create(
     project: ProjectOpt = None,
 ) -> None:
     """Create a page section with background shape and title textbox."""
-    from pbi.properties import VISUAL_PROPERTIES, set_property as set_prop
-
     proj = get_project(project)
     try:
         pg = proj.find_page(page)
@@ -892,54 +820,28 @@ def page_section_create(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Create background shape
-    bg = proj.create_visual(pg, "shape", x=x, y=y, width=width, height=height)
-    bg.data["name"] = f"section-bg-{title.lower().replace(' ', '-')[:20]}"
-    set_prop(bg.data, "border.show", "true", VISUAL_PROPERTIES)
-    set_prop(bg.data, "border.radius", str(radius), VISUAL_PROPERTIES)
-    set_prop(bg.data, "border.color", "#EDEBE9", VISUAL_PROPERTIES)
-    set_prop(bg.data, "background.show", "false", VISUAL_PROPERTIES)
-    # Set chart-level fill for the shape
-    _set_chart_prop(bg.data, "fill", "show", True)
-    _set_chart_prop(bg.data, "fill", "fillColor", background)
-    _set_chart_prop(bg.data, "outline", "show", False)
-    bg.save()
-
-    # Create title textbox
-    title_height = title_size + 16
-    tb = proj.create_visual(pg, "textbox", x=x + 8, y=y + 4, width=width - 16, height=title_height)
-    tb.data["name"] = f"section-title-{title.lower().replace(' ', '-')[:20]}"
-    # Set textbox paragraphs
-    tb.data.setdefault("visual", {})["objects"] = {
-        "general": [{
-            "properties": {
-                "paragraphs": [{
-                    "textRuns": [{
-                        "value": f"'{title}'",
-                        "textStyle": {
-                            "fontFamily": f"'{title_font}'",
-                            "fontSize": f"'{title_size}pt'",
-                            "color": {"expr": {"Literal": {"Value": f"'{title_color}'"}}},
-                        },
-                    }],
-                }],
-            },
-        }],
-    }
-    set_prop(tb.data, "background.show", "false", VISUAL_PROPERTIES)
-    set_prop(tb.data, "border.show", "false", VISUAL_PROPERTIES)
-    tb.save()
-
-    # Group them
-    group = proj.create_group(pg, [bg, tb], display_name=f"Section: {title}")
+    result = create_page_section(
+        proj,
+        pg,
+        title,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+        background=background,
+        radius=radius,
+        title_color=title_color,
+        title_font=title_font,
+        title_size=title_size,
+    )
 
     console.print(
         f'Created section "[cyan]{title}[/cyan]" on "{pg.display_name}" '
         f"at ({x}, {y}) {width}x{height}"
     )
-    console.print(f"  [dim]Background: {bg.name}[/dim]")
-    console.print(f"  [dim]Title: {tb.name}[/dim]")
-    console.print(f"  [dim]Group: {group.name}[/dim]")
+    console.print(f"  [dim]Background: {result.background_visual}[/dim]")
+    console.print(f"  [dim]Title: {result.title_visual}[/dim]")
+    console.print(f"  [dim]Group: {result.group_visual}[/dim]")
 
 
 @page_section_app.command("list")
@@ -955,21 +857,7 @@ def page_section_list(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    visuals = proj.get_visuals(pg)
-    sections = []
-    for vis in visuals:
-        if "visualGroup" not in vis.data:
-            continue
-        display = vis.data.get("visualGroup", {}).get("displayName", "")
-        if display.startswith("Section:") or vis.name.startswith("section-bg"):
-            pos = vis.position
-            sections.append({
-                "name": display.replace("Section: ", "") if display.startswith("Section:") else vis.name,
-                "x": pos.get("x", 0),
-                "y": pos.get("y", 0),
-                "width": pos.get("width", 0),
-                "height": pos.get("height", 0),
-            })
+    sections = list_page_sections(proj, pg)
 
     if not sections:
         console.print("[yellow]No sections found. Use `pbi page section create` to add one.[/yellow]")
@@ -982,35 +870,8 @@ def page_section_list(
 
     for sec in sections:
         table.add_row(
-            sec["name"],
-            f'{sec["x"]}, {sec["y"]}',
-            f'{sec["width"]}x{sec["height"]}',
+            sec.name,
+            f"{sec.x}, {sec.y}",
+            f"{sec.width}x{sec.height}",
         )
     console.print(table)
-
-
-def _set_chart_prop(data: dict, obj_name: str, prop_name: str, value: object) -> None:
-    """Set a chart-level object property (visual.objects)."""
-    objects = data.setdefault("visual", {}).setdefault("objects", {})
-    entries = objects.setdefault(obj_name, [])
-    # Find or create the default selector entry
-    entry = None
-    for e in entries:
-        sel = e.get("selector", {})
-        if sel.get("id") == "default":
-            entry = e
-            break
-    if entry is None:
-        entry = {"selector": {"id": "default"}, "properties": {}}
-        entries.append(entry)
-
-    if isinstance(value, bool):
-        encoded = {"expr": {"Literal": {"Value": f"{'true' if value else 'false'}L"}}}
-    elif isinstance(value, (int, float)):
-        encoded = {"expr": {"Literal": {"Value": f"{value}D"}}}
-    elif isinstance(value, str) and value.startswith("#"):
-        # Color
-        encoded = {"expr": {"Literal": {"Value": f"'{value}'"}}}
-    else:
-        encoded = {"expr": {"Literal": {"Value": f"'{value}'"}}}
-    entry["properties"][prop_name] = [encoded]

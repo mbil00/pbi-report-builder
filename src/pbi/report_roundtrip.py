@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from pbi.project import Project, _write_json
+from pbi.project import Project
+from pbi.report_io import write_report_json
 from pbi.resources import normalize_resource_packages
 from pbi.schema_refs import REPORT_SCHEMA
 
@@ -47,7 +48,7 @@ def apply_report_spec(
         return False, touched
 
     if not dry_run:
-        _write_json(project.definition_folder / "report.json", report)
+        write_report_json(project, report)
     return True, touched
 
 

@@ -7,7 +7,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from pbi.project import Project, _write_json
+from pbi.project import Project
+from pbi.report_io import read_report_json, write_report_json
 from pbi.resources import (
     REGISTERED_RESOURCES_PACKAGE,
     get_or_create_resource_package,
@@ -235,14 +236,11 @@ def delete_resource_item(
 
 
 def _read_report(project: Project) -> dict:
-    report = project.get_report_meta()
-    report.setdefault("$schema", REPORT_SCHEMA)
-    normalize_resource_packages(report)
-    return report
+    return read_report_json(project, ensure_schema=True, normalize_resources_flag=True)
 
 
 def _write_report(project: Project, report: dict) -> None:
-    _write_json(project.definition_folder / "report.json", report)
+    write_report_json(project, report)
 
 
 def _resource_packages(report: dict) -> list[dict]:

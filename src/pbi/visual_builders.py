@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections import Counter
 
-from pbi.commands.common import resolve_field_info, resolve_field_type
+from pbi.fields import resolve_field_info, resolve_field_type
 from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.visual_queries import add_binding, get_bindings, set_sort
 from pbi.visual_analysis import (
     allowed_role_names,
     get_visual_analysis_mappings,
@@ -119,7 +120,7 @@ def apply_role_bindings(
     validate_builder_bindings(canonical_visual_type, resolved)
 
     for field in resolved:
-        project.add_binding(
+        add_binding(
             visual,
             field.role,
             field.entity,
@@ -133,7 +134,7 @@ def apply_role_bindings(
 def existing_bound_fields(project, visual) -> list[BoundField]:
     """Resolve existing visual bindings into BoundField records."""
     existing: list[BoundField] = []
-    for role, entity, prop, field_type in project.get_bindings(visual):
+    for role, entity, prop, field_type in get_bindings(visual):
         resolved_entity, resolved_prop, resolved_field_type, data_type = resolve_field_info(
             project,
             f"{entity}.{prop}",
@@ -165,7 +166,7 @@ def apply_initial_sort(
         field_type,
         strict=True,
     )
-    project.set_sort(visual, entity, prop, field_type=resolved_field_type, descending=descending)
+    set_sort(visual, entity, prop, field_type=resolved_field_type, descending=descending)
     direction = "Descending" if descending else "Ascending"
     return entity, prop, resolved_field_type, direction
 

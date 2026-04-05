@@ -9,6 +9,8 @@ import typer
 from rich import box
 from rich.table import Table
 
+from pbi.fields import resolve_field_info
+
 from .common import ProjectOpt, console, get_project, parse_property_assignments, resolve_output_path
 
 theme_app = typer.Typer(help="Theme operations.", no_args_is_help=True)
@@ -301,9 +303,8 @@ def theme_create(
 ) -> None:
     """Create and apply a theme from brand colors."""
     import json
-    import tempfile
 
-    from pbi.themes import apply_theme, create_theme
+    from pbi.themes import create_and_apply_theme, create_theme
 
     kwargs: dict = {}
     if foreground:
@@ -334,17 +335,11 @@ def theme_create(
         return
 
     proj = get_project(project)
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8",
-    ) as f:
-        json.dump(theme_data, f, indent=2, ensure_ascii=False)
-        tmp_path = Path(f.name)
-
     try:
-        apply_theme(proj, tmp_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+        create_and_apply_theme(proj, name, **kwargs)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     console.print(f'Created theme "[cyan]{name}[/cyan]"')
 
@@ -490,20 +485,9 @@ def theme_set(
     project: ProjectOpt = None,
 ) -> None:
     """Modify properties of the active custom theme."""
-    from pbi.themes import (
-        get_theme_data,
-        get_theme_property,
-        save_theme_data,
-        set_theme_property,
-    )
+    from pbi.themes import update_theme_properties
 
     proj = get_project(project)
-
-    try:
-        data = get_theme_data(proj)
-    except FileNotFoundError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
 
     try:
         pairs = parse_property_assignments(assignments)
@@ -511,29 +495,21 @@ def theme_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    changed = False
-    for prop, value in pairs:
-        old = get_theme_property(data, prop)
-        try:
-            keys = set_theme_property(data, prop, value, cascade=not no_cascade)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {prop}: {e}")
-            raise typer.Exit(1)
+    try:
+        changes = update_theme_properties(proj, pairs, no_cascade=no_cascade)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
-        new = get_theme_property(data, prop)
-        old_str = str(old) if old is not None else "(none)"
-        new_str = str(new) if new is not None else "(none)"
-        if old_str == new_str:
-            console.print(f"[dim]No change:[/dim] [cyan]{prop}[/cyan] is already {new_str}")
+    for change in changes:
+        old_str = str(change.old) if change.old is not None else "(none)"
+        new_str = str(change.new) if change.new is not None else "(none)"
+        if not change.changed:
+            console.print(f"[dim]No change:[/dim] [cyan]{change.prop}[/cyan] is already {new_str}")
         else:
-            console.print(f"[dim]{prop}:[/dim] {old_str} [dim]->[/dim] {new_str}")
-            changed = True
-            # Show cascaded keys
-            for key in keys[1:]:
+            console.print(f"[dim]{change.prop}:[/dim] {old_str} [dim]->[/dim] {new_str}")
+            for key in change.cascaded_keys:
                 console.print(f"  [dim]cascaded:[/dim] [cyan]{key}[/cyan]")
-
-    if changed:
-        save_theme_data(proj, data)
 
 
 @theme_app.command("properties")
@@ -594,9 +570,7 @@ def theme_load(
     project: ProjectOpt = None,
 ) -> None:
     """Apply a saved theme preset to the project."""
-    import tempfile
-
-    from pbi.themes import apply_theme, get_theme_preset
+    from pbi.themes import apply_theme_data, get_theme_preset
 
     proj = get_project(project)
 
@@ -610,19 +584,11 @@ def theme_load(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Write theme data to a temp file and apply via existing infrastructure
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8",
-    ) as f:
-        import json
-
-        json.dump(preset.data, f, indent=2, ensure_ascii=False)
-        tmp_path = Path(f.name)
-
     try:
-        apply_theme(proj, tmp_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+        apply_theme_data(proj, preset.data)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     console.print(f'Loaded theme preset "[cyan]{preset.name}[/cyan]" ({preset.scope})')
 
@@ -1113,7 +1079,6 @@ def theme_format_set(
     project: ProjectOpt = None,
 ) -> None:
     """Set theme-level conditional formatting on a visualStyles property."""
-    from pbi.commands.common import resolve_field_info
     from pbi.formatting import (
         GradientStop,
         build_gradient_format,

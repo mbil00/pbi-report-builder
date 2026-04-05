@@ -28,6 +28,7 @@ Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative 
 Understand what exists before writing anything:
 
 ```bash
+pbi init                              # optional: prewarm project-local CLI scaffolding
 pbi info                              # tree view of pages and visuals
 pbi page list                         # page table with sizes and counts
 pbi page get "Page Name"              # page properties, background, visual count
@@ -39,6 +40,8 @@ pbi model fields TableName            # columns + measures for binding
 pbi model relationship list           # table relationships (verify cross-table joins)
 pbi model path TableA TableB          # relationship chain between two tables
 ```
+
+Use `pbi init` as the standard bootstrap step before working in a project, especially in CI or agent workflows. It prepares custom-visual schemas and is the intended way to make project-specific CLI scaffolding available.
 
 For an existing page you want to modify:
 

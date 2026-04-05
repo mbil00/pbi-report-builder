@@ -6,6 +6,8 @@ from typing import Annotated
 
 import typer
 
+from pbi.visual_groups import create_group, ungroup
+
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import resolve_visual_target, _set_visual_image_source
@@ -301,7 +303,7 @@ def visual_group(
         raise typer.Exit(1)
 
     try:
-        group = proj.create_group(pg, vis_list, display_name=name)
+        group = create_group(proj, pg, vis_list, display_name=name)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -320,7 +322,7 @@ def visual_ungroup(
     proj, pg, grp = resolve_visual_target(project, page, group)
 
     try:
-        children = proj.ungroup(pg, grp)
+        children = ungroup(proj, pg, grp)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

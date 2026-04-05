@@ -16,6 +16,7 @@ from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
 from pbi.report_roundtrip import export_report_spec
+from pbi.visual_queries import get_sort
 from pbi.roundtrip import (
     export_bindings,
     export_object_properties,
@@ -213,7 +214,7 @@ def _export_visual(project: Project, visual: Visual) -> dict:
         result["bindings"] = bindings
 
     # Sort
-    sorts = project.get_sort(visual)
+    sorts = get_sort(visual)
     if sorts:
         entity, prop, ftype, direction = sorts[0]
         suffix = " (measure)" if ftype == "measure" else ""

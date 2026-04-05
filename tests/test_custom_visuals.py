@@ -11,6 +11,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pbi.cli import app
+from pbi.commands.common import get_project
 from pbi.custom_visuals import (
     CustomVisualInfo,
     auto_install,
@@ -694,8 +695,8 @@ def test_auto_install_multiple_pbiviz():
         assert types == {"ChartA", "ChartB"}
 
 
-def test_auto_install_on_project_load():
-    """Verify that get_project() auto-installs custom visual schemas."""
+def test_prepare_runtime_installs_and_registers_custom_visual_schemas():
+    """Explicit runtime preparation installs schemas and registers them in memory."""
     clear_custom_schemas()
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -704,7 +705,6 @@ def test_auto_install_on_project_load():
             cv_dir.mkdir(parents=True)
             _make_pbiviz(cv_dir / "MyChart.pbiviz")
 
-            # Simulate what get_project() does
             newly_installed = auto_install(proj)
             assert len(newly_installed) == 1
 
@@ -715,8 +715,8 @@ def test_auto_install_on_project_load():
         clear_custom_schemas()
 
 
-def test_cli_auto_installs_on_any_command():
-    """Any CLI command touching the project triggers auto-install."""
+def test_cli_scan_does_not_auto_install_without_init():
+    """CLI commands no longer bootstrap custom visual schemas implicitly."""
     clear_custom_schemas()
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -727,18 +727,82 @@ def test_cli_auto_installs_on_any_command():
             cv_dir.mkdir(parents=True)
             _make_pbiviz(cv_dir / "MyChart.pbiviz")
 
-            # Running any command should auto-install
             result = runner.invoke(app, ["visual", "plugin", "scan", "-p", str(proj.root)])
             assert result.exit_code == 0
-            assert "Auto-installed" in result.output
             assert "MyCustomChart" in result.output
+            assert "pbi init" in result.output
 
-            # Schema file should exist now
+            schema_file = proj.root / ".pbi-custom-schemas" / "MyCustomChart.json"
+            assert not schema_file.exists()
+    finally:
+        clear_custom_schemas()
+
+
+def test_cli_init_installs_custom_visual_schema_files():
+    clear_custom_schemas()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = _make_project(Path(tmp))
+            _add_visual(proj, "page1", "cv1", "MyCustomChart")
+
+            cv_dir = proj.report_folder / "CustomVisuals"
+            cv_dir.mkdir(parents=True)
+            _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+            result = runner.invoke(app, ["init", "-p", str(proj.root)])
+            assert result.exit_code == 0
+            assert 'Installed plugin schema "MyCustomChart"' in result.output
+            assert 'Initialized project "Sample"' in result.output
+
             schema_file = proj.root / ".pbi-custom-schemas" / "MyCustomChart.json"
             assert schema_file.exists()
+    finally:
+        clear_custom_schemas()
 
-            # Running again should NOT auto-install (already done)
-            result = runner.invoke(app, ["visual", "plugin", "scan", "-p", str(proj.root)])
-            assert "Auto-installed" not in result.output
+
+def test_cli_init_is_idempotent_once_schema_files_exist():
+    clear_custom_schemas()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = _make_project(Path(tmp))
+            _add_visual(proj, "page1", "cv1", "MyCustomChart")
+
+            cv_dir = proj.report_folder / "CustomVisuals"
+            cv_dir.mkdir(parents=True)
+            _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+            first = runner.invoke(app, ["init", "-p", str(proj.root)])
+            assert first.exit_code == 0
+            assert 'Installed plugin schema "MyCustomChart"' in first.output
+
+            clear_custom_schemas()
+
+            second = runner.invoke(app, ["init", "-p", str(proj.root)])
+            assert second.exit_code == 0
+            assert "No initialization changes needed." in second.output
+            assert 'Installed plugin schema "MyCustomChart"' not in second.output
+    finally:
+        clear_custom_schemas()
+
+
+def test_get_project_registers_installed_custom_schemas():
+    clear_custom_schemas()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = _make_project(Path(tmp))
+            _add_visual(proj, "page1", "cv1", "MyCustomChart")
+
+            cv_dir = proj.report_folder / "CustomVisuals"
+            cv_dir.mkdir(parents=True)
+            _make_pbiviz(cv_dir / "MyChart.pbiviz")
+
+            init_result = runner.invoke(app, ["init", "-p", str(proj.root)])
+            assert init_result.exit_code == 0
+
+            clear_custom_schemas()
+
+            loaded = get_project(proj.root)
+            assert loaded.root == proj.root
+            assert get_visual_schema("MyCustomChart") is not None
     finally:
         clear_custom_schemas()

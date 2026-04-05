@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pbi.project import Project
+from pbi.report_io import read_report_json, write_report_json
 from pbi.resources import (
     REGISTERED_RESOURCES_PACKAGE,
     add_or_update_resource_item,
@@ -36,26 +37,10 @@ def _resources_dir(project: Project) -> Path:
 def _get_resource_package(project: Project) -> tuple[dict, list[dict]]:
     """Get or create the RegisteredResources package from report.json.
     Returns (report_data, items_list)."""
-    report_path = project.definition_folder / "report.json"
-    import json
-    if report_path.exists():
-        with open(report_path, encoding="utf-8-sig") as f:
-            report_data = json.load(f)
-    else:
-        report_data = {"$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/1.0.0/report.json"}
-
+    report_data = read_report_json(project, ensure_schema=True)
     normalize_resource_packages(report_data)
     package = get_or_create_resource_package(report_data)
     return report_data, package.setdefault("items", [])
-
-
-def _save_report_json(project: Project, report_data: dict) -> None:
-    """Write report.json back."""
-    import json
-    report_path = project.definition_folder / "report.json"
-    with open(report_path, "w", encoding="utf-8", newline="\r\n") as f:
-        json.dump(report_data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
 
 
 def _find_image_references(project: Project) -> dict[str, list[str]]:
@@ -122,7 +107,7 @@ def add_image(project: Project, source_path: Path) -> str:
         name=registered_name,
         path=registered_name,
     )
-    _save_report_json(project, report_data)
+    write_report_json(project, report_data)
 
     return registered_name
 
@@ -173,7 +158,7 @@ def prune_images(project: Project) -> list[str]:
     if removed:
         items.clear()
         items.extend(remaining)
-        _save_report_json(project, report_data)
+        write_report_json(project, report_data)
 
     return removed
 

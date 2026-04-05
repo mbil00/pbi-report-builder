@@ -4,17 +4,10 @@ from __future__ import annotations
 
 import json
 import re
-import secrets
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pbi.lookup import find_page_by_identifier, find_visual_by_identifier
-from pbi.schema_refs import (
-    PAGE_SCHEMA,
-    PAGES_METADATA_SCHEMA,
-    VISUAL_CONTAINER_SCHEMA,
-)
 
 
 _UNSAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_-]")
@@ -293,111 +286,49 @@ class Project:
         display_option: str = "FitToPage",
     ) -> Page:
         """Create a new page."""
-        page_id = secrets.token_hex(10)
-        page_dir = self.definition_folder / "pages" / page_id
-        page_dir.mkdir(parents=True)
-        (page_dir / "visuals").mkdir()
+        from pbi.page_authoring import create_page as _create_page
 
-        data = {
-            "$schema": PAGE_SCHEMA,
-            "name": page_id,
-            "displayName": display_name,
-            "displayOption": display_option,
-            "width": width,
-            "height": height,
-            "visibility": "AlwaysVisible",
-        }
-        _write_json(page_dir / "page.json", data)
-        self._add_to_page_order(page_id)
-        page = Page(folder=page_dir, data=data)
-        self._visuals_cache[page_dir] = []
-        return page
+        return _create_page(
+            self,
+            display_name,
+            width=width,
+            height=height,
+            display_option=display_option,
+        )
 
     def copy_page(self, source: Page, new_name: str) -> Page:
         """Deep-copy a page and all its visuals."""
-        new_id = secrets.token_hex(10)
-        new_dir = self.definition_folder / "pages" / new_id
-        shutil.copytree(source.folder, new_dir)
+        from pbi.page_authoring import copy_page as _copy_page
 
-        # Update page identity
-        new_data = _read_json(new_dir / "page.json")
-        new_data["name"] = new_id
-        new_data["displayName"] = new_name
-        _write_json(new_dir / "page.json", new_data)
-
-        # Give each visual a new unique folder but preserve friendly names
-        visuals_dir = new_dir / "visuals"
-        if visuals_dir.exists():
-            for visual_dir in list(visuals_dir.iterdir()):
-                if not visual_dir.is_dir():
-                    continue
-                new_visual_id = secrets.token_hex(10)
-                new_visual_dir = visuals_dir / new_visual_id
-                visual_dir.rename(new_visual_dir)
-                visual_json = new_visual_dir / "visual.json"
-                if visual_json.exists():
-                    vdata = _read_json(visual_json)
-                    # Preserve the original friendly name if it differs
-                    # from the old folder name (i.e. user set a custom name)
-                    old_name = vdata.get("name", "")
-                    old_folder = visual_dir.name
-                    if old_name == old_folder:
-                        # No custom name — use new ID
-                        vdata["name"] = new_visual_id
-                    # else: keep the existing friendly name
-                    _write_json(visual_json, vdata)
-
-        self._add_to_page_order(new_id)
-        self._invalidate_visuals_cache(new_dir)
-        return Page(folder=new_dir, data=new_data)
+        return _copy_page(self, source, new_name)
 
     def delete_page(self, page: Page) -> None:
         """Delete a page and all its visuals."""
-        shutil.rmtree(page.folder)
-        self._invalidate_visuals_cache(page)
-        self._remove_from_page_order(page.name)
+        from pbi.page_authoring import delete_page as _delete_page
+
+        _delete_page(self, page)
 
     def _add_to_page_order(self, page_id: str) -> None:
-        meta_path = self.definition_folder / "pages" / "pages.json"
-        if meta_path.exists():
-            meta = _read_json(meta_path)
-        else:
-            meta = {
-                "$schema": PAGES_METADATA_SCHEMA,
-            }
-        meta.setdefault("pageOrder", []).append(page_id)
-        _write_json(meta_path, meta)
-        self._invalidate_pages_cache()
+        from pbi.page_authoring import add_page_to_order
+
+        add_page_to_order(self, page_id)
 
     def _remove_from_page_order(self, page_id: str) -> None:
-        meta_path = self.definition_folder / "pages" / "pages.json"
-        if not meta_path.exists():
-            return
-        meta = _read_json(meta_path)
-        order = meta.get("pageOrder", [])
-        if page_id in order:
-            order.remove(page_id)
-            meta["pageOrder"] = order
-        # If deleted page was active, set first remaining page as active
-        if meta.get("activePageName") == page_id and order:
-            meta["activePageName"] = order[0]
-        _write_json(meta_path, meta)
-        self._invalidate_pages_cache()
+        from pbi.page_authoring import remove_page_from_order
+
+        remove_page_from_order(self, page_id)
 
     def set_page_order(self, page_ids: list[str]) -> None:
         """Overwrite the page order with a new sequence of page folder IDs."""
-        meta_path = self.definition_folder / "pages" / "pages.json"
-        meta = _read_json(meta_path) if meta_path.exists() else {"$schema": PAGES_METADATA_SCHEMA}
-        meta["pageOrder"] = page_ids
-        _write_json(meta_path, meta)
-        self._invalidate_pages_cache()
+        from pbi.page_authoring import set_page_order as _set_page_order
+
+        _set_page_order(self, page_ids)
 
     def set_active_page(self, page_id: str) -> None:
         """Set the active (default-open) page by folder ID."""
-        meta_path = self.definition_folder / "pages" / "pages.json"
-        meta = _read_json(meta_path) if meta_path.exists() else {"$schema": PAGES_METADATA_SCHEMA}
-        meta["activePageName"] = page_id
-        _write_json(meta_path, meta)
+        from pbi.page_authoring import set_active_page as _set_active_page
+
+        _set_active_page(self, page_id)
 
     # ── Visual CRUD ────────────────────────────────────────────
 
@@ -411,49 +342,17 @@ class Project:
         height: int = 200,
     ) -> Visual:
         """Create a new visual on a page with type-aware scaffolding."""
-        from pbi.roles import get_visual_roles
+        from pbi.visual_authoring import create_visual as _create_visual
 
-        visual_id = secrets.token_hex(10)
-        visual_dir = page.folder / "visuals" / visual_id
-        visual_dir.mkdir(parents=True, exist_ok=True)
-
-        # Determine z-order (above existing visuals)
-        existing = self._get_visuals_cached(page)
-        max_z = max((v.position.get("z", 0) for v in existing), default=0)
-
-        # Scaffold queryState with empty role projections for the visual type
-        roles = get_visual_roles(visual_type)
-        query_state: dict = {}
-        for role in roles:
-            query_state[role["name"]] = {"projections": []}
-
-        data = {
-            "$schema": VISUAL_CONTAINER_SCHEMA,
-            "name": visual_id,
-            "position": {
-                "x": x,
-                "y": y,
-                "width": width,
-                "height": height,
-                "z": max_z + 1000,
-                "tabOrder": len(existing),
-            },
-            "visual": {
-                "visualType": visual_type,
-                "query": {"queryState": query_state},
-                "objects": {},
-            },
-        }
-        _write_json(visual_dir / "visual.json", data)
-        visual = Visual(folder=visual_dir, data=data)
-        existing.append(visual)
-        existing.sort(
-            key=lambda v: (
-                v.position.get("y", 0),
-                v.position.get("x", 0),
-            )
+        return _create_visual(
+            self,
+            page,
+            visual_type,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
         )
-        return visual
 
     def copy_visual(
         self,
@@ -462,32 +361,15 @@ class Project:
         new_name: str | None = None,
     ) -> Visual:
         """Copy a visual, optionally to a different page."""
-        new_id = secrets.token_hex(10)
-        new_dir = target_page.folder / "visuals" / new_id
-        shutil.copytree(source.folder, new_dir)
+        from pbi.visual_authoring import copy_visual as _copy_visual
 
-        new_data = _read_json(new_dir / "visual.json")
-        new_data["name"] = sanitize_visual_name(new_name) if new_name else new_id
-        _write_json(new_dir / "visual.json", new_data)
-        self._invalidate_visuals_cache(target_page)
-        return Visual(folder=new_dir, data=new_data)
+        return _copy_visual(self, source, target_page, new_name=new_name)
 
     def delete_visual(self, visual: Visual) -> None:
         """Delete a visual."""
-        page_path = visual.folder.parent.parent
-        self._invalidate_visuals_cache(page_path)
-        if "visualGroup" in visual.data:
-            page = next((candidate for candidate in self.get_pages() if candidate.folder == page_path), None)
-            if page is None:
-                page_json = page_path / "page.json"
-                if page_json.exists():
-                    page = Page(folder=page_path, data=_read_json(page_json))
-            visuals = self._get_visuals_cached(page) if page is not None else []
-            for candidate in visuals:
-                if candidate.data.get("parentGroupName") == visual.name:
-                    candidate.data.pop("parentGroupName", None)
-                    candidate.save()
-        shutil.rmtree(visual.folder)
+        from pbi.visual_authoring import delete_visual as _delete_visual
+
+        _delete_visual(self, visual)
 
     # ── Visual grouping ─────────────────────────────────────────
 
@@ -502,66 +384,9 @@ class Project:
         Creates a group container that encompasses all provided visuals
         and sets parentGroupName on each child.
         """
-        if len(visuals) < 2:
-            raise ValueError("Need at least 2 visuals to group")
+        from pbi.visual_groups import create_group as _create_group
 
-        # Check none are already in a group
-        for v in visuals:
-            if v.data.get("parentGroupName"):
-                raise ValueError(
-                    f'Visual "{v.name}" is already in group '
-                    f'"{v.data["parentGroupName"]}"'
-                )
-            if "visualGroup" in v.data:
-                raise ValueError(f'"{v.name}" is a group container, not a visual')
-
-        # Calculate bounding box from children
-        min_x = min(v.position.get("x", 0) for v in visuals)
-        min_y = min(v.position.get("y", 0) for v in visuals)
-        max_x = max(
-            v.position.get("x", 0) + v.position.get("width", 0)
-            for v in visuals
-        )
-        max_y = max(
-            v.position.get("y", 0) + v.position.get("height", 0)
-            for v in visuals
-        )
-        max_z = max(v.position.get("z", 0) for v in visuals)
-
-        # Create group container
-        group_id = secrets.token_hex(10)
-        group_dir = page.folder / "visuals" / group_id
-        group_dir.mkdir(parents=True, exist_ok=True)
-
-        safe_name = sanitize_visual_name(display_name) if display_name else group_id
-
-        group_data = {
-            "$schema": VISUAL_CONTAINER_SCHEMA,
-            "name": safe_name,
-            "position": {
-                "x": min_x,
-                "y": min_y,
-                "width": max_x - min_x,
-                "height": max_y - min_y,
-                "z": max_z + 1,
-                "tabOrder": 0,
-            },
-            "visualGroup": {
-                "displayName": display_name or group_id,
-                "groupMode": "ScaleMode",
-                "objects": {},
-            },
-        }
-        _write_json(group_dir / "visual.json", group_data)
-
-        # Update children to reference the group
-        group_name = group_data["name"]
-        for v in visuals:
-            v.data["parentGroupName"] = group_name
-            v.save()
-
-        self._invalidate_visuals_cache(page)
-        return Visual(folder=group_dir, data=group_data)
+        return _create_group(self, page, visuals, display_name=display_name)
 
     def create_group_container(
         self,
@@ -575,58 +400,24 @@ class Project:
         height: int = 0,
     ) -> Visual:
         """Create an empty visual group container."""
-        existing = self._get_visuals_cached(page)
-        max_z = max((v.position.get("z", 0) for v in existing), default=0)
-        group_id = secrets.token_hex(10)
-        group_dir = page.folder / "visuals" / group_id
-        group_dir.mkdir(parents=True, exist_ok=True)
+        from pbi.visual_groups import create_group_container as _create_group_container
 
-        safe_name = sanitize_visual_name(name) if name else group_id
-        group_data = {
-            "$schema": VISUAL_CONTAINER_SCHEMA,
-            "name": safe_name,
-            "position": {
-                "x": x,
-                "y": y,
-                "width": width,
-                "height": height,
-                "z": max_z + 1,
-                "tabOrder": len(existing),
-            },
-            "visualGroup": {
-                "displayName": display_name or safe_name,
-                "groupMode": "ScaleMode",
-                "objects": {},
-            },
-        }
-        _write_json(group_dir / "visual.json", group_data)
-        visual = Visual(folder=group_dir, data=group_data)
-        existing.append(visual)
-        existing.sort(
-            key=lambda v: (
-                v.position.get("y", 0),
-                v.position.get("x", 0),
-            )
+        return _create_group_container(
+            self,
+            page,
+            name=name,
+            display_name=display_name,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
         )
-        return visual
 
     def ungroup(self, page: Page, group: Visual) -> list[Visual]:
         """Ungroup a visual group. Returns the freed child visuals."""
-        if "visualGroup" not in group.data:
-            raise ValueError(f'"{group.name}" is not a group')
+        from pbi.visual_groups import ungroup as _ungroup
 
-        group_name = group.name
-        children = []
-        for v in self.get_visuals(page):
-            if v.data.get("parentGroupName") == group_name:
-                v.data.pop("parentGroupName", None)
-                v.save()
-                children.append(v)
-
-        # Delete the group container
-        self.delete_visual(group)
-        self._invalidate_visuals_cache(page)
-        return children
+        return _ungroup(self, page, group)
 
     # ── Data bindings ──────────────────────────────────────────
 
@@ -640,29 +431,9 @@ class Project:
         display_name: str | None = None,
     ) -> None:
         """Add a data binding (column or measure) to a visual's query."""
-        field_key = "Column" if field_type == "column" else "Measure"
-        projection = {
-            "field": {
-                field_key: {
-                    "Expression": {"SourceRef": {"Entity": entity}},
-                    "Property": prop,
-                }
-            },
-            "queryRef": f"{entity}.{prop}",
-            "nativeQueryRef": prop,
-        }
-        if display_name:
-            projection["displayName"] = display_name
+        from pbi.visual_queries import add_binding as _add_binding
 
-        query_state = (
-            visual.data
-            .setdefault("visual", {})
-            .setdefault("query", {})
-            .setdefault("queryState", {})
-        )
-        role_config = query_state.setdefault(role, {"projections": []})
-        role_config["projections"].append(projection)
-        visual.save()
+        _add_binding(visual, role, entity, prop, field_type=field_type, display_name=display_name)
 
     @staticmethod
     def remove_binding(
@@ -675,62 +446,16 @@ class Project:
         If field_ref is given (e.g. 'Product.Category'), removes that specific
         binding. Otherwise removes the entire role.
         """
-        query_state = (
-            visual.data
-            .get("visual", {})
-            .get("query", {})
-            .get("queryState", {})
-        )
-        if role not in query_state:
-            return 0
+        from pbi.visual_queries import remove_binding as _remove_binding
 
-        if field_ref is None:
-            removed = len(query_state[role].get("projections", []))
-            del query_state[role]
-            visual.save()
-            return removed
-
-        projections = query_state[role].get("projections", [])
-        original_count = len(projections)
-        # Collect queryRefs being removed for metadata cleanup
-        removed_refs = [
-            p.get("queryRef", "")
-            for p in projections
-            if p.get("queryRef", "").lower() == field_ref.lower()
-        ]
-        query_state[role]["projections"] = [
-            p for p in projections
-            if p.get("queryRef", "").lower() != field_ref.lower()
-        ]
-        removed = original_count - len(query_state[role]["projections"])
-        if not query_state[role]["projections"]:
-            del query_state[role]
-        # Clean up orphaned column metadata (widths, formatting)
-        if removed_refs:
-            from pbi.columns import clear_column_width, clear_column_format
-            for ref in removed_refs:
-                clear_column_width(visual, ref)
-                clear_column_format(visual, ref)
-        visual.save()
-        return removed
+        return _remove_binding(visual, role, field_ref=field_ref)
 
     @staticmethod
     def get_bindings(visual: Visual) -> list[tuple[str, str, str, str]]:
         """Get all bindings as (role, entity, property, field_type) tuples."""
-        query_state = (
-            visual.data
-            .get("visual", {})
-            .get("query", {})
-            .get("queryState", {})
-        )
-        bindings = []
-        for role, config in query_state.items():
-            for proj in config.get("projections", []):
-                field_data = proj.get("field", {})
-                entity, prop, field_type = _resolve_projection_field(field_data)
-                if entity != "?":
-                    bindings.append((role, entity, prop, field_type))
-        return bindings
+        from pbi.visual_queries import get_bindings as _get_bindings
+
+        return _get_bindings(visual)
 
     # ── Sort definitions ──────────────────────────────────────────
 
@@ -743,78 +468,23 @@ class Project:
         descending: bool = True,
     ) -> None:
         """Set the sort definition on a visual."""
-        field_key = "Column" if field_type == "column" else "Measure"
-        sort_entry = {
-            "field": {
-                field_key: {
-                    "Expression": {"SourceRef": {"Entity": entity}},
-                    "Property": prop,
-                }
-            },
-            "direction": "Descending" if descending else "Ascending",
-        }
+        from pbi.visual_queries import set_sort as _set_sort
 
-        query = (
-            visual.data
-            .setdefault("visual", {})
-            .setdefault("query", {})
-        )
-        query["sortDefinition"] = {
-            "sort": [sort_entry],
-            "isDefaultSort": False,
-        }
-        visual.save()
+        _set_sort(visual, entity, prop, field_type=field_type, descending=descending)
 
     @staticmethod
     def clear_sort(visual: Visual) -> bool:
         """Remove sort definition from a visual. Returns True if one was removed."""
-        query = visual.data.get("visual", {}).get("query", {})
-        if "sortDefinition" in query:
-            del query["sortDefinition"]
-            visual.save()
-            return True
-        return False
+        from pbi.visual_queries import clear_sort as _clear_sort
+
+        return _clear_sort(visual)
 
     @staticmethod
     def get_sort(visual: Visual) -> list[tuple[str, str, str, str]]:
         """Get sort definitions as (entity, property, field_type, direction) tuples."""
-        sort_def = (
-            visual.data
-            .get("visual", {})
-            .get("query", {})
-            .get("sortDefinition", {})
-        )
-        result = []
-        for entry in sort_def.get("sort", []):
-            field_data = entry.get("field", {})
-            direction = entry.get("direction", "Ascending")
-            entity, prop, ftype = _resolve_projection_field(field_data)
-            if entity != "?":
-                result.append((entity, prop, ftype, direction))
-        return result
+        from pbi.visual_queries import get_sort as _get_sort
 
-
-def _resolve_projection_field(field_data: dict) -> tuple[str, str, str]:
-    """Extract (entity, property, field_type) from a query projection field.
-
-    Handles Column, Measure, and Aggregation (Sum, Min, Count, etc.) field types.
-    Returns ("?", "?", "column") if the field type is unrecognized.
-    """
-    for key, ftype in [("Column", "column"), ("Measure", "measure")]:
-        if key in field_data:
-            entity = field_data[key]["Expression"]["SourceRef"]["Entity"]
-            prop = field_data[key]["Property"]
-            return entity, prop, ftype
-
-    if "Aggregation" in field_data:
-        inner = field_data["Aggregation"].get("Expression", {})
-        for key in ("Column", "Measure"):
-            if key in inner:
-                entity = inner[key]["Expression"]["SourceRef"]["Entity"]
-                prop = inner[key]["Property"]
-                return entity, prop, "aggregation"
-
-    return "?", "?", "column"
+        return _get_sort(visual)
 
 def _read_json(path: Path) -> dict:
     with open(path, encoding="utf-8-sig") as f:

@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from pbi.project import Project
+from pbi.report_io import read_report_json, write_report_json
 from pbi.resources import (
     add_or_update_resource_item,
     get_or_create_resource_package,
@@ -132,6 +133,15 @@ class ThemePreset:
     data: dict[str, Any] = field(default_factory=dict)
     description: str | None = None
     scope: str = "project"  # "project" or "global"
+
+
+@dataclass(frozen=True)
+class ThemePropertyChange:
+    prop: str
+    old: Any
+    new: Any
+    changed: bool
+    cascaded_keys: list[str] = field(default_factory=list)
 
 
 def _global_themes_dir() -> Path:
@@ -711,11 +721,58 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     Removes any previously applied custom theme first.
     Returns the theme name.
     """
-    # Read and validate theme JSON
     with open(theme_path, encoding="utf-8-sig") as f:
         theme_data = json.load(f)
 
     theme_name = _validate_theme_name(theme_data.get("name", theme_path.stem))
+    theme_filename = _theme_filename(theme_name)
+
+    report = _read_report(project)
+    _normalize_resource_packages(report)
+    old_paths = _custom_theme_paths(
+        project,
+        report,
+        report.get("themeCollection", {}).get("customTheme", {}).get("name"),
+    )
+
+    resources_dir = _registered_resources_dir(project)
+    resources_dir.mkdir(parents=True, exist_ok=True)
+    dest = resources_dir / theme_filename
+    temp_dest = resources_dir / f".{theme_filename}.tmp"
+    shutil.copy2(theme_path, temp_dest)
+    temp_dest.replace(dest)
+
+    report.setdefault("$schema", REPORT_SCHEMA)
+    report.setdefault("themeCollection", {})
+
+    base_theme = report.get("themeCollection", {}).get("baseTheme", {})
+    version_at_import = base_theme.get("reportVersionAtImport", {})
+    if not isinstance(version_at_import, dict):
+        version_at_import = {}
+
+    report["themeCollection"]["customTheme"] = {
+        "name": theme_filename,
+        "reportVersionAtImport": version_at_import,
+        "type": "RegisteredResources",
+    }
+
+    report.pop("layoutOptimization", None)
+    _remove_resource_items_by_type(report, "CustomTheme")
+    _ensure_resource_entry(report, theme_name)
+    _write_report(project, report)
+
+    for path in old_paths:
+        if path == dest:
+            continue
+        if path.exists():
+            path.unlink()
+
+    return _theme_display_name(theme_name)
+
+
+def apply_theme_data(project: Project, theme_data: dict[str, Any]) -> str:
+    """Apply theme JSON data directly to the project."""
+    theme_name = _validate_theme_name(theme_data.get("name", "Theme"))
     theme_filename = _theme_filename(theme_name)
 
     report = _read_report(project)
@@ -731,7 +788,9 @@ def apply_theme(project: Project, theme_path: Path) -> str:
     resources_dir.mkdir(parents=True, exist_ok=True)
     dest = resources_dir / theme_filename
     temp_dest = resources_dir / f".{theme_filename}.tmp"
-    shutil.copy2(theme_path, temp_dest)
+    with open(temp_dest, "w", encoding="utf-8", newline="\r\n") as f:
+        json.dump(theme_data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
     temp_dest.replace(dest)
 
     report.setdefault("$schema", REPORT_SCHEMA)
@@ -767,6 +826,67 @@ def apply_theme(project: Project, theme_path: Path) -> str:
             path.unlink()
 
     return _theme_display_name(theme_name)
+
+
+def create_and_apply_theme(
+    project: Project,
+    name: str,
+    *,
+    foreground: str = "#252423",
+    background: str = "#FFFFFF",
+    accent: str = "#118DFF",
+    font: str | None = None,
+    data_colors: list[str] | None = None,
+    good: str | None = None,
+    bad: str | None = None,
+    neutral: str | None = None,
+) -> str:
+    """Create theme data from brand colors and apply it to the project."""
+    theme_data = create_theme(
+        name,
+        foreground=foreground,
+        background=background,
+        accent=accent,
+        font=font,
+        data_colors=data_colors,
+        good=good,
+        bad=bad,
+        neutral=neutral,
+    )
+    return apply_theme_data(project, theme_data)
+
+
+def update_theme_properties(
+    project: Project,
+    assignments: list[tuple[str, str]],
+    *,
+    no_cascade: bool = False,
+) -> list[ThemePropertyChange]:
+    """Update theme properties and persist the theme if anything changed."""
+    data = get_theme_data(project)
+    changes: list[ThemePropertyChange] = []
+    for prop, value in assignments:
+        old = get_theme_property(data, prop)
+        try:
+            keys = set_theme_property(data, prop, value, cascade=not no_cascade)
+        except ValueError as e:
+            raise ValueError(f"{prop}: {e}") from e
+        new = get_theme_property(data, prop)
+        old_str = str(old) if old is not None else "(none)"
+        new_str = str(new) if new is not None else "(none)"
+        changes.append(
+            ThemePropertyChange(
+                prop=prop,
+                old=old,
+                new=new,
+                changed=old_str != new_str,
+                cascaded_keys=keys[1:],
+            )
+        )
+
+    if any(change.changed for change in changes):
+        save_theme_data(project, data)
+    return changes
 
 
 def export_theme(project: Project, output_path: Path) -> str:
@@ -907,17 +1027,11 @@ def _remove_resource_items_by_type(report: dict, item_type: str) -> None:
 
 
 def _read_report(project: Project) -> dict:
-    path = project.definition_folder / "report.json"
-    if path.exists():
-        return project.get_report_meta()
-    return {}
+    return read_report_json(project)
 
 
 def _write_report(project: Project, data: dict) -> None:
-    path = project.definition_folder / "report.json"
-    with open(path, "w", encoding="utf-8", newline="\r\n") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    write_report_json(project, data)
 
 
 def _ensure_resource_entry(report: dict, theme_name: str) -> None:

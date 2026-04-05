@@ -9,6 +9,8 @@ import typer
 from rich import box
 from rich.table import Table
 
+from pbi.fields import resolve_field_info
+
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app, visual_format_app
 from .helpers import resolve_visual_target
@@ -67,8 +69,6 @@ def visual_format_set(
         conditional_target_warning,
         set_conditional_format,
     )
-    from ..common import resolve_field_info
-
     proj, _pg, vis = resolve_visual_target(project, page, visual)
 
     dot = prop.find(".")

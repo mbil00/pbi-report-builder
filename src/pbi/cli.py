@@ -17,6 +17,7 @@ from pbi.commands.components import component_app
 from pbi.commands.common import (
     ProjectOpt,
     console,
+    find_project,
     get_project,
     parse_property_assignments,
     resolve_yaml_input,
@@ -43,6 +44,7 @@ from pbi.properties import (
     get_visual_objects,
     property_aliases_for,
 )
+from pbi.project_runtime import prepare_project_runtime
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -89,6 +91,23 @@ def _safe_backup_path(project_root: Path, page_name: str) -> Path:
 
 
 # ── Project info ───────────────────────────────────────────────────
+
+@app.command()
+def init(project: ProjectOpt = None) -> None:
+    """Initialize project-local CLI runtime state."""
+    proj = find_project(project)
+    runtime = prepare_project_runtime(proj)
+
+    if runtime.newly_installed_visuals:
+        for cv in runtime.newly_installed_visuals:
+            console.print(
+                f'Installed plugin schema "[cyan]{cv.visual_type}[/cyan]" '
+                f"({cv.role_count} roles, {cv.object_count} objects)"
+            )
+        console.print(f'Initialized project "[cyan]{proj.project_name}[/cyan]"')
+        return
+
+    console.print("[dim]No initialization changes needed.[/dim]")
 
 @app.command()
 def map(

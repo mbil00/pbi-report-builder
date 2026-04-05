@@ -71,7 +71,7 @@ def custom_visual_scan(
     if installable:
         types = ", ".join(r.visual_type for r in installable)
         console.print(
-            f"\n[dim]Run [/dim]`pbi visual plugin install`[dim] to extract and register schemas for: {types}[/dim]"
+            f"\n[dim]Run [/dim]`pbi init`[dim] to extract and register schemas for: {types}[/dim]"
         )
 
 
@@ -167,8 +167,8 @@ def custom_visual_list(
 
     if not schemas:
         console.print("[yellow]No custom visual schemas installed.[/yellow]")
-        console.print("[dim]Use `pbi visual plugin scan` to find custom visuals, "
-                      "then `pbi visual plugin install` to register their schemas.[/dim]")
+        console.print("[dim]Use `pbi init` to prepare project-local schemas, "
+                      "or `pbi visual plugin install` to register specific .pbiviz files manually.[/dim]")
         raise typer.Exit(0)
 
     table = Table(box=box.SIMPLE, title="Installed Custom Visual Schemas")
