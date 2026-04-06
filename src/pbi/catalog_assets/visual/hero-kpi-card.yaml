@@ -1,0 +1,23 @@
+kind: visual
+name: hero-kpi-card
+category: kpi
+description: Large summary card with configurable title and measure binding.
+tags:
+  - kpi
+  - card
+  - summary
+parameters:
+  title:
+    type: string
+    default: Revenue
+  value:
+    type: field
+    default: Sales.Revenue
+payload:
+  type: cardVisual
+  size: 260 x 120
+  title:
+    show: true
+    text: '{{ title }}'
+  bindings:
+    Value: '{{ value }}'

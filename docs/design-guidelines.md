@@ -366,8 +366,8 @@ For a polished look, define styles once and reference them everywhere:
 
 ```bash
 # Create once
-pbi style create card-panel border.show=true border.color="#E2E2E2" \
-  border.radius=8 background.color="#FFFFFF"
+pbi catalog create style border.show=true border.color="#E2E2E2" \
+  border.radius=8 background.color="#FFFFFF" --name card-panel
 ```
 
 ```yaml
@@ -388,4 +388,4 @@ pbi style create card-panel border.show=true border.color="#E2E2E2" \
   ...
 ```
 
-Use `pbi visual set-all --all-pages --style card-panel` to apply retroactively to existing visuals.
+Use `pbi catalog apply style/card-panel "Dashboard" --visual-type cardVisual` or YAML `style: card-panel` to reuse it.

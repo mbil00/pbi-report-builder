@@ -9,13 +9,13 @@ Shortest path to reliable PBIR changes. Prefer declarative YAML over imperative 
 | Build a new page | Write YAML + `pbi apply` |
 | Restyle / restructure a page | `pbi page export` → edit YAML → `pbi apply` |
 | Redesign a page completely | `pbi page export` → edit YAML → `pbi apply --overwrite` |
-| Reuse a standard intro/info/detail page | `pbi page template apply` |
-| Stamp repeated composite widgets | `pbi component create` → `pbi component apply --row N` |
+| Reuse a standard intro/info/detail page | `pbi catalog apply page/...` |
+| Stamp repeated composite widgets | `pbi catalog create component` → `pbi catalog apply component/... --row N` |
 | Import a page from another project | `pbi page import --from-project ... --page ...` |
 | Add page section backgrounds | `pbi page section create` |
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
-| Apply consistent formatting | `pbi style apply` or `style:` in YAML |
-| Apply a built-in shape preset | `pbi style apply --style rounded-container` |
+| Apply consistent formatting | `pbi catalog apply style/...` or `style:` in YAML |
+| Apply a built-in shape preset | `pbi catalog apply style/rounded-container` |
 | Change a theme's colors everywhere | `pbi theme migrate old.json new.json` |
 | Manage embedded images | `pbi image create` / `pbi image prune` |
 | Understand group hierarchy | `pbi visual tree "Page"` |
@@ -150,17 +150,17 @@ Styles save formatting as named presets. Use them to keep visuals consistent acr
 ### Capture a style from an existing visual
 
 ```bash
-pbi style create card-style --from-visual "Executive Overview" --visual kpiStrip
+pbi catalog create style --from-visual "Executive Overview" --visual kpiStrip --name card-style
 ```
 
 ### Apply a style
 
 ```bash
 # To one visual
-pbi style apply "Device Intelligence" kpiStrip --style card-style
+pbi catalog apply style/card-style "Device Intelligence" --visual kpiStrip
 
 # To all visuals of a type on a page
-pbi style apply "Device Intelligence" --visual-type cardVisual --style card-style
+pbi catalog apply style/card-style "Device Intelligence" --visual-type cardVisual
 
 # In YAML — just reference the style name
 - name: kpiStrip
@@ -172,10 +172,10 @@ pbi style apply "Device Intelligence" --visual-type cardVisual --style card-styl
 ### Global styles (shared across projects)
 
 ```bash
-pbi style create card-style ... --global        # save to ~/.config/pbi/styles/
-pbi style clone card-style --to-project         # copy global → project
-pbi style clone card-style --to-global          # copy project → global
-pbi style list                                  # shows both scopes
+pbi catalog create style ... --name card-style --scope global
+pbi catalog clone style/card-style --to-project
+pbi catalog clone style/card-style --to-global
+pbi catalog list --kind style
 ```
 
 Style resolution: project-scoped styles take priority, global styles are the fallback.
@@ -186,18 +186,18 @@ Page templates now store full apply-compatible page YAML, not just stripped layo
 
 ```bash
 # Save one page as a reusable template
-pbi page template create "Executive Intro" corp-intro --global --description "Shared intro page"
+pbi catalog create page --from-visual "Executive Intro" --name corp-intro --scope global --description "Shared intro page"
 
 # Discover available templates
-pbi page template list
-pbi page template list --global
-pbi page template list --json
-pbi page template get corp-intro --global
+pbi catalog list --kind page
+pbi catalog list --kind page --scope global
+pbi catalog list --kind page --json
+pbi catalog get page/corp-intro --scope global
 
 # Reuse a template on a new or existing page
-pbi page create "Intro" --from-template corp-intro --template-global
-pbi page template apply "Overview" corp-intro --global
-pbi page template apply "Overview" corp-intro --global --overwrite
+pbi page create "Intro"
+pbi catalog apply page/corp-intro "Intro" --scope global
+pbi catalog apply page/corp-intro "Overview" --scope global --overwrite
 ```
 
 Template resolution matches styles: project templates win, global templates are the fallback.
@@ -208,7 +208,7 @@ Templates can carry:
 - filters and interactions
 - page-local bookmarks
 
-Use `--overwrite` on `page template apply` when the target page should be reconciled exactly to the template.
+Use `--overwrite` on `catalog apply page/...` when the target page should be reconciled exactly to the saved page asset.
 
 ## Components (Reusable Grouped Widgets)
 
@@ -217,7 +217,7 @@ Components sit between styles (one visual) and templates (entire page). They cap
 ### Save a component from an existing group
 
 ```bash
-pbi component create "Dashboard" "KPI: Revenue" --name kpi-card-with-py \
+pbi catalog create component --from-visual "Dashboard" --visual "KPI: Revenue" --name kpi-card-with-py \
   --description "KPI gauge with prior year value and rounded container"
 # Saves 4 visuals with auto-detected parameters (title, filters)
 ```
@@ -225,7 +225,7 @@ pbi component create "Dashboard" "KPI: Revenue" --name kpi-card-with-py \
 ### Stamp onto a page
 
 ```bash
-pbi component apply "Dashboard" kpi-card-with-py --x 16 --y 200 \
+pbi catalog apply component/kpi-card-with-py "Dashboard" --x 16 --y 200 \
   --set title="Compliance Rate" \
   --set "filter[DimFacts.Kpi Name]=Compliance Rate"
 ```
@@ -233,7 +233,7 @@ pbi component apply "Dashboard" kpi-card-with-py --x 16 --y 200 \
 ### Batch stamp a row of instances
 
 ```bash
-pbi component apply "Dashboard" kpi-card-with-py \
+pbi catalog apply component/kpi-card-with-py "Dashboard" \
   --row 4 --x 16 --y 200 --gap 12 \
   --set-each title=Revenue,Margin,Pipeline,Backlog \
   --set-each "filter[DimFacts.Kpi Name]=Revenue,Margin,Pipeline,Backlog"
@@ -242,10 +242,10 @@ pbi component apply "Dashboard" kpi-card-with-py \
 ### Manage components
 
 ```bash
-pbi component list
-pbi component get kpi-card-with-py
-pbi component clone kpi-card-with-py --to-global
-pbi component delete kpi-card-with-py --force
+pbi catalog list --kind component
+pbi catalog get component/kpi-card-with-py
+pbi catalog clone component/kpi-card-with-py --to-global
+pbi catalog delete component/kpi-card-with-py --force
 ```
 
 Component storage mirrors styles: project in `.pbi-components/`, global in `~/.config/pbi/components/`. Parameters use `{{ name }}` syntax in the saved YAML and are substituted at stamp time via `--set`.
@@ -300,16 +300,16 @@ Four built-in shape style presets ship with the tool, always available by name:
 | `card-frame` | Transparent with border only |
 
 ```bash
-# Use in imperative commands
-pbi style apply "Dashboard" bgShape --style rounded-container
+# Apply directly from the catalog
+pbi catalog apply style/rounded-container "Dashboard" --visual bgShape
 
 # Use in YAML
 - name: bgShape
   type: shape
   style: rounded-container
 
-# List bundled presets
-pbi style list --bundled
+# List style assets, including bundled presets
+pbi catalog list --kind style
 ```
 
 ## Bulk Operations

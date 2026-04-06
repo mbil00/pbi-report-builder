@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 from pbi.commands.bookmarks import bookmark_app
-from pbi.commands.components import component_app
+from pbi.commands.catalog import catalog_app
 from pbi.commands.common import (
     ProjectOpt,
     console,
@@ -68,7 +68,6 @@ def main(
     ] = False,
 ) -> None:
     """CLI tool for editing Power BI PBIP project files."""
-style_app = typer.Typer(help="Style preset operations.", no_args_is_help=True)
 app.add_typer(report_app, name="report")
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
@@ -76,11 +75,10 @@ app.add_typer(model_app, name="model")
 app.add_typer(nav_app, name="nav")
 app.add_typer(filter_app, name="filter")
 app.add_typer(theme_app, name="theme")
-app.add_typer(style_app, name="style")
 app.add_typer(bookmark_app, name="bookmark")
 app.add_typer(interaction_app, name="interaction")
 app.add_typer(image_app, name="image")
-app.add_typer(component_app, name="component")
+app.add_typer(catalog_app, name="catalog")
 
 
 def _safe_backup_path(project_root: Path, page_name: str) -> Path:
@@ -267,237 +265,6 @@ def apply_cmd(
         raise typer.Exit(1)
     if not result.has_changes and not dry_run:
         console.print("[dim]No changes applied.[/dim]")
-
-
-@style_app.command("create")
-def style_create(
-    style_name: Annotated[str, typer.Argument(help="Name for the saved style preset.")],
-    assignments: Annotated[list[str] | None, typer.Argument(help="Property assignments as prop=value.")] = None,
-    from_visual_page: Annotated[str | None, typer.Option("--from-visual", help="Capture style from visual: page name.")] = None,
-    from_visual_name: Annotated[str | None, typer.Option("--visual", help="Visual name (used with --from-visual).")] = None,
-    description: Annotated[str | None, typer.Option("--description", help="Optional style description.")] = None,
-    force: Annotated[bool, typer.Option("--force", "-f", help="Replace an existing style preset.")] = False,
-    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Save as a global style (~/.config/pbi/styles/).")] = False,
-    project: ProjectOpt = None,
-) -> None:
-    """Create a visual style preset from assignments or an existing visual."""
-    from pbi.styles import create_style, extract_style_properties
-
-    proj = get_project(project) if not global_scope or from_visual_page else (get_project(project) if project else None)
-
-    if from_visual_page:
-        if not from_visual_name:
-            console.print("[red]Error:[/red] --visual is required with --from-visual.")
-            raise typer.Exit(1)
-        proj = get_project(project)
-        from pbi.export import export_visual_spec
-        try:
-            pg = proj.find_page(from_visual_page)
-            vis = proj.find_visual(pg, from_visual_name)
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
-        spec = export_visual_spec(proj, vis)
-        props = extract_style_properties(spec)
-        if not props:
-            console.print("[yellow]Visual has no style properties to capture.[/yellow]")
-            raise typer.Exit(0)
-    elif assignments:
-        props = dict(parse_property_assignments(assignments))
-    else:
-        console.print("[red]Error:[/red] Provide prop=value assignments or use --from-visual.")
-        raise typer.Exit(1)
-
-    try:
-        path = create_style(
-            proj,
-            style_name,
-            props,
-            description=description,
-            overwrite=force,
-            global_scope=global_scope,
-        )
-    except (FileExistsError, ValueError) as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    scope_label = "global " if global_scope else ""
-    console.print(
-        f'Saved {scope_label}style "[cyan]{style_name}[/cyan]" '
-        f"({len(props)} properties) → {path}"
-    )
-
-
-@style_app.command("list")
-def style_list(
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Show only global styles.")] = False,
-    bundled: Annotated[bool, typer.Option("--bundled", help="Include built-in shape presets.")] = False,
-    project: ProjectOpt = None,
-) -> None:
-    """List saved style presets (project + global)."""
-    from pbi.styles import list_styles
-
-    proj = get_project(project) if not global_scope else None
-    styles = list_styles(proj, global_scope=global_scope, include_bundled=bundled)
-
-    if not styles:
-        console.print("[yellow]No styles saved. Use `pbi style create` to create one.[/yellow]")
-        raise typer.Exit(0)
-
-    if as_json:
-        import json
-
-        rows = [{"name": s.name, "properties": len(s.properties), "scope": s.scope, "description": s.description or ""} for s in styles]
-        console.print_json(json.dumps(rows, indent=2))
-        return
-
-    table = Table(box=box.SIMPLE)
-    table.add_column("Name", style="cyan")
-    table.add_column("Scope", style="dim")
-    table.add_column("Properties")
-    table.add_column("Description", style="dim")
-    for style in styles:
-        table.add_row(
-            style.name,
-            style.scope,
-            str(len(style.properties)),
-            style.description or "",
-        )
-    console.print(table)
-
-
-@style_app.command("get")
-def style_get(
-    style_name: Annotated[str, typer.Argument(help="Style preset name.")],
-    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Look up in global styles only.")] = False,
-    project: ProjectOpt = None,
-) -> None:
-    """Show one saved style preset as YAML."""
-    from pbi.styles import dump_style, get_style
-
-    proj = get_project(project) if not global_scope else None
-    try:
-        style = get_style(proj, style_name, global_scope=global_scope)
-    except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    typer.echo(dump_style(style), nl=False)
-
-
-@style_app.command("delete")
-def style_delete(
-    style_name: Annotated[str, typer.Argument(help="Style preset name to delete.")],
-    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
-    global_scope: Annotated[bool, typer.Option("--global", "-g", help="Delete from global styles.")] = False,
-    project: ProjectOpt = None,
-) -> None:
-    """Delete a saved style preset."""
-    from pbi.styles import delete_style
-
-    proj = get_project(project) if not global_scope else None
-    if not force:
-        confirm = typer.confirm(f'Delete style "{style_name}"?')
-        if not confirm:
-            raise typer.Abort()
-
-    try:
-        deleted = delete_style(proj, style_name, global_scope=global_scope)
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    if deleted:
-        console.print(f'Deleted style "[cyan]{style_name}[/cyan]"')
-    else:
-        console.print(f'[yellow]Style "{style_name}" not found.[/yellow]')
-
-
-@style_app.command("apply")
-def style_apply(
-    page: Annotated[str, typer.Argument(help="Page name, display name, or index.")],
-    visual: Annotated[str | None, typer.Argument(help="Visual name or index. Omit with --visual-type.")] = None,
-    style_name: Annotated[str, typer.Option("--style", "-s", help="Style preset name to apply.")] = "",
-    visual_type: Annotated[str | None, typer.Option("--visual-type", help="Apply to all visuals of this type.")] = None,
-    project: ProjectOpt = None,
-) -> None:
-    """Apply a saved style preset to one or more visuals."""
-    from pbi.properties import set_property as set_prop
-    from pbi.styles import get_style
-
-    if not style_name:
-        console.print("[red]Error:[/red] --style is required.")
-        raise typer.Exit(1)
-    if not visual and not visual_type:
-        console.print("[red]Error:[/red] Provide a visual name or use --visual-type.")
-        raise typer.Exit(1)
-    if visual and visual_type:
-        console.print("[red]Error:[/red] Use either a visual name or --visual-type, not both.")
-        raise typer.Exit(1)
-
-    proj = get_project(project)
-    try:
-        pg = proj.find_page(page)
-        style = get_style(proj, style_name)
-    except (ValueError, FileNotFoundError) as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    if visual:
-        try:
-            targets = [proj.find_visual(pg, visual)]
-        except ValueError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
-    else:
-        targets = [v for v in proj.get_visuals(pg) if v.visual_type == visual_type]
-        if not targets:
-            console.print(f'[yellow]No visuals of type "{visual_type}" on "{pg.display_name}".[/yellow]')
-            raise typer.Exit(0)
-
-    for vis in targets:
-        for prop_name, value in style.properties.items():
-            try:
-                set_prop(vis.data, prop_name, str(value), VISUAL_PROPERTIES)
-            except ValueError:
-                pass
-        vis.save()
-
-    console.print(
-        f'Applied style "[cyan]{style_name}[/cyan]" ({len(style.properties)} properties) '
-        f'to [cyan]{len(targets)}[/cyan] visual(s) on "{pg.display_name}"'
-    )
-
-
-@style_app.command("clone")
-def style_clone(
-    style_name: Annotated[str, typer.Argument(help="Style to clone.")],
-    new_name: Annotated[str | None, typer.Option("--name", "-n", help="New name for the cloned style.")] = None,
-    to_global: Annotated[bool, typer.Option("--to-global", help="Clone project style to global.")] = False,
-    to_project: Annotated[bool, typer.Option("--to-project", help="Clone global style to project.")] = False,
-    force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite if exists.")] = False,
-    project: ProjectOpt = None,
-) -> None:
-    """Clone a style between project and global scope."""
-    from pbi.styles import clone_style
-
-    if not to_global and not to_project:
-        console.print("[red]Error:[/red] Specify --to-global or --to-project.")
-        raise typer.Exit(1)
-    if to_global and to_project:
-        console.print("[red]Error:[/red] Use either --to-global or --to-project, not both.")
-        raise typer.Exit(1)
-
-    proj = get_project(project)
-    try:
-        path = clone_style(proj, style_name, to_global=to_global, new_name=new_name, overwrite=force)
-    except (FileExistsError, FileNotFoundError, ValueError) as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    target_name = new_name or style_name
-    direction = "global" if to_global else "project"
-    console.print(f'Cloned "[cyan]{style_name}[/cyan]" → {direction} as "[cyan]{target_name}[/cyan]" → {path}')
 
 
 @app.command("diff")

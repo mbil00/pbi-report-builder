@@ -28,7 +28,7 @@ Bookmarks also integrate directly with reusable page templates and `pbi nav`:
 
 ```bash
 # Save bookmarks with a reusable page template
-pbi page template create "Executive Intro" corp-intro --global
+pbi catalog create page --from-visual "Executive Intro" --name corp-intro --scope global
 
 # Wire a button to a bookmark
 pbi nav bookmark set "Sales Overview" toggleBtn "Minimal View"

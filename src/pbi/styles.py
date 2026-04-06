@@ -85,6 +85,54 @@ def create_style(
     return path
 
 
+def save_style_from_visual(
+    project: Project,
+    page,
+    visual,
+    style_name: str,
+    *,
+    description: str | None = None,
+    overwrite: bool = False,
+    global_scope: bool = False,
+) -> Path:
+    """Create a style preset from an existing visual."""
+    from pbi.export import export_visual_spec
+
+    spec = export_visual_spec(project, visual)
+    properties = extract_style_properties(spec)
+    if not properties:
+        raise ValueError("Visual has no style properties to capture.")
+    return create_style(
+        None if global_scope else project,
+        style_name,
+        properties,
+        description=description,
+        overwrite=overwrite,
+        global_scope=global_scope,
+    )
+
+
+def register_style(
+    project: Project | None,
+    yaml_path: Path,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    overwrite: bool = False,
+    global_scope: bool = False,
+) -> Path:
+    """Register a style preset from an existing style YAML file."""
+    source = _load_style_file(yaml_path, name or yaml_path.stem, scope="source")
+    return create_style(
+        None if global_scope else project,
+        name or source.name,
+        source.properties,
+        description=description if description is not None else source.description,
+        overwrite=overwrite,
+        global_scope=global_scope,
+    )
+
+
 def get_style(project: Project | None, style_name: str, *, global_scope: bool = False) -> StylePreset:
     """Load and validate one saved style preset.
 

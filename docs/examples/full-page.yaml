@@ -8,7 +8,7 @@
 #   1. pbi apply full-page.yaml
 #   2. Open in Desktop, fine-tune styling
 #   3. pbi visual inspect "Executive Overview" <visual> --search <keyword>
-#   4. pbi style create my-style --from-visual "Executive Overview" <visual>
+#   4. pbi catalog create style --from-visual "Executive Overview" --visual <visual> --name my-style
 #   5. Iterate
 #
 # Usage: pbi apply full-page.yaml

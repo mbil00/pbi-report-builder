@@ -5,8 +5,8 @@
 # authoring workflow.
 #
 # Prerequisites:
-#   pbi style create prestige-table border.show=true border.color="#DDD6CC" \
-#     background.color="#FAFAF8" title.show=true title.fontColor="#4A4A48"
+#   pbi catalog create style border.show=true border.color="#DDD6CC" \
+#     background.color="#FAFAF8" title.show=true title.fontColor="#4A4A48" --name prestige-table
 #
 # Usage: pbi apply styled-table.yaml
 

@@ -71,6 +71,32 @@ def save_template(
     return path
 
 
+def register_template(
+    project: Project | None,
+    yaml_path: Path,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    overwrite: bool = False,
+    global_scope: bool = False,
+) -> Path:
+    """Register a page asset from an existing template YAML file."""
+    template = _load_template_file(yaml_path, name or yaml_path.stem, scope="source")
+    payload = copy.deepcopy(template.spec)
+    payload["name"] = _validate_template_name(name or template.name)
+    if description is not None:
+        payload["description"] = description
+    elif payload.get("description") is None:
+        payload.pop("description", None)
+    if global_scope:
+        path = _global_template_path(payload["name"])
+    else:
+        if project is None:
+            raise ValueError("Project is required for project-scoped page assets.")
+        path = _template_path(project, payload["name"])
+    return _write_template(path, payload, overwrite=overwrite)
+
+
 def apply_template(
     project: Project,
     page: Page,

@@ -980,9 +980,12 @@ class RealReportFixtureTests(unittest.TestCase):
             create_result = runner.invoke(
                 app,
                 [
-                    "component",
+                    "catalog",
                     "create",
+                    "component",
+                    "--from-visual",
                     "Executive Overview",
+                    "--visual",
                     "Navigation",
                     "--name",
                     "nav-cluster",
@@ -998,7 +1001,7 @@ class RealReportFixtureTests(unittest.TestCase):
 
             list_result = runner.invoke(
                 app,
-                ["component", "list", "--json", "--project", str(pbip)],
+                ["catalog", "list", "--kind", "component", "--json", "--project", str(pbip)],
             )
             self.assertEqual(list_result.exit_code, 0, list_result.stdout)
             rows = json.loads(list_result.stdout)
@@ -1009,10 +1012,10 @@ class RealReportFixtureTests(unittest.TestCase):
             apply_result = runner.invoke(
                 app,
                 [
-                    "component",
+                    "catalog",
                     "apply",
+                    "component/nav-cluster",
                     "Hidden QA Page",
-                    "nav-cluster",
                     "--x",
                     "80",
                     "--y",

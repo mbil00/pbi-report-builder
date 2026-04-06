@@ -1171,7 +1171,7 @@ pages:
 
             result = runner.invoke(
                 app,
-                ["component", "create", "--from-yaml", str(spec_path), "--name", "my-widget",
+                ["catalog", "register", str(spec_path), "--kind", "component", "--name", "my-widget",
                  "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(result.exit_code, 0, result.stdout)

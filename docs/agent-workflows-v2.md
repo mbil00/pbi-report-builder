@@ -20,13 +20,13 @@ Name every visual you create (`name:` in YAML or `--name` on create). Unnamed vi
 |------|----------|
 | Understand the project | `pbi map` |
 | Understand the data model | `pbi model table list` then `pbi model fields <Table>` |
-| Check reusable assets before building | `pbi style list`, `pbi component list`, `pbi page template list` |
+| Check reusable assets before building | `pbi catalog list --kind ...` |
 | Build or restyle a page | `pbi page export` (or write YAML from scratch) then `pbi apply` |
 | Redesign a page completely | `pbi page export` then edit then `pbi apply --overwrite` |
 | Tweak 1-2 properties quickly | `pbi visual set` (imperative) |
-| Apply consistent formatting | Styles: `pbi style apply` or `style:` in YAML |
-| Reuse a standard page layout | Templates: `pbi page template apply` |
-| Stamp repeated widget groups | Components: `pbi component apply --row N` |
+| Apply consistent formatting | Styles: `pbi catalog apply style/...` or `style:` in YAML |
+| Reuse a standard page layout | Templates: `pbi catalog apply page/...` |
+| Stamp repeated widget groups | Components: `pbi catalog apply component/... --row N` |
 | Change theme colors everywhere | `pbi theme migrate old.json new.json` |
 
 **Rule of thumb:** Use `pbi page export` + `pbi apply` for any multi-visual work. Use imperative commands only for quick one-off tweaks.
@@ -46,10 +46,9 @@ pbi model path Sales Calendar           # how are tables related?
 Before building visuals from scratch, check the reuse stores for existing assets:
 
 ```bash
-pbi style list                          # saved formatting presets (project + global)
-pbi style list --bundled                # built-in shape presets
-pbi component list                      # saved visual groups (project + global)
-pbi page template list                  # saved page layouts (project + global)
+pbi catalog list --kind style           # saved formatting presets
+pbi catalog list --kind component       # saved visual groups
+pbi catalog list --kind page            # saved page layouts
 ```
 
 These stores grow over time. Prefer reusing an existing style, component, or template over building from scratch — it keeps reports consistent and saves work.
@@ -144,12 +143,12 @@ The CLI maintains stores of reusable assets at two scopes: **project** (local to
 ### Styles
 
 ```bash
-pbi style list                          # browse available styles
-pbi style apply "Page" myCard --style card-style
+pbi catalog list --kind style
+pbi catalog apply style/card-style "Page" --visual myCard
 
 # Save a well-formatted visual as a reusable style
-pbi style create card-style --from-visual "Dashboard" --visual kpiCard
-pbi style clone card-style --to-global  # promote to global for cross-project reuse
+pbi catalog create style --from-visual "Dashboard" --visual kpiCard --name card-style
+pbi catalog clone style/card-style --to-global
 ```
 
 Or reference in YAML: `style: card-style`. See [visuals.md](visuals.md).
@@ -157,27 +156,27 @@ Or reference in YAML: `style: card-style`. See [visuals.md](visuals.md).
 ### Components
 
 ```bash
-pbi component list                      # browse available components
-pbi component get kpi-widget            # inspect parameters and visuals
-pbi component apply "Dashboard" kpi-widget --x 16 --y 200 --set title=Revenue
-pbi component apply "Dashboard" kpi-widget --row 4 --set-each title=Rev,Margin,Pipeline,Backlog
+pbi catalog list --kind component
+pbi catalog get component/kpi-widget
+pbi catalog apply component/kpi-widget "Dashboard" --x 16 --y 200 --set title=Revenue
+pbi catalog apply component/kpi-widget "Dashboard" --row 4 --set-each title=Rev,Margin,Pipeline,Backlog
 
 # Save a visual group you'll reuse
-pbi component create "Dashboard" "KPI Group" --name kpi-widget
-pbi component clone kpi-widget --to-global
+pbi catalog create component --from-visual "Dashboard" --visual "KPI Group" --name kpi-widget
+pbi catalog clone component/kpi-widget --to-global
 ```
 
-Components use `{{ param }}` substitution. See `pbi component get <name>` for parameters.
+Components use `{{ param }}` substitution. See `pbi catalog get component/<name>` for parameters.
 
 ### Templates
 
 ```bash
-pbi page template list                  # browse available templates
-pbi page template apply "My Intro" corp-intro --global
+pbi catalog list --kind page
+pbi catalog apply page/corp-intro "My Intro" --scope global
 pbi page create "New Page" --from-template corp-intro --template-global
 
 # Save a page layout you'll reuse
-pbi page template create "Intro Page" corp-intro --global
+pbi catalog create page --from-visual "Intro Page" --name corp-intro --scope global
 ```
 
 See [pages.md](pages.md).
@@ -217,5 +216,5 @@ pbi theme migrate old-theme.json new-theme.json
 | Interactions | `pbi interaction set` | [interactions.md](interactions.md) |
 | Validation | `pbi validate` | [validation.md](validation.md) |
 | Layout preview | `pbi render` | [render.md](render.md) |
-| Shape presets | `pbi style list --bundled` | [visuals.md](visuals.md) |
+| Shape presets | `pbi catalog list --kind style` | [visuals.md](visuals.md) |
 | Capabilities | `pbi capabilities` | [capabilities.md](capabilities.md) |

@@ -83,7 +83,7 @@ class TemplateRegressionTests(unittest.TestCase):
 
                 result = runner.invoke(
                     app,
-                    ["page", "template", "list", "--json", "--project", str(root / "Sample.pbip")],
+                    ["catalog", "list", "--kind", "page", "--json", "--project", str(root / "Sample.pbip")],
                 )
 
                 self.assertEqual(result.exit_code, 0, result.stdout)
@@ -101,22 +101,24 @@ class StylePresetRegressionTests(unittest.TestCase):
 
             empty_list = runner.invoke(
                 app,
-                ["style", "list", "--project", str(root / "Sample.pbip")],
+                ["catalog", "list", "--kind", "style", "--scope", "project", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(empty_list.exit_code, 0, empty_list.stdout)
-            self.assertIn("No styles saved", empty_list.stdout)
+            self.assertIn("No catalog items found", empty_list.stdout)
 
             create_result = runner.invoke(
                 app,
                 [
-                    "style",
+                    "catalog",
                     "create",
-                    "card-standard",
+                    "style",
                     "border.show=true",
                     "border.radius=10",
                     "title.text=Standard Card",
                     "--description",
                     "Card baseline",
+                    "--name",
+                    "card-standard",
                     "--project",
                     str(root / "Sample.pbip"),
                 ],
@@ -132,7 +134,7 @@ class StylePresetRegressionTests(unittest.TestCase):
 
             list_result = runner.invoke(
                 app,
-                ["style", "list", "--project", str(root / "Sample.pbip")],
+                ["catalog", "list", "--kind", "style", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(list_result.exit_code, 0, list_result.stdout)
             self.assertIn("card-standard", list_result.stdout)
@@ -140,7 +142,7 @@ class StylePresetRegressionTests(unittest.TestCase):
 
             show_result = runner.invoke(
                 app,
-                ["style", "get", "card-standard", "--project", str(root / "Sample.pbip")],
+                ["catalog", "get", "style/card-standard", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(show_result.exit_code, 0, show_result.stdout)
             self.assertIn("name: card-standard", show_result.stdout)
@@ -149,7 +151,7 @@ class StylePresetRegressionTests(unittest.TestCase):
 
             delete_result = runner.invoke(
                 app,
-                ["style", "delete", "card-standard", "--force", "--project", str(root / "Sample.pbip")],
+                ["catalog", "delete", "style/card-standard", "--force", "--project", str(root / "Sample.pbip")],
             )
             self.assertEqual(delete_result.exit_code, 0, delete_result.stdout)
             self.assertFalse(style_path.exists())
@@ -163,10 +165,12 @@ class StylePresetRegressionTests(unittest.TestCase):
             result = runner.invoke(
                 app,
                 [
-                    "style",
+                    "catalog",
                     "create",
-                    "../escape",
+                    "style",
                     "border.show=true",
+                    "--name",
+                    "../escape",
                     "--project",
                     str(root / "Sample.pbip"),
                 ],

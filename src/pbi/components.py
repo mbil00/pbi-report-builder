@@ -9,10 +9,9 @@ from typing import Any
 
 import yaml
 
-from pbi.apply.visual_support import apply_raw_visual_payload
 from pbi.export import export_visual_spec
 from pbi.project import Page, Project, Visual, sanitize_visual_name
-from pbi.textbox import set_textbox_content
+from pbi.visual_stamping import create_visual_from_spec
 from pbi.visual_groups import create_group
 
 
@@ -507,26 +506,13 @@ def apply_component(
             raw_pbir = spec.get("pbir")
             if isinstance(raw_pbir, dict):
                 raw_pbir.pop("parentGroupName", None)
-        vis_type = spec.get("type", "shape")
         pos_str = spec.get("position", "0, 0")
-        size_str = spec.get("size", "300 x 200")
 
         # Parse relative position and offset by target (x, y)
         rel_x, rel_y = _parse_position(pos_str)
         abs_x = x + rel_x
         abs_y = y + rel_y
-        w, h = _parse_size(size_str)
-
-        vis = project.create_visual(page, vis_type, x=abs_x, y=abs_y, width=w, height=h)
-
-        # Apply name
-        vis_name = spec.get("name")
-        if vis_name:
-            vis.data["name"] = sanitize_visual_name(vis_name)
-
-        # Apply properties via the YAML apply engine approach
-        _apply_spec_to_visual(project, vis, spec)
-        vis.save()
+        vis = create_visual_from_spec(project, page, spec, x=abs_x, y=abs_y)
         created.append(vis)
 
     # Group the created visuals if more than one
@@ -639,99 +625,3 @@ def _deep_replace_str(obj: Any, old: str, new: str) -> None:
             elif isinstance(item, (dict, list)):
                 _deep_replace_str(item, old, new)
 
-
-def _apply_spec_to_visual(project: Project, visual: Visual, spec: dict) -> None:
-    """Apply component spec properties/bindings/filters to a created visual."""
-    from pbi.properties import VISUAL_PROPERTIES, set_property
-
-    # Apply formatting properties
-    skip_keys = {
-        "id",
-        "name",
-        "type",
-        "position",
-        "size",
-        "bindings",
-        "sort",
-        "filters",
-        "pbir",
-        "style",
-        "isHidden",
-        "text",
-        "textStyle",
-        "group",
-    }
-
-    for key, value in spec.items():
-        if key in skip_keys:
-            continue
-        if isinstance(value, dict):
-            # Nested properties like title: {show: true, text: "Hello"}
-            for subkey, subval in value.items():
-                prop_name = f"{key}.{subkey}"
-                try:
-                    set_property(visual.data, prop_name, str(subval), VISUAL_PROPERTIES)
-                except (ValueError, KeyError):
-                    pass
-        elif isinstance(value, (str, int, float, bool)):
-            try:
-                set_property(visual.data, key, str(value), VISUAL_PROPERTIES)
-            except (ValueError, KeyError):
-                pass
-
-    # Apply bindings
-    bindings = spec.get("bindings", {})
-    if isinstance(bindings, dict):
-        for role, fields in bindings.items():
-            if isinstance(fields, str):
-                fields = [fields]
-            if isinstance(fields, list):
-                for field_ref in fields:
-                    if not isinstance(field_ref, str) or "." not in field_ref:
-                        continue
-                    is_measure = "(measure)" in field_ref
-                    clean_ref = field_ref.replace("(measure)", "").strip()
-                    dot = clean_ref.find(".")
-                    entity = clean_ref[:dot]
-                    prop = clean_ref[dot + 1:]
-                    ftype = "measure" if is_measure else "column"
-                    project.add_binding(visual, role, entity, prop, field_type=ftype)
-
-    # Apply isHidden
-    if spec.get("isHidden"):
-        visual.data["isHidden"] = True
-
-    # Apply filters
-    filters = spec.get("filters", [])
-    if isinstance(filters, list):
-        from pbi.filters import add_categorical_filter, add_exclude_filter
-        for filt in filters:
-            if not isinstance(filt, dict):
-                continue
-            field_ref = filt.get("field", "")
-            values = filt.get("values", [])
-            mode = filt.get("mode", "include")
-            if field_ref and "." in field_ref and values:
-                dot = field_ref.find(".")
-                entity = field_ref[:dot]
-                prop = field_ref[dot + 1:]
-                try:
-                    if mode == "exclude":
-                        add_exclude_filter(visual.data, entity, prop, values=values)
-                    else:
-                        add_categorical_filter(visual.data, entity, prop, values=values)
-                except (ValueError, KeyError):
-                    pass
-
-    # Apply raw PBIR payload if present (for round-trip fidelity)
-    pbir = spec.get("pbir")
-    if isinstance(pbir, dict):
-        apply_raw_visual_payload(visual, pbir)
-
-    if visual.visual_type == "textbox" and isinstance(spec.get("text"), str):
-        style = spec.get("textStyle", {})
-        set_textbox_content(
-            visual.data,
-            text=spec["text"],
-            style_updates=style if isinstance(style, dict) else None,
-        )

@@ -47,8 +47,8 @@ pages:
       Y: Sales.TotalRevenue
 
   # --- Style reference (reuse a saved preset) ---
-  # Styles are created with: pbi style create <name> ...
-  # List available: pbi style list / pbi style list --bundled
+  # Styles are created with: pbi catalog create style ... --name <name>
+  # List available: pbi catalog list --kind style
   - name: presetCard
     type: cardVisual
     position: 320, 16

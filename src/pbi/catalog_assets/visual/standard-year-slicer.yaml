@@ -1,0 +1,22 @@
+kind: visual
+name: standard-year-slicer
+category: slicer
+description: Vertical year slicer starter with a configurable field binding.
+tags:
+  - slicer
+  - year
+  - filter
+parameters:
+  field:
+    type: field
+    default: Date.Year
+payload:
+  type: slicer
+  size: 180 x 220
+  bindings:
+    Values: '{{ field }}'
+  header:
+    show: false
+  title:
+    show: true
+    text: Year

@@ -335,15 +335,15 @@ pbi interaction clear "Overview" slicer1                     # reset to defaults
 
 ---
 
-## Styles, Components & Templates
+## Catalog Reuse
 
 **Styles** — reusable visual property sets:
 ```bash
-pbi style create card-style background.color="#FFF" border.show=true border.radius=8
-pbi style create card-style --from-visual "Overview" myCard   # capture from existing visual
-pbi style list                                                # list available styles
-pbi style apply "Overview" --style card-style                 # apply to all visuals on page
-pbi style apply "Overview" myCard --style card-style          # apply to one visual
+pbi catalog create style background.color="#FFF" border.show=true border.radius=8 --name card-style
+pbi catalog create style --from-visual "Overview" --visual myCard --name card-style
+pbi catalog list --kind style
+pbi catalog apply style/card-style "Overview" --visual-type cardVisual
+pbi catalog apply style/card-style "Overview" --visual myCard
 
 # In YAML, reference styles by name:
 #   style: card-style
@@ -352,18 +352,18 @@ pbi style apply "Overview" myCard --style card-style          # apply to one vis
 
 **Components** — reusable visual groups (stamps):
 ```bash
-pbi component create "Overview" kpiGroup --name kpi-strip     # save group as component
-pbi component apply "Detail" kpi-strip --x 16 --y 16         # stamp onto page
-pbi component apply "Detail" kpi-strip --row 3 --gap 16      # stamp 3 copies in a row
-pbi component apply "Detail" kpi-strip --set measure=Facts.Rev  # override parameters
-pbi component apply "Overview" page-header --set title="Department Breakdown"
+pbi catalog create component --from-visual "Overview" --visual kpiGroup --name kpi-strip
+pbi catalog apply component/kpi-strip "Detail" --x 16 --y 16
+pbi catalog apply component/kpi-strip "Detail" --row 3 --gap 16
+pbi catalog apply component/kpi-strip "Detail" --set measure=Facts.Rev
+pbi catalog apply component/page-header "Overview" --set title="Department Breakdown"
 ```
 
 **Page templates** — reusable page layouts:
 ```bash
-pbi page template create "Overview" dashboard-layout          # save page as template
-pbi page template apply "New Page" dashboard-layout           # apply to another page
-pbi page template list
+pbi catalog create page --from-visual "Overview" --name dashboard-layout
+pbi catalog apply page/dashboard-layout "New Page"
+pbi catalog list --kind page
 ```
 
 ---

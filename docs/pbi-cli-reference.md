@@ -102,29 +102,29 @@ cat model.yaml | pbi model apply --dry-run
 # model.yaml supports model.timeIntelligence, model.annotations, tables.<name>.dateTable, partitions, roles, and perspectives
 
 # Styles (reusable formatting presets)
-pbi style create card-style --from-visual "Sales" kpiStrip
-pbi style apply "Device Intel" --visual-type cardVisual --style card-style
-pbi style list                     # project + global styles
-pbi style clone card-style --to-global
+pbi catalog create style --from-visual "Sales" --visual kpiStrip --name card-style
+pbi catalog apply style/card-style "Device Intel" --visual-type cardVisual
+pbi catalog list --kind style      # project + global + bundled styles
+pbi catalog clone style/card-style --to-global
 
 # Page templates (reusable full-page YAML)
-pbi page template create "Sales Overview" sales-layout
-pbi page template create "Executive Intro" corp-intro --global
-pbi page template list --json
-pbi page template get corp-intro --global
-pbi page template apply "Landing" corp-intro --global --overwrite
-pbi page template clone corp-intro --to-project
+pbi catalog create page --from-visual "Sales Overview" --name sales-layout
+pbi catalog create page --from-visual "Executive Intro" --name corp-intro --scope global
+pbi catalog list --kind page --json
+pbi catalog get page/corp-intro --scope global
+pbi catalog apply page/corp-intro "Landing" --scope global --overwrite
+pbi catalog clone page/corp-intro --to-project
 
 # Components (reusable grouped widgets)
-pbi component create "Dashboard" "KPI Group" --name kpi-card
-pbi component list
-pbi component get kpi-card
-pbi component apply "Dashboard" kpi-card --x 16 --y 200 --set title=Revenue
-pbi component apply "Dashboard" kpi-card --row 4 --x 16 --y 200 --gap 12 \
+pbi catalog create component --from-visual "Dashboard" --visual "KPI Group" --name kpi-card
+pbi catalog list --kind component
+pbi catalog get component/kpi-card
+pbi catalog apply component/kpi-card "Dashboard" --x 16 --y 200 --set title=Revenue
+pbi catalog apply component/kpi-card "Dashboard" --row 4 --x 16 --y 200 --gap 12 \
   --set-each title=Revenue,Margin,Pipeline,Backlog
-pbi component apply "Dashboard" page-header --set title="Department Breakdown"
-pbi component clone kpi-card --to-global
-pbi component delete kpi-card --force
+pbi catalog apply component/page-header "Dashboard" --set title="Department Breakdown"
+pbi catalog clone component/kpi-card --to-global
+pbi catalog delete component/kpi-card --force
 
 # Page import and sections
 pbi page import --from-project /path/to/other --page "Dashboard" --name "My Dashboard"
