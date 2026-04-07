@@ -1,0 +1,57 @@
+relationship AutoDetected_58887df0-e6b6-48bb-959d-15cada7f1ae5
+	fromColumn: Forecast.AccountKey
+	toColumn: Account.AccountKey
+
+relationship AutoDetected_ffe625f4-55c2-4860-98b2-3ed84213f9c4
+	fromColumn: Budget.AccountKey
+	toColumn: Account.AccountKey
+
+relationship AutoDetected_e1f028d0-32cc-468c-a6b1-05ac7fd05947
+	fromColumn: GL_Actuals.AccountKey
+	toColumn: Account.AccountKey
+
+relationship AutoDetected_fc171ae8-53d8-4535-909f-98a90e541da3
+	fromColumn: Forecast.DepartmentKey
+	toColumn: Department.DepartmentKey
+
+relationship AutoDetected_7278c42e-26d6-4ae7-a74b-3ac73ce0311b
+	fromColumn: Budget.DepartmentKey
+	toColumn: Department.DepartmentKey
+
+relationship AutoDetected_0f98779f-0af1-43e8-bbb8-ea3f3cae1b43
+	fromColumn: GL_Actuals.DepartmentKey
+	toColumn: Department.DepartmentKey
+
+relationship AutoDetected_075a79f4-c265-4c8b-94bb-a28d52c73b69
+	fromColumn: CostCenter.DepartmentKey
+	toColumn: Department.DepartmentKey
+
+relationship AutoDetected_3b2a2ec0-9557-4d0c-9f26-ce0fc683e1f0
+	fromColumn: Forecast.ScenarioKey
+	toColumn: Scenario.ScenarioKey
+
+relationship AutoDetected_24272bf8-5617-48ed-a32d-3ee96fbc352d
+	fromColumn: Budget.ScenarioKey
+	toColumn: Scenario.ScenarioKey
+
+relationship AutoDetected_83df0944-2419-4158-a9f8-6841513102db
+	fromColumn: GL_Actuals.ScenarioKey
+	toColumn: Scenario.ScenarioKey
+
+relationship AutoDetected_ebbd6051-34f7-4bde-8398-d4fc6fccd123
+	isActive: false
+	fromColumn: GL_Actuals.CostCenterKey
+	toColumn: CostCenter.CostCenterKey
+
+relationship ea1c76a0-141f-4e50-8aa8-3d379db1f16c
+	fromColumn: GL_Actuals.Date
+	toColumn: Date.Date
+
+relationship 4486b31b-55b4-4801-b756-df07edf80b17
+	fromColumn: Budget.Date
+	toColumn: Date.Date
+
+relationship f4ef5d0c-0dbd-44b1-a3bc-8846aca547f0
+	fromColumn: Forecast.Date
+	toColumn: Date.Date
+

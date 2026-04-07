@@ -1,0 +1,82 @@
+table Department
+	lineageTag: 3038aa46-8e7e-4787-926a-a8f42c27404d
+
+	column DepartmentKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: c0c5b048-ea19-4beb-92d5-97c89609ccc4
+		summarizeBy: none
+		sourceColumn: DepartmentKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column DepartmentCode
+		dataType: string
+		lineageTag: 4f765174-311a-4727-b391-83c69953ea1c
+		summarizeBy: none
+		sourceColumn: DepartmentCode
+
+		annotation SummarizationSetBy = Automatic
+
+	column DepartmentName
+		dataType: string
+		lineageTag: 70020c72-d589-4db8-90f6-c9818201a7b9
+		summarizeBy: none
+		sourceColumn: DepartmentName
+
+		annotation SummarizationSetBy = Automatic
+
+	column Division
+		dataType: string
+		lineageTag: 56916217-1ee4-44b3-9081-01dea6daf27d
+		summarizeBy: none
+		sourceColumn: Division
+
+		annotation SummarizationSetBy = Automatic
+
+	column VPName
+		dataType: string
+		lineageTag: da7fb7dc-f320-4541-af59-c02188611f7a
+		summarizeBy: none
+		sourceColumn: VPName
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsCorporate
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 9f8c88ec-b2ef-49ed-90f8-55baf7ca3e12
+		summarizeBy: none
+		sourceColumn: IsCorporate
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Department Label' = Department[DepartmentCode] & " - " & Department[DepartmentName]
+		dataType: string
+		lineageTag: bba1d181-281e-44b2-ae65-624cc42bc9fa
+		summarizeBy: none
+
+	hierarchy Org
+		lineageTag: 372cda3c-74b1-4428-b025-6b73d3466f1d
+
+		level Division
+			lineageTag: c6ca7961-a99d-4e8a-bae2-6f15a167ff2a
+			column: Division
+
+		level DepartmentName
+			lineageTag: e29c0d1b-e723-4447-a16a-e6f07389ad67
+			column: DepartmentName
+
+	partition Department = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\Department.csv"),[Delimiter=",", Columns=6, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"DepartmentKey", Int64.Type}, {"DepartmentCode", type text}, {"DepartmentName", type text}, {"Division", type text}, {"VPName", type text}, {"IsCorporate", type logical}})
+				in
+				    #"Changed Type"
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

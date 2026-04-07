@@ -1,0 +1,93 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "header-logo",
+  "position": {
+    "x": 20,
+    "y": 10,
+    "width": 50,
+    "height": 50,
+    "z": 17002,
+    "tabOrder": 17
+  },
+  "visual": {
+    "objects": {
+      "image": [
+        {
+          "properties": {
+            "sourceType": {
+              "expr": {
+                "Literal": {
+                  "Value": "'image'"
+                }
+              }
+            },
+            "sourceFile": {
+              "image": {
+                "name": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'logo-finance.png'"
+                    }
+                  }
+                },
+                "url": {
+                  "expr": {
+                    "ResourcePackageItem": {
+                      "PackageName": "RegisteredResources",
+                      "PackageType": 1,
+                      "ItemName": "logo-finance4fb88b6ca7.png"
+                    }
+                  }
+                },
+                "scaling": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'Normal'"
+                    }
+                  }
+                }
+              }
+            },
+            "sourceFile.image.name.expr.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''logo-finance.png''"
+                }
+              }
+            },
+            "sourceFile.image.url.expr.ResourcePackageItem.PackageName": {
+              "expr": {
+                "Literal": {
+                  "Value": "'RegisteredResources'"
+                }
+              }
+            },
+            "sourceFile.image.url.expr.ResourcePackageItem.PackageType": {
+              "expr": {
+                "Literal": {
+                  "Value": "1.0D"
+                }
+              }
+            },
+            "sourceFile.image.url.expr.ResourcePackageItem.ItemName": {
+              "expr": {
+                "Literal": {
+                  "Value": "'logo-finance4fb88b6ca7.png'"
+                }
+              }
+            },
+            "sourceFile.image.scaling.expr.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''Normal''"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualType": "image"
+  },
+  "parentGroupName": "page-header"
+}

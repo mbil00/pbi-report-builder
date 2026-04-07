@@ -1,0 +1,3 @@
+role 'Executive Demo'
+	modelPermission: read
+	tablePermission Department = Department[IsCorporate] = TRUE()

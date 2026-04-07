@@ -1,0 +1,15 @@
+perspective 'Variance Analysis'
+	perspectiveTable Account
+		perspectiveColumn AccountGroup
+		perspectiveColumn AccountName
+	perspectiveTable Budget
+		perspectiveMeasure 'Budget Amount'
+	perspectiveTable Department
+		perspectiveColumn DepartmentName
+	perspectiveTable Forecast
+		perspectiveMeasure 'Actual vs Budget'
+		perspectiveMeasure 'Actual vs Budget %'
+	perspectiveTable GL_Actuals
+		perspectiveMeasure 'Actual Amount'
+	perspectiveTable 'Variance Bands'
+		includeAll

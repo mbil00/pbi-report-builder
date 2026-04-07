@@ -1,0 +1,52 @@
+name: kpi_tile
+size: 860 x 100
+description: Reusable KPI card strip
+parameters:
+  title:
+    source: kpi-variance.title.text
+    default: Variance %
+visuals:
+- name: kpi-actual
+  type: cardVisual
+  position: 0, 0
+  size: 200 x 100
+  title:
+    show: true
+    text: Actual
+  bindings:
+    Data: GL_Actuals.Actual Amount (measure)
+  pbir:
+    parentGroupName: kpi-strip
+- name: kpi-budget
+  type: cardVisual
+  position: 220, 0
+  size: 200 x 100
+  title:
+    show: true
+    text: Budget
+  bindings:
+    Data: Budget.Budget Amount (measure)
+  pbir:
+    parentGroupName: kpi-strip
+- name: kpi-forecast
+  type: cardVisual
+  position: 440, 0
+  size: 200 x 100
+  title:
+    show: true
+    text: Forecast
+  bindings:
+    Data: Forecast.Forecast Amount (measure)
+  pbir:
+    parentGroupName: kpi-strip
+- name: kpi-variance
+  type: cardVisual
+  position: 660, 0
+  size: 200 x 100
+  title:
+    show: true
+    text: '{{ title }}'
+  bindings:
+    Data: Forecast.Actual vs Budget % (measure)
+  pbir:
+    parentGroupName: kpi-strip

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Hide Detail",
+  "name": "649de16a4f7cf2738a90",
+  "explorationState": {
+    "version": "2.1",
+    "activeSection": "a45ae1c4559f84d8ba6d",
+    "sections": {
+      "a45ae1c4559f84d8ba6d": {
+        "visualContainers": {
+          "variance-matrix": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "variance-bands": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

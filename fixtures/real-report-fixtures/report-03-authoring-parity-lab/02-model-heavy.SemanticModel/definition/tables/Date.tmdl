@@ -1,0 +1,121 @@
+table Date
+	lineageTag: b87c517c-aa49-43b1-8627-0c9a256a257c
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 9d29c97b-234c-45ce-ac6f-c51b493247f6
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 3fe0f825-ad69-4c2d-a813-af39e24458a7
+		summarizeBy: sum
+		sourceColumn: Year
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quarter
+		dataType: string
+		lineageTag: 1cc95a33-7fb7-449d-8eb0-1fe8f265bbe6
+		summarizeBy: none
+		sourceColumn: Quarter
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthNumber
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 732de0b8-456e-43aa-b23e-96ef9be63754
+		summarizeBy: sum
+		sourceColumn: MonthNumber
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthName
+		dataType: string
+		lineageTag: 3913bdc5-b122-4a78-b747-bd411a01cbf2
+		summarizeBy: none
+		sourceColumn: MonthName
+		sortByColumn: MonthNumber
+
+		annotation SummarizationSetBy = Automatic
+
+	column YearMonth
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: b3a2ead4-4edc-4b9c-a1c6-61adf7bf2d6e
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column FiscalYear
+		dataType: string
+		lineageTag: 58137255-1a7e-4946-a69f-573a218ec42e
+		summarizeBy: none
+		sourceColumn: FiscalYear
+
+		annotation SummarizationSetBy = Automatic
+
+	column FiscalQuarter
+		dataType: string
+		lineageTag: 37bf49b8-4663-4537-91cd-16f141636938
+		summarizeBy: none
+		sourceColumn: FiscalQuarter
+
+		annotation SummarizationSetBy = Automatic
+
+	column FiscalMonthNumber
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: a5fd7951-3655-4f48-8f4c-5c0370c2c9e3
+		summarizeBy: sum
+		sourceColumn: FiscalMonthNumber
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Month Start' = DATE ( YEAR ( 'Date'[Date] ), MONTH ( 'Date'[Date] ), 1 )
+		dataType: dateTime
+		lineageTag: a495efe5-b1a7-4425-968c-e4b81f1081b6
+		summarizeBy: none
+
+	hierarchy 'Fiscal Calendar'
+		lineageTag: 5ab03b36-5e17-437a-9d4d-99130a264bd0
+
+		level FiscalYear
+			lineageTag: ef4c0213-55d3-42ce-9bf6-93190105ce3d
+			column: FiscalYear
+
+		level FiscalQuarter
+			lineageTag: cbfe262f-0fba-4e63-8aa4-0aca8d2306ec
+			column: FiscalQuarter
+
+		level MonthName
+			lineageTag: af05b358-0e02-4c53-950d-a579501fc206
+			column: MonthName
+
+	partition Date = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\Date.csv"),[Delimiter=",", Columns=9, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Year", Int64.Type}, {"Quarter", type text}, {"MonthNumber", Int64.Type}, {"MonthName", type text}, {"YearMonth", type date}, {"FiscalYear", type text}, {"FiscalQuarter", type text}, {"FiscalMonthNumber", Int64.Type}})
+				in
+				    #"Changed Type"
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

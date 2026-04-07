@@ -1,0 +1,65 @@
+name: page_header
+size: 460 x 50
+description: Image + title + subtitle header
+visuals:
+- name: header-logo
+  type: image
+  position: 0, 0
+  size: 50 x 50
+  chart:image.sourceType: image
+  chart:image.sourceFile:
+    image:
+      name:
+        expr:
+          Literal:
+            Value: '''logo-finance.png'''
+      url:
+        expr:
+          ResourcePackageItem:
+            PackageName: RegisteredResources
+            PackageType: 1
+            ItemName: logo-finance4fb88b6ca7.png
+      scaling:
+        expr:
+          Literal:
+            Value: '''Normal'''
+  pbir:
+    visual:
+      objects:
+        image:
+        - properties:
+            sourceType:
+              expr:
+                Literal:
+                  Value: '''image'''
+            sourceFile:
+              image:
+                name:
+                  expr:
+                    Literal:
+                      Value: '''logo-finance.png'''
+                url:
+                  expr:
+                    ResourcePackageItem:
+                      PackageName: RegisteredResources
+                      PackageType: 1
+                      ItemName: logo-finance4fb88b6ca7.png
+                scaling:
+                  expr:
+                    Literal:
+                      Value: '''Normal'''
+    parentGroupName: page-header
+- name: header-title
+  type: textbox
+  position: 60, 0
+  size: 400 x 30
+  chart:paragraph.text: Executive Finance Dashboard
+  pbir:
+    parentGroupName: page-header
+- name: header-subtitle
+  type: textbox
+  position: 60, 30
+  size: 400 x 20
+  chart:paragraph.text: Authoring Parity Acceptance Report
+  pbir:
+    parentGroupName: page-header

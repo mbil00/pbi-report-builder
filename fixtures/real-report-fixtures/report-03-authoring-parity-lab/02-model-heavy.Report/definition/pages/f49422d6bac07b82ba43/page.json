@@ -1,0 +1,49 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "f49422d6bac07b82ba43",
+  "displayName": "Account Drillthrough",
+  "displayOption": "FitToPage",
+  "width": 1280,
+  "height": 720,
+  "visibility": "HiddenInViewMode",
+  "type": "Drillthrough",
+  "pageBinding": {
+    "name": "d75de10161c96fbb731cf2f37deb0da9",
+    "type": "Drillthrough",
+    "referenceScope": "Default",
+    "parameters": [
+      {
+        "name": "param0",
+        "boundFilter": "drillFilter0",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Account"
+              }
+            },
+            "Property": "AccountName"
+          }
+        }
+      }
+    ]
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "drillFilter0",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Account"
+              }
+            },
+            "Property": "AccountName"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

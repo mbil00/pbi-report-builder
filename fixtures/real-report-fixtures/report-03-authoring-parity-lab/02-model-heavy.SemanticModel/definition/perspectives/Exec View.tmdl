@@ -1,0 +1,11 @@
+perspective 'Exec View'
+	perspectiveTable Budget
+		perspectiveMeasure 'Budget Amount'
+	perspectiveTable Date
+		includeAll
+	perspectiveTable Department
+		includeAll
+	perspectiveTable Forecast
+		perspectiveMeasure 'Forecast Amount'
+	perspectiveTable GL_Actuals
+		perspectiveMeasure 'Actual Amount'

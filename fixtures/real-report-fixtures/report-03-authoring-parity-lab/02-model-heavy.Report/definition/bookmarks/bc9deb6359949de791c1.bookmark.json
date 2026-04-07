@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Show Detail",
+  "name": "bc9deb6359949de791c1",
+  "explorationState": {
+    "version": "2.1",
+    "activeSection": "a45ae1c4559f84d8ba6d",
+    "sections": {
+      "a45ae1c4559f84d8ba6d": {
+        "visualContainers": {}
+      }
+    }
+  }
+}

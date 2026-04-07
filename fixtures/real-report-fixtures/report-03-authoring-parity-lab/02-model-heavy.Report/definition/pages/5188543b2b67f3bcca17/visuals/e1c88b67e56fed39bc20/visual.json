@@ -1,0 +1,35 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "build-info",
+  "position": {
+    "x": 20,
+    "y": 20,
+    "width": 600,
+    "height": 300,
+    "z": 1000,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "textbox",
+    "query": {
+      "queryState": {}
+    },
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "'Fixture: report-03-authoring-parity-lab | Desktop Version: March 2026 (PBIR) | Build Date: 2026-03-21 | Generated via pbi CLI workflows (Phase 1-6 acceptance)'"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

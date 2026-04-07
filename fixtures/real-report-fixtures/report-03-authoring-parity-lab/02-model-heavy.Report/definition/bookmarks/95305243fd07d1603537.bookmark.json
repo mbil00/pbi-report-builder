@@ -1,0 +1,29 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Narrative View",
+  "name": "95305243fd07d1603537",
+  "explorationState": {
+    "version": "2.1",
+    "activeSection": "27fe4d5736a37e897ff8",
+    "sections": {
+      "27fe4d5736a37e897ff8": {
+        "visualContainers": {
+          "dept-column": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "acct-donut": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

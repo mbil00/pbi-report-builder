@@ -1,0 +1,41 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "header-logo",
+  "position": {
+    "x": 20,
+    "y": 10,
+    "width": 50,
+    "height": 50,
+    "z": 1000,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "image",
+    "query": {
+      "queryState": {}
+    },
+    "objects": {
+      "image": [
+        {
+          "properties": {
+            "sourceType": {
+              "expr": {
+                "Literal": {
+                  "Value": "'image'"
+                }
+              }
+            },
+            "sourceFile.image": {
+              "expr": {
+                "Literal": {
+                  "Value": "'{'name': {'expr': {'Literal': {'Value': \"'logo-finance.png'\"}}}, 'url': {'expr': {'ResourcePackageItem': {'PackageName': 'RegisteredResources', 'PackageType': 1, 'ItemName': 'logo-finance4fb88b6ca7.png'}}}, 'scaling': {'expr': {'Literal': {'Value': \"'Normal'\"}}}}'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "parentGroupName": "page_header"
+}

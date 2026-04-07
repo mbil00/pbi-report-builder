@@ -1,0 +1,9 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "9cbe4eb03f6190f61d23",
+  "displayName": "Department Breakdown",
+  "displayOption": "FitToPage",
+  "width": 1280,
+  "height": 720,
+  "visibility": "AlwaysVisible"
+}

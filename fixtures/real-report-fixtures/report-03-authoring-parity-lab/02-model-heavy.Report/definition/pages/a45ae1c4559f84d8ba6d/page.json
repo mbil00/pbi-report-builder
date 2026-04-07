@@ -1,0 +1,9 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "a45ae1c4559f84d8ba6d",
+  "displayName": "Variance Diagnostics",
+  "displayOption": "FitToPage",
+  "width": 1280,
+  "height": 720,
+  "visibility": "AlwaysVisible"
+}

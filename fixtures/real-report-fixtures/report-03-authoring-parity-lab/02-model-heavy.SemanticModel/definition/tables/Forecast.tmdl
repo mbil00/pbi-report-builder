@@ -1,0 +1,114 @@
+table Forecast
+	lineageTag: a2313636-0a9a-4540-9247-fce927556174
+
+	measure 'Forecast Amount' = SUM ( Forecast[ForecastAmount] )
+		displayFolder: Forecast
+		lineageTag: 8e82589c-4b67-4eac-8fd7-a49775523a92
+
+	measure 'Actual vs Budget' = [Actual Amount] - [Budget Amount]
+		displayFolder: Variance
+		lineageTag: b9af4783-59c1-41db-b480-1d4ac4c97cbf
+
+	measure 'Actual vs Budget %' = DIVIDE ( [Actual vs Budget], [Budget Amount] )
+		formatString: 0.0%;-0.0%;0.0%
+		displayFolder: Variance
+		lineageTag: 720b1e12-1b4e-4ec9-94c4-677f3d4c1aaa
+
+	measure 'Actual vs Forecast' = [Actual Amount] - [Forecast Amount]
+		displayFolder: Variance
+		lineageTag: 52731e93-a170-4a51-899b-1f7e0ac75642
+
+	measure 'Average Actual per FTE' = DIVIDE ( [Actual Amount], [FTE Actual] )
+		displayFolder: Ratios
+		lineageTag: aadc77c2-1706-45f4-8e6c-d9e3302dc43d
+
+	measure 'YTD Actual' = TOTALYTD ( [Actual Amount], 'Date'[Date] )
+		displayFolder: Time Intelligence
+		lineageTag: b598e687-db6d-4a63-aab5-aa5339af5fe0
+
+	measure 'Prior Year Actual' = CALCULATE ( [Actual Amount], DATEADD ( 'Date'[Date], -1, YEAR ) )
+		displayFolder: Time Intelligence
+		lineageTag: 153eacfb-f20d-439f-9728-868d83a09a65
+
+	measure 'Actual YoY' = [Actual Amount] - [Prior Year Actual]
+		displayFolder: Time Intelligence
+		lineageTag: 9ab055cc-8f7c-4b76-bab4-0c7d03ff5887
+
+	measure 'Actual YoY %' = DIVIDE ( [Actual YoY], [Prior Year Actual] )
+		formatString: 0.0%;-0.0%;0.0%
+		displayFolder: Time Intelligence
+		lineageTag: a0be6252-a3dc-4ad1-af3a-e9e5c4cd0792
+
+	column ForecastKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 5ba55ab5-590f-4611-8911-59a036edab15
+		summarizeBy: count
+		sourceColumn: ForecastKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 3da9aa66-4933-409c-a115-84079700af20
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column DepartmentKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: b35a7d51-a556-49e3-bda2-8e8bfe34965d
+		summarizeBy: none
+		sourceColumn: DepartmentKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 99ae4cfe-0541-488f-82b2-40a7f35f9545
+		summarizeBy: none
+		sourceColumn: AccountKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ScenarioKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 428548a5-4140-4909-9da6-f27e4671c28e
+		summarizeBy: none
+		sourceColumn: ScenarioKey
+
+		annotation SummarizationSetBy = Automatic
+
+	column ForecastAmount
+		dataType: double
+		lineageTag: 7e33fa2a-4b7b-4f44-b56d-3570d67ad79a
+		summarizeBy: sum
+		sourceColumn: ForecastAmount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition Forecast = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\pbi-report-builder\fixtures\real-report-fixtures\report-02-model-heavy\data\Forecast.csv"),[Delimiter=",", Columns=6, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ForecastKey", Int64.Type}, {"Date", type date}, {"DepartmentKey", Int64.Type}, {"AccountKey", Int64.Type}, {"ScenarioKey", Int64.Type}, {"ForecastAmount", type number}})
+				in
+				    #"Changed Type"
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

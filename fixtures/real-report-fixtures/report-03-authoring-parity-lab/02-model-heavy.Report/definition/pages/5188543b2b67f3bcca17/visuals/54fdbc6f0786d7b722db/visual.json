@@ -1,0 +1,92 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "watermark",
+  "position": {
+    "x": 800,
+    "y": 400,
+    "width": 80,
+    "height": 80,
+    "z": 2000,
+    "tabOrder": 1
+  },
+  "visual": {
+    "objects": {
+      "image": [
+        {
+          "properties": {
+            "sourceType": {
+              "expr": {
+                "Literal": {
+                  "Value": "'image'"
+                }
+              }
+            },
+            "sourceFile": {
+              "image": {
+                "name": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'watermark-grid.png'"
+                    }
+                  }
+                },
+                "url": {
+                  "expr": {
+                    "ResourcePackageItem": {
+                      "PackageName": "RegisteredResources",
+                      "PackageType": 1,
+                      "ItemName": "watermark-grid97ae37a3c8.png"
+                    }
+                  }
+                },
+                "scaling": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'Normal'"
+                    }
+                  }
+                }
+              }
+            },
+            "sourceFile.image.name.expr.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''watermark-grid.png''"
+                }
+              }
+            },
+            "sourceFile.image.url.expr.ResourcePackageItem.PackageName": {
+              "expr": {
+                "Literal": {
+                  "Value": "'RegisteredResources'"
+                }
+              }
+            },
+            "sourceFile.image.url.expr.ResourcePackageItem.PackageType": {
+              "expr": {
+                "Literal": {
+                  "Value": "1.0D"
+                }
+              }
+            },
+            "sourceFile.image.url.expr.ResourcePackageItem.ItemName": {
+              "expr": {
+                "Literal": {
+                  "Value": "'watermark-grid97ae37a3c8.png'"
+                }
+              }
+            },
+            "sourceFile.image.scaling.expr.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''Normal''"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualType": "image"
+  }
+}

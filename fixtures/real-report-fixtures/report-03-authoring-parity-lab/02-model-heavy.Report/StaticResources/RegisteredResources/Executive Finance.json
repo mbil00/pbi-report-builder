@@ -1,0 +1,302 @@
+{
+  "name": "Executive Finance",
+  "dataColors": [
+    "#B38A3D",
+    "#556270",
+    "#3F7D5C",
+    "#A84C3D",
+    "#1E2A36",
+    "#8B7355"
+  ],
+  "foreground": "#1E2A36",
+  "foregroundNeutralSecondary": "#73797E",
+  "foregroundNeutralTertiary": "#B3B5B3",
+  "background": "#F4F1EA",
+  "backgroundLight": "#E9E7E0",
+  "backgroundNeutral": "#C4C5C2",
+  "tableAccent": "#B38A3D",
+  "foregroundDark": "#1E2A36",
+  "foregroundNeutralDark": "#1E2A36",
+  "foregroundSelected": "#1E2A36",
+  "backgroundDark": "#1E2A36",
+  "foregroundNeutralSecondaryAlt": "#73797E",
+  "foregroundNeutralSecondaryAlt2": "#73797E",
+  "foregroundButton": "#73797E",
+  "foregroundNeutralLight": "#E9E7E0",
+  "disabledText": "#B3B5B3",
+  "foregroundNeutralTertiaryAlt": "#C4C5C2",
+  "good": "#3F7D5C",
+  "neutral": "#556270",
+  "bad": "#A84C3D",
+  "maximum": "#B38A3D",
+  "center": "#556270",
+  "minimum": "#EBE3D3",
+  "null": "#FF7F48",
+  "hyperlink": "#B38A3D",
+  "visitedHyperlink": "#B38A3D",
+  "textClasses": {
+    "title": {
+      "fontSize": 12,
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1E2A36"
+    },
+    "header": {
+      "fontSize": 12,
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1E2A36"
+    },
+    "callout": {
+      "fontSize": 24,
+      "fontFace": "Segoe UI",
+      "color": "#1E2A36"
+    },
+    "label": {
+      "fontSize": 10,
+      "fontFace": "Segoe UI",
+      "color": "#1E2A36"
+    }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [
+          {
+            "color": {
+              "solid": {
+                "color": "#F4F1EA"
+              }
+            },
+            "transparency": 100
+          }
+        ],
+        "title": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#1E2A36"
+              }
+            },
+            "fontSize": 12
+          }
+        ]
+      }
+    },
+    "card": {
+      "*": {
+        "card": [
+          {
+            "cardLabel.fontColor": {
+              "solid": {
+                "color": "#556270"
+              }
+            },
+            "cardLabel.fontSize": 10
+          }
+        ]
+      }
+    },
+    "tableEx": {
+      "*": {
+        "grid": [
+          {
+            "gridColor": {
+              "solid": {
+                "color": "#E0DDD5"
+              }
+            },
+            "gridVerticalColor": {
+              "solid": {
+                "color": "#E0DDD5"
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": "#E0DDD5"
+              }
+            }
+          }
+        ],
+        "columnHeaders": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#1E2A36"
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": "#EDE9DF"
+              }
+            }
+          }
+        ],
+        "values": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#556270"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "pivotTable": {
+      "*": {
+        "grid": [
+          {
+            "gridColor": {
+              "solid": {
+                "color": "#E0DDD5"
+              }
+            },
+            "gridVerticalColor": {
+              "solid": {
+                "color": "#E0DDD5"
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": "#E0DDD5"
+              }
+            }
+          }
+        ],
+        "columnHeaders": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#1E2A36"
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": "#EDE9DF"
+              }
+            }
+          }
+        ],
+        "rowHeaders": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#1E2A36"
+              }
+            }
+          }
+        ],
+        "values": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#556270"
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "FillRule": {
+                      "Input": {
+                        "Measure": {
+                          "Expression": {
+                            "SourceRef": {
+                              "Entity": "Forecast"
+                            }
+                          },
+                          "Property": "Actual vs Budget %"
+                        }
+                      },
+                      "FillRule": {
+                        "linearGradient3": {
+                          "min": {
+                            "color": {
+                              "Literal": {
+                                "Value": "'#A84C3D'"
+                              }
+                            },
+                            "value": {
+                              "Literal": {
+                                "Value": "-0.2D"
+                              }
+                            }
+                          },
+                          "mid": {
+                            "color": {
+                              "Literal": {
+                                "Value": "'#F4F1EA'"
+                              }
+                            },
+                            "value": {
+                              "Literal": {
+                                "Value": "0D"
+                              }
+                            }
+                          },
+                          "max": {
+                            "color": {
+                              "Literal": {
+                                "Value": "'#3F7D5C'"
+                              }
+                            },
+                            "value": {
+                              "Literal": {
+                                "Value": "0.2D"
+                              }
+                            }
+                          },
+                          "nullColoringStrategy": {
+                            "strategy": {
+                              "Literal": {
+                                "Value": "'asZero'"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "slicer": {
+      "*": {
+        "data": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#1E2A36"
+              }
+            }
+          }
+        ],
+        "header": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#556270"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "lineClusteredColumnComboChart": {
+      "Series": {
+        "dataPoint": [
+          {
+            "fill": {
+              "solid": {
+                "color": "#B38A3D"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

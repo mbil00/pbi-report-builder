@@ -1,0 +1,22 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Show Matrix",
+  "name": "17ae0455e0000dc19818",
+  "explorationState": {
+    "version": "2.1",
+    "activeSection": "9cbe4eb03f6190f61d23",
+    "sections": {
+      "9cbe4eb03f6190f61d23": {
+        "visualContainers": {
+          "dept-bar": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

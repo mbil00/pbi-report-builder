@@ -1,0 +1,22 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Show Chart",
+  "name": "d15dee07c8173fcab0c4",
+  "explorationState": {
+    "version": "2.1",
+    "activeSection": "9cbe4eb03f6190f61d23",
+    "sections": {
+      "9cbe4eb03f6190f61d23": {
+        "visualContainers": {
+          "dept-matrix": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

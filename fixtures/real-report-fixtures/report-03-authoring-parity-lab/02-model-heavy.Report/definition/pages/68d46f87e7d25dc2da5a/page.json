@@ -1,0 +1,9 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "68d46f87e7d25dc2da5a",
+  "displayName": "Navigation Lab",
+  "displayOption": "FitToPage",
+  "width": 1280,
+  "height": 720,
+  "visibility": "AlwaysVisible"
+}

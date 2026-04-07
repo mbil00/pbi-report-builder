@@ -1,0 +1,239 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "dept-matrix",
+  "position": {
+    "x": 20,
+    "y": 80,
+    "width": 830,
+    "height": 340,
+    "z": 8001,
+    "tabOrder": 7
+  },
+  "visual": {
+    "objects": {
+      "values": [
+        {
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ]
+          },
+          "properties": {
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Conditional": {
+                      "Cases": [
+                        {
+                          "Condition": {
+                            "Comparison": {
+                              "ComparisonKind": 0,
+                              "Left": {
+                                "Measure": {
+                                  "Expression": {
+                                    "SourceRef": {
+                                      "Entity": "Forecast"
+                                    }
+                                  },
+                                  "Property": "Actual vs Budget %"
+                                }
+                              },
+                              "Right": {
+                                "Literal": {
+                                  "Value": "'0.05'"
+                                }
+                              }
+                            }
+                          },
+                          "Value": {
+                            "Literal": {
+                              "Value": "'#3F7D5C'"
+                            }
+                          }
+                        },
+                        {
+                          "Condition": {
+                            "Comparison": {
+                              "ComparisonKind": 0,
+                              "Left": {
+                                "Measure": {
+                                  "Expression": {
+                                    "SourceRef": {
+                                      "Entity": "Forecast"
+                                    }
+                                  },
+                                  "Property": "Actual vs Budget %"
+                                }
+                              },
+                              "Right": {
+                                "Literal": {
+                                  "Value": "'-0.05'"
+                                }
+                              }
+                            }
+                          },
+                          "Value": {
+                            "Literal": {
+                              "Value": "'#A84C3D'"
+                            }
+                          }
+                        }
+                      ],
+                      "Else": {
+                        "Literal": {
+                          "Value": "'#556270'"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "fontColor.expr.Conditional.Cases": {
+              "expr": {
+                "Literal": {
+                  "Value": "'[{'Condition': {'Comparison': {'ComparisonKind': 0, 'Left': {'Measure': {'Expression': {'SourceRef': {'Entity': 'Forecast'}}, 'Property': 'Actual vs Budget %'}}, 'Right': {'Literal': {'Value': \"'0.05'\"}}}}, 'Value': {'Literal': {'Value': \"'#3F7D5C'\"}}}, {'Condition': {'Comparison': {'ComparisonKind': 0, 'Left': {'Measure': {'Expression': {'SourceRef': {'Entity': 'Forecast'}}, 'Property': 'Actual vs Budget %'}}, 'Right': {'Literal': {'Value': \"'-0.05'\"}}}}, 'Value': {'Literal': {'Value': \"'#A84C3D'\"}}}]'"
+                }
+              }
+            },
+            "fontColor.expr.Conditional.Else.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''#556270''"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Department Performance Matrix'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "query": {
+      "queryState": {
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Department"
+                    }
+                  },
+                  "Property": "DepartmentName"
+                }
+              },
+              "queryRef": "Department.DepartmentName",
+              "nativeQueryRef": "DepartmentName"
+            }
+          ]
+        },
+        "Columns": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Scenario"
+                    }
+                  },
+                  "Property": "ScenarioName"
+                }
+              },
+              "queryRef": "Scenario.ScenarioName",
+              "nativeQueryRef": "ScenarioName"
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "GL_Actuals"
+                    }
+                  },
+                  "Property": "Actual Amount"
+                }
+              },
+              "queryRef": "GL_Actuals.Actual Amount",
+              "nativeQueryRef": "Actual Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Budget"
+                    }
+                  },
+                  "Property": "Budget Amount"
+                }
+              },
+              "queryRef": "Budget.Budget Amount",
+              "nativeQueryRef": "Budget Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Forecast Amount"
+                }
+              },
+              "queryRef": "Forecast.Forecast Amount",
+              "nativeQueryRef": "Forecast Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Actual vs Budget %"
+                }
+              },
+              "queryRef": "Forecast.Actual vs Budget %",
+              "nativeQueryRef": "Actual vs Budget %"
+            }
+          ]
+        }
+      }
+    },
+    "visualType": "pivotTable"
+  }
+}

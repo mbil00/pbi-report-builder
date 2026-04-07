@@ -1,0 +1,28 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+annotation PBI_ProTooling = ["DevMode"]
+
+annotation PBI_QueryOrder = ["Account","Budget","CostCenter","Date","Department","ExchangeRate","Forecast","GL_Actuals","Scenario","Variance Bands"]
+
+annotation AuthoringParity = {"fixture":"report-03","phases":[1,2,3,4,5,6]}
+ref table Account
+ref table Department
+ref table Forecast
+ref table Budget
+ref table GL_Actuals
+ref table ExchangeRate
+ref table CostCenter
+ref table Date
+ref table Scenario
+ref table 'Variance Bands'
+
+ref cultureInfo en-US
+

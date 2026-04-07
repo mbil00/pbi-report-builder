@@ -1,0 +1,248 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "account-table",
+  "position": {
+    "x": 20,
+    "y": 440,
+    "width": 830,
+    "height": 260,
+    "z": 9001,
+    "tabOrder": 7
+  },
+  "visual": {
+    "objects": {
+      "values": [
+        {
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ]
+          },
+          "properties": {
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "FillRule": {
+                      "Input": {
+                        "Measure": {
+                          "Expression": {
+                            "SourceRef": {
+                              "Entity": "Forecast"
+                            }
+                          },
+                          "Property": "Actual vs Budget %"
+                        }
+                      },
+                      "FillRule": {
+                        "linearGradient3": {
+                          "min": {
+                            "color": {
+                              "Literal": {
+                                "Value": "'#A84C3D'"
+                              }
+                            },
+                            "value": {
+                              "Literal": {
+                                "Value": "-0.2D"
+                              }
+                            }
+                          },
+                          "mid": {
+                            "color": {
+                              "Literal": {
+                                "Value": "'#F4F1EA'"
+                              }
+                            },
+                            "value": {
+                              "Literal": {
+                                "Value": "0D"
+                              }
+                            }
+                          },
+                          "max": {
+                            "color": {
+                              "Literal": {
+                                "Value": "'#3F7D5C'"
+                              }
+                            },
+                            "value": {
+                              "Literal": {
+                                "Value": "0.2D"
+                              }
+                            }
+                          },
+                          "nullColoringStrategy": {
+                            "strategy": {
+                              "Literal": {
+                                "Value": "'asZero'"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "backColor.expr.FillRule.Input.Measure.Expression.SourceRef.Entity": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Forecast'"
+                }
+              }
+            },
+            "backColor.expr.FillRule.Input.Measure.Property": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Actual vs Budget %'"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.min.color.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''#A84C3D''"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.min.value.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "'-0.2D'"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.mid.color.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''#F4F1EA''"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.mid.value.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "'0D'"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.max.color.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''#3F7D5C''"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.max.value.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "'0.2D'"
+                }
+              }
+            },
+            "backColor.expr.FillRule.FillRule.linearGradient3.nullColoringStrategy.strategy.Literal.Value": {
+              "expr": {
+                "Literal": {
+                  "Value": "''asZero''"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Account Detail'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Account"
+                    }
+                  },
+                  "Property": "AccountName"
+                }
+              },
+              "queryRef": "Account.AccountName",
+              "nativeQueryRef": "AccountName"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "GL_Actuals"
+                    }
+                  },
+                  "Property": "Actual Amount"
+                }
+              },
+              "queryRef": "GL_Actuals.Actual Amount",
+              "nativeQueryRef": "Actual Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Budget"
+                    }
+                  },
+                  "Property": "Budget Amount"
+                }
+              },
+              "queryRef": "Budget.Budget Amount",
+              "nativeQueryRef": "Budget Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Forecast"
+                    }
+                  },
+                  "Property": "Actual vs Budget %"
+                }
+              },
+              "queryRef": "Forecast.Actual vs Budget %",
+              "nativeQueryRef": "Actual vs Budget %"
+            }
+          ]
+        }
+      }
+    },
+    "visualType": "tableEx"
+  }
+}

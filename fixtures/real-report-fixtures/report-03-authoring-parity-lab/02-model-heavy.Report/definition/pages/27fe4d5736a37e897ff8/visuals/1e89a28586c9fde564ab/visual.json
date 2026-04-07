@@ -1,0 +1,35 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "narrative",
+  "position": {
+    "x": 460,
+    "y": 470,
+    "width": 400,
+    "height": 120,
+    "z": 13002,
+    "tabOrder": 14
+  },
+  "visual": {
+    "visualType": "textbox",
+    "query": {
+      "queryState": {}
+    },
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "'This dashboard summarizes financial performance across departments, comparing actuals to budget and forecast targets.'"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

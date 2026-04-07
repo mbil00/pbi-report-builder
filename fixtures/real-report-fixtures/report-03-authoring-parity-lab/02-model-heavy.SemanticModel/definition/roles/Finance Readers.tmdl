@@ -1,0 +1,5 @@
+role 'Finance Readers'
+	modelPermission: readRefresh
+	tablePermission Department = Department[Division] IN {"Corporate","Shared Services"}
+
+	member 'finance@example.com'

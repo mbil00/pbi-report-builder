@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "c941a2dd1ff26ce2802c",
+  "displayName": "Department Tooltip",
+  "displayOption": "FitToPage",
+  "width": 320,
+  "height": 240,
+  "visibility": "HiddenInViewMode",
+  "type": "Tooltip",
+  "pageBinding": {
+    "name": "bd59f80a9f10db7b5f345ef880705797",
+    "type": "Tooltip",
+    "parameters": []
+  }
+}
