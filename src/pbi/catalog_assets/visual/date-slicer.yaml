@@ -1,0 +1,27 @@
+kind: visual
+name: date-slicer
+category: slicer
+description: Date range slicer in Between mode — title visible, header hidden.
+tags:
+  - slicer
+  - date
+  - range
+parameters:
+  title:
+    type: string
+    default: Date Range
+  field:
+    type: field
+    default: Date.Date
+payload:
+  type: slicer
+  size: 240 x 60
+  title:
+    show: true
+    text: '{{ title }}'
+    fontSize: 10
+    color: '#605E5C'
+  slicerHeader.show: false
+  chart:data.mode: Between
+  bindings:
+    Values: '{{ field }}'

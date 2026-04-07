@@ -10,12 +10,18 @@ from typer.testing import CliRunner
 
 from pbi.catalog import get_catalog_item, list_catalog_items, validate_catalog
 from pbi.cli import app
-from pbi.components import save_component_from_yaml
+from pbi.components import apply_component, list_components, save_component_from_yaml
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.project import Project
+from pbi.validate import validate_project
+from pbi.visual_schema import get_data_roles
 from pbi.styles import create_style
 from pbi.templates import save_template
-from pbi.visual_templates import apply_visual_template, register_visual_template
+from pbi.visual_templates import (
+    apply_visual_template,
+    list_visual_templates,
+    register_visual_template,
+)
 from tests.cli_regressions_support import make_project
 
 
@@ -101,7 +107,7 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(visual.visual_type, "cardVisual")
             self.assertEqual(visual.position["x"], 40)
             self.assertEqual(visual.position["y"], 80)
-            self.assertEqual(project.get_bindings(visual), [("Value", "Sales", "Revenue", "column")])
+            self.assertEqual(project.get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
 
     def test_get_catalog_item_rejects_ambiguous_plain_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -162,6 +168,52 @@ class CatalogTests(unittest.TestCase):
         items = list_catalog_items(None, kind="visual-template")
         refs = {(item.kind, item.name, item.scope) for item in items}
         self.assertIn(("visual", "hero-kpi-card", "bundled"), refs)
+
+    def test_bundled_assets_stamp_without_schema_or_role_issues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Audit")
+
+            for template in list_visual_templates(project):
+                if template.scope != "bundled":
+                    continue
+                visual, _template = apply_visual_template(project, page, template.name)
+                query_roles = set(
+                    visual.data.get("visual", {}).get("query", {}).get("queryState", {}).keys()
+                )
+                schema_roles = set((get_data_roles(visual.visual_type) or {}).keys())
+                self.assertTrue(
+                    query_roles <= schema_roles,
+                    f'{template.name} stamped unsupported query roles: {sorted(query_roles - schema_roles)}',
+                )
+
+            for component in list_components(project):
+                if component.scope != "bundled":
+                    continue
+                created = apply_component(project, page, component.name)
+                child_visuals = (
+                    created[:-1]
+                    if len(created) >= 2 and "visualGroup" in created[-1].data
+                    else created
+                )
+                for spec, visual in zip(component.visuals, child_visuals):
+                    query_roles = set(
+                        visual.data.get("visual", {}).get("query", {}).get("queryState", {}).keys()
+                    )
+                    schema_roles = set((get_data_roles(visual.visual_type) or {}).keys())
+                    self.assertTrue(
+                        query_roles <= schema_roles,
+                        f'{component.name}/{spec.get("name")} stamped unsupported query roles: '
+                        f'{sorted(query_roles - schema_roles)}',
+                    )
+
+            schema_issues = [
+                issue.message
+                for issue in validate_project(project)
+                if issue.message.startswith("Schema:")
+            ]
+            self.assertEqual(schema_issues, [])
 
 
 class CatalogCliTests(unittest.TestCase):
@@ -272,7 +324,7 @@ class CatalogCliTests(unittest.TestCase):
             visual = reloaded.find_visual(page, "revenueHero")
             self.assertEqual(visual.position["x"], 24)
             self.assertEqual(visual.position["y"], 48)
-            self.assertEqual(reloaded.get_bindings(visual), [("Value", "Sales", "Revenue", "column")])
+            self.assertEqual(reloaded.get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
 
     def test_catalog_create_visual_template_from_existing_visual_cli(self) -> None:
         runner = CliRunner()

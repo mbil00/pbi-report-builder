@@ -1,0 +1,1 @@
+"""Bundled component catalog items."""

@@ -1,0 +1,19 @@
+name: accent-card
+description: Bold KPI card with accent bar and large value — callout layout.
+properties:
+  border.show: false
+  background.show: false
+  title.show: true
+  title.fontSize: 10
+  title.bold: false
+  title.color: '#605E5C'
+  accentBar.show: true
+  accentBar.color: '#2B579A'
+  cardValue.show: true
+  cardValue.fontSize: 28
+  cardValue.bold: true
+  cardValue.color: '#252423'
+  cardLabel.show: true
+  cardLabel.fontSize: 10
+  cardLabel.color: '#605E5C'
+  layout.style: Callout

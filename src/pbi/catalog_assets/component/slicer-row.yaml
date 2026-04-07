@@ -1,0 +1,86 @@
+name: slicer-row
+description: Row of 3 dropdown slicers — title visible, header hidden.
+size: 580 x 60
+parameters:
+  title1:
+    source: visual_0.title.text
+    default: Region
+  field1:
+    source: visual_0.bindings.Values
+    default: Geography.Region
+  title2:
+    source: visual_1.title.text
+    default: Category
+  field2:
+    source: visual_1.bindings.Values
+    default: Product.Category
+  title3:
+    source: visual_2.title.text
+    default: Year
+  field3:
+    source: visual_2.bindings.Values
+    default: Date.Year
+visuals:
+  - name: slicerRegion
+    type: slicer
+    position: 0, 0
+    size: 180 x 60
+    title:
+      show: true
+      text: '{{ title1 }}'
+      fontSize: 10
+      color: '#605E5C'
+    slicerHeader.show: false
+    chart:data.mode: Dropdown
+    border.show: true
+    border.color: '#E1DFDD'
+    border.radius: 4
+    border.width: 1
+    background.show: true
+    background.color: '#FFFFFF'
+    slicerItems.fontColor: '#323130'
+    slicerItems.fontSize: 10
+    bindings:
+      Values: '{{ field1 }}'
+  - name: slicerCategory
+    type: slicer
+    position: 200, 0
+    size: 180 x 60
+    title:
+      show: true
+      text: '{{ title2 }}'
+      fontSize: 10
+      color: '#605E5C'
+    slicerHeader.show: false
+    chart:data.mode: Dropdown
+    border.show: true
+    border.color: '#E1DFDD'
+    border.radius: 4
+    border.width: 1
+    background.show: true
+    background.color: '#FFFFFF'
+    slicerItems.fontColor: '#323130'
+    slicerItems.fontSize: 10
+    bindings:
+      Values: '{{ field2 }}'
+  - name: slicerYear
+    type: slicer
+    position: 400, 0
+    size: 180 x 60
+    title:
+      show: true
+      text: '{{ title3 }}'
+      fontSize: 10
+      color: '#605E5C'
+    slicerHeader.show: false
+    chart:data.mode: Dropdown
+    border.show: true
+    border.color: '#E1DFDD'
+    border.radius: 4
+    border.width: 1
+    background.show: true
+    background.color: '#FFFFFF'
+    slicerItems.fontColor: '#323130'
+    slicerItems.fontSize: 10
+    bindings:
+      Values: '{{ field3 }}'

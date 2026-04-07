@@ -1,0 +1,42 @@
+kind: visual
+name: column-chart
+category: chart
+description: Vertical column chart with dotted Y gridlines and clean category axis.
+tags:
+  - chart
+  - column
+  - vertical
+parameters:
+  title:
+    type: string
+    default: Revenue by Period
+  category:
+    type: field
+    default: Date.Month
+  value:
+    type: field
+    default: Measures.Revenue
+payload:
+  type: clusteredColumnChart
+  size: 480 x 320
+  title:
+    show: true
+    text: '{{ title }}'
+    fontSize: 12
+    bold: true
+    color: '#252423'
+  legend.show: false
+  xAxis.show: true
+  xAxis.title: false
+  xAxis.gridlines: false
+  yAxis.show: true
+  yAxis.title: false
+  yAxis.gridlines: true
+  yAxis.gridlineColor: '#E1DFDD'
+  yAxis.gridlineStyle: dotted
+  yAxis.gridlineThickness: 1
+  labels.show: false
+  plotArea.transparency: 100
+  bindings:
+    Category: '{{ category }}'
+    Y: '{{ value }}'

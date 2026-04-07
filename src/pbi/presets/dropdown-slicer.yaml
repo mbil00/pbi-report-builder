@@ -1,0 +1,16 @@
+name: dropdown-slicer
+description: Dropdown-ready slicer — title visible, header hidden to avoid label clipping.
+properties:
+  border.show: true
+  border.color: '#E1DFDD'
+  border.radius: 4
+  border.width: 1
+  background.show: true
+  background.color: '#FFFFFF'
+  title.show: true
+  title.fontSize: 10
+  title.bold: false
+  title.color: '#605E5C'
+  slicerHeader.show: false
+  slicerItems.fontColor: '#323130'
+  slicerItems.fontSize: 10

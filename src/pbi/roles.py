@@ -118,7 +118,6 @@ VISUAL_ROLES: dict[str, list[dict]] = {
     # ── Cards ──────────────────────────────────────────────────
     "cardVisual": [
         _role("Data", "Displayed measures", multi=True),
-        _role("Rows", "Grouping field"),
         _role("Tooltips", "Additional tooltip fields", multi=True),
     ],
     "multiRowCard": [

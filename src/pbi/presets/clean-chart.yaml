@@ -1,0 +1,29 @@
+name: clean-chart
+description: Minimal chart chrome — dotted Y gridlines, hidden X gridlines, no legend title.
+properties:
+  border.show: false
+  background.show: false
+  title.show: true
+  title.fontSize: 12
+  title.bold: true
+  title.color: '#252423'
+  legend.show: true
+  legend.showTitle: false
+  legend.position: Top
+  legend.fontSize: 9
+  legend.color: '#605E5C'
+  xAxis.show: true
+  xAxis.title: false
+  xAxis.gridlines: false
+  xAxis.color: '#605E5C'
+  xAxis.fontSize: 9
+  yAxis.show: true
+  yAxis.title: false
+  yAxis.gridlines: true
+  yAxis.gridlineColor: '#E1DFDD'
+  yAxis.gridlineStyle: dotted
+  yAxis.gridlineThickness: 1
+  yAxis.color: '#605E5C'
+  yAxis.fontSize: 9
+  labels.show: false
+  plotArea.transparency: 100

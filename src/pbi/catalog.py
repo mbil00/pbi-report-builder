@@ -202,7 +202,11 @@ class _ComponentHandler(_BaseHandler):
     kind = "component"
 
     def _iter_paths(self, project: Project | None, scope: str) -> list[Path]:
-        from pbi.components import _components_dir, _global_components_dir
+        from pbi.components import (
+            _bundled_components_dir,
+            _components_dir,
+            _global_components_dir,
+        )
 
         if scope == "project":
             if project is None:
@@ -211,7 +215,7 @@ class _ComponentHandler(_BaseHandler):
         elif scope == "global":
             target = _global_components_dir()
         else:
-            return []
+            target = _bundled_components_dir()
         if not target.exists():
             return []
         return sorted(target.glob("*.yaml"))

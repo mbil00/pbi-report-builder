@@ -1,0 +1,19 @@
+name: compact-card
+description: Tight KPI card without accent bar — for dense card rows.
+properties:
+  border.show: false
+  background.show: false
+  title.show: true
+  title.fontSize: 10
+  title.bold: false
+  title.color: '#605E5C'
+  accentBar.show: false
+  cardValue.show: true
+  cardValue.fontSize: 20
+  cardValue.bold: true
+  cardValue.color: '#252423'
+  cardLabel.show: true
+  cardLabel.fontSize: 9
+  cardLabel.color: '#A19F9D'
+  layout.style: Callout
+  cardPadding.uniform: 8

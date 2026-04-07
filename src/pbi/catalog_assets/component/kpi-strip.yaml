@@ -1,0 +1,101 @@
+name: kpi-strip
+description: Row of 4 KPI cards with accent bars — bind each to a different measure.
+size: 1040 x 100
+parameters:
+  title1:
+    source: visual_0.title.text
+    default: Revenue
+  value1:
+    source: visual_0.bindings.Data
+    default: Measures.Revenue
+  title2:
+    source: visual_1.title.text
+    default: Profit
+  value2:
+    source: visual_1.bindings.Data
+    default: Measures.Profit
+  title3:
+    source: visual_2.title.text
+    default: Orders
+  value3:
+    source: visual_2.bindings.Data
+    default: Measures.Orders
+  title4:
+    source: visual_3.title.text
+    default: Customers
+  value4:
+    source: visual_3.bindings.Data
+    default: Measures.Customers
+visuals:
+  - name: kpiCard1
+    type: cardVisual
+    position: 0, 0
+    size: 240 x 100
+    title:
+      show: true
+      text: '{{ title1 }}'
+      fontSize: 10
+      color: '#605E5C'
+    accentBar.show: true
+    accentBar.color: '#2B579A'
+    cardValue.show: true
+    cardValue.fontSize: 28
+    cardValue.bold: true
+    cardLabel.show: false
+    layout.style: Callout
+    bindings:
+      Data: '{{ value1 }}'
+  - name: kpiCard2
+    type: cardVisual
+    position: 260, 0
+    size: 240 x 100
+    title:
+      show: true
+      text: '{{ title2 }}'
+      fontSize: 10
+      color: '#605E5C'
+    accentBar.show: true
+    accentBar.color: '#2B579A'
+    cardValue.show: true
+    cardValue.fontSize: 28
+    cardValue.bold: true
+    cardLabel.show: false
+    layout.style: Callout
+    bindings:
+      Data: '{{ value2 }}'
+  - name: kpiCard3
+    type: cardVisual
+    position: 520, 0
+    size: 240 x 100
+    title:
+      show: true
+      text: '{{ title3 }}'
+      fontSize: 10
+      color: '#605E5C'
+    accentBar.show: true
+    accentBar.color: '#2B579A'
+    cardValue.show: true
+    cardValue.fontSize: 28
+    cardValue.bold: true
+    cardLabel.show: false
+    layout.style: Callout
+    bindings:
+      Data: '{{ value3 }}'
+  - name: kpiCard4
+    type: cardVisual
+    position: 780, 0
+    size: 240 x 100
+    title:
+      show: true
+      text: '{{ title4 }}'
+      fontSize: 10
+      color: '#605E5C'
+    accentBar.show: true
+    accentBar.color: '#2B579A'
+    cardValue.show: true
+    cardValue.fontSize: 28
+    cardValue.bold: true
+    cardLabel.show: false
+    layout.style: Callout
+    bindings:
+      Data: '{{ value4 }}'

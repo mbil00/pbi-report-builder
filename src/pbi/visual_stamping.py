@@ -8,6 +8,7 @@ from pbi.apply.visual_support import apply_raw_visual_payload, parse_position, p
 from pbi.filters import add_categorical_filter, add_exclude_filter
 from pbi.project import Page, Project, Visual, sanitize_visual_name
 from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.roles import normalize_visual_role
 from pbi.textbox import set_textbox_content
 
 
@@ -80,6 +81,7 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
     bindings = spec.get("bindings", {})
     if isinstance(bindings, dict):
         for role, fields in bindings.items():
+            canonical_role = normalize_visual_role(visual.visual_type, role)
             field_list = [fields] if isinstance(fields, str) else fields
             if not isinstance(field_list, list):
                 continue
@@ -92,7 +94,7 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
                 entity = clean_ref[:dot]
                 prop = clean_ref[dot + 1 :]
                 field_type = "measure" if is_measure else "column"
-                project.add_binding(visual, role, entity, prop, field_type=field_type)
+                project.add_binding(visual, canonical_role, entity, prop, field_type=field_type)
 
     if spec.get("isHidden"):
         visual.data["isHidden"] = True

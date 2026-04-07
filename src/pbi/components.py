@@ -28,6 +28,10 @@ class Component:
     visuals: list[dict[str, Any]] = field(default_factory=list)
 
 
+def _bundled_components_dir() -> Path:
+    return Path(__file__).parent / "catalog_assets" / "component"
+
+
 def _global_components_dir() -> Path:
     return Path.home() / ".config" / "pbi" / "components"
 
@@ -320,6 +324,10 @@ def get_component(
     if global_path.exists():
         return _load_component_file(global_path, name, scope="global")
 
+    bundled_path = _bundled_components_dir() / f"{_validate_component_name(name)}.yaml"
+    if bundled_path.exists():
+        return _load_component_file(bundled_path, name, scope="bundled")
+
     raise FileNotFoundError(f'Component "{name}" not found')
 
 
@@ -389,6 +397,17 @@ def list_components(
         for path in sorted(global_dir.glob("*.yaml")):
             try:
                 comp = _load_component_file(path, path.stem, scope="global")
+                if comp.name not in seen:
+                    result.append(comp)
+                    seen.add(comp.name)
+            except (FileNotFoundError, ValueError):
+                continue
+
+    bundled_dir = _bundled_components_dir()
+    if bundled_dir.exists():
+        for path in sorted(bundled_dir.glob("*.yaml")):
+            try:
+                comp = _load_component_file(path, path.stem, scope="bundled")
                 if comp.name not in seen:
                     result.append(comp)
                     seen.add(comp.name)

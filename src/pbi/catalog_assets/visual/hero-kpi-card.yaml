@@ -20,4 +20,4 @@ payload:
     show: true
     text: '{{ title }}'
   bindings:
-    Value: '{{ value }}'
+    Data: '{{ value }}'

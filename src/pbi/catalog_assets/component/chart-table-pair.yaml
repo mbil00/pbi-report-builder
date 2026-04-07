@@ -1,0 +1,69 @@
+name: chart-table-pair
+description: Column chart above a detail table — same category axis, visual summary + detail.
+size: 560 x 560
+parameters:
+  chart_title:
+    source: visual_0.title.text
+    default: Revenue by Category
+  table_title:
+    source: visual_1.title.text
+    default: Detail
+  category:
+    source: visual_0.bindings.Category
+    default: Product.Category
+  value:
+    source: visual_0.bindings.Y
+    default: Measures.Revenue
+visuals:
+  - name: summaryChart
+    type: clusteredColumnChart
+    position: 0, 0
+    size: 560 x 300
+    title:
+      show: true
+      text: '{{ chart_title }}'
+      fontSize: 12
+      bold: true
+      color: '#252423'
+    legend.show: false
+    xAxis.show: true
+    xAxis.title: false
+    xAxis.gridlines: false
+    yAxis.show: true
+    yAxis.title: false
+    yAxis.gridlines: true
+    yAxis.gridlineColor: '#E1DFDD'
+    yAxis.gridlineStyle: dotted
+    yAxis.gridlineThickness: 1
+    labels.show: false
+    plotArea.transparency: 100
+    bindings:
+      Category: '{{ category }}'
+      Y: '{{ value }}'
+  - name: detailTable
+    type: tableEx
+    position: 0, 320
+    size: 560 x 240
+    title:
+      show: true
+      text: '{{ table_title }}'
+      fontSize: 12
+      bold: true
+      color: '#252423'
+    columnHeaders.fontColor: '#252423'
+    columnHeaders.backColor: '#F3F2F1'
+    columnHeaders.fontSize: 10
+    columnHeaders.bold: true
+    columnHeaders.wordWrap: true
+    columnHeaders.autoSize: true
+    values.fontColor: '#323130'
+    values.backColor: '#FFFFFF'
+    values.altBackColor: '#FAF9F8'
+    values.fontSize: 10
+    grid.vertical: false
+    grid.horizontal: true
+    grid.horizontalColor: '#EDEBE9'
+    grid.horizontalWeight: 1
+    grid.rowPadding: 3
+    total.show: false
+    bindings: {}

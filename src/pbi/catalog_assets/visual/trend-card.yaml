@@ -1,0 +1,33 @@
+kind: visual
+name: trend-card
+category: kpi
+description: Callout card with accent bar — bind a measure to show a single KPI value.
+tags:
+  - kpi
+  - card
+  - trend
+parameters:
+  title:
+    type: string
+    default: Total Revenue
+  value:
+    type: field
+    default: Measures.Revenue
+payload:
+  type: cardVisual
+  size: 220 x 100
+  title:
+    show: true
+    text: '{{ title }}'
+    fontSize: 10
+    color: '#605E5C'
+  accentBar.show: true
+  accentBar.color: '#2B579A'
+  cardValue.show: true
+  cardValue.fontSize: 28
+  cardValue.bold: true
+  cardValue.color: '#252423'
+  cardLabel.show: false
+  layout.style: Callout
+  bindings:
+    Data: '{{ value }}'

@@ -1,0 +1,47 @@
+kind: visual
+name: line-chart
+category: chart
+description: Line chart with markers, legend, and clean gridlines.
+tags:
+  - chart
+  - line
+  - trend
+parameters:
+  title:
+    type: string
+    default: Trend Over Time
+  category:
+    type: field
+    default: Date.Month
+  value:
+    type: field
+    default: Measures.Revenue
+payload:
+  type: lineChart
+  size: 520 x 320
+  title:
+    show: true
+    text: '{{ title }}'
+    fontSize: 12
+    bold: true
+    color: '#252423'
+  legend.show: true
+  legend.showTitle: false
+  legend.position: Top
+  legend.fontSize: 9
+  legend.color: '#605E5C'
+  xAxis.show: true
+  xAxis.title: false
+  xAxis.gridlines: false
+  yAxis.show: true
+  yAxis.title: false
+  yAxis.gridlines: true
+  yAxis.gridlineColor: '#E1DFDD'
+  yAxis.gridlineStyle: dotted
+  yAxis.gridlineThickness: 1
+  labels.show: false
+  plotArea.transparency: 100
+  line.show: true
+  bindings:
+    Category: '{{ category }}'
+    Y: '{{ value }}'

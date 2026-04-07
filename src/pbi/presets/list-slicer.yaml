@@ -1,0 +1,14 @@
+name: list-slicer
+description: Vertical list slicer — header visible as label, title hidden to avoid double labels.
+properties:
+  border.show: false
+  background.show: true
+  background.color: '#FFFFFF'
+  title.show: false
+  slicerHeader.show: true
+  slicerHeader.fontColor: '#252423'
+  slicerHeader.fontSize: 11
+  slicerHeader.bold: true
+  slicerItems.fontColor: '#323130'
+  slicerItems.fontSize: 10
+  slicer.selectAll: true

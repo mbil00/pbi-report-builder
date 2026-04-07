@@ -1,0 +1,38 @@
+kind: visual
+name: data-table
+category: table
+description: Clean data table with styled headers, alternating rows, and horizontal gridlines.
+tags:
+  - table
+  - data
+  - detail
+parameters:
+  title:
+    type: string
+    default: Detail Table
+payload:
+  type: tableEx
+  size: 560 x 300
+  title:
+    show: true
+    text: '{{ title }}'
+    fontSize: 12
+    bold: true
+    color: '#252423'
+  columnHeaders.fontColor: '#252423'
+  columnHeaders.backColor: '#F3F2F1'
+  columnHeaders.fontSize: 10
+  columnHeaders.bold: true
+  columnHeaders.wordWrap: true
+  columnHeaders.autoSize: true
+  values.fontColor: '#323130'
+  values.backColor: '#FFFFFF'
+  values.altBackColor: '#FAF9F8'
+  values.fontSize: 10
+  grid.vertical: false
+  grid.horizontal: true
+  grid.horizontalColor: '#EDEBE9'
+  grid.horizontalWeight: 1
+  grid.rowPadding: 3
+  total.show: false
+  bindings: {}

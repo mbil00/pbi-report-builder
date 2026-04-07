@@ -1,0 +1,44 @@
+kind: visual
+name: bar-chart
+category: chart
+description: Horizontal bar chart with clean axes and outside-end data labels.
+tags:
+  - chart
+  - bar
+  - horizontal
+parameters:
+  title:
+    type: string
+    default: Top Categories
+  category:
+    type: field
+    default: Product.Category
+  value:
+    type: field
+    default: Measures.Revenue
+payload:
+  type: clusteredBarChart
+  size: 480 x 320
+  title:
+    show: true
+    text: '{{ title }}'
+    fontSize: 12
+    bold: true
+    color: '#252423'
+  legend.show: false
+  xAxis.show: true
+  xAxis.title: false
+  xAxis.gridlines: true
+  xAxis.gridlineColor: '#E1DFDD'
+  xAxis.gridlineStyle: dotted
+  yAxis.show: true
+  yAxis.title: false
+  yAxis.gridlines: false
+  labels.show: true
+  labels.color: '#605E5C'
+  labels.fontSize: 9
+  labels.position: OutsideEnd
+  plotArea.transparency: 100
+  bindings:
+    Category: '{{ category }}'
+    Y: '{{ value }}'
