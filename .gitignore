@@ -12,3 +12,6 @@ package-lock.json
 package.json
 schema-analysis/
 docs/superpowers/
+.codex/
+.mcp.json
+.specialist-workspace.json
