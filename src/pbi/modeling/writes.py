@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 import re
 import textwrap
 import uuid
@@ -1747,24 +1748,33 @@ def validate_relationships(
                 ),
             })
 
-    def _find_active_paths(start: str, end: str, *, limit: int = 2) -> list[list[str]]:
-        paths: list[list[str]] = []
+    def _find_shortest_active_paths(start: str, end: str, *, limit: int = 2) -> list[list[str]]:
+        shortest_paths: list[list[str]] = []
+        queue: deque[list[str]] = deque([[start]])
+        shortest_length: int | None = None
 
-        def _dfs(current: str, path: list[str]) -> None:
-            if len(paths) >= limit:
-                return
+        while queue:
+            path = queue.popleft()
+            if shortest_length is not None and len(path) > shortest_length:
+                break
+
+            current = path[-1]
             if current == end:
-                paths.append(path.copy())
-                return
+                shortest_length = len(path)
+                shortest_paths.append(path)
+                if len(shortest_paths) >= limit:
+                    break
+                continue
+
             for neighbor in sorted(active_adj.get(current, set())):
                 if neighbor in path:
                     continue
-                path.append(neighbor)
-                _dfs(neighbor, path)
-                path.pop()
+                next_path = path + [neighbor]
+                if shortest_length is not None and len(next_path) > shortest_length:
+                    continue
+                queue.append(next_path)
 
-        _dfs(start, [start])
-        return paths
+        return shortest_paths
 
     active_table_list = sorted(active_tables)
     reported_paths: set[tuple[str, str]] = set()
@@ -1772,7 +1782,7 @@ def validate_relationships(
         for target_name in active_table_list:
             if source_name == target_name:
                 continue
-            paths = _find_active_paths(source_name, target_name)
+            paths = _find_shortest_active_paths(source_name, target_name)
             if len(paths) >= 2 and (source_name, target_name) not in reported_paths:
                 reported_paths.add((source_name, target_name))
                 rendered = "; ".join(" -> ".join(path) for path in paths[:2])

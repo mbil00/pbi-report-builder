@@ -191,3 +191,26 @@ Discovery: `pbi visual properties --visual-type <type>` shows all schema-derived
 ## Engineering Rule
 
 New write paths must be validated against the extracted PBI Desktop schema or derived from a canonical exported PBIR sample with test coverage. No guessing JSON structures.
+
+## Specialists
+
+This project has an MCP-based specialist consultant runtime (`.mcp.json`). Use it when you need domain expertise that goes beyond what's in this file.
+
+**Available specialists:** `tmdl`, `dax`, `visualization`, `framework`, `database`, `research`, `erp_sql`, `microsoft_graph`
+
+**Setup (first time only):**
+1. `ensure_workspace` with `cwd` set to this project root
+2. `bootstrap_specialist` with the specialist kind and your first question — this takes 2-5 minutes but only runs once per specialist
+
+**Usage:**
+```
+consult_specialist(workspace_id, specialist_kind, question)
+```
+
+**When to use which:**
+- `tmdl` — TMDL parsing, semantic model structure, relationship semantics, partition definitions
+- `dax` — DAX expressions, filter context, measure patterns, calculated columns
+- `visualization` — visual types, property schema, binding roles, chart configuration
+- `framework` — apply engine architecture, round-trip patterns, CLI design decisions
+- `database` — schema design when adding persistence features
+- `research` — web research for Power BI docs, API references, PBIR format details

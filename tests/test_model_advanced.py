@@ -1015,7 +1015,7 @@ table Sales
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No issues", result.stdout)
 
-    def test_validate_reports_ambiguous_active_paths(self):
+    def test_validate_prefers_shorter_direct_active_path(self):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1034,16 +1034,43 @@ table {name}
             create_relationship(root, "C.ID", "B.ID")
 
             validate_result = runner.invoke(app, ["validate", "--project", str(root / "Sample.pbip")])
+            self.assertEqual(validate_result.exit_code, 0, validate_result.stdout)
+            self.assertNotIn("Ambiguous active", validate_result.stdout)
+
+            check_result = runner.invoke(app, ["model", "check", "--project", str(root / "Sample.pbip")])
+            self.assertEqual(check_result.exit_code, 0, check_result.stdout)
+            self.assertNotIn("Ambiguous active relationship paths", check_result.stdout)
+
+    def test_validate_reports_equal_length_ambiguous_active_paths(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            for name in ("A", "B", "C", "D"):
+                _write_table(root, f"{name}.tmdl", f"""
+table {name}
+\tcolumn ID
+\t\tdataType: string
+\t\tlineageTag: {name.lower()}-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: ID
+""")
+            create_relationship(root, "A.ID", "B.ID")
+            create_relationship(root, "A.ID", "C.ID")
+            create_relationship(root, "B.ID", "D.ID")
+            create_relationship(root, "C.ID", "D.ID")
+
+            validate_result = runner.invoke(app, ["validate", "--project", str(root / "Sample.pbip")])
             self.assertEqual(validate_result.exit_code, 1, validate_result.stdout)
             self.assertIn("Ambiguous active", validate_result.stdout)
-            self.assertIn("B -> A", validate_result.stdout)
-            self.assertIn("B -> C -> A", validate_result.stdout)
+            self.assertIn("D -> B -> A", validate_result.stdout)
+            self.assertIn("D -> C -> A", validate_result.stdout)
 
             check_result = runner.invoke(app, ["model", "check", "--project", str(root / "Sample.pbip")])
             self.assertEqual(check_result.exit_code, 1, check_result.stdout)
             self.assertIn("Ambiguous active relationship paths", check_result.stdout)
-            self.assertIn("B -> A", check_result.stdout)
-            self.assertIn("B -> C -> A", check_result.stdout)
+            self.assertIn("D -> B -> A", check_result.stdout)
+            self.assertIn("D -> C -> A", check_result.stdout)
 
     def test_model_check_accepts_auto_date_table_data_categories(self):
         runner = CliRunner()
