@@ -194,23 +194,27 @@ New write paths must be validated against the extracted PBI Desktop schema or de
 
 ## Specialists
 
-This project has an MCP-based specialist consultant runtime (`.mcp.json`). Use it when you need domain expertise that goes beyond what's in this file.
+This project has a specialists MCP server. Use it when you need repo-specific domain guidance that goes beyond this file.
 
-**Available specialists:** `tmdl`, `dax`, `visualization`, `framework`, `database`, `research`, `erp_sql`, `microsoft_graph`
+Use these tools:
+- `list_specialists` - check which specialists are available before consulting.
+- `consult_specialist` - ask one of those specialists a focused question.
 
-**Setup (first time only):**
-1. `ensure_workspace` with `cwd` set to this project root
-2. `bootstrap_specialist` with the specialist kind and your first question — this takes 2-5 minutes but only runs once per specialist
-
-**Usage:**
-```
-consult_specialist(workspace_id, specialist_kind, question)
-```
+**Current workspace specialists:** `dax`, `power_bi_visual_schema`
 
 **When to use which:**
-- `tmdl` — TMDL parsing, semantic model structure, relationship semantics, partition definitions
-- `dax` — DAX expressions, filter context, measure patterns, calculated columns
-- `visualization` — visual types, property schema, binding roles, chart configuration
-- `framework` — apply engine architecture, round-trip patterns, CLI design decisions
-- `database` — schema design when adding persistence features
-- `research` — web research for Power BI docs, API references, PBIR format details
+- `dax` - DAX expressions, filter context, measure patterns, calculated columns
+- `power_bi_visual_schema` - visual types, capability schema, binding roles, chart/property configuration
+
+**Examples:**
+
+```text
+list_specialists()
+```
+
+```text
+consult_specialist(
+  specialist_kind="dax",
+  question="How should this measure be rewritten to preserve filter context correctly?"
+)
+```
