@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from pbi.apply.visual_support import apply_raw_visual_payload, parse_position, parse_size
+from pbi.fields import resolve_field_info
 from pbi.filters import add_categorical_filter, add_exclude_filter
 from pbi.project import Page, Project, Visual, sanitize_visual_name
 from pbi.properties import VISUAL_PROPERTIES, set_property
@@ -88,12 +89,9 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
             for field_ref in field_list:
                 if not isinstance(field_ref, str) or "." not in field_ref:
                     continue
-                is_measure = "(measure)" in field_ref
-                clean_ref = field_ref.replace("(measure)", "").strip()
-                dot = clean_ref.find(".")
-                entity = clean_ref[:dot]
-                prop = clean_ref[dot + 1 :]
-                field_type = "measure" if is_measure else "column"
+                entity, prop, field_type, _data_type = resolve_field_info(
+                    project, field_ref, "auto"
+                )
                 project.add_binding(visual, canonical_role, entity, prop, field_type=field_type)
 
     if spec.get("isHidden"):

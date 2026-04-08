@@ -15,7 +15,7 @@ parameters:
     default: Product.Category
 payload:
   type: slicer
-  size: 180 x 60
+  size: 180 x 72
   title:
     show: true
     text: '{{ title }}'

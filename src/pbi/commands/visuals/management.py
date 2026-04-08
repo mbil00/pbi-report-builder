@@ -41,6 +41,7 @@ def visual_create(
     auto_sort: Annotated[bool, typer.Option("--auto-sort/--no-auto-sort", help="Infer initial sort from semantic-model metadata when --sort is omitted.")] = True,
     field_type: Annotated[str, typer.Option("--field-type", help="Field type used for --bind/--sort: auto, column, or measure.")] = "auto",
     from_ref: Annotated[str | None, typer.Option("--from", help="Reference visual as 'page/visual' to copy type, style, and bindings from.")] = None,
+    behind: Annotated[bool, typer.Option("--behind", help="Place visual behind all existing visuals (for background shapes).")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Create a new visual on a page. Use --from to clone from a reference visual."""
@@ -123,7 +124,7 @@ def visual_create(
             "Creating a raw visual container."
         )
 
-    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h)
+    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h, behind=behind)
     if name:
         from pbi.project import sanitize_visual_name
         vis.data["name"] = sanitize_visual_name(name)

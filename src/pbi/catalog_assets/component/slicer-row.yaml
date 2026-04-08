@@ -1,6 +1,6 @@
 name: slicer-row
 description: Row of 3 dropdown slicers — title visible, header hidden.
-size: 580 x 60
+size: 580 x 72
 parameters:
   title1:
     source: visual_0.title.text
@@ -24,7 +24,7 @@ visuals:
   - name: slicerRegion
     type: slicer
     position: 0, 0
-    size: 180 x 60
+    size: 180 x 72
     title:
       show: true
       text: '{{ title1 }}'
@@ -45,7 +45,7 @@ visuals:
   - name: slicerCategory
     type: slicer
     position: 200, 0
-    size: 180 x 60
+    size: 180 x 72
     title:
       show: true
       text: '{{ title2 }}'
@@ -66,7 +66,7 @@ visuals:
   - name: slicerYear
     type: slicer
     position: 400, 0
-    size: 180 x 60
+    size: 180 x 72
     title:
       show: true
       text: '{{ title3 }}'

@@ -17,8 +17,14 @@ def create_visual(
     y: int = 0,
     width: int = 300,
     height: int = 200,
+    *,
+    behind: bool = False,
 ) -> Visual:
-    """Create a new visual on a page with type-aware scaffolding."""
+    """Create a new visual on a page with type-aware scaffolding.
+
+    When *behind* is True the visual is placed below all existing visuals
+    (useful for background shapes).
+    """
     from pbi.roles import get_visual_roles
 
     visual_id = secrets.token_hex(10)
@@ -26,7 +32,12 @@ def create_visual(
     visual_dir.mkdir(parents=True, exist_ok=True)
 
     existing = project._get_visuals_cached(page)
-    max_z = max((visual.position.get("z", 0) for visual in existing), default=0)
+    if behind:
+        min_z = min((visual.position.get("z", 0) for visual in existing), default=0)
+        z = min_z - 1000
+    else:
+        max_z = max((visual.position.get("z", 0) for visual in existing), default=0)
+        z = max_z + 1000
 
     roles = get_visual_roles(visual_type)
     query_state: dict = {}
@@ -41,7 +52,7 @@ def create_visual(
             "y": y,
             "width": width,
             "height": height,
-            "z": max_z + 1000,
+            "z": z,
             "tabOrder": len(existing),
         },
         "visual": {

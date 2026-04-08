@@ -89,14 +89,12 @@ class RealReportFixtureTests(unittest.TestCase):
         self.assertNotIn("- name: Executive Overview", result.stdout)
         self.assertNotIn("- group: Navigation", result.stdout)
 
-    def test_kitchen_sink_validate_cli_reports_known_overlap_warnings(self) -> None:
+    def test_kitchen_sink_validate_cli_no_false_positive_overlaps(self) -> None:
         result = CliRunner().invoke(app, ["validate", "--project", str(KITCHEN_SINK_PBIP)])
 
         self.assertEqual(result.exit_code, 0, result.stdout)
-        self.assertIn("3 warning(s)", result.stdout)
-        self.assertIn('Visual "revByChannelLabel" overlaps "navToProduct"', result.stdout)
-        self.assertIn('Visual "revByChannelLabel" overlaps "navToRegional"', result.stdout)
-        self.assertIn('Visual "revByChannelLabel" overlaps "navFocusOnline"', result.stdout)
+        # Background shapes behind content no longer trigger overlap warnings
+        self.assertIn("No issues found.", result.stdout)
 
     def test_real_fixtures_diff_no_changes_for_exported_yaml(self) -> None:
         runner = CliRunner()

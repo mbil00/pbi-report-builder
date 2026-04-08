@@ -109,6 +109,62 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(visual.position["y"], 80)
             self.assertEqual(project.get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
 
+    def test_visual_template_binds_measures_correctly_with_model(self) -> None:
+        """Measures resolved via the semantic model use the Measure discriminator."""
+        from tests.cli_regressions_support import write_model_table
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root, with_model=True)
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+    column Revenue
+        dataType: int64
+    measure 'Total Revenue'
+        expression: SUM(Sales[Revenue])
+""",
+            )
+            page = project.create_page("Dashboard")
+
+            spec_path = root / "kpi.yaml"
+            spec_path.write_text(
+                "\n".join(
+                    [
+                        "type: cardVisual",
+                        "size: 260 x 120",
+                        "bindings:",
+                        "  Value: '{{ value }}'",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            register_visual_template(project, spec_path, name="kpi-card", category="kpi")
+
+            # Bind to a measure — should use "measure" discriminator
+            visual_m, _ = apply_visual_template(
+                project, page, "kpi-card",
+                params={"value": "Sales.Total Revenue"},
+            )
+            self.assertEqual(
+                project.get_bindings(visual_m),
+                [("Data", "Sales", "Total Revenue", "measure")],
+            )
+
+            # Bind to a column — should use "column" discriminator
+            visual_c, _ = apply_visual_template(
+                project, page, "kpi-card",
+                params={"value": "Sales.Revenue"},
+            )
+            self.assertEqual(
+                project.get_bindings(visual_c),
+                [("Data", "Sales", "Revenue", "column")],
+            )
+
     def test_get_catalog_item_rejects_ambiguous_plain_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -582,6 +638,40 @@ class CatalogCliTests(unittest.TestCase):
             target_page = reloaded.find_page("Target")
             visuals = reloaded.get_visuals(target_page)
             self.assertGreaterEqual(len(visuals), 2)
+
+    def test_component_apply_deduplicates_visual_names(self) -> None:
+        """Applying a component with a name that already exists on the page auto-suffixes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Dashboard")
+
+            # Pre-existing visual with same name as what the component will produce
+            existing = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            existing.data["name"] = "titleBox"
+            existing.save()
+
+            comp_yaml = root / "header.yaml"
+            comp_yaml.write_text(
+                "\n".join(
+                    [
+                        "visuals:",
+                        "- type: textbox",
+                        "  name: titleBox",
+                        "  position: 0, 0",
+                        "  size: 100 x 30",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            save_component_from_yaml(project, comp_yaml, "header")
+            created = apply_component(project, page, "header", x=200, y=0)
+
+            names = [v.name for v in project.get_visuals(page)]
+            self.assertIn("titleBox", names)
+            self.assertIn("titleBox-2", names)
+            self.assertEqual(len(names), len(set(names)), "All visual names must be unique")
 
     def test_catalog_register_component_cli(self) -> None:
         runner = CliRunner()

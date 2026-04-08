@@ -340,6 +340,8 @@ class Project:
         y: int = 0,
         width: int = 300,
         height: int = 200,
+        *,
+        behind: bool = False,
     ) -> Visual:
         """Create a new visual on a page with type-aware scaffolding."""
         from pbi.visual_authoring import create_visual as _create_visual
@@ -352,6 +354,7 @@ class Project:
             y=y,
             width=width,
             height=height,
+            behind=behind,
         )
 
     def copy_visual(

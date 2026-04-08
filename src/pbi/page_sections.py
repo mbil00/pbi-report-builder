@@ -46,7 +46,7 @@ def create_page_section(
     title_font: str = "Segoe UI Semibold",
     title_size: int = 14,
 ) -> PageSectionResult:
-    background_visual = project.create_visual(page, "shape", x=x, y=y, width=width, height=height)
+    background_visual = project.create_visual(page, "shape", x=x, y=y, width=width, height=height, behind=True)
     background_visual.data["name"] = f"section-bg-{title.lower().replace(' ', '-')[:20]}"
     set_visual_property(background_visual.data, "border.show", "true", VISUAL_PROPERTIES)
     set_visual_property(background_visual.data, "border.radius", str(radius), VISUAL_PROPERTIES)

@@ -520,15 +520,23 @@ def catalog_apply(
                     f'({len(style.properties)} properties) to [cyan]{len(targets)}[/cyan] visual(s) on "{pg.display_name}"'
                 )
                 return
+            skipped_props: list[str] = []
             for target in targets:
+                skipped_props = []
                 for prop_name, value in style.properties.items():
                     try:
                         set_prop(target.data, prop_name, str(value), VISUAL_PROPERTIES)
                     except ValueError:
-                        pass
+                        skipped_props.append(prop_name)
                 target.save()
+            if skipped_props:
+                console.print(
+                    f'[yellow]Warning:[/yellow] Skipped {len(skipped_props)} incompatible '
+                    f'property(ies) for {targets[0].visual_type}: {", ".join(skipped_props)}'
+                )
+            applied = len(style.properties) - len(skipped_props)
             console.print(
-                f'Applied style "[cyan]{item.name}[/cyan]" ({len(style.properties)} properties) '
+                f'Applied style "[cyan]{item.name}[/cyan]" ({applied} properties) '
                 f'to [cyan]{len(targets)}[/cyan] visual(s) on "{pg.display_name}"'
             )
             return

@@ -58,6 +58,7 @@ def validate_project(
             page_data: dict | None = None
             page_visuals: list[tuple[str, dict]] = []
             page_visual_names: set[str] = set()
+            page_visual_name_sources: dict[str, list[str]] = {}
             if page_json.exists():
                 page_data, page_issues = _validate_json_file(page_json)
                 issues.extend(page_issues)
@@ -81,14 +82,26 @@ def validate_project(
                         if visual_data is not None:
                             issues.extend(_validate_visual_data(visual_data, rel))
                             page_visuals.append((visual_dir.name, visual_data))
-                            page_visual_names.add(visual_data.get("name", visual_dir.name))
+                            vname = visual_data.get("name", visual_dir.name)
+                            page_visual_names.add(vname)
+                            page_visual_name_sources.setdefault(vname, []).append(rel)
                         else:
                             page_visual_names.add(visual_dir.name)
+                            rel_fallback = f"pages/{page_dir.name}/visuals/{visual_dir.name}/visual.json"
+                            page_visual_name_sources.setdefault(visual_dir.name, []).append(rel_fallback)
                     else:
                         issues.append(ValidationIssue(
                             f"pages/{page_dir.name}/visuals/{visual_dir.name}/visual.json",
                             "error", "Visual directory exists but visual.json is missing"
                         ))
+
+            for vname, sources in page_visual_name_sources.items():
+                if len(sources) > 1:
+                    issues.append(ValidationIssue(
+                        f"pages/{page_dir.name}",
+                        "error",
+                        f'Duplicate visual name "{vname}" ({len(sources)} visuals)',
+                    ))
 
             if page_data is not None:
                 loaded_pages[page_dir.name] = page_data
@@ -663,7 +676,8 @@ def _validate_layout(
 
     for page_name, _display_name, page_w, page_h, visuals in page_items:
 
-        rects: list[tuple[str, str, int, int, int, int, str | None]] = []  # (name, rel, x, y, w, h, parentGroup)
+        # (name, rel, x, y, w, h, parentGroup, z, visualType)
+        rects: list[tuple[str, str, int, int, int, int, str | None, int, str]] = []
 
         for visual_id, visual_data in visuals:
             if "visualGroup" in visual_data:
@@ -673,7 +687,9 @@ def _validate_layout(
             y = int(pos.get("y", 0))
             w = int(pos.get("width", 0))
             h = int(pos.get("height", 0))
+            z = int(pos.get("z", 0))
             vis_name = visual_data.get("name", visual_id)
+            vis_type = visual_data.get("visual", {}).get("visualType", "")
             rel = f"pages/{page_name}/visuals/{visual_id}/visual.json"
             parent_group = visual_data.get("parentGroupName")
 
@@ -699,15 +715,20 @@ def _validate_layout(
                     f'(y={y}, h={h}, page={page_h})',
                 ))
 
-            rects.append((vis_name, rel, x, y, w, h, parent_group))
+            rects.append((vis_name, rel, x, y, w, h, parent_group, z, vis_type))
 
         # Check overlaps (only report significant ones > 10px in both axes)
         for i in range(len(rects)):
             for j in range(i + 1, len(rects)):
-                n1, r1, x1, y1, w1, h1, g1 = rects[i]
-                n2, _r2, x2, y2, w2, h2, g2 = rects[j]
+                n1, r1, x1, y1, w1, h1, g1, z1, t1 = rects[i]
+                n2, _r2, x2, y2, w2, h2, g2, z2, t2 = rects[j]
                 # Skip overlap check for visuals in the same group
                 if g1 and g1 == g2:
+                    continue
+                # Skip when one visual is a shape behind the other (background)
+                if t1 == "shape" and z1 < z2:
+                    continue
+                if t2 == "shape" and z2 < z1:
                     continue
                 ox = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
                 oy = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))

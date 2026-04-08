@@ -47,3 +47,20 @@ class ValidateCliRegressionTests(unittest.TestCase):
             )
             self.assertEqual(ignored_result.exit_code, 0, ignored_result.stdout)
             self.assertIn("No issues found.", ignored_result.stdout)
+
+    def test_validate_detects_duplicate_visual_names(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Dashboard")
+            v1 = project.create_visual(page, "cardVisual")
+            v1.data["name"] = "myCard"
+            v1.save()
+            v2 = project.create_visual(page, "cardVisual")
+            v2.data["name"] = "myCard"
+            v2.save()
+
+            result = runner.invoke(app, ["validate", "--project", str(root / "Sample.pbip")])
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn('Duplicate visual name "myCard"', result.stdout)

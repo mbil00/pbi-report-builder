@@ -518,6 +518,7 @@ def apply_component(
     _remove_existing_component_instance(project, page, instance_name or component_name)
 
     # Create visuals with absolute positions
+    existing_names = {visual.name for visual in project.get_visuals(page)}
     created: list[Visual] = []
     for spec in visual_specs:
         if isinstance(spec, dict):
@@ -526,6 +527,20 @@ def apply_component(
             if isinstance(raw_pbir, dict):
                 raw_pbir.pop("parentGroupName", None)
         pos_str = spec.get("position", "0, 0")
+
+        # Deduplicate visual name against page and batch
+        spec_name = spec.get("name")
+        if isinstance(spec_name, str) and spec_name:
+            safe = sanitize_visual_name(spec_name)
+            if safe in existing_names:
+                suffix = 2
+                candidate = f"{safe}-{suffix}"
+                while candidate in existing_names:
+                    suffix += 1
+                    candidate = f"{safe}-{suffix}"
+                safe = candidate
+            existing_names.add(safe)
+            spec["name"] = safe
 
         # Parse relative position and offset by target (x, y)
         rel_x, rel_y = _parse_position(pos_str)
