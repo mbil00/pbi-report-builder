@@ -725,10 +725,8 @@ def _validate_layout(
                 # Skip overlap check for visuals in the same group
                 if g1 and g1 == g2:
                     continue
-                # Skip when one visual is a shape behind the other (background)
-                if t1 == "shape" and z1 < z2:
-                    continue
-                if t2 == "shape" and z2 < z1:
+                # Skip when either visual is a shape (decorative/background element)
+                if t1 == "shape" or t2 == "shape":
                     continue
                 ox = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
                 oy = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))

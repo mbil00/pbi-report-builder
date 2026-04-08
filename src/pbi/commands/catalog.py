@@ -29,6 +29,8 @@ def _optional_project(project: Path | None):
 def catalog_list(
     kind: Annotated[str | None, typer.Option("--kind", help="Filter by kind: visual, style, component, page.")] = None,
     scope: Annotated[str | None, typer.Option("--scope", help="Filter by scope: project, global, bundled.")] = None,
+    category: Annotated[str | None, typer.Option("--category", help="Filter by category.")] = None,
+    tag: Annotated[str | None, typer.Option("--tag", help="Filter by tag.")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -37,7 +39,7 @@ def catalog_list(
 
     proj = _optional_project(project)
     try:
-        items = list_catalog_items(proj, kind=kind, scope=scope)
+        items = list_catalog_items(proj, kind=kind, scope=scope, category=category, tag=tag)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -234,6 +236,7 @@ def catalog_create(
     tags: Annotated[list[str] | None, typer.Option("--tag", help="Optional tag. Repeatable.")] = None,
     scope: Annotated[str, typer.Option("--scope", help="Target scope: project or global.")] = "project",
     force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite an existing item.")] = False,
+    no_parameterize: Annotated[bool, typer.Option("--no-parameterize", help="Export as frozen snapshot without auto-parameterization.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Create a catalog item from report state."""
@@ -275,6 +278,7 @@ def catalog_create(
                 tags=tags,
                 overwrite=force,
                 global_scope=scope == "global",
+                parameterize=not no_parameterize,
             )
         elif resolved_kind == "style":
             if from_visual_page:
@@ -394,6 +398,18 @@ def catalog_apply(
 
     try:
         if item.kind == "visual":
+            from pbi.visual_stamping import validate_spec_bindings
+            from pbi.visual_templates import get_visual_template, _apply_template_parameters
+            import copy as _copy
+
+            template = get_visual_template(proj, item.name, scope=item.scope, global_scope=item.scope == "global")
+            resolved_spec = _copy.deepcopy(template.payload)
+            _apply_template_parameters(resolved_spec, template.parameters, params or {})
+
+            binding_warnings = validate_spec_bindings(proj, resolved_spec)
+            for warning in binding_warnings:
+                console.print(f"[yellow]Warning:[/yellow] {warning}")
+
             if dry_run:
                 target_name = name or item.name
                 console.print(
@@ -404,7 +420,7 @@ def catalog_apply(
                     console.print(f"[dim]Parameters:[/dim] {', '.join(f'{k}={v}' for k, v in params.items())}")
                 return
 
-            created_visual, template = apply_visual_template(
+            created_visual, _template = apply_visual_template(
                 proj,
                 pg,
                 item.name,

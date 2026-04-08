@@ -124,7 +124,9 @@ def visual_create(
             "Creating a raw visual container."
         )
 
-    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h, behind=behind)
+    # Shapes default to behind (background layer)
+    effective_behind = behind or canonical_visual_type == "shape"
+    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h, behind=effective_behind)
     if name:
         from pbi.project import sanitize_visual_name
         vis.data["name"] = sanitize_visual_name(name)

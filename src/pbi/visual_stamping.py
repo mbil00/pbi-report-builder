@@ -21,11 +21,14 @@ def create_visual_from_spec(
     x: int | float | None = None,
     y: int | float | None = None,
     name: str | None = None,
+    behind: bool | None = None,
 ) -> Visual:
     """Create one visual from an apply/export-compatible visual spec."""
     vis_type = str(spec.get("type", "shape"))
     base_x, base_y = parse_position(spec.get("position", "0, 0"))
     width, height = parse_size(spec.get("size", "300 x 200"))
+    # Shapes default to behind (background layer) unless explicitly overridden
+    effective_behind = behind if behind is not None else (vis_type == "shape")
     visual = project.create_visual(
         page,
         vis_type,
@@ -33,6 +36,7 @@ def create_visual_from_spec(
         y=base_y if y is None else y,
         width=width,
         height=height,
+        behind=effective_behind,
     )
 
     target_name = name or spec.get("name")
@@ -128,3 +132,32 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
             text=spec["text"],
             style_updates=style if isinstance(style, dict) else None,
         )
+
+
+def validate_spec_bindings(project: Project, spec: dict[str, Any]) -> list[str]:
+    """Check binding field refs against the semantic model, returning warnings."""
+    warnings: list[str] = []
+    try:
+        from pbi.modeling.schema import SemanticModel
+
+        model = SemanticModel.load(project.root)
+    except (FileNotFoundError, ValueError):
+        return warnings
+
+    bindings = spec.get("bindings", {})
+    if not isinstance(bindings, dict):
+        return warnings
+
+    for role, fields in bindings.items():
+        field_list = [fields] if isinstance(fields, str) else fields
+        if not isinstance(field_list, list):
+            continue
+        for field_ref in field_list:
+            if not isinstance(field_ref, str) or "." not in field_ref:
+                continue
+            clean = field_ref.replace("(measure)", "").strip()
+            try:
+                model.resolve_field(clean)
+            except (ValueError, KeyError) as e:
+                warnings.append(f'Binding {role}="{clean}": {e}')
+    return warnings

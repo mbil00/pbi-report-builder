@@ -451,6 +451,8 @@ def visual_paste_style(
         console.print("[yellow]Source visual has no formatting to copy.[/yellow]")
         raise typer.Exit(0)
 
+    from pbi.visual_schema import get_object_names
+
     for tgt_vis in target_visuals:
         if scope in {"all", "container"}:
             if container:
@@ -459,7 +461,18 @@ def visual_paste_style(
                 tgt_vis.data.get("visual", {}).pop("visualContainerObjects", None)
         if scope in {"all", "chart"}:
             if objects:
-                tgt_vis.data.setdefault("visual", {})["objects"] = copy.deepcopy(objects)
+                filtered = copy.deepcopy(objects)
+                valid_objects = get_object_names(tgt_vis.visual_type)
+                if valid_objects is not None:
+                    skipped = [k for k in filtered if k not in valid_objects]
+                    for k in skipped:
+                        del filtered[k]
+                    if skipped:
+                        console.print(
+                            f'[yellow]Warning:[/yellow] Skipped {len(skipped)} incompatible '
+                            f'object(s) for {tgt_vis.visual_type}: {", ".join(skipped)}'
+                        )
+                tgt_vis.data.setdefault("visual", {})["objects"] = filtered
             else:
                 tgt_vis.data.get("visual", {}).pop("objects", None)
         tgt_vis.save()

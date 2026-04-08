@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import yaml
+
 from typer.testing import CliRunner
 
 from pbi.catalog import get_catalog_item, list_catalog_items, validate_catalog
@@ -30,6 +32,17 @@ class CatalogTests(unittest.TestCase):
         items = list_catalog_items(None, kind="visual")
         refs = {(item.kind, item.name, item.scope) for item in items}
         self.assertIn(("visual", "hero-kpi-card", "bundled"), refs)
+
+    def test_list_catalog_items_filter_by_category_and_tag(self) -> None:
+        items = list_catalog_items(None, kind="visual", category="kpi")
+        self.assertTrue(all(item.category == "kpi" for item in items))
+        self.assertTrue(len(items) > 0)
+
+        items_chart = list_catalog_items(None, kind="visual", tag="chart")
+        self.assertTrue(all("chart" in item.tags for item in items_chart))
+
+        items_none = list_catalog_items(None, kind="visual", category="nonexistent")
+        self.assertEqual(len(items_none), 0)
 
     def test_list_catalog_items_aggregates_existing_asset_kinds(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -382,6 +395,52 @@ class CatalogCliTests(unittest.TestCase):
             self.assertEqual(visual.position["y"], 48)
             self.assertEqual(reloaded.get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
 
+    def test_catalog_apply_warns_on_missing_model_field(self) -> None:
+        """catalog apply warns when a binding references a field not in the model."""
+        from tests.cli_regressions_support import write_model_table
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root, with_model=True)
+            write_model_table(
+                root,
+                "Sales.tmdl",
+                """
+table Sales
+    column Revenue
+        dataType: int64
+""",
+            )
+            project.create_page("Dashboard")
+
+            spec_path = root / "kpi.yaml"
+            spec_path.write_text(
+                "\n".join(
+                    [
+                        "type: cardVisual",
+                        "size: 260 x 120",
+                        "bindings:",
+                        "  Data: '{{ value }}'",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            register_visual_template(project, spec_path, name="kpi-card", category="kpi")
+
+            result = runner.invoke(
+                app,
+                [
+                    "catalog", "apply", "visual/kpi-card", "Dashboard",
+                    "--set", "value=Sales.NonExistent",
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Warning", result.stdout)
+            self.assertIn("NonExistent", result.stdout)
+
     def test_catalog_create_visual_template_from_existing_visual_cli(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -418,6 +477,67 @@ class CatalogCliTests(unittest.TestCase):
             content = template_path.read_text(encoding="utf-8")
             self.assertIn("kind: visual", content)
             self.assertNotIn("id:", content)
+
+    def test_catalog_create_visual_auto_parameterizes_bindings_and_title(self) -> None:
+        """Capturing a visual auto-creates parameters for bindings and title."""
+        from pbi.properties import VISUAL_PROPERTIES, set_property
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Dashboard")
+            visual = project.create_visual(page, "clusteredColumnChart")
+            visual.data["name"] = "salesChart"
+            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
+            set_property(visual.data, "title.text", "Revenue by Region", VISUAL_PROPERTIES)
+            visual.save()
+            project.add_binding(visual, "Category", "Geography", "Region")
+            project.add_binding(visual, "Y", "Sales", "Revenue")
+
+            from pbi.visual_templates import save_visual_template
+
+            path = save_visual_template(project, page, visual, "sales-chart")
+            content = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+            params = content.get("parameters", {})
+            # Should have title + 2 binding parameters
+            self.assertIn("title", params)
+            self.assertEqual(params["title"]["type"], "string")
+            self.assertEqual(params["title"]["default"], "Revenue by Region")
+
+            # Bindings should be parameterized (role Y -> param "value", role Category -> param "category")
+            payload = content["payload"]
+            self.assertIn("{{ title }}", str(payload.get("title", {}).get("text", "")))
+
+            binding_values = str(payload.get("bindings", {}))
+            self.assertIn("{{", binding_values)
+
+            # Field defaults should be preserved
+            field_params = {k: v for k, v in params.items() if v.get("type") == "field"}
+            defaults = {v["default"] for v in field_params.values()}
+            self.assertIn("Geography.Region", defaults)
+            self.assertIn("Sales.Revenue", defaults)
+
+    def test_catalog_create_visual_no_parameterize_flag(self) -> None:
+        """--no-parameterize preserves snapshot without parameters."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Dashboard")
+            visual = project.create_visual(page, "cardVisual")
+            visual.data["name"] = "kpiCard"
+            visual.save()
+            project.add_binding(visual, "Value", "Sales", "Revenue")
+
+            from pbi.visual_templates import save_visual_template
+
+            path = save_visual_template(project, page, visual, "frozen-card", parameterize=False)
+            content = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+            self.assertNotIn("parameters", content)
+            # Binding should be the raw field ref, not a placeholder
+            bindings = content["payload"].get("bindings", {})
+            self.assertNotIn("{{", str(bindings))
 
     def test_catalog_clone_and_delete_visual_template_cli(self) -> None:
         runner = CliRunner()

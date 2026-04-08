@@ -121,6 +121,7 @@ def save_visual_template(
     tags: list[str] | None = None,
     overwrite: bool = False,
     global_scope: bool = False,
+    parameterize: bool = True,
 ) -> Path:
     """Create a visual template directly from an existing report visual."""
     spec = export_visual_spec(project, visual)
@@ -141,6 +142,10 @@ def save_visual_template(
         category=category,
         tags=tags,
     )
+    if parameterize and not payload.get("parameters"):
+        params, payload["payload"] = _auto_parameterize_payload(payload["payload"])
+        if params:
+            payload["parameters"] = params
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         yaml.safe_dump(payload, sort_keys=False, allow_unicode=True, width=120),
@@ -211,6 +216,100 @@ def normalize_visual_template_data(
     if tags:
         normalized["tags"] = tags
     return normalized
+
+
+def _auto_parameterize_payload(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Detect bindings and title in a visual spec and replace with template parameters.
+
+    Returns (parameters_dict, updated_payload).
+    """
+    payload = copy.deepcopy(payload)
+    parameters: dict[str, Any] = {}
+    used_names: set[str] = set()
+
+    def _unique_name(base: str) -> str:
+        name = base
+        suffix = 2
+        while name in used_names:
+            name = f"{base}{suffix}"
+            suffix += 1
+        used_names.add(name)
+        return name
+
+    # Parameterize title.text
+    title = payload.get("title")
+    if isinstance(title, dict) and isinstance(title.get("text"), str):
+        text_value = title["text"]
+        if text_value and not _PLACEHOLDER_RE.search(text_value):
+            param_name = _unique_name("title")
+            parameters[param_name] = {"type": "string", "default": text_value}
+            title["text"] = f"{{{{ {param_name} }}}}"
+
+    # Parameterize bindings
+    bindings = payload.get("bindings")
+    if isinstance(bindings, dict):
+        for role, value in bindings.items():
+            field_refs = _extract_binding_field_refs(value)
+            if not field_refs:
+                continue
+            if len(field_refs) == 1:
+                ref = field_refs[0]
+                if _PLACEHOLDER_RE.search(ref):
+                    continue
+                param_name = _unique_name(_role_to_param_name(role))
+                parameters[param_name] = {"type": "field", "default": ref}
+                bindings[role] = _replace_binding_ref(value, ref, f"{{{{ {param_name} }}}}")
+            else:
+                for i, ref in enumerate(field_refs, 1):
+                    if _PLACEHOLDER_RE.search(ref):
+                        continue
+                    param_name = _unique_name(f"{_role_to_param_name(role)}{i}")
+                    parameters[param_name] = {"type": "field", "default": ref}
+                    bindings[role] = _replace_binding_ref(
+                        bindings[role], ref, f"{{{{ {param_name} }}}}"
+                    )
+
+    return parameters, payload
+
+
+def _role_to_param_name(role: str) -> str:
+    """Convert a binding role like 'Category', 'Y', 'Values' to a parameter name."""
+    name = role.lower().replace(" ", "_")
+    # Map common short/cryptic role names to readable ones
+    aliases = {"y": "value", "x": "category", "y2": "value2"}
+    return aliases.get(name, name)
+
+
+def _extract_binding_field_refs(value: Any) -> list[str]:
+    """Extract Table.Field strings from a binding value (simple or rich)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict) and isinstance(value.get("field"), str):
+        return [value["field"]]
+    if isinstance(value, list):
+        refs: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                refs.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("field"), str):
+                refs.append(item["field"])
+        return refs
+    return []
+
+
+def _replace_binding_ref(value: Any, old_ref: str, new_ref: str) -> Any:
+    """Replace a field reference in a binding value, preserving structure."""
+    if isinstance(value, str) and value == old_ref:
+        return new_ref
+    if isinstance(value, dict) and value.get("field") == old_ref:
+        result = dict(value)
+        result["field"] = new_ref
+        return result
+    if isinstance(value, list):
+        return [_replace_binding_ref(item, old_ref, new_ref) for item in value]
+    return value
 
 
 def _normalize_visual_payload(payload: dict[str, Any]) -> dict[str, Any]:

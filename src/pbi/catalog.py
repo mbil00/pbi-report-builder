@@ -367,6 +367,8 @@ def list_catalog_items(
     *,
     kind: str | None = None,
     scope: str | None = None,
+    category: str | None = None,
+    tag: str | None = None,
 ) -> list[CatalogItem]:
     """List catalog items across kinds."""
     resolved_kind = normalize_catalog_kind(kind)
@@ -381,6 +383,12 @@ def list_catalog_items(
     items: list[CatalogItem] = []
     for handler in handlers:
         items.extend(handler.list_items(project, scope=scope))
+    if category is not None:
+        cat_lower = category.lower()
+        items = [item for item in items if (item.category or "").lower() == cat_lower]
+    if tag is not None:
+        tag_lower = tag.lower()
+        items = [item for item in items if tag_lower in (t.lower() for t in item.tags)]
     return sorted(items, key=lambda item: (item.kind, item.name, item.scope))
 
 
