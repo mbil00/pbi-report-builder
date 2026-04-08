@@ -1,6 +1,6 @@
 ---
 name: pbi-modeling
-description: "Power BI semantic model development with the `pbi` CLI — use when building or modifying data models, writing DAX measures, creating calculated columns, managing relationships/hierarchies, configuring RLS roles, perspectives, or date tables. Triggers on: DAX expressions, measure creation, column formatting, model relationships, data modeling, semantic model, sort-by-column, display folders, calculated tables, time intelligence, model YAML apply/export."
+description: "Power BI semantic model development with the `pbi` CLI — use when building or modifying data models, writing DAX measures, creating calculated columns, managing relationships/hierarchies, configuring RLS roles, perspectives, partitions, field parameters, or date tables. Triggers on: DAX expressions, measure creation, column formatting, model relationships, data modeling, semantic model, sort-by-column, display folders, calculated tables, time intelligence, model YAML apply/export, field parameters, table rename."
 ---
 
 # Power BI Semantic Model Development
@@ -98,10 +98,12 @@ pbi model column unhide --table Sales --pattern "ID$"
 
 ### Format columns and measures
 
+Use `formatString` via `set` or `--format` on create:
+
 ```bash
-pbi model format "Sales.Revenue" "#,0"
-pbi model format "Sales.OrderDate" "dd/MM/yyyy"
-pbi model format "Sales.MarginPct" "0.0%"
+pbi model column set Sales.Revenue formatString="#,0"
+pbi model column set Sales.OrderDate formatString="dd/MM/yyyy"
+pbi model measure set Sales.MarginPct formatString="0.0%"
 ```
 
 ## Step 4: Relationships
@@ -133,7 +135,7 @@ pbi model hierarchy delete Date "Calendar" --force
 ## Step 6: Date Table & Time Intelligence
 
 ```bash
-pbi model table set Date dateTable=Date              # mark Date[Date] as the date table
+pbi model table set Date dateTable=Date              # mark Date[Date] as the date table (also set via table set)
 pbi model set timeIntelligence=off                   # disable auto date/time tables
 ```
 
@@ -145,6 +147,8 @@ Disabling auto date/time removes the local date tables Power BI creates for ever
 pbi model table list
 pbi model table get Date                             # metadata including date-table status
 pbi model table create "Calendar" "CALENDARAUTO()"   # calculated table
+pbi model table rename OldName NewName               # rename a table
+pbi model table set Date dateTable=Date              # mark as date table
 ```
 
 ## Step 8: Advanced Model Features
@@ -260,6 +264,24 @@ hierarchies:
   Date:
   - name: Calendar
     levels: [Year, Quarter, Month]
+
+# Field parameters — name-keyed
+fieldParameters:
+  Metric Selection:
+    fields:
+    - field: Sales.Revenue
+      label: Revenue
+    - field: Sales.Profit
+      label: Profit
+    - field: Sales.OrderCount
+      label: Orders
+```
+
+### Field parameters (imperative)
+
+```bash
+pbi model field-parameter create "Metric Selection" Sales.Revenue Sales.Profit \
+  --labels Revenue Profit
 ```
 
 ## DAX Patterns

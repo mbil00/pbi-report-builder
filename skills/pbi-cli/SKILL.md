@@ -1,6 +1,6 @@
 ---
 name: pbi-cli
-description: "General-purpose guide for the `pbi` CLI tool that edits Power BI PBIP project files — use when you need to understand CLI grammar, discover commands, orient in a project, choose between YAML and imperative workflows, or perform common operations like project validation, page management, or visual inspection. Triggers on: pbi commands, Power BI project, PBIP files, report structure, command help, project setup, page management, visual listing, project overview, CLI usage."
+description: "General-purpose guide for the `pbi` CLI tool that edits Power BI PBIP project files — use when you need to understand CLI grammar, discover commands, orient in a project, choose between YAML and imperative workflows, or perform common operations like project validation, page management, visual inspection, catalog asset management, or report metadata. Triggers on: pbi commands, Power BI project, PBIP files, report structure, command help, project setup, page management, visual listing, project overview, CLI usage, catalog, reusable assets, report metadata."
 ---
 
 # PBI CLI — General Usage Guide
@@ -15,7 +15,7 @@ All commands follow a consistent pattern:
 pbi <object> <verb> <target> [key=value...] [--flags]
 ```
 
-**Objects:** `page`, `visual`, `filter`, `interaction`, `bookmark`, `style`, `component`, `theme`, `model`, `image`, `nav`
+**Objects:** `page`, `visual`, `filter`, `interaction`, `bookmark`, `theme`, `model`, `image`, `nav`, `report`, `catalog`
 
 **Verbs work the same across all objects:**
 
@@ -30,12 +30,15 @@ pbi <object> <verb> <target> [key=value...] [--flags]
 | `clear` | Remove configuration (sort, formatting, interactions) |
 | `apply` | Apply from YAML |
 | `export` | Export to YAML/JSON |
+| `copy` | Duplicate an item |
+| `rename` | Rename an item |
 
 **Subgroup grammar:** When a feature has variants, use noun subgroups before verbs:
 - `page tooltip set`, `page drillthrough clear`
 - `model measure create`, `model column set`
 - `nav page set`, `nav bookmark set`
 - `theme style set`, `theme format set`
+- `report annotation get`, `report object set`
 
 ## Common Flags
 
@@ -108,12 +111,13 @@ So `pbi page get "over"` works if "Overview" is the only page starting with "ove
 | Restyle a page | `pbi page export` → edit → `pbi apply` |
 | Redesign completely | Edit YAML → `pbi apply --overwrite` |
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
-| Bulk format all visuals | `pbi visual set-all` or `pbi style apply` |
-| Reuse a page layout | `pbi page template apply` |
-| Stamp repeated widgets | `pbi component apply --row N` |
+| Bulk format all visuals | `pbi visual set-all` or `pbi catalog apply style/card-panel` |
+| Reuse a page layout | `pbi catalog apply page/dashboard-layout "Page"` |
+| Stamp repeated widgets | `pbi catalog apply component/kpi-strip "Page" --row 4` |
+| Create from a template visual | `pbi catalog apply visual/bar-chart "Page" --set value=Sales.Revenue` |
 | Import from another project | `pbi page import --from-project ...` |
 
-**Rule of thumb:** For any page-level work, start with `pbi page export`. Use imperative commands only for quick one-off tweaks.
+**Rule of thumb:** For any page-level work, start with `pbi page export`. Use imperative commands only for quick one-off tweaks. Use catalog assets for reusable patterns.
 
 ## The Apply Workflow
 
@@ -132,10 +136,32 @@ YAML supports: visuals, bindings, properties, filters, interactions, conditional
 
 For details on YAML syntax, use the **pbi-visuals** skill. For model YAML, use the **pbi-modeling** skill.
 
+## Report Metadata
+
+```bash
+pbi report get                                # report metadata
+pbi report get theme                          # specific property
+pbi report set theme="custom-theme"
+pbi report properties                         # writable properties
+
+# Annotations (key-value metadata on the report)
+pbi report annotation list
+pbi report annotation get PBI_QueryOrder
+pbi report annotation set myKey "value"
+pbi report annotation delete myKey --force
+
+# Report-level objects/arrays
+pbi report object list
+pbi report object get slowDataSourceSettings
+pbi report object set slowDataSourceSettings key=value
+pbi report object clear slowDataSourceSettings
+```
+
 ## Model Commands (Quick Reference)
 
 ```bash
 pbi model table list                          # tables
+pbi model table rename OldName NewName        # rename a table
 pbi model fields Sales                        # columns + measures
 pbi model search "revenue"                    # cross-table search
 pbi model measure create Sales "Rev" "SUM(Sales[Revenue])"
@@ -167,25 +193,47 @@ pbi nav page set "Overview" button "Detail"        # page navigation
 pbi nav bookmark set "Overview" button "Minimal"   # apply bookmark
 pbi nav back set "Detail" backButton               # back navigation
 pbi nav url set "Overview" link "https://..."       # external URL
+pbi nav drillthrough set "Detail" button Sales.Region  # drillthrough action
+pbi nav toggle set "Overview" button "View Group"  # bookmark-group toggle
+pbi nav tooltip set "Page" chart                   # report-page tooltip
+pbi nav action get "Page" button                   # inspect current action
 pbi bookmark create "Show North" "Overview" --hide chart2
 pbi bookmark list
 ```
 
-## Styles, Components & Templates
+## Catalog — Reusable Assets
+
+The unified catalog manages four kinds of reusable assets (visual, style, component, page) across three scopes (project, global, bundled). Bundled assets ship with the CLI.
 
 ```bash
-# Styles — reusable property sets
-pbi style create card-style border.show=true border.radius=8
-pbi style apply "Page" --style card-style
+# Browse available assets
+pbi catalog list                                    # all assets across all scopes
+pbi catalog list --kind visual                      # visual templates only
+pbi catalog list --kind style --scope bundled       # bundled styles
+pbi catalog get visual/bar-chart                    # view asset YAML
 
-# Components — reusable visual groups
-pbi component create "Page" "KPI Group" --name kpi-strip
-pbi component apply "Page" kpi-strip --row 3 --gap 16
+# Create from report state
+pbi catalog create style --from-visual "Page" --visual chart --name card-style
+pbi catalog create style --name flat border.show=false background.show=false
+pbi catalog create visual --from-visual "Page" --visual chart --name my-chart
+pbi catalog create component --from-visual "Page" --visual "KPI Group" --name kpi-strip
+pbi catalog create page --from-visual "Page" --name dashboard-layout
 
-# Templates — reusable page layouts
-pbi page template create "Page" dashboard-layout
-pbi page template apply "New Page" dashboard-layout
+# Apply assets
+pbi catalog apply style/card-style "Page" --visual chart          # style one visual
+pbi catalog apply style/card-style "Page" --visual-type barChart  # style all of a type
+pbi catalog apply visual/bar-chart "Page" --x 16 --y 200 --set value=Sales.Revenue
+pbi catalog apply component/kpi-strip "Page" --x 16 --y 90 --row 4 --gap 12
+pbi catalog apply page/dashboard-layout "New Page"
+
+# Manage
+pbi catalog clone visual/bar-chart --to-global      # share across projects
+pbi catalog register my-chart.yaml --kind visual     # import from file
+pbi catalog delete style/old-theme --force
+pbi catalog validate                                 # verify all catalog YAML
 ```
+
+Visual and component templates support `{{ param }}` placeholders resolved at apply-time via `--set key=value`. Components also support `--set-each key=v1,v2,v3` for per-instance values when using `--row`.
 
 ## Themes
 

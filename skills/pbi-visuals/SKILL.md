@@ -1,6 +1,6 @@
 ---
 name: pbi-visuals
-description: "Power BI report visual design and styling with the `pbi` CLI — use when building page layouts, creating/styling visuals, writing apply YAML, configuring charts/slicers/KPIs/tables, setting up filters, conditional formatting, interactions, bookmarks, themes, or page templates. Triggers on: dashboard layout, report page, visual properties, slicer configuration, KPI card, chart formatting, data binding, cross-filtering, YAML apply, page export, visual styling, theme colors, conditional formatting, report design."
+description: "Power BI report visual design and styling with the `pbi` CLI — use when building page layouts, creating/styling visuals, writing apply YAML, configuring charts/slicers/KPIs/tables, setting up filters, conditional formatting, interactions, bookmarks, themes, catalog assets (styles, visual templates, components, page templates), or visual auditing. Triggers on: dashboard layout, report page, visual properties, slicer configuration, KPI card, chart formatting, data binding, cross-filtering, YAML apply, page export, visual styling, theme colors, conditional formatting, report design, catalog apply, visual template, component stamp."
 ---
 
 # Power BI Visual Design & Styling
@@ -342,25 +342,85 @@ bookmarks:
   hide: [detailTable, footnote]
 ```
 
-## Styles — Reusable Formatting
+## Catalog — Styles, Components, Visual Templates, Page Templates
+
+All reusable assets are managed through the unified `pbi catalog` command. Four kinds: **visual**, **style**, **component**, **page**. Three scopes: **project**, **global**, **bundled** (read-only built-ins).
+
+### Styles
 
 ```bash
-# Create from properties
-pbi style create card-panel border.show=true border.color="#E2E2E2" border.radius=8 background.color="#FFFFFF"
+# Create a style from properties
+pbi catalog create style --name card-panel border.show=true border.color="#E2E2E2" border.radius=8
 
-# Capture from existing visual
-pbi style create card-panel --from-visual "Overview" myCard
+# Capture style from an existing visual
+pbi catalog create style --from-visual "Overview" --visual myCard --name card-panel
 
-# Apply
-pbi style apply "Page" --style card-panel                        # all visuals
-pbi style apply "Page" myCard --style card-panel                 # one visual
-pbi visual set-all --all-pages --style card-panel                # entire report
+# Apply to visuals
+pbi catalog apply style/card-panel "Page" --visual chart              # one visual
+pbi catalog apply style/card-panel "Page" --visual-type barChart      # all of a type
 
-# In YAML
+# In YAML — same as before
 - name: chart1
   type: barChart
   style: card-panel           # single style
   style: [base, dark-theme]   # multiple, applied in order
+```
+
+### Visual Templates
+
+Parameterized single-visual templates with `{{ param }}` placeholders.
+
+```bash
+# Browse bundled templates
+pbi catalog list --kind visual
+pbi catalog get visual/bar-chart
+
+# Create from report
+pbi catalog create visual --from-visual "Page" --visual chart --name my-chart
+
+# Apply with parameter overrides
+pbi catalog apply visual/bar-chart "Page" --x 16 --y 200 \
+  --set category=Products.Name --set value=Sales.Revenue
+```
+
+### Components
+
+Multi-visual groups with coordinated layout and parameterization.
+
+```bash
+# Save a visual group as a component
+pbi catalog create component --from-visual "Dashboard" --visual "KPI Group" --name kpi-strip
+
+# Stamp onto a page
+pbi catalog apply component/kpi-strip "Page" --x 16 --y 90
+
+# Batch stamp a row with per-instance values
+pbi catalog apply component/kpi-strip "Page" --row 4 --gap 12 \
+  --set-each title=Revenue,Margin,Pipeline,Backlog
+```
+
+### Page Templates
+
+```bash
+# Save a page layout
+pbi catalog create page --from-visual "Overview" --name dashboard-layout --scope global
+
+# Apply to a page
+pbi catalog apply page/dashboard-layout "New Page"
+pbi catalog apply page/dashboard-layout "New Page" --overwrite   # remove non-template visuals
+
+# Or use shorthand on page create
+pbi page create "Intro" --from-template corp-intro --template-global
+```
+
+### Catalog Management
+
+```bash
+pbi catalog list --kind style --scope bundled       # browse bundled styles
+pbi catalog clone visual/bar-chart --to-global      # share across projects
+pbi catalog register my-chart.yaml --kind visual    # import from file
+pbi catalog validate                                # verify all catalog YAML
+pbi catalog delete style/old --force
 ```
 
 ## Themes
@@ -371,36 +431,22 @@ pbi theme get                             # palette overview
 pbi theme set foreground=#111111          # modify with color cascade
 pbi theme set dataColors=#0078D4,#E94560  # data color palette
 pbi theme properties                      # all writable properties
+pbi theme audit                           # audit theme changes vs defaults
 
 # Visual style overrides (defaults per visual type)
 pbi theme style set columnChart legend.show=true legend.position=RightCenter
 pbi theme style set * background.show=true background.transparency=0    # all types
 
+# Theme-level conditional formatting
+pbi theme format get
+pbi theme format set dataPoint.fill --mode measure --source Measures.StatusColor
+pbi theme format clear dataPoint.fill
+
 # Theme presets
 pbi theme save "corporate" --global
 pbi theme load "corporate"
-```
-
-## Components — Reusable Visual Groups
-
-```bash
-# Save a group as a reusable component
-pbi component create "Dashboard" "KPI: Revenue" --name kpi-card
-
-# Stamp onto another page
-pbi component apply "Detail" kpi-card --x 16 --y 200
-
-# Batch stamp a row
-pbi component apply "Detail" kpi-card --row 4 --gap 12 \
-  --set-each title=Revenue,Margin,Pipeline,Backlog
-```
-
-## Page Templates
-
-```bash
-pbi page template create "Overview" dashboard-layout --global
-pbi page template apply "New Page" dashboard-layout --global
-pbi page create "Intro" --from-template corp-intro --template-global
+pbi theme preset list
+pbi theme preset clone "corporate" --to-project
 ```
 
 ## Page Sections
@@ -424,10 +470,24 @@ pbi visual move "Page" chart --x 16 --y 200
 pbi visual resize "Page" chart --width 600 --height 400
 pbi visual bind "Page" chart Category Sales.Region
 pbi visual arrange row "Page" s1 s2 s3 --gap 8 --margin 16
+pbi visual arrange column "Page" v1 v2 v3 --gap 8
+pbi visual arrange grid "Page" v1 v2 v3 v4 --columns 2 --gap 8
 pbi visual arrange align "Page" c1 c2 --align top --distribute horizontal
 pbi visual sort set "Page" chart Facts.Revenue --direction desc
 pbi visual column "Page" table "Revenue" --width 120 --rename "Rev ($)"
+pbi visual paste-style "Page" source-chart target-chart  # copy formatting
 pbi nav page set "Page" button "Target Page"
+```
+
+### Visual Inspection & Audit
+
+```bash
+pbi visual audit "Page"                   # audit visual state and properties
+pbi visual objects "Page" chart            # list data-binding objects
+pbi visual diff "Page" chart spec.yaml    # diff a visual against YAML
+pbi visual page-diff "Page"               # show page visual differences
+pbi visual inspect "Page" chart            # inspect visual capabilities
+pbi visual tree "Page"                     # show group hierarchy
 ```
 
 ## Bulk Operations
