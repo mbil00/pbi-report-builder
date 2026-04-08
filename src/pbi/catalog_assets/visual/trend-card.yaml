@@ -28,6 +28,6 @@ payload:
   cardValue.bold: true
   cardValue.color: '#252423'
   cardLabel.show: false
-  layout.style: Callout
+  layout.style: Cards
   bindings:
     Data: '{{ value }}'

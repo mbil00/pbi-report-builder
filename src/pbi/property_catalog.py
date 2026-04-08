@@ -828,7 +828,7 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     # ── New card visual (cardVisual) ──────────────────────────
     # Layout — global entry (no selector)
     "layout.style": PropertyDef(
-        None, "string", "Card layout style (Cards or Callout)",
+        None, "string", "Card layout style (Table or Cards)",
         container_key="layout", container_prop="style", objects_path="objects",
     ),
     "layout.columnCount": PropertyDef(

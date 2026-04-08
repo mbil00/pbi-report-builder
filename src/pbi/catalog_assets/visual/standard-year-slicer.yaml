@@ -15,8 +15,7 @@ payload:
   size: 180 x 220
   bindings:
     Values: '{{ field }}'
-  header:
-    show: false
+  slicerHeader.show: false
   title:
     show: true
     text: Year

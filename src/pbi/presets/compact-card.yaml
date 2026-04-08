@@ -15,5 +15,5 @@ properties:
   cardLabel.show: true
   cardLabel.fontSize: 9
   cardLabel.color: '#A19F9D'
-  layout.style: Callout
+  layout.style: Cards
   cardPadding.uniform: 8

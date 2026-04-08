@@ -41,8 +41,9 @@ visuals:
     cardValue.show: true
     cardValue.fontSize: 28
     cardValue.bold: true
+    cardValue.color: '#252423'
     cardLabel.show: false
-    layout.style: Callout
+    layout.style: Cards
     bindings:
       Data: '{{ value1 }}'
   - name: kpiCard2
@@ -59,8 +60,9 @@ visuals:
     cardValue.show: true
     cardValue.fontSize: 28
     cardValue.bold: true
+    cardValue.color: '#252423'
     cardLabel.show: false
-    layout.style: Callout
+    layout.style: Cards
     bindings:
       Data: '{{ value2 }}'
   - name: kpiCard3
@@ -77,8 +79,9 @@ visuals:
     cardValue.show: true
     cardValue.fontSize: 28
     cardValue.bold: true
+    cardValue.color: '#252423'
     cardLabel.show: false
-    layout.style: Callout
+    layout.style: Cards
     bindings:
       Data: '{{ value3 }}'
   - name: kpiCard4
@@ -95,7 +98,8 @@ visuals:
     cardValue.show: true
     cardValue.fontSize: 28
     cardValue.bold: true
+    cardValue.color: '#252423'
     cardLabel.show: false
-    layout.style: Callout
+    layout.style: Cards
     bindings:
       Data: '{{ value4 }}'

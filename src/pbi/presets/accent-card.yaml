@@ -16,4 +16,4 @@ properties:
   cardLabel.show: true
   cardLabel.fontSize: 10
   cardLabel.color: '#605E5C'
-  layout.style: Callout
+  layout.style: Cards
