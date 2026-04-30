@@ -182,6 +182,21 @@ def theme_migrate(
             f"[cyan]{result.page_background_changes}[/cyan] page(s)"
         )
 
+    if result.skipped:
+        console.print(
+            f"[yellow]Warning:[/yellow] skipped {len(result.skipped)} "
+            f"color replacement(s) where the target schema is not 'color':"
+        )
+        for skip in result.skipped:
+            target = (
+                f"[cyan]{skip.visual_type or '?'}[/cyan]"
+                f"[dim].[/dim][cyan]{skip.object_name}.{skip.property_name}[/cyan]"
+            )
+            console.print(
+                f"  {target} [dim]({skip.reason})[/dim]: "
+                f"{skip.old_color} [dim]->[/dim] {skip.new_color}"
+            )
+
     if not result.total_changes:
         console.print("[dim]No matching color overrides found in visuals.[/dim]")
 

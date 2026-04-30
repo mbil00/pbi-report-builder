@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pbi.project import Project
@@ -20,11 +20,30 @@ class ColorReplacement:
 
 
 @dataclass
+class SkippedColorWrite:
+    """A color replacement that was skipped because the target schema disagreed.
+
+    Migration finds an old color in a visual property and would normally rewrite it
+    to the new theme's equivalent. When the target property's schema type isn't
+    ``color``, we skip rather than risk writing malformed PBIR — and record what
+    we skipped so the user can see it.
+    """
+
+    visual_type: str
+    object_name: str
+    property_name: str
+    old_color: str
+    new_color: str
+    reason: str
+
+
+@dataclass
 class MigrateResult:
     """Summary of what a theme migration would change."""
 
     replacements: list[ColorReplacement]
     page_background_changes: int = 0
+    skipped: list[SkippedColorWrite] = field(default_factory=list)
 
     @property
     def total_changes(self) -> int:
@@ -78,7 +97,12 @@ def migrate_theme(
                 replacement.old_color: _count_visual_color_matches(visual.data, replacement.old_color)
                 for replacement in result.replacements
             }
-            changed = _migrate_visual_colors(visual.data, color_map, dry_run=dry_run)
+            changed = _migrate_visual_colors(
+                visual.data,
+                color_map,
+                dry_run=dry_run,
+                skipped=result.skipped,
+            )
             if changed and not dry_run:
                 visual.save()
             for replacement in result.replacements:
@@ -128,12 +152,25 @@ def _migrate_visual_colors(
     color_map: dict[str, str],
     *,
     dry_run: bool,
+    skipped: list[SkippedColorWrite],
 ) -> bool:
-    """Scan and replace colors in visual objects."""
+    """Scan and replace colors in visual objects.
+
+    Before rewriting a property, consult the visual schema for the target
+    property's type. When the schema is known and the type is *not* ``color``,
+    skip the write and record it — silently encoding into a non-color property
+    would produce malformed PBIR, which is the bug class this seam exists to
+    prevent. Unknown types fall through and write (preserves migration coverage
+    for properties not yet in the schema).
+    """
+    from pbi.visual_schema import get_property_type
+
+    visual_type = data.get("visual", {}).get("visualType", "")
+
     changed = False
     for objects_key in ("objects", "visualContainerObjects"):
         objects = data.get("visual", {}).get(objects_key, {})
-        for entries in objects.values():
+        for object_name, entries in objects.items():
             if not isinstance(entries, list):
                 continue
             for entry in entries:
@@ -145,6 +182,19 @@ def _migrate_visual_colors(
                     replacement = _match_color(color, color_map)
                     if not replacement:
                         continue
+
+                    target_type = get_property_type(visual_type, object_name, prop_name)
+                    if target_type is not None and target_type != "color":
+                        skipped.append(SkippedColorWrite(
+                            visual_type=visual_type,
+                            object_name=object_name,
+                            property_name=prop_name,
+                            old_color=color,
+                            new_color=replacement,
+                            reason=f"target type is '{target_type}', not 'color'",
+                        ))
+                        continue
+
                     if not dry_run:
                         _replace_color_in_value(properties, prop_name, replacement)
                     changed = True

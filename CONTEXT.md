@@ -40,6 +40,14 @@ _Avoid_: project authoring, report service
 A user-facing request to derive a visual or theme color property from a measure, gradient, or rule set.
 _Avoid_: formatting payload, color expression
 
+**Theme Schema**:
+The static, closed-set schema defining writable properties on a theme document — top-level theme entries (e.g. `dataColors`, `foreground`, `textClasses.title.color`) and their types (color, number, string, color list). Authoritative: every writable property is known up front, so validation against this schema can hard-reject invalid writes.
+_Avoid_: theme registry, theme metadata
+
+**Visual Schema**:
+The per-visual-type schema extracted from Power BI Desktop capabilities, defining which objects and properties are valid on a **Visual** and the type of each property. Open: extended at runtime by custom visuals shipped inside a **PBIP Project**, so validation is advisory rather than authoritative.
+_Avoid_: capabilities, visual registry, property catalog
+
 ## Relationships
 
 - A **PBIP Project** contains one **PBIR Report** and usually one **Semantic Model**.
@@ -48,6 +56,8 @@ _Avoid_: formatting payload, color expression
 - A **Visual** can bind roles to **Field References** from the **Semantic Model**.
 - **YAML Round-Trip** can modify a **PBIR Report**, its **Pages**, **Visuals**, and the **Semantic Model**.
 - **Conditional Formatting Intent** targets a color property on a **Visual** or theme visual style and uses a **Field Reference** as its source.
+- A **Theme Schema** governs writes to a theme document (the JSON file referenced by a **PBIR Report**'s registered resources).
+- A **Visual Schema** governs writes to **Visual** properties on a **Page**, and also to the visualStyles defaults embedded inside a theme document.
 
 ## Example dialogue
 

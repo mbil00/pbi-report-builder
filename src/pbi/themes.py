@@ -33,6 +33,12 @@ from pbi.theme_audit import (
     fix_theme_overrides,
 )
 from pbi.theme_migration import ColorReplacement, MigrateResult, migrate_theme
+from pbi.theme_schema import (
+    THEME_PROPERTIES,
+    ThemeProperty,
+    lookup_property as lookup_theme_property,
+    validate_and_encode as validate_and_encode_theme_property,
+)
 from pbi.theme_styles import (
     THEME_PALETTE_KEYS,
     _cascade_visual_styles_colors,
@@ -84,42 +90,6 @@ DEFAULT_TEXT_CLASSES: dict[str, dict[str, Any]] = {
     "callout": {"fontSize": 24, "fontFace": "DIN", "color": "#252423"},
     "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": "#252423"},
 }
-
-
-# ── Writable theme properties (for `theme properties`) ──────────────────
-
-THEME_PROPERTIES: list[tuple[str, str, str]] = [
-    # (dot_path, type, description)
-    ("foreground", "color", "Primary text color"),
-    ("foregroundNeutralSecondary", "color", "Secondary text color"),
-    ("foregroundNeutralTertiary", "color", "Tertiary/muted text color"),
-    ("background", "color", "Page background color"),
-    ("backgroundLight", "color", "Light background (cards, wells)"),
-    ("backgroundNeutral", "color", "Neutral background"),
-    ("tableAccent", "color", "Accent color (table headers, highlights)"),
-    ("hyperlink", "color", "Hyperlink color"),
-    ("visitedHyperlink", "color", "Visited hyperlink color"),
-    ("good", "color", "Positive/good sentiment color"),
-    ("neutral", "color", "Neutral sentiment color"),
-    ("bad", "color", "Negative/bad sentiment color"),
-    ("maximum", "color", "Maximum value color (conditional formatting)"),
-    ("center", "color", "Center value color (conditional formatting)"),
-    ("minimum", "color", "Minimum value color (conditional formatting)"),
-    ("null", "color", "Null value color"),
-    ("dataColors", "color[]", "Comma-separated data series colors"),
-    ("textClasses.title.fontSize", "number", "Title font size"),
-    ("textClasses.title.fontFace", "string", "Title font face"),
-    ("textClasses.title.color", "color", "Title text color"),
-    ("textClasses.header.fontSize", "number", "Header font size"),
-    ("textClasses.header.fontFace", "string", "Header font face"),
-    ("textClasses.header.color", "color", "Header text color"),
-    ("textClasses.callout.fontSize", "number", "Callout font size"),
-    ("textClasses.callout.fontFace", "string", "Callout font face"),
-    ("textClasses.callout.color", "color", "Callout text color"),
-    ("textClasses.label.fontSize", "number", "Label font size"),
-    ("textClasses.label.fontFace", "string", "Label font face"),
-    ("textClasses.label.color", "color", "Label text color"),
-]
 
 
 # ── Theme preset storage (project + global scope) ───────────────────────
@@ -419,51 +389,32 @@ def set_theme_property(
     cascade: bool = True,
 ) -> list[str]:
     """Set a theme property value with optional cascade. Returns list of all keys set."""
+    encoded = validate_and_encode_theme_property(prop_path, value)
+    prop = lookup_theme_property(prop_path)
+    assert prop is not None  # validate_and_encode raises if unknown
+
     changed: list[str] = []
 
-    # Special handling for dataColors (comma-separated hex list)
-    if prop_path == "dataColors":
-        colors = [_validate_hex_color(c.strip()) for c in value.split(",")]
-        data["dataColors"] = colors
-        changed.append("dataColors")
-        return changed
-
-    # Determine type from THEME_PROPERTIES
-    prop_type = "string"
-    for p_path, p_type, _desc in THEME_PROPERTIES:
-        if p_path == prop_path:
-            prop_type = p_type
-            break
-
-    coerced = _coerce_theme_value(value, prop_type)
-
-    # Build color mapping for visualStyles cascade (old → new)
     color_map: dict[str, str] = {}
-    if cascade and prop_type == "color" and isinstance(coerced, str):
+    if cascade and prop.prop_type == "color" and isinstance(encoded, str):
         old_val = get_theme_property(data, prop_path)
-        if isinstance(old_val, str) and old_val.upper() != coerced.upper():
-            color_map[old_val.upper()] = coerced
+        if isinstance(old_val, str) and old_val.upper() != encoded.upper():
+            color_map[old_val.upper()] = encoded
 
-    # Set the value using dot-path
-    _set_nested(data, prop_path, coerced)
+    _set_nested(data, prop_path, encoded)
     changed.append(prop_path)
 
-    # Apply cascade if the key is a cascade source
     if cascade:
-        # Get the top-level key for cascade lookup
         top_key = prop_path.split(".")[0]
         for derived in THEME_CASCADE.get(top_key, []):
-            # Only cascade if we're setting the top-level key directly
             if prop_path == top_key:
-                # Capture old derived value for visualStyles cascade
-                if prop_type == "color" and isinstance(coerced, str):
+                if prop.prop_type == "color" and isinstance(encoded, str):
                     old_derived = data.get(derived)
-                    if isinstance(old_derived, str) and old_derived.upper() != coerced.upper():
-                        color_map[old_derived.upper()] = coerced
-                _set_nested(data, derived, coerced)
+                    if isinstance(old_derived, str) and old_derived.upper() != encoded.upper():
+                        color_map[old_derived.upper()] = encoded
+                _set_nested(data, derived, encoded)
                 changed.append(derived)
 
-    # Cascade color changes to visualStyles
     if color_map:
         vs_count = _cascade_visual_styles_colors(data, color_map)
         if vs_count:
@@ -544,18 +495,6 @@ def create_theme(
 
 
 # ── Internal helpers for theme authoring ─────────────────────────────────
-
-def _coerce_theme_value(value: str, prop_type: str) -> Any:
-    """Coerce a string value to the appropriate type for theme JSON."""
-    if prop_type == "color":
-        return _validate_hex_color(value)
-    if prop_type == "number":
-        try:
-            return int(value)
-        except ValueError:
-            return float(value)
-    return value
-
 
 def _set_nested(data: dict, dot_path: str, value: Any) -> None:
     """Set a value in a nested dict using dot-path notation."""
