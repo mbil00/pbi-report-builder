@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from pbi.cli import app
 from pbi.properties import VISUAL_PROPERTIES, get_property
 from pbi.project import Project
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -18,7 +19,7 @@ class VisualBuilderCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = runner.invoke(
                 app,
@@ -49,8 +50,8 @@ class VisualBuilderCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "textbox")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "textbox")
             visual.data["name"] = "note"
             visual.save()
 
@@ -104,7 +105,7 @@ class VisualBuilderCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -163,14 +164,14 @@ table Sales
             page = reloaded.find_page("Demo")
             visual = reloaded.find_visual(page, "revenueChart")
             self.assertEqual(
-                reloaded.get_bindings(visual),
+                ReportAuthoring(reloaded).get_bindings(visual),
                 [
                     ("Category", "Date", "Year", "column"),
                     ("Y", "Sales", "Revenue", "measure"),
                 ],
             )
             self.assertEqual(
-                reloaded.get_sort(visual),
+                ReportAuthoring(reloaded).get_sort(visual),
                 [("Date", "Year", "column", "Ascending")],
             )
 
@@ -179,7 +180,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = runner.invoke(
                 app,
@@ -209,7 +210,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Sales.tmdl",
@@ -250,7 +251,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -311,7 +312,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -370,7 +371,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -416,7 +417,7 @@ table Date
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = runner.invoke(
                 app,
@@ -447,7 +448,7 @@ table Date
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Sales.tmdl",
@@ -495,7 +496,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Sales.tmdl",
@@ -530,7 +531,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -566,7 +567,7 @@ table Date
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -618,7 +619,7 @@ table Sales
             page = reloaded.find_page("Demo")
             visual = reloaded.find_visual(page, "monthlyRevenue")
             self.assertEqual(
-                reloaded.get_sort(visual),
+                ReportAuthoring(reloaded).get_sort(visual),
                 [("Date", "MonthNumber", "column", "Ascending")],
             )
 
@@ -627,7 +628,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -668,7 +669,7 @@ table Date
             page = reloaded.find_page("Demo")
             visual = reloaded.find_visual(page, "monthSlicer")
             self.assertEqual(
-                reloaded.get_sort(visual),
+                ReportAuthoring(reloaded).get_sort(visual),
                 [("Date", "MonthNumber", "column", "Ascending")],
             )
 
@@ -677,7 +678,7 @@ table Date
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
             write_model_table(
                 root,
                 "Date.tmdl",
@@ -752,10 +753,10 @@ table Sales
             explicit = reloaded.find_visual(page, "explicitSortChart")
             manual = reloaded.find_visual(page, "manualChart")
             self.assertEqual(
-                reloaded.get_sort(explicit),
+                ReportAuthoring(reloaded).get_sort(explicit),
                 [("Date", "MonthName", "column", "Ascending")],
             )
-            self.assertEqual(reloaded.get_sort(manual), [])
+            self.assertEqual(ReportAuthoring(reloaded).get_sort(manual), [])
 
 
 if __name__ == "__main__":

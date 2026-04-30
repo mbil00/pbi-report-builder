@@ -151,7 +151,9 @@ def apply_conditional_formatting(
             if project is None:
                 entity, prop = field_ref.split(".", 1)
                 return entity, prop, "measure" if preferred_type == "measure" else "column", None
-            effective_type = "measure" if preferred_type == "measure" and model is None else preferred_type
+            effective_type = "measure" if preferred_type == "measure" and model is None else (
+                "auto" if preferred_type == "measure" else preferred_type
+            )
             return resolve_field_info(
                 project,
                 field_ref,

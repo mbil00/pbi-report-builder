@@ -6,6 +6,7 @@ import secrets
 
 from pbi.project import Page, Project, Visual, sanitize_visual_name
 from pbi.schema_refs import VISUAL_CONTAINER_SCHEMA
+from pbi.visual_authoring import delete_visual
 
 
 def create_group(
@@ -127,6 +128,6 @@ def ungroup(project: Project, page: Page, group: Visual) -> list[Visual]:
             visual.save()
             children.append(visual)
 
-    project.delete_visual(group)
+    delete_visual(project, group)
     project.clear_caches()
     return children

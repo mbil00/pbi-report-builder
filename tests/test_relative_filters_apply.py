@@ -11,6 +11,7 @@ from pbi.apply import apply_yaml
 from pbi.export import export_yaml
 from pbi.filters import add_relative_date_filter
 from pbi.project import Project
+from pbi.report_authoring import ReportAuthoring
 
 
 def _make_project(root: Path) -> Project:
@@ -37,7 +38,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             spec = yaml.safe_dump(
                 {
@@ -88,7 +89,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             spec = yaml.safe_dump(
                 {
@@ -131,7 +132,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             spec = yaml.safe_dump(
                 {
@@ -177,7 +178,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             spec = yaml.safe_dump(
                 {
@@ -223,7 +224,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             spec = yaml.safe_dump(
                 {
@@ -265,7 +266,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             spec = yaml.safe_dump(
                 {
@@ -310,7 +311,7 @@ class RelativeFilterApplyTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
                     project = _make_project(root)
-                    project.create_page("Demo")
+                    ReportAuthoring(project).create_page("Demo")
 
                     spec = yaml.safe_dump(
                         {
@@ -358,8 +359,8 @@ class RelativeDateFilterExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "clusteredColumnChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "clusteredColumnChart")
             visual.data["name"] = "chart1"
             add_relative_date_filter(
                 visual.data,
@@ -394,8 +395,8 @@ class RelativeDateFilterExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = _make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "clusteredColumnChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "clusteredColumnChart")
             visual.data["name"] = "chart1"
             add_relative_date_filter(
                 visual.data,

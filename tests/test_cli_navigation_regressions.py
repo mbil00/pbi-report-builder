@@ -21,6 +21,7 @@ from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.interactions import get_interactions, set_interaction
 from pbi.project import Project, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -70,9 +71,9 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
     def test_interaction_default_clears_custom_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = make_project(Path(tmp))
-            page = project.create_page("Demo")
-            source = project.create_visual(page, "barChart")
-            target = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            source = ReportAuthoring(project).create_visual(page, "barChart")
+            target = ReportAuthoring(project).create_visual(page, "cardVisual")
 
             set_interaction(page, source.name, target.name, "DataFilter")
             self.assertEqual(len(get_interactions(page)), 1)
@@ -85,9 +86,9 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            source = project.create_visual(page, "barChart")
-            target = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            source = ReportAuthoring(project).create_visual(page, "barChart")
+            target = ReportAuthoring(project).create_visual(page, "cardVisual")
             source.data["name"] = "source1"
             target.data["name"] = "target1"
             source.save()
@@ -133,8 +134,8 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "button1"
             visual.save()
 
@@ -194,8 +195,8 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "button1"
             visual.save()
 
@@ -223,8 +224,8 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Home")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Home")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "toggleButton"
             visual.save()
 
@@ -251,12 +252,12 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            home = project.create_page("Home")
-            details = project.create_page("Details")
-            first = project.create_visual(home, "shape")
+            home = ReportAuthoring(project).create_page("Home")
+            details = ReportAuthoring(project).create_page("Details")
+            first = ReportAuthoring(project).create_visual(home, "shape")
             first.data["name"] = "vis1"
             first.save()
-            second = project.create_visual(details, "tableEx")
+            second = ReportAuthoring(project).create_visual(details, "tableEx")
             second.data["name"] = "vis2"
             second.save()
 
@@ -346,8 +347,8 @@ class BookmarkInteractionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "vis1"
             visual.save()
             create_bookmark(project, "Stateful", page, [visual])
@@ -387,9 +388,9 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            home = project.create_page("Home")
-            details = project.create_page("Details")
-            visual = project.create_visual(home, "shape")
+            home = ReportAuthoring(project).create_page("Home")
+            details = ReportAuthoring(project).create_page("Details")
+            visual = ReportAuthoring(project).create_visual(home, "shape")
             visual.data["name"] = "navButton"
             set_property(visual.data, "action.type", "WebUrl", VISUAL_PROPERTIES)
             set_property(visual.data, "action.url", "https://example.com", VISUAL_PROPERTIES)
@@ -414,9 +415,9 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            home = project.create_page("Home")
-            project.create_page("Details")
-            visual = project.create_visual(home, "barChart")
+            home = ReportAuthoring(project).create_page("Home")
+            ReportAuthoring(project).create_page("Details")
+            visual = ReportAuthoring(project).create_visual(home, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -433,11 +434,11 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            home = project.create_page("Home")
-            details = project.create_page("Details")
+            home = ReportAuthoring(project).create_page("Home")
+            details = ReportAuthoring(project).create_page("Details")
             configure_drillthrough(details, [("Product", "Category", "column")])
             details.save()
-            visual = project.create_visual(home, "shape")
+            visual = ReportAuthoring(project).create_visual(home, "shape")
             visual.data["name"] = "drillBtn"
             visual.save()
 
@@ -460,7 +461,7 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Detail")
+            ReportAuthoring(project).create_page("Detail")
 
             result = runner.invoke(
                 app,
@@ -496,11 +497,11 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            home = project.create_page("Home")
-            tip = project.create_page("Tip")
+            home = ReportAuthoring(project).create_page("Home")
+            tip = ReportAuthoring(project).create_page("Tip")
             configure_tooltip_page(tip, [("Product", "Category", "column")], width=320, height=240)
             tip.save()
-            visual = project.create_visual(home, "barChart")
+            visual = ReportAuthoring(project).create_visual(home, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -540,11 +541,11 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            home = project.create_page("Home")
-            tip = project.create_page("Tip")
+            home = ReportAuthoring(project).create_page("Home")
+            tip = ReportAuthoring(project).create_page("Tip")
             configure_tooltip_page(tip, [("Product", "Category", "column")], width=320, height=240)
             tip.save()
-            visual = project.create_visual(home, "shape")
+            visual = ReportAuthoring(project).create_visual(home, "shape")
             visual.data["name"] = "shape1"
             visual.save()
 
@@ -561,14 +562,14 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            drill = project.create_page("Drill")
+            drill = ReportAuthoring(project).create_page("Drill")
             configure_drillthrough(
                 drill,
                 [("Product", "Category", "column"), ("Sales", "Total Revenue", "measure")],
                 cross_report=True,
             )
             drill.save()
-            tip = project.create_page("Tip")
+            tip = ReportAuthoring(project).create_page("Tip")
             configure_tooltip_page(tip, [("Product", "Category", "column")], width=360, height=220)
             tip.save()
 
@@ -595,8 +596,8 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Home")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Home")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "bookmarkButton"
             visual.save()
             bookmark = create_bookmark(
@@ -649,8 +650,8 @@ class NavigationCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Home")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Home")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "urlButton"
             visual.save()
 

@@ -19,14 +19,15 @@ from pbi.page_metadata import (
 )
 from pbi.page_sections import create_page_section, list_page_sections
 from pbi.properties import PAGE_PROPERTIES, get_property
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
 def test_page_listing_reorder_and_active_page() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         project = make_project(Path(tmp))
-        first = project.create_page("Overview")
-        second = project.create_page("Details")
+        first = ReportAuthoring(project).create_page("Overview")
+        second = ReportAuthoring(project).create_page("Details")
 
         rows = list_pages(project)
         assert [row.display_name for row in rows] == ["Overview", "Details"]
@@ -53,8 +54,8 @@ def test_page_listing_reorder_and_active_page() -> None:
 def test_page_property_helpers_support_single_and_bulk_updates() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         project = make_project(Path(tmp))
-        first = project.create_page("Overview")
-        second = project.create_page("Hidden Draft")
+        first = ReportAuthoring(project).create_page("Overview")
+        second = ReportAuthoring(project).create_page("Hidden Draft")
 
         changes = set_page_properties(
             first,
@@ -77,7 +78,7 @@ def test_page_property_helpers_support_single_and_bulk_updates() -> None:
 def test_page_binding_helpers_cover_drillthrough_and_tooltip() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         project = make_project(Path(tmp), with_model=True)
-        page = project.create_page("Detail")
+        page = ReportAuthoring(project).create_page("Detail")
         fields = resolve_page_fields(project, ["Customers.Region"])
 
         configure_page_drillthrough(page, fields, cross_report=True, hide=True)
@@ -101,7 +102,7 @@ def test_page_binding_helpers_cover_drillthrough_and_tooltip() -> None:
 def test_page_section_helpers_create_and_list_sections() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         project = make_project(Path(tmp))
-        page = project.create_page("Overview")
+        page = ReportAuthoring(project).create_page("Overview")
 
         result = create_page_section(project, page, "Revenue", x=10, y=20, width=300, height=120)
         assert result.title == "Revenue"

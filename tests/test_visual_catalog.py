@@ -16,6 +16,7 @@ from pbi.roles import (
     normalize_visual_type,
 )
 from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA
+from pbi.report_authoring import ReportAuthoring
 
 
 class VisualCatalogTests(unittest.TestCase):
@@ -159,7 +160,7 @@ class VisualCatalogCliTests(unittest.TestCase):
         visual = project.find_visual(page, "multiRowCard")
         visual.data["name"] = "headerDevice"
         visual.save()
-        Project.add_binding(visual, "Values", "Devices", "DeviceName")
+        ReportAuthoring(project).add_binding(visual, "Values", "Devices", "DeviceName")
 
         rename_result = self.runner.invoke(
             app,

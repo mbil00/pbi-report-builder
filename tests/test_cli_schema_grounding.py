@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pbi.cli import app
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -36,8 +37,8 @@ class CliSchemaGroundingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_modeled_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             visual.save()
 
@@ -62,7 +63,7 @@ class CliSchemaGroundingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_modeled_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = self.runner.invoke(
                 app,
@@ -84,8 +85,8 @@ class CliSchemaGroundingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_modeled_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "clusteredColumnChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "clusteredColumnChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -114,8 +115,8 @@ class CliSchemaGroundingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_modeled_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "clusteredColumnChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "clusteredColumnChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -152,8 +153,8 @@ class CliSchemaGroundingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_modeled_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "clusteredColumnChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "clusteredColumnChart")
             visual.data["name"] = "chart1"
             visual.save()
 

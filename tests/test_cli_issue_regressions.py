@@ -15,6 +15,7 @@ from pbi.images import add_image
 from pbi.interactions import set_interaction
 from pbi.project import _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -61,8 +62,8 @@ class ImageResourceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "image")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "image")
             visual.data["name"] = "logo"
             visual.save()
 
@@ -103,7 +104,7 @@ class ImageResourceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             image_path = root / "logo.png"
             image_path.write_bytes(b"png")
@@ -246,8 +247,8 @@ table Metrics
                 """,
             )
 
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
             visual.data["name"] = "salesTable"
             visual.data["visual"]["query"]["queryState"] = {
                 "Values": {
@@ -343,7 +344,7 @@ table 'Measures Table'
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = runner.invoke(
                 app,
@@ -369,8 +370,8 @@ table 'Measures Table'
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
             visual.data["name"] = "grid"
             visual.save()
 
@@ -398,7 +399,7 @@ class ModelHeavyAuthoringRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Page 1")
+            ReportAuthoring(project).create_page("Page 1")
 
             result = runner.invoke(
                 app,
@@ -499,7 +500,7 @@ table Finance
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             yaml_content = """
 version: 1
@@ -563,8 +564,8 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Home")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Home")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "bookmarkButton"
             visual.save()
             bookmark = create_bookmark(
@@ -589,9 +590,9 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            source = project.create_visual(page, "barChart")
-            target = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            source = ReportAuthoring(project).create_visual(page, "barChart")
+            target = ReportAuthoring(project).create_visual(page, "cardVisual")
             source.data["name"] = "source1"
             target.data["name"] = "target1"
             source.save()
@@ -610,10 +611,10 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
-            project.set_sort(visual, "Product", "Category", descending=False)
+            ReportAuthoring(project).set_sort(visual, "Product", "Category", descending=False)
             visual.save()
 
             result = runner.invoke(
@@ -628,8 +629,8 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Test")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
             value = build_gradient_format(
                 "T",
@@ -652,7 +653,7 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Details")
+            page = ReportAuthoring(project).create_page("Details")
             configure_drillthrough(page, [("Product", "Category", "column")])
             page.save()
 
@@ -668,7 +669,7 @@ class DestructiveClearForceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Tooltip")
+            page = ReportAuthoring(project).create_page("Tooltip")
             configure_tooltip_page(page, [("Product", "Category", "column")], width=320, height=240)
             page.save()
 

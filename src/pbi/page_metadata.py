@@ -19,6 +19,7 @@ from pbi.drillthrough import (
 from pbi.fields import resolve_field_type
 from pbi.project import Page, Project
 from pbi.properties import PAGE_PROPERTIES, get_property, set_property
+from pbi.report_authoring import ReportAuthoring
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ def reorder_pages(project: Project, identifiers: list[str]) -> list[Page]:
             if page_id not in resolved_ids:
                 resolved_ids.append(page_id)
 
-    project.set_page_order(resolved_ids)
+    ReportAuthoring(project).set_page_order(resolved_ids)
     page_map = {page.name: page for page in all_pages}
     return [page_map[page_id] for page_id in resolved_ids]
 
@@ -98,7 +99,7 @@ def set_active_page(project: Project, identifier: str) -> tuple[Page, str | None
     if old_active == page.name:
         return page, page.display_name, False
 
-    project.set_active_page(page.name)
+    ReportAuthoring(project).set_active_page(page.name)
 
     old_name = None
     if old_active:

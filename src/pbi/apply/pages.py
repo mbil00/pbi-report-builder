@@ -24,6 +24,7 @@ from pbi.project import Project
 from pbi.properties import PAGE_PROPERTIES, set_property
 from pbi.roundtrip import apply_page_roundtrip_fields
 from pbi.styles import StylePreset
+from pbi.report_authoring import ReportAuthoring
 
 
 def apply_page(
@@ -61,7 +62,7 @@ def apply_page(
             page = None  # type: ignore[assignment]
         else:
             session.ensure_snapshot(project)
-            page = project.create_page(
+            page = ReportAuthoring(project).create_page(
                 page_name,
                 width=width,
                 height=height,
@@ -187,7 +188,7 @@ def apply_page(
                 result.visuals_deleted.append((page_name, visual.name))
                 if not dry_run:
                     session.ensure_snapshot(project)
-                    project.delete_visual(visual)
+                    ReportAuthoring(project).delete_visual(visual)
                     page_state.remove(visual)
 
     if not (dry_run and page_is_new) and "interactions" in page_spec:

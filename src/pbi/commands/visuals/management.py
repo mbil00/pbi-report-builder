@@ -6,12 +6,11 @@ from typing import Annotated
 
 import typer
 
-from pbi.visual_groups import create_group, ungroup
-
 from ..common import ProjectOpt, console, get_project
 from .app import visual_app
 from .helpers import resolve_visual_target, _set_visual_image_source
 from pbi.textbox import set_textbox_content
+from pbi.report_authoring import ReportAuthoring
 from pbi.visual_builders import (
     apply_auto_title,
     apply_builder_preset,
@@ -82,7 +81,7 @@ def visual_create(
         ref_pos = ref_visual.position
         w = width if width is not None else ref_pos.get("width", 300)
         h = height if height is not None else ref_pos.get("height", 200)
-        new_vis = proj.copy_visual(ref_visual, pg, new_name=name)
+        new_vis = ReportAuthoring(proj).copy_visual(ref_visual, pg, new_name=name)
         # Override position
         new_vis.data["position"]["x"] = x
         new_vis.data["position"]["y"] = y
@@ -126,7 +125,7 @@ def visual_create(
 
     # Shapes default to behind (background layer)
     effective_behind = behind or canonical_visual_type == "shape"
-    vis = proj.create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h, behind=effective_behind)
+    vis = ReportAuthoring(proj).create_visual(pg, canonical_visual_type, x=x, y=y, width=w, height=h, behind=effective_behind)
     if name:
         from pbi.project import sanitize_visual_name
         vis.data["name"] = sanitize_visual_name(name)
@@ -156,7 +155,7 @@ def visual_create(
             bound_fields = apply_role_bindings(proj, vis, bind, field_type=field_type)
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
-            proj.delete_visual(vis)
+            ReportAuthoring(proj).delete_visual(vis)
             raise typer.Exit(1)
 
     inferred_title: str | None = None
@@ -169,7 +168,7 @@ def visual_create(
             applied_preset = apply_builder_preset(vis, preset, bound_fields=bound_fields)
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
-            proj.delete_visual(vis)
+            ReportAuthoring(proj).delete_visual(vis)
             raise typer.Exit(1)
 
     sort_details: tuple[str, str, str, str] | None = None
@@ -185,7 +184,7 @@ def visual_create(
             )
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
-            proj.delete_visual(vis)
+            ReportAuthoring(proj).delete_visual(vis)
             raise typer.Exit(1)
     elif auto_sort and bound_fields:
         sort_details = infer_default_sort(proj, vis, bound_fields)
@@ -238,7 +237,7 @@ def visual_copy(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    new_vis = proj.copy_visual(vis, target, new_name=name)
+    new_vis = ReportAuthoring(proj).copy_visual(vis, target, new_name=name)
     dest = f' to "{target.display_name}"' if to_page else ""
     console.print(f'Copied [cyan]{vis.visual_type}[/cyan] "{vis.name}"{dest} -> "{new_vis.name}"')
 
@@ -285,7 +284,7 @@ def visual_delete(
         if not confirm:
             raise typer.Abort()
 
-    proj.delete_visual(vis)
+    ReportAuthoring(proj).delete_visual(vis)
     console.print(f'Deleted [cyan]{vis.visual_type}[/cyan] "{vis.name}"')
 
 
@@ -306,7 +305,7 @@ def visual_group(
         raise typer.Exit(1)
 
     try:
-        group = create_group(proj, pg, vis_list, display_name=name)
+        group = ReportAuthoring(proj).create_group(pg, vis_list, display_name=name)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -325,7 +324,7 @@ def visual_ungroup(
     proj, pg, grp = resolve_visual_target(project, page, group)
 
     try:
-        children = ungroup(proj, pg, grp)
+        children = ReportAuthoring(proj).ungroup(pg, grp)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

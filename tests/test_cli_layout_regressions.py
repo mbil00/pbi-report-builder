@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from pbi.apply import apply_yaml
 from pbi.cli import app
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -208,7 +209,7 @@ class TestKpisShorthand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Dashboard")
+            ReportAuthoring(project).create_page("Dashboard")
 
             yaml_content = yaml.safe_dump({
                 "version": 1,

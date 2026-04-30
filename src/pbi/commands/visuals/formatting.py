@@ -132,7 +132,9 @@ def visual_format_set(
     )
 
     def _field_resolver(field_ref: str, preferred_type: str) -> tuple[str, str, str, str | None]:
-        source_field_type = "measure" if preferred_type == "measure" and model is None else preferred_type
+        source_field_type = "measure" if preferred_type == "measure" and model is None else (
+            "auto" if preferred_type == "measure" else preferred_type
+        )
         return resolve_field_info(
             proj,
             field_ref,

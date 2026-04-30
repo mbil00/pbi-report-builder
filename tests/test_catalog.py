@@ -19,6 +19,7 @@ from pbi.validate import validate_project
 from pbi.visual_schema import get_data_roles
 from pbi.styles import create_style
 from pbi.templates import save_template
+from pbi.report_authoring import ReportAuthoring
 from pbi.visual_templates import (
     apply_visual_template,
     list_visual_templates,
@@ -48,8 +49,8 @@ class CatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            ReportAuthoring(project).create_visual(page, "cardVisual")
 
             create_style(project, "card-style", {"border.show": True})
             save_template(project, page, "sales-page")
@@ -81,7 +82,7 @@ class CatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
+            page = ReportAuthoring(project).create_page("Dashboard")
 
             spec_path = root / "hero.yaml"
             spec_path.write_text(
@@ -120,7 +121,7 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(visual.visual_type, "cardVisual")
             self.assertEqual(visual.position["x"], 40)
             self.assertEqual(visual.position["y"], 80)
-            self.assertEqual(project.get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
+            self.assertEqual(ReportAuthoring(project).get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
 
     def test_visual_template_binds_measures_correctly_with_model(self) -> None:
         """Measures resolved via the semantic model use the Measure discriminator."""
@@ -140,7 +141,7 @@ table Sales
         expression: SUM(Sales[Revenue])
 """,
             )
-            page = project.create_page("Dashboard")
+            page = ReportAuthoring(project).create_page("Dashboard")
 
             spec_path = root / "kpi.yaml"
             spec_path.write_text(
@@ -164,7 +165,7 @@ table Sales
                 params={"value": "Sales.Total Revenue"},
             )
             self.assertEqual(
-                project.get_bindings(visual_m),
+                ReportAuthoring(project).get_bindings(visual_m),
                 [("Data", "Sales", "Total Revenue", "measure")],
             )
 
@@ -174,7 +175,7 @@ table Sales
                 params={"value": "Sales.Revenue"},
             )
             self.assertEqual(
-                project.get_bindings(visual_c),
+                ReportAuthoring(project).get_bindings(visual_c),
                 [("Data", "Sales", "Revenue", "column")],
             )
 
@@ -182,8 +183,8 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            ReportAuthoring(project).create_visual(page, "cardVisual")
 
             create_style(project, "shared", {"border.show": True})
             save_template(project, page, "shared")
@@ -242,7 +243,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Audit")
+            page = ReportAuthoring(project).create_page("Audit")
 
             for template in list_visual_templates(project):
                 if template.scope != "bundled":
@@ -301,8 +302,8 @@ class CatalogCliTests(unittest.TestCase):
             home = root / "home"
             with mock.patch("pathlib.Path.home", return_value=home):
                 project = make_project(root)
-                page = project.create_page("Demo")
-                project.create_visual(page, "cardVisual")
+                page = ReportAuthoring(project).create_page("Demo")
+                ReportAuthoring(project).create_visual(page, "cardVisual")
 
                 create_style(project, "local-style", {"border.show": True})
                 create_style(None, "global-style", {"title.show": True}, global_scope=True)
@@ -330,7 +331,7 @@ class CatalogCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Dashboard")
+            ReportAuthoring(project).create_page("Dashboard")
             spec_path = root / "hero.yaml"
             spec_path.write_text(
                 "\n".join(
@@ -393,7 +394,7 @@ class CatalogCliTests(unittest.TestCase):
             visual = reloaded.find_visual(page, "revenueHero")
             self.assertEqual(visual.position["x"], 24)
             self.assertEqual(visual.position["y"], 48)
-            self.assertEqual(reloaded.get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
+            self.assertEqual(ReportAuthoring(reloaded).get_bindings(visual), [("Data", "Sales", "Revenue", "column")])
 
     def test_catalog_apply_warns_on_missing_model_field(self) -> None:
         """catalog apply warns when a binding references a field not in the model."""
@@ -412,7 +413,7 @@ table Sales
         dataType: int64
 """,
             )
-            project.create_page("Dashboard")
+            ReportAuthoring(project).create_page("Dashboard")
 
             spec_path = root / "kpi.yaml"
             spec_path.write_text(
@@ -446,11 +447,11 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Dashboard")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "revenueCard"
             visual.save()
-            project.add_binding(visual, "Value", "Sales", "Revenue")
+            ReportAuthoring(project).add_binding(visual, "Value", "Sales", "Revenue")
 
             result = runner.invoke(
                 app,
@@ -485,14 +486,14 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
-            visual = project.create_visual(page, "clusteredColumnChart")
+            page = ReportAuthoring(project).create_page("Dashboard")
+            visual = ReportAuthoring(project).create_visual(page, "clusteredColumnChart")
             visual.data["name"] = "salesChart"
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "title.text", "Revenue by Region", VISUAL_PROPERTIES)
             visual.save()
-            project.add_binding(visual, "Category", "Geography", "Region")
-            project.add_binding(visual, "Y", "Sales", "Revenue")
+            ReportAuthoring(project).add_binding(visual, "Category", "Geography", "Region")
+            ReportAuthoring(project).add_binding(visual, "Y", "Sales", "Revenue")
 
             from pbi.visual_templates import save_visual_template
 
@@ -523,11 +524,11 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Dashboard")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "kpiCard"
             visual.save()
-            project.add_binding(visual, "Value", "Sales", "Revenue")
+            ReportAuthoring(project).add_binding(visual, "Value", "Sales", "Revenue")
 
             from pbi.visual_templates import save_visual_template
 
@@ -546,8 +547,8 @@ table Sales
             home = root / "home"
             with mock.patch("pathlib.Path.home", return_value=home):
                 project = make_project(root)
-                page = project.create_page("Dashboard")
-                visual = project.create_visual(page, "cardVisual")
+                page = ReportAuthoring(project).create_page("Dashboard")
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual")
                 visual.data["name"] = "cardA"
                 visual.save()
 
@@ -613,13 +614,13 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
-            source = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Dashboard")
+            source = ReportAuthoring(project).create_visual(page, "cardVisual")
             source.data["name"] = "sourceCard"
             set_property(source.data, "border.show", "true", VISUAL_PROPERTIES)
             set_property(source.data, "border.radius", "8", VISUAL_PROPERTIES)
             source.save()
-            target = project.create_visual(page, "cardVisual")
+            target = ReportAuthoring(project).create_visual(page, "cardVisual")
             target.data["name"] = "targetCard"
             target.save()
 
@@ -666,9 +667,9 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            source = project.create_page("Source")
-            target = project.create_page("Landing")
-            visual = project.create_visual(source, "cardVisual")
+            source = ReportAuthoring(project).create_page("Source")
+            target = ReportAuthoring(project).create_page("Landing")
+            visual = ReportAuthoring(project).create_visual(source, "cardVisual")
             visual.data["name"] = "revenueCard"
             visual.save()
 
@@ -710,15 +711,15 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            source = project.create_page("Source")
-            target = project.create_page("Target")
-            one = project.create_visual(source, "textbox", x=0, y=0, width=100, height=30)
+            source = ReportAuthoring(project).create_page("Source")
+            target = ReportAuthoring(project).create_page("Target")
+            one = ReportAuthoring(project).create_visual(source, "textbox", x=0, y=0, width=100, height=30)
             one.data["name"] = "titleBox"
             one.save()
-            two = project.create_visual(source, "shape", x=0, y=40, width=120, height=50)
+            two = ReportAuthoring(project).create_visual(source, "shape", x=0, y=40, width=120, height=50)
             two.data["name"] = "bgShape"
             two.save()
-            project.create_group(source, [one, two], display_name="Header Group")
+            ReportAuthoring(project).create_group(source, [one, two], display_name="Header Group")
 
             create_result = runner.invoke(
                 app,
@@ -764,10 +765,10 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
+            page = ReportAuthoring(project).create_page("Dashboard")
 
             # Pre-existing visual with same name as what the component will produce
-            existing = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            existing = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
             existing.data["name"] = "titleBox"
             existing.save()
 
@@ -798,7 +799,7 @@ table Sales
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Target")
+            ReportAuthoring(project).create_page("Target")
             component_yaml = root / "header.yaml"
             component_yaml.write_text(
                 "\n".join(

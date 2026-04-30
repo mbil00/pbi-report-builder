@@ -13,6 +13,7 @@ from pbi.cli import app
 from pbi.formatting import GradientStop, build_gradient_format, build_rules_format
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.theme_formatting import get_theme_conditional_formats
+from pbi.report_authoring import ReportAuthoring
 from pbi.themes import (
     THEME_CASCADE,
     ThemePreset,
@@ -1325,10 +1326,10 @@ def _scaffold_audit_project(root: Path) -> Path:
 
     pbip = _scaffold_project(root, theme_data=theme_data)
     proj = Project.find(pbip)
-    page = proj.create_page("Dashboard")
+    page = ReportAuthoring(proj).create_page("Dashboard")
 
     # Visual 1: redundant override (matches theme)
-    v1 = proj.create_visual(page, "card")
+    v1 = ReportAuthoring(proj).create_visual(page, "card")
     v1.data["visual"]["visualContainerObjects"] = {
         "background": [{
             "properties": {
@@ -1340,7 +1341,7 @@ def _scaffold_audit_project(root: Path) -> Path:
     v1.save()
 
     # Visual 2: conflicting override (differs from theme)
-    v2 = proj.create_visual(page, "tableEx")
+    v2 = ReportAuthoring(proj).create_visual(page, "tableEx")
     v2.data["visual"]["visualContainerObjects"] = {
         "border": [{
             "properties": {
@@ -1358,7 +1359,7 @@ def _scaffold_audit_project(root: Path) -> Path:
     v2.save()
 
     # Visual 3: no overrides (clean)
-    proj.create_visual(page, "slicer")
+    ReportAuthoring(proj).create_visual(page, "slicer")
 
     return pbip
 

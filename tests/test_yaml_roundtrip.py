@@ -25,6 +25,7 @@ from pbi.styles import create_style
 from pbi.textbox import set_textbox_content
 from pbi.themes import apply_theme, create_theme
 from pbi.validate import validate_project
+from pbi.report_authoring import ReportAuthoring
 
 
 class YamlRoundTripTests(unittest.TestCase):
@@ -53,8 +54,8 @@ class YamlRoundTripTests(unittest.TestCase):
     def test_round_trip_preserves_float_geometry_and_unnamed_visual_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = self._make_project(Path(tmp))
-            page = project.create_page("Demo")
-            original = project.create_visual(
+            page = ReportAuthoring(project).create_page("Demo")
+            original = ReportAuthoring(project).create_visual(
                 page,
                 "textSlicer",
                 x=9.5,
@@ -78,7 +79,7 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            source.create_page("Demo")
+            ReportAuthoring(source).create_page("Demo")
             report = source.get_report_meta()
             report["annotations"] = [{"name": "README", "value": "hello"}]
             report["organizationCustomVisuals"] = [{"name": "Org Timeline", "path": "store/org.pbiviz"}]
@@ -121,7 +122,7 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            source.create_page("Demo")
+            ReportAuthoring(source).create_page("Demo")
 
             theme = create_theme("Corporate")
             theme["visualStyles"] = {
@@ -166,7 +167,7 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
+            page = ReportAuthoring(source).create_page("Demo")
             add_topn_filter(
                 page.data,
                 "Customers",
@@ -209,10 +210,10 @@ class YamlRoundTripTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "tableEx")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
-            source.add_binding(visual, "Values", "Customers", "Region")
+            ReportAuthoring(source).add_binding(visual, "Values", "Customers", "Region")
             set_conditional_format(
                 visual.data,
                 "values",
@@ -256,8 +257,8 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "tableEx")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
             visual.save()
 
@@ -327,15 +328,15 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            source.create_page("Details")
-            page = source.create_page("Demo")
+            ReportAuthoring(source).create_page("Details")
+            page = ReportAuthoring(source).create_page("Demo")
 
-            textbox = source.create_visual(page, "textbox")
+            textbox = ReportAuthoring(source).create_visual(page, "textbox")
             textbox.data["name"] = "note"
             set_textbox_content(textbox.data, text="Hello")
             textbox.save()
 
-            button = source.create_visual(page, "actionButton")
+            button = ReportAuthoring(source).create_visual(page, "actionButton")
             button.data["name"] = "goDetails"
             set_property(button.data, "action.show", "true", VISUAL_PROPERTIES)
             set_property(button.data, "action.type", "PageNavigation", VISUAL_PROPERTIES)
@@ -351,7 +352,7 @@ class YamlRoundTripTests(unittest.TestCase):
             self.assertTrue(raw_visual_entries)
 
             target = self._make_project(root / "target")
-            target.create_page("Details")
+            ReportAuthoring(target).create_page("Details")
             result = apply_yaml(target, spec)
 
             self.assertEqual(result.errors, [])
@@ -365,14 +366,14 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
-            first = source.create_visual(page, "cardVisual", x=10, y=10, width=120, height=80)
+            page = ReportAuthoring(source).create_page("Demo")
+            first = ReportAuthoring(source).create_visual(page, "cardVisual", x=10, y=10, width=120, height=80)
             first.data["name"] = "card1"
             first.save()
-            second = source.create_visual(page, "cardVisual", x=140, y=10, width=120, height=80)
+            second = ReportAuthoring(source).create_visual(page, "cardVisual", x=140, y=10, width=120, height=80)
             second.data["name"] = "card2"
             second.save()
-            group = source.create_group(page, [first, second], display_name="Cards")
+            group = ReportAuthoring(source).create_group(page, [first, second], display_name="Cards")
 
             spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
             visuals = spec["pages"][0]["visuals"]
@@ -403,19 +404,19 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
-            title = project.create_visual(page, "textbox", x=0, y=0, width=200, height=40)
+            page = ReportAuthoring(project).create_page("Demo")
+            title = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=200, height=40)
             title.data["name"] = "header-title"
             set_textbox_content(title.data, text="Executive Summary")
             title.save()
-            subtitle = project.create_visual(page, "textbox", x=0, y=50, width=200, height=30)
+            subtitle = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=50, width=200, height=30)
             subtitle.data["name"] = "header-subtitle"
             set_textbox_content(subtitle.data, text="FY26 outlook")
             subtitle.save()
-            group = project.create_group(page, [title, subtitle], display_name="page_header")
+            group = ReportAuthoring(project).create_group(page, [title, subtitle], display_name="page_header")
 
             save_component(project, page, group, "page_header")
-            target = project.create_page("Target")
+            target = ReportAuthoring(project).create_page("Target")
             stamped = apply_component(
                 project,
                 target,
@@ -441,8 +442,8 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
-            title = project.create_visual(page, "textbox", x=0, y=0, width=200, height=40)
+            page = ReportAuthoring(project).create_page("Demo")
+            title = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=200, height=40)
             title.data["name"] = "header-title"
             set_textbox_content(title.data, text="Executive Summary")
             title.save()
@@ -451,7 +452,7 @@ class YamlRoundTripTests(unittest.TestCase):
             image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5Wv2QAAAAASUVORK5CYII="))
             add_image(project, image_path)
 
-            logo = project.create_visual(page, "image", x=0, y=50, width=40, height=40)
+            logo = ReportAuthoring(project).create_visual(page, "image", x=0, y=50, width=40, height=40)
             logo.data["name"] = "header-logo"
             logo.data["visual"]["objects"] = {
                 "image": [
@@ -465,9 +466,9 @@ class YamlRoundTripTests(unittest.TestCase):
             }
             logo.save()
 
-            group = project.create_group(page, [title, logo], display_name="page_header")
+            group = ReportAuthoring(project).create_group(page, [title, logo], display_name="page_header")
             save_component(project, page, group, "page_header")
-            target = project.create_page("Target")
+            target = ReportAuthoring(project).create_page("Target")
 
             stamped = apply_component(project, target, "page_header")
 
@@ -488,16 +489,16 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
-            first = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            page = ReportAuthoring(project).create_page("Demo")
+            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
             first.data["name"] = "title"
             set_textbox_content(first.data, text="One")
             first.save()
-            second = project.create_visual(page, "textbox", x=0, y=40, width=100, height=30)
+            second = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=40, width=100, height=30)
             second.data["name"] = "subtitle"
             set_textbox_content(second.data, text="Two")
             second.save()
-            group = project.create_group(page, [first, second], display_name="page_header")
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="page_header")
 
             save_component(project, page, group, "page_header")
             apply_component(project, page, "page_header", x=0, y=0)
@@ -514,8 +515,8 @@ class YamlRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "cardVisual", x=10, y=20, width=300, height=100)
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "cardVisual", x=10, y=20, width=300, height=100)
             visual.data["name"] = "card1"
             visual.save()
             spec = export_yaml(source, page_filter="Demo")
@@ -555,10 +556,10 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "tableEx")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
-            source.add_binding(visual, "Values", "Product", "Category")
+            ReportAuthoring(source).add_binding(visual, "Values", "Product", "Category")
             rename_column(visual, "Product.Category", "Category Label")
             set_column_width(visual, "Product.Category", 420)
             visual.save()
@@ -589,8 +590,8 @@ pages:
     def test_export_uses_canonical_cli_property_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = self._make_project(Path(tmp))
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
             set_property(visual.data, "title.color", "#112233", VISUAL_PROPERTIES)
             set_property(visual.data, "grid.horizontal", "true", VISUAL_PROPERTIES)
@@ -620,8 +621,8 @@ pages:
                     "title.text": "Overview",
                 },
             )
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "cardVisual")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             set_property(visual.data, "background.color", "#112233", VISUAL_PROPERTIES)
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
@@ -666,8 +667,8 @@ pages:
                     "title.show": True,
                 },
             )
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             set_property(visual.data, "background.color", "#112233", VISUAL_PROPERTIES)
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
@@ -684,7 +685,7 @@ pages:
     def test_export_uses_canonical_page_property_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = self._make_project(Path(tmp))
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
             page.data.setdefault("objects", {})["background"] = [
                 {
                     "properties": {
@@ -711,8 +712,8 @@ pages:
     def test_export_unknown_chart_property_uses_chart_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = self._make_project(Path(tmp))
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
             set_property(visual.data, "chart:legend.seriesOrder", "descending", VISUAL_PROPERTIES)
             visual.save()
@@ -729,10 +730,10 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "tableEx")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
-            source.add_binding(visual, "Values", "Product", "Category")
+            ReportAuthoring(source).add_binding(visual, "Values", "Product", "Category")
             set_column_width(visual, "Product.Category", 420)
             visual.data["filterConfig"] = {
                 "filters": [
@@ -759,8 +760,8 @@ pages:
     def test_export_promotes_drill_filter_other_visuals_from_pbir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = self._make_project(Path(tmp))
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
             visual.data["visual"]["drillFilterOtherVisuals"] = True
             visual.save()
@@ -784,8 +785,8 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "actionButton")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "actionButton")
             visual.data["name"] = "btn1"
             visual.data["howCreated"] = "InsertVisualButton"
             visual.data["visual"]["drillFilterOtherVisuals"] = True
@@ -855,7 +856,7 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Tip")
+            page = ReportAuthoring(source).create_page("Tip")
             configure_tooltip_page(page, [("Product", "Category", "column")], width=400, height=300)
             page.save()
 
@@ -874,11 +875,11 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            demo = source.create_page("Demo")
-            tip = source.create_page("Tip")
+            demo = ReportAuthoring(source).create_page("Demo")
+            tip = ReportAuthoring(source).create_page("Tip")
             configure_tooltip_page(tip, [("Product", "Category", "column")], width=400, height=300)
             tip.save()
-            visual = source.create_visual(demo, "barChart")
+            visual = ReportAuthoring(source).create_visual(demo, "barChart")
             visual.data["name"] = "chart1"
             set_property(visual.data, "tooltip.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "tooltip.type", "ReportPage", VISUAL_PROPERTIES)
@@ -926,7 +927,7 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            page = source.create_page("Drill")
+            page = ReportAuthoring(source).create_page("Drill")
             configure_drillthrough(page, [("Product", "Category", "column")], cross_report=True)
             page.save()
 
@@ -945,11 +946,11 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
-            home = source.create_page("Home")
-            drill = source.create_page("Drill")
+            home = ReportAuthoring(source).create_page("Home")
+            drill = ReportAuthoring(source).create_page("Drill")
             configure_drillthrough(drill, [("Product", "Category", "column")], cross_report=True)
             drill.save()
-            visual = source.create_visual(home, "actionButton")
+            visual = ReportAuthoring(source).create_visual(home, "actionButton")
             visual.data["name"] = "btn1"
             set_property(visual.data, "action.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "action.type", "Drillthrough", VISUAL_PROPERTIES)
@@ -997,7 +998,7 @@ pages:
     def test_configure_tooltip_page_clears_prior_drillthrough_filters(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = self._make_project(Path(tmp))
-            page = project.create_page("Switch")
+            page = ReportAuthoring(project).create_page("Switch")
             configure_drillthrough(page, [("Product", "Category", "column")])
             configure_tooltip_page(page, [("Product", "Category", "column")], width=320, height=240)
             page.save()
@@ -1011,18 +1012,18 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
 
-            card = project.create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
+            card = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
             card.data["name"] = "kpi-card"
-            project.add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
+            ReportAuthoring(project).add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
             card.save()
 
-            bg = project.create_visual(page, "shape", x=0, y=0, width=220, height=120)
+            bg = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=220, height=120)
             bg.data["name"] = "kpi-bg"
             bg.save()
 
-            group = project.create_group(page, [card, bg], display_name="kpi_tile")
+            group = ReportAuthoring(project).create_group(page, [card, bg], display_name="kpi_tile")
             save_component(project, page, group, "kpi_tile")
             comp = get_component(project, "kpi_tile")
 
@@ -1033,21 +1034,21 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
 
-            card = project.create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
+            card = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
             card.data["name"] = "kpi-card"
-            project.add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
+            ReportAuthoring(project).add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
             card.save()
 
-            bg = project.create_visual(page, "shape", x=0, y=0, width=220, height=120)
+            bg = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=220, height=120)
             bg.data["name"] = "kpi-bg"
             bg.save()
 
-            group = project.create_group(page, [card, bg], display_name="kpi_tile")
+            group = ReportAuthoring(project).create_group(page, [card, bg], display_name="kpi_tile")
             save_component(project, page, group, "kpi_tile")
 
-            target = project.create_page("Target")
+            target = ReportAuthoring(project).create_page("Target")
             stamped = apply_component(
                 project, target, "kpi_tile",
                 params={"data": "Budget.Amount (measure)"},
@@ -1068,19 +1069,19 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
 
-            first = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
             first.data["name"] = "label"
             set_textbox_content(first.data, text="Value")
             first.save()
-            second = project.create_visual(page, "shape", x=0, y=0, width=120, height=50)
+            second = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=120, height=50)
             second.data["name"] = "bg"
             second.save()
-            group = project.create_group(page, [first, second], display_name="tile")
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="tile")
 
             save_component(project, page, group, "tile")
-            target = project.create_page("Target")
+            target = ReportAuthoring(project).create_page("Target")
             all_created = apply_component_row(project, target, "tile", 3, x=0, y=0, gap=10)
 
             project.clear_caches()
@@ -1093,19 +1094,19 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = self._make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
 
-            first = project.create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
             first.data["name"] = "label"
             set_textbox_content(first.data, text="Value")
             first.save()
-            second = project.create_visual(page, "shape", x=0, y=0, width=120, height=50)
+            second = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=120, height=50)
             second.data["name"] = "bg"
             second.save()
-            group = project.create_group(page, [first, second], display_name="tile")
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="tile")
 
             save_component(project, page, group, "tile")
-            target = project.create_page("Target")
+            target = ReportAuthoring(project).create_page("Target")
 
             apply_component_row(project, target, "tile", 4, x=0, y=0, gap=10)
             apply_component_row(project, target, "tile", 2, x=0, y=0, gap=10)

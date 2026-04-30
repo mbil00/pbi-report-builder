@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from pbi.project import Page, Project
 from pbi.properties import VISUAL_PROPERTIES, set_property as set_visual_property
-from pbi.visual_groups import create_group
+from pbi.report_authoring import ReportAuthoring
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ def create_page_section(
     title_font: str = "Segoe UI Semibold",
     title_size: int = 14,
 ) -> PageSectionResult:
-    background_visual = project.create_visual(page, "shape", x=x, y=y, width=width, height=height, behind=True)
+    background_visual = ReportAuthoring(project).create_visual(page, "shape", x=x, y=y, width=width, height=height, behind=True)
     background_visual.data["name"] = f"section-bg-{title.lower().replace(' ', '-')[:20]}"
     set_visual_property(background_visual.data, "border.show", "true", VISUAL_PROPERTIES)
     set_visual_property(background_visual.data, "border.radius", str(radius), VISUAL_PROPERTIES)
@@ -58,7 +58,7 @@ def create_page_section(
     background_visual.save()
 
     title_height = title_size + 16
-    title_visual = project.create_visual(
+    title_visual = ReportAuthoring(project).create_visual(
         page,
         "textbox",
         x=x + 8,
@@ -93,7 +93,7 @@ def create_page_section(
     set_visual_property(title_visual.data, "border.show", "false", VISUAL_PROPERTIES)
     title_visual.save()
 
-    group = create_group(project, page, [background_visual, title_visual], display_name=f"Section: {title}")
+    group = ReportAuthoring(project).create_group(page, [background_visual, title_visual], display_name=f"Section: {title}")
     return PageSectionResult(
         page_name=page.display_name,
         title=title,

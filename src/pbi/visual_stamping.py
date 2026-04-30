@@ -11,6 +11,7 @@ from pbi.project import Page, Project, Visual, sanitize_visual_name
 from pbi.properties import VISUAL_PROPERTIES, set_property
 from pbi.roles import normalize_visual_role
 from pbi.textbox import set_textbox_content
+from pbi.report_authoring import ReportAuthoring
 
 
 def create_visual_from_spec(
@@ -29,7 +30,7 @@ def create_visual_from_spec(
     width, height = parse_size(spec.get("size", "300 x 200"))
     # Shapes default to behind (background layer) unless explicitly overridden
     effective_behind = behind if behind is not None else (vis_type == "shape")
-    visual = project.create_visual(
+    visual = ReportAuthoring(project).create_visual(
         page,
         vis_type,
         x=base_x if x is None else x,
@@ -96,7 +97,7 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
                 entity, prop, field_type, _data_type = resolve_field_info(
                     project, field_ref, "auto"
                 )
-                project.add_binding(visual, canonical_role, entity, prop, field_type=field_type)
+                ReportAuthoring(project).add_binding(visual, canonical_role, entity, prop, field_type=field_type)
 
     if spec.get("isHidden"):
         visual.data["isHidden"] = True

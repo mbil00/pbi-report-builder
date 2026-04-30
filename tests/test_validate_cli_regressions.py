@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pbi.cli import app
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -16,8 +17,8 @@ class ValidateCliRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["visual"]["objects"] = {
                 "legend": [
                     {
@@ -53,11 +54,11 @@ class ValidateCliRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Dashboard")
-            v1 = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Dashboard")
+            v1 = ReportAuthoring(project).create_visual(page, "cardVisual")
             v1.data["name"] = "myCard"
             v1.save()
-            v2 = project.create_visual(page, "cardVisual")
+            v2 = ReportAuthoring(project).create_visual(page, "cardVisual")
             v2.data["name"] = "myCard"
             v2.save()
 

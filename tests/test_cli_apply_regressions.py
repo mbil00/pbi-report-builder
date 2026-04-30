@@ -15,6 +15,7 @@ from pbi.cli import app
 from pbi.export import export_yaml
 from pbi.project import Project
 from pbi.validate import validate_project
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -23,7 +24,7 @@ class ApplyWorkflowRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             yaml_content = yaml.safe_dump(
                 {
@@ -43,7 +44,7 @@ class ApplyWorkflowRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo", width=1280, height=720)
+            ReportAuthoring(project).create_page("Demo", width=1280, height=720)
 
             yaml_content = yaml.safe_dump(
                 {
@@ -69,7 +70,7 @@ class ApplyWorkflowRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             yaml_content = yaml.safe_dump(
                 {
@@ -152,9 +153,9 @@ class ApplyWorkflowRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "textSlicer", x=10, y=20, width=300, height=120)
-            source.add_binding(visual, "Values", "Customers", "Region")
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "textSlicer", x=10, y=20, width=300, height=120)
+            ReportAuthoring(source).add_binding(visual, "Values", "Customers", "Region")
 
             spec = yaml.safe_load(export_yaml(source, page_filter="Demo"))
             exported_visual = spec["pages"][0]["visuals"][0]
@@ -178,8 +179,8 @@ class ApplyWorkflowRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "textSlicer", x=1, y=2, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "textSlicer", x=1, y=2, width=100, height=50)
             visual.data["name"] = "keepme"
             visual.save()
 
@@ -216,8 +217,8 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
             visual.data["name"] = "card1"
             visual.save()
 
@@ -253,8 +254,8 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "textSlicer", x=5, y=7, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "textSlicer", x=5, y=7, width=100, height=50)
             visual.data["name"] = "vis1"
             visual.save()
 
@@ -326,8 +327,8 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = make_project(root / "source")
-            page = source.create_page("Demo")
-            visual = source.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            page = ReportAuthoring(source).create_page("Demo")
+            visual = ReportAuthoring(source).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
             visual.data["name"] = "card1"
             visual.save()
 
@@ -366,8 +367,8 @@ pages:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("../../outside")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("../../outside")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             visual.save()
 
@@ -400,8 +401,8 @@ class ValidationPerformanceRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
             visual.data["name"] = "card1"
             visual.save()
 
@@ -561,11 +562,11 @@ class TestApplyPerformance(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            source = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            source = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
             source.data["name"] = "card1"
             source.save()
-            target = project.create_visual(page, "cardVisual", x=120, y=20, width=100, height=50)
+            target = ReportAuthoring(project).create_visual(page, "cardVisual", x=120, y=20, width=100, height=50)
             target.data["name"] = "card2"
             target.save()
 
@@ -600,7 +601,7 @@ class TestApplyPerformance(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root, with_model=True)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             yaml_content = yaml.safe_dump(
                 {
@@ -663,11 +664,11 @@ class TestApplyPerformance(unittest.TestCase):
                 ) + "\n",
                 encoding="utf-8",
             )
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
             visual.data["name"] = "table1"
-            project.add_binding(visual, "Values", "Customers", "Region")
-            project.add_binding(visual, "Values", "Customers", "Segment")
+            ReportAuthoring(project).add_binding(visual, "Values", "Customers", "Region")
+            ReportAuthoring(project).add_binding(visual, "Values", "Customers", "Segment")
             visual.data["visual"].setdefault("objects", {})["columnWidth"] = [
                 {
                     "selector": {"metadata": "Customers.Region"},

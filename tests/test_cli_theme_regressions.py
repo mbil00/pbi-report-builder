@@ -21,6 +21,7 @@ from pbi.styles import (
     _normalize_style_properties,
 )
 from pbi.templates import apply_template, save_template
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -28,8 +29,8 @@ class TemplateRegressionTests(unittest.TestCase):
     def test_template_name_is_validated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = make_project(Path(tmp))
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "textSlicer")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "textSlicer")
 
             with self.assertRaises(ValueError):
                 save_template(project, page, "../escape", [visual])
@@ -40,11 +41,11 @@ class TemplateRegressionTests(unittest.TestCase):
             home = root / "home"
             with mock.patch("pathlib.Path.home", return_value=home):
                 source = make_project(root / "source")
-                source_page = source.create_page("Source")
-                visual = source.create_visual(source_page, "textSlicer", x=0, y=0, width=100, height=50)
+                source_page = ReportAuthoring(source).create_page("Source")
+                visual = ReportAuthoring(source).create_visual(source_page, "textSlicer", x=0, y=0, width=100, height=50)
                 visual.data["name"] = "regionSlicer"
                 visual.save()
-                source.add_binding(visual, "Values", "Customers", "Region")
+                ReportAuthoring(source).add_binding(visual, "Values", "Customers", "Region")
                 create_bookmark(
                     source,
                     display_name="Intro Hidden",
@@ -56,7 +57,7 @@ class TemplateRegressionTests(unittest.TestCase):
                 save_template(source, source_page, "intro", global_scope=True)
 
                 target = make_project(root / "target")
-                target_page = target.create_page("Landing")
+                target_page = ReportAuthoring(target).create_page("Landing")
                 result = apply_template(target, target_page, "intro", global_scope=True)
 
                 self.assertEqual(result.errors, [])
@@ -76,8 +77,8 @@ class TemplateRegressionTests(unittest.TestCase):
             home = root / "home"
             with mock.patch("pathlib.Path.home", return_value=home):
                 project = make_project(root)
-                page = project.create_page("Demo")
-                project.create_visual(page, "cardVisual")
+                page = ReportAuthoring(project).create_page("Demo")
+                ReportAuthoring(project).create_visual(page, "cardVisual")
                 save_template(project, page, "local-template")
                 save_template(project, page, "global-template", global_scope=True)
 
@@ -321,9 +322,9 @@ class TestPageCreateFromTemplate(unittest.TestCase):
             home = root / "home"
             with mock.patch("pathlib.Path.home", return_value=home):
                 source = make_project(root / "source")
-                source_page = source.create_page("Source")
-                source.create_visual(source_page, "card")
-                source.create_visual(source_page, "tableEx")
+                source_page = ReportAuthoring(source).create_page("Source")
+                ReportAuthoring(source).create_visual(source_page, "card")
+                ReportAuthoring(source).create_visual(source_page, "tableEx")
                 visuals = source.get_visuals(source_page)
                 save_template(source, source_page, "my-layout", visuals, global_scope=True)
 

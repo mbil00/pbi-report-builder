@@ -19,6 +19,7 @@ from pbi.model_export import export_model_yaml
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.project import Project
 from pbi.themes import create_theme
+from pbi.report_authoring import ReportAuthoring
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "real-report-fixtures"
@@ -819,7 +820,7 @@ class RealReportFixtureTests(unittest.TestCase):
             pbip = copied_root / MODEL_HEAVY_PBIP.name
 
             project = Project.find(pbip)
-            builder_page = project.create_page("Builder Smoke")
+            builder_page = ReportAuthoring(project).create_page("Builder Smoke")
 
             commands = [
                 [
@@ -953,7 +954,7 @@ class RealReportFixtureTests(unittest.TestCase):
                 "Actual vs Budget",
             )
             self.assertEqual(
-                reloaded.get_sort(created_visuals["builderScenario"]),
+                ReportAuthoring(reloaded).get_sort(created_visuals["builderScenario"]),
                 [],
             )
 

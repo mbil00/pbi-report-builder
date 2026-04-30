@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from pbi.cli import app
 from pbi.model_apply import apply_model_yaml
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project, write_model_table
 
 
@@ -789,10 +790,10 @@ class TestValidateMeasuresOnlyTable(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root, with_model=True)
-            page = project.create_page("Test")
+            page = ReportAuthoring(project).create_page("Test")
 
             # Create a visual referencing both a data table and a measures table
-            visual = project.create_visual(page, "card")
+            visual = ReportAuthoring(project).create_visual(page, "card")
             visual.data["visual"]["query"] = {
                 "queryState": {
                     "Values": {
@@ -881,9 +882,9 @@ class TestValidateMeasuresOnlyTable(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root, with_model=True)
-            page = project.create_page("Test")
+            page = ReportAuthoring(project).create_page("Test")
 
-            visual = project.create_visual(page, "card")
+            visual = ReportAuthoring(project).create_visual(page, "card")
             visual.data["visual"]["query"] = {
                 "queryState": {
                     "Values": {

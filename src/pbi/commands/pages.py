@@ -26,6 +26,8 @@ from pbi.page_metadata import (
 from pbi.page_sections import create_page_section, list_page_sections
 from pbi.properties import PAGE_PROPERTIES, get_property, list_properties
 
+from pbi.report_authoring import ReportAuthoring
+
 from .common import (
     ProjectOpt,
     console,
@@ -302,7 +304,7 @@ def page_create(
 ) -> None:
     """Create a new page."""
     proj = get_project(project)
-    pg = proj.create_page(name, width=width, height=height, display_option=display_option)
+    pg = ReportAuthoring(proj).create_page(name, width=width, height=height, display_option=display_option)
     console.print(f'Created page "[cyan]{pg.display_name}[/cyan]" ({pg.name})')
 
     if from_template:
@@ -331,7 +333,7 @@ def page_copy(
 ) -> None:
     """Copy/duplicate a page with all its visuals."""
     proj, source = _get_page(project, page)
-    new_page = proj.copy_page(source, name)
+    new_page = ReportAuthoring(proj).copy_page(source, name)
     visuals = proj.get_visuals(new_page)
     console.print(
         f'Copied "[cyan]{source.display_name}[/cyan]" -> '
@@ -370,7 +372,7 @@ def page_delete(
         if not confirm:
             raise typer.Abort()
 
-    proj.delete_page(pg)
+    ReportAuthoring(proj).delete_page(pg)
     console.print(f'Deleted page "[cyan]{pg.display_name}[/cyan]"')
 
 

@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from pbi.cli import app
 from pbi.project import Project, _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, _property_alias_map
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -20,11 +21,11 @@ class ProjectCachingRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            first = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            first = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
             first.data["name"] = "card1"
             first.save()
-            second = project.create_visual(page, "cardVisual", x=120, y=20, width=100, height=50)
+            second = ReportAuthoring(project).create_visual(page, "cardVisual", x=120, y=20, width=100, height=50)
             second.data["name"] = "card2"
             second.save()
 
@@ -47,8 +48,8 @@ class ProjectCachingRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
             visual.data["name"] = "card1"
             visual.save()
 
@@ -56,7 +57,7 @@ class ProjectCachingRegressionTests(unittest.TestCase):
             self.assertEqual(len(project.get_visuals(cached_page)), 1)
 
             with mock.patch("pbi.project._read_json", wraps=_read_json) as read_json:
-                created = project.create_visual(cached_page, "cardVisual", x=120, y=20, width=100, height=50)
+                created = ReportAuthoring(project).create_visual(cached_page, "cardVisual", x=120, y=20, width=100, height=50)
                 created.data["name"] = "card2"
                 created.save()
 
@@ -159,7 +160,7 @@ class OutputPathHardeningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             old_cwd = os.getcwd()
             try:
@@ -233,9 +234,9 @@ class ValidateCliRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            project.create_visual(page, "textbox", x=0, y=0, width=100, height=100)
-            project.create_visual(page, "textbox", x=0, y=0, width=100, height=100)
+            page = ReportAuthoring(project).create_page("Demo")
+            ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=100)
+            ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=100)
             runner = CliRunner()
 
             result = runner.invoke(app, ["--project", str(root), "validate", "--no-layout", "--errors-only"])
@@ -264,17 +265,17 @@ class GroupDeleteRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            first = project.create_visual(page, "textbox")
+            page = ReportAuthoring(project).create_page("Demo")
+            first = ReportAuthoring(project).create_visual(page, "textbox")
             first.data["name"] = "first"
             first.save()
-            second = project.create_visual(page, "textbox")
+            second = ReportAuthoring(project).create_visual(page, "textbox")
             second.data["name"] = "second"
             second.save()
 
-            group = project.create_group(page, [first, second], display_name="header")
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="header")
 
-            project.delete_visual(group)
+            ReportAuthoring(project).delete_visual(group)
             project.clear_caches()
 
             visuals = {visual.name: visual for visual in project.get_visuals(page)}

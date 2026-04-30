@@ -19,6 +19,7 @@ from pbi.filters import (
 from pbi.model import _parse_tmdl_name
 from pbi.project import Project, _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -28,20 +29,20 @@ class VisualDiffRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
 
-            left = project.create_visual(page, "tableEx")
+            left = ReportAuthoring(project).create_visual(page, "tableEx")
             left.data["name"] = "left"
-            project.add_binding(left, "Values", "Product", "Category")
-            project.set_sort(left, "Product", "Category", descending=True)
+            ReportAuthoring(project).add_binding(left, "Values", "Product", "Category")
+            ReportAuthoring(project).set_sort(left, "Product", "Category", descending=True)
             add_range_filter(left.data, "Sales", "Amount", min_val="10", max_val="20")
             left.data["visual"].setdefault("query", {})["queryMetadata"] = {"foo": "left"}
             left.save()
 
-            right = project.create_visual(page, "tableEx")
+            right = ReportAuthoring(project).create_visual(page, "tableEx")
             right.data["name"] = "right"
-            project.add_binding(right, "Values", "Product", "Brand")
-            project.set_sort(right, "Product", "Brand", descending=False)
+            ReportAuthoring(project).add_binding(right, "Values", "Product", "Brand")
+            ReportAuthoring(project).set_sort(right, "Product", "Brand", descending=False)
             add_range_filter(right.data, "Sales", "Quantity", min_val="20", max_val="30")
             right.data["visual"].setdefault("query", {})["queryMetadata"] = {"foo": "right"}
             right.save()
@@ -82,9 +83,9 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            first = project.create_visual(page, "textSlicer", x=0, y=0)
-            second = project.create_visual(page, "cardVisual", x=100, y=0)
+            page = ReportAuthoring(project).create_page("Demo")
+            first = ReportAuthoring(project).create_visual(page, "textSlicer", x=0, y=0)
+            second = ReportAuthoring(project).create_visual(page, "cardVisual", x=100, y=0)
             first.data["name"] = "7ac9f370abc"
             second.data["name"] = "26d0c6f4bee8"
             first.save()
@@ -109,8 +110,8 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "background.color", "#123456", VISUAL_PROPERTIES)
@@ -141,8 +142,8 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual", x=10, y=20, width=300, height=100)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=300, height=100)
             visual.data["name"] = "card1"
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "background.color", "#123456", VISUAL_PROPERTIES)
@@ -166,8 +167,8 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -200,8 +201,8 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             set_property(visual.data, "background.show", "true", VISUAL_PROPERTIES)
             visual.save()
@@ -233,8 +234,8 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             set_property(visual.data, "shadow.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "cardShape.radius", "5", VISUAL_PROPERTIES)
@@ -256,9 +257,9 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            card = project.create_visual(page, "cardVisual")
-            chart = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            card = ReportAuthoring(project).create_visual(page, "cardVisual")
+            chart = ReportAuthoring(project).create_visual(page, "barChart")
             card.data["name"] = "card1"
             chart.data["name"] = "chart1"
             set_property(card.data, "background.color", "#123456", VISUAL_PROPERTIES)
@@ -290,10 +291,10 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page_a = project.create_page("Demo A")
-            page_b = project.create_page("Demo B")
-            left = project.create_visual(page_a, "cardVisual", x=10, y=20, width=300, height=100)
-            right = project.create_visual(page_b, "cardVisual", x=40, y=20, width=300, height=100)
+            page_a = ReportAuthoring(project).create_page("Demo A")
+            page_b = ReportAuthoring(project).create_page("Demo B")
+            left = ReportAuthoring(project).create_visual(page_a, "cardVisual", x=10, y=20, width=300, height=100)
+            right = ReportAuthoring(project).create_visual(page_b, "cardVisual", x=40, y=20, width=300, height=100)
             left.data["name"] = "cardLeft"
             right.data["name"] = "cardRight"
             set_property(left.data, "background.color", "#123456", VISUAL_PROPERTIES)
@@ -329,7 +330,7 @@ class VisualGetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo", width=1440, height=900, display_option="FitToWidth")
+            ReportAuthoring(project).create_page("Demo", width=1440, height=900, display_option="FitToWidth")
 
             result = runner.invoke(
                 app,
@@ -431,7 +432,7 @@ class FilterModelRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = runner.invoke(
                 app,
@@ -462,7 +463,7 @@ class FilterModelRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             create_result = runner.invoke(
                 app,
@@ -503,7 +504,7 @@ class DrillthroughRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root, with_model=True)
-            project.create_page("Demo")
+            ReportAuthoring(project).create_page("Demo")
 
             result = runner.invoke(
                 app,
@@ -530,8 +531,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual", x=0, y=0, width=100, height=50)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=100, height=50)
             visual.data["name"] = "card1"
             visual.save()
 
@@ -580,21 +581,21 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            source_page = project.create_page("Source")
-            target_page = project.create_page("Target")
+            source_page = ReportAuthoring(project).create_page("Source")
+            target_page = ReportAuthoring(project).create_page("Target")
 
-            source = project.create_visual(source_page, "cardVisual")
+            source = ReportAuthoring(project).create_visual(source_page, "cardVisual")
             source.data["name"] = "sourceCard"
             set_property(source.data, "background.color", "#123456", VISUAL_PROPERTIES)
             set_property(source.data, "title.show", "true", VISUAL_PROPERTIES)
             source.save()
 
             for name in ("targetA", "targetB"):
-                visual = project.create_visual(target_page, "cardVisual")
+                visual = ReportAuthoring(project).create_visual(target_page, "cardVisual")
                 visual.data["name"] = name
                 visual.save()
 
-            chart = project.create_visual(target_page, "barChart")
+            chart = ReportAuthoring(project).create_visual(target_page, "barChart")
             chart.data["name"] = "chart1"
             chart.save()
 
@@ -633,10 +634,10 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
             specs = [("card1", 100), ("card2", 120), ("card3", 80)]
             for name, width in specs:
-                visual = project.create_visual(page, "cardVisual", width=width, height=50)
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual", width=width, height=50)
                 visual.data["name"] = name
                 visual.save()
 
@@ -674,7 +675,7 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
             specs = [
                 ("card1", 100, 50),
                 ("card2", 120, 60),
@@ -682,7 +683,7 @@ class VisualSetRegressionTests(unittest.TestCase):
                 ("card4", 90, 70),
             ]
             for name, width, height in specs:
-                visual = project.create_visual(page, "cardVisual", width=width, height=height)
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual", width=width, height=height)
                 visual.data["name"] = name
                 visual.save()
 
@@ -729,10 +730,10 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
             specs = [("card1", 50), ("card2", 60), ("card3", 40)]
             for name, height in specs:
-                visual = project.create_visual(page, "cardVisual", width=100, height=height)
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual", width=100, height=height)
                 visual.data["name"] = name
                 visual.save()
 
@@ -770,8 +771,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "cardVisual")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual")
             visual.data["name"] = "card1"
             visual.save()
 
@@ -799,8 +800,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -826,8 +827,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -872,9 +873,9 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
             for idx in range(2):
-                visual = project.create_visual(page, "cardVisual")
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual")
                 visual.data["name"] = f"card{idx}"
                 visual.save()
 
@@ -902,9 +903,9 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
+            page = ReportAuthoring(project).create_page("Demo")
             for idx in range(2):
-                visual = project.create_visual(page, "cardVisual")
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual")
                 visual.data["name"] = f"card{idx}"
                 visual.save()
 
@@ -934,8 +935,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -993,8 +994,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "shape")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "shape")
             visual.data["name"] = "shape1"
             visual.save()
 
@@ -1022,8 +1023,8 @@ class VisualSetRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Demo")
-            visual = project.create_visual(page, "barChart")
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "barChart")
             visual.data["name"] = "chart1"
             visual.save()
 
@@ -1053,8 +1054,8 @@ class TestVisualInspect(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Test")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
 
             # Set some chart objects
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
@@ -1081,8 +1082,8 @@ class TestVisualInspect(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            visual = project.create_visual(page, "card")
+            page = ReportAuthoring(project).create_page("Test")
+            visual = ReportAuthoring(project).create_visual(page, "card")
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
             set_property(visual.data, "title.text", "Hello", VISUAL_PROPERTIES)
             set_property(visual.data, "border.show", "true", VISUAL_PROPERTIES)
@@ -1104,8 +1105,8 @@ class TestVisualInspect(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            visual = project.create_visual(page, "card")
+            page = ReportAuthoring(project).create_page("Test")
+            visual = ReportAuthoring(project).create_visual(page, "card")
             set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
             visual.save()
 

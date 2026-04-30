@@ -8,6 +8,7 @@ import yaml
 
 from pbi.apply import apply_yaml
 from pbi.properties import VISUAL_PROPERTIES, set_property
+from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
 
 
@@ -213,8 +214,8 @@ class TestConditionalFormattingListSyntaxGuard(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Test")
+            ReportAuthoring(project).create_visual(page, "tableEx")
 
             yaml_content = yaml.safe_dump({
                 "version": 1,
@@ -289,8 +290,8 @@ class TestRulesBasedConditionalFormatting(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Test")
+            ReportAuthoring(project).create_visual(page, "tableEx")
 
             yaml_content = yaml.safe_dump({
                 "version": 1,
@@ -330,8 +331,8 @@ class TestVisualFormatSetCli(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            page = project.create_page("Test")
-            visual = project.create_visual(page, "tableEx")
+            page = ReportAuthoring(project).create_page("Test")
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
 
             result = CliRunner().invoke(
                 app,
@@ -405,7 +406,7 @@ class TestPerColumnConditionalFormatting(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
-            project.create_page("Test")
+            ReportAuthoring(project).create_page("Test")
 
             yaml_content = yaml.safe_dump({
                 "version": 1,

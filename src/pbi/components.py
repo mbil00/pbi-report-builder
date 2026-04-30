@@ -11,8 +11,8 @@ import yaml
 
 from pbi.export import export_visual_spec
 from pbi.project import Page, Project, Visual, sanitize_visual_name
+from pbi.report_authoring import ReportAuthoring
 from pbi.visual_stamping import create_visual_from_spec
-from pbi.visual_groups import create_group
 
 
 @dataclass(frozen=True)
@@ -551,7 +551,7 @@ def apply_component(
 
     # Group the created visuals if more than one
     if len(created) >= 2:
-        group = create_group(project, page, created, display_name=instance_name or component_name)
+        group = ReportAuthoring(project).create_group(page, created, display_name=instance_name or component_name)
         created.append(group)
 
     return created
@@ -579,8 +579,8 @@ def _remove_existing_component_instance(project: Project, page: Page, component_
             if visual.data.get("parentGroupName") == group.name
         ]
         for child in children:
-            project.delete_visual(child)
-        project.delete_visual(group)
+            ReportAuthoring(project).delete_visual(child)
+        ReportAuthoring(project).delete_visual(group)
 
 
 def apply_component_row(

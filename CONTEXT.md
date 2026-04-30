@@ -32,6 +32,10 @@ _Avoid_: column string, measure string
 The export/edit/apply workflow that represents PBIR Report and Semantic Model changes declaratively in YAML.
 _Avoid_: config sync, template import
 
+**PBIR Report Authoring**:
+Mutation of Pages, Visuals, grouping, Visual bindings, and Visual sort definitions in a PBIR Report.
+_Avoid_: project authoring, report service
+
 **Conditional Formatting Intent**:
 A user-facing request to derive a visual or theme color property from a measure, gradient, or rule set.
 _Avoid_: formatting payload, color expression
