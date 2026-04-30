@@ -14,16 +14,24 @@ from pbi.project import Project
 from pbi.project_runtime import register_project_schemas
 console = Console()
 
+_GLOBAL_PROJECT: Path | None = None
+
 ProjectOpt = Annotated[
     Optional[Path],
     typer.Option("--project", "-p", help="Path to PBIP project (default: auto-detect from cwd)."),
 ]
 
 
+def set_global_project(project: Path | None) -> None:
+    """Set the root-level --project value for subcommands that omit it."""
+    global _GLOBAL_PROJECT
+    _GLOBAL_PROJECT = project
+
+
 def find_project(project: Path | None) -> Project:
     """Resolve a PBIP project or exit with a CLI-friendly error."""
     try:
-        return Project.find(project)
+        return Project.find(project if project is not None else _GLOBAL_PROJECT)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

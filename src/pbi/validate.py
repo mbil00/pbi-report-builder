@@ -29,6 +29,7 @@ def validate_project(
     project: Project,
     *,
     include_model_checks: bool = True,
+    include_layout_checks: bool = True,
 ) -> list[ValidationIssue]:
     """Validate the entire project. Returns list of issues found."""
     issues: list[ValidationIssue] = []
@@ -114,7 +115,8 @@ def validate_project(
                 issues.extend(_validate_group_membership(page_dir.name, page_visuals))
 
     # Validate visual layout (overlaps, out-of-bounds, zero sizes)
-    issues.extend(_validate_layout(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
+    if include_layout_checks:
+        issues.extend(_validate_layout(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
 
     # Validate cross-table relationships in visual bindings
     if include_model_checks:

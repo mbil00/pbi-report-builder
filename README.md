@@ -70,6 +70,16 @@ Reusable page templates now support full-page YAML capture plus project/global s
 
 See [docs/agent-workflows.md](docs/agent-workflows.md) for detailed patterns.
 
+## Scope and limitations
+
+This tool edits PBIP/PBIR projects on disk. It is not a full Power BI Desktop replacement: advanced visual query shapes, obscure Desktop-generated metadata, and some custom visual behaviors may still require Desktop or a canonical exported sample.
+
+## Development
+
+```bash
+uv run --extra dev pytest -q
+```
+
 ## Documentation
 
 Detailed guides are in the [docs/](docs/) folder:

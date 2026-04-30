@@ -22,6 +22,7 @@ from pbi.commands.common import (
     parse_property_assignments,
     resolve_yaml_input,
     resolve_output_path,
+    set_global_project,
 )
 from pbi.commands.filters import filter_app
 from pbi.commands.images import image_app
@@ -66,8 +67,12 @@ def main(
         bool,
         typer.Option("--version", "-V", help="Show version and exit.", callback=_version_callback, is_eager=True),
     ] = False,
+    project: ProjectOpt = None,
 ) -> None:
     """CLI tool for editing Power BI PBIP project files."""
+    set_global_project(project)
+
+
 app.add_typer(report_app, name="report")
 app.add_typer(page_app, name="page")
 app.add_typer(visual_app, name="visual")
@@ -514,6 +519,9 @@ def capabilities(
 @app.command()
 def validate(
     strict: Annotated[bool, typer.Option("--strict", help="Fail on warnings as well as errors.")] = False,
+    errors_only: Annotated[bool, typer.Option("--errors-only", help="Only print errors; suppress warnings in output.")] = False,
+    no_layout: Annotated[bool, typer.Option("--no-layout", help="Skip layout warnings such as overlaps and out-of-bounds visuals.")] = False,
+    max_warnings: Annotated[Optional[int], typer.Option("--max-warnings", help="Maximum number of warnings to print (exit behavior is unchanged).")] = None,
     ignore_schema_warnings: Annotated[
         bool,
         typer.Option("--ignore-schema-warnings", help="Suppress schema-derived warnings from validation output."),
@@ -528,7 +536,7 @@ def validate(
     from pbi.validate import validate_project
 
     proj = get_project(project)
-    issues = validate_project(proj)
+    issues = validate_project(proj, include_layout_checks=not no_layout)
     if ignore_schema_warnings:
         issues = [
             issue for issue in issues
@@ -540,7 +548,8 @@ def validate(
         return
 
     errors = [i for i in issues if i.level == "error"]
-    warnings = [i for i in issues if i.level == "warning"]
+    all_warnings = [i for i in issues if i.level == "warning"]
+    warnings = [] if errors_only else all_warnings
 
     if errors:
         console.print(f"\n[red bold]{len(errors)} error(s):[/red bold]")
@@ -548,13 +557,17 @@ def validate(
             console.print(f"  [red]ERROR[/red] {issue.file}: {issue.message}")
 
     if warnings:
+        visible_warnings = warnings[:max_warnings] if max_warnings is not None else warnings
         console.print(f"\n[yellow bold]{len(warnings)} warning(s):[/yellow bold]")
-        for issue in warnings:
+        for issue in visible_warnings:
             console.print(f"  [yellow]WARN[/yellow]  {issue.file}: {issue.message}")
+        hidden = len(warnings) - len(visible_warnings)
+        if hidden > 0:
+            console.print(f"  [dim]... {hidden} more warning(s) hidden by --max-warnings[/dim]")
 
     if errors:
         raise typer.Exit(1)
-    if strict and warnings:
+    if strict and all_warnings:
         raise typer.Exit(1)
 
 

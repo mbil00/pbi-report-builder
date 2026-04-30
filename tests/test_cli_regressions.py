@@ -215,6 +215,35 @@ class OutputPathHardeningTests(unittest.TestCase):
             self.assertTrue(output.exists())
 
 
+class GlobalProjectOptionRegressionTests(unittest.TestCase):
+    def test_root_level_project_option_is_used_by_subcommands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            runner = CliRunner()
+
+            result = runner.invoke(app, ["--project", str(root), "page", "list"])
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Name", result.stdout)
+
+
+class ValidateCliRegressionTests(unittest.TestCase):
+    def test_validate_no_layout_suppresses_overlap_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Demo")
+            project.create_visual(page, "textbox", x=0, y=0, width=100, height=100)
+            project.create_visual(page, "textbox", x=0, y=0, width=100, height=100)
+            runner = CliRunner()
+
+            result = runner.invoke(app, ["--project", str(root), "validate", "--no-layout", "--errors-only"])
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("No issues found", result.stdout)
+
+
 class GroupDeleteRegressionTests(unittest.TestCase):
     def test_delete_visual_group_clears_children_without_crashing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
