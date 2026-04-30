@@ -521,7 +521,9 @@ def validate(
     strict: Annotated[bool, typer.Option("--strict", help="Fail on warnings as well as errors.")] = False,
     errors_only: Annotated[bool, typer.Option("--errors-only", help="Only print errors; suppress warnings in output.")] = False,
     no_layout: Annotated[bool, typer.Option("--no-layout", help="Skip layout warnings such as overlaps and out-of-bounds visuals.")] = False,
+    no_model: Annotated[bool, typer.Option("--no-model", help="Skip semantic-model relationship checks.")] = False,
     max_warnings: Annotated[Optional[int], typer.Option("--max-warnings", help="Maximum number of warnings to print (exit behavior is unchanged).")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output validation issues as JSON.")] = False,
     ignore_schema_warnings: Annotated[
         bool,
         typer.Option("--ignore-schema-warnings", help="Suppress schema-derived warnings from validation output."),
@@ -536,19 +538,33 @@ def validate(
     from pbi.validate import validate_project
 
     proj = get_project(project)
-    issues = validate_project(proj, include_layout_checks=not no_layout)
+    issues = validate_project(
+        proj,
+        include_layout_checks=not no_layout,
+        include_model_checks=not no_model,
+    )
     if ignore_schema_warnings:
         issues = [
             issue for issue in issues
             if not (issue.level == "warning" and issue.message.startswith("Schema:"))
         ]
 
+    errors = [i for i in issues if i.level == "error"]
+    all_warnings = [i for i in issues if i.level == "warning"]
+
+    if as_json:
+        import json as json_mod
+        from dataclasses import asdict
+
+        console.print_json(json_mod.dumps([asdict(issue) for issue in issues], indent=2))
+        if errors or (strict and all_warnings):
+            raise typer.Exit(1)
+        return
+
     if not issues:
         console.print("[green]No issues found.[/green]")
         return
 
-    errors = [i for i in issues if i.level == "error"]
-    all_warnings = [i for i in issues if i.level == "warning"]
     warnings = [] if errors_only else all_warnings
 
     if errors:

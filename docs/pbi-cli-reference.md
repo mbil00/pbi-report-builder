@@ -94,6 +94,8 @@ pbi apply sales.yaml               # apply
 cat sales.yaml | pbi diff          # diff from stdin
 cat sales.yaml | pbi apply         # apply from stdin
 pbi validate --strict              # fail on warnings too
+pbi validate --errors-only --no-layout --no-model
+pbi validate --json                # machine-readable issue list
 pbi validate --ignore-schema-warnings
 
 # Model YAML apply

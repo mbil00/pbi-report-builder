@@ -243,6 +243,21 @@ class ValidateCliRegressionTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No issues found", result.stdout)
 
+    def test_validate_json_outputs_machine_readable_issues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            report_path = project.definition_folder / "report.json"
+            report_path.write_text("{broken", encoding="utf-8")
+            runner = CliRunner()
+
+            result = runner.invoke(app, ["--project", str(root), "validate", "--json"])
+
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            issues = json.loads(result.stdout)
+            self.assertEqual(issues[0]["level"], "error")
+            self.assertIn("Invalid JSON", issues[0]["message"])
+
 
 class GroupDeleteRegressionTests(unittest.TestCase):
     def test_delete_visual_group_clears_children_without_crashing(self) -> None:

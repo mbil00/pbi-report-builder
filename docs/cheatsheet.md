@@ -473,6 +473,9 @@ pbi map --page "Overview"       # single page detail
 pbi info                         # quick project summary
 pbi validate                    # check for structural errors, schema violations, and warnings
 pbi validate --strict           # also fail on warnings
+pbi validate --errors-only --no-layout --no-model
+pbi validate --max-warnings 20
+pbi validate --json             # machine-readable issue list
 pbi validate --ignore-schema-warnings
 pbi render "Overview" -o page.html   # HTML mockup of page layout
 pbi capabilities                 # show what the CLI supports vs PBIR spec

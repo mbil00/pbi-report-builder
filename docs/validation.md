@@ -7,12 +7,17 @@ Check project files for structural errors without requiring external schema down
 ```bash
 pbi validate
 pbi validate --strict
-pbi validate --ignore-schema-warnings
+pbi validate --errors-only
+pbi validate --no-layout --no-model
+pbi validate --max-warnings 20
+pbi validate --json
 pbi validate -p /path/to/project
 ```
 
 Exit code `0` if no errors are found. By default warnings do not fail the
-command. Use `--strict` to exit `1` on warnings too. Use
+command. Use `--strict` to exit `1` on warnings too. Use `--errors-only`,
+`--max-warnings`, `--no-layout`, and `--no-model` to reduce noisy output during
+agent runs. Use `--json` for machine-readable issue lists. Use
 `--ignore-schema-warnings` to suppress known schema-gap warnings such as textbox
 or image internals when you only care about structural issues.
 
