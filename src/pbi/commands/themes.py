@@ -1080,12 +1080,12 @@ def theme_format_set(
 ) -> None:
     """Set theme-level conditional formatting on a visualStyles property."""
     from pbi.formatting import (
+        ConditionalFormattingIntent,
+        ConditionalFormattingRule,
         GradientStop,
-        build_gradient_format,
-        build_measure_format,
-        build_rules_format,
-        conditional_source_warning,
-        conditional_target_warning,
+        parse_conditional_formatting_rule,
+        parse_conditional_formatting_target,
+        resolve_conditional_formatting,
     )
     from pbi.properties import VISUAL_PROPERTIES
     from pbi.themes import clear_visual_style_property, get_theme_data, save_theme_data, set_visual_style_value
@@ -1097,31 +1097,28 @@ def theme_format_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    dot = prop.find(".")
-    if dot == -1:
+    try:
+        target = parse_conditional_formatting_target(prop)
+    except ValueError:
         console.print("[red]Error:[/red] Property must be object.prop format (e.g. dataPoint.fill).")
         raise typer.Exit(1)
-    obj_name, prop_name = prop[:dot], prop[dot + 1 :]
+    obj_name, prop_name = target.object_name, target.property_name
 
-    property_def = VISUAL_PROPERTIES.get(f"{obj_name}.{prop_name}")
+    property_def = VISUAL_PROPERTIES.get(target.path)
+    validation_visual_type = visual_type
     if property_def is not None:
+        validation_visual_type = None
         if property_def.value_type != "color":
             console.print(
-                f'[red]Error:[/red] Conditional formatting target "{obj_name}.{prop_name}" is not a color property.'
+                f'[red]Error:[/red] Conditional formatting target "{target.path}" is not a color property.'
             )
-            raise typer.Exit(1)
-    else:
-        target_warning = conditional_target_warning(visual_type, obj_name, prop_name)
-        if target_warning is not None:
-            console.print(f"[red]Error:[/red] {target_warning}")
             raise typer.Exit(1)
 
     if mode not in {"measure", "gradient", "rules"}:
         console.print("[red]Error:[/red] --mode must be 'measure', 'gradient', or 'rules'.")
         raise typer.Exit(1)
 
-    src_dot = source.find(".")
-    if src_dot == -1:
+    if source.find(".") == -1:
         console.print("[red]Error:[/red] --source must be Table.Field format.")
         raise typer.Exit(1)
 
@@ -1132,52 +1129,19 @@ def theme_format_set(
     except (FileNotFoundError, ValueError):
         model = None
 
-    try:
-        source_field_type = "measure" if mode == "measure" and model is None else "auto"
-        src_entity, src_prop, src_field_type, src_data_type = resolve_field_info(
-            proj,
-            source,
-            source_field_type,
-            model=model,
-            strict=True,
-        )
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    source_warning = conditional_source_warning(
-        mode,
-        f"{src_entity}.{src_prop}",
-        src_field_type,
-        src_data_type,
-    )
-    if source_warning is not None:
-        console.print(f"[red]Error:[/red] {source_warning}")
-        raise typer.Exit(1)
-
-    if mode == "measure":
-        value = build_measure_format(src_entity, src_prop)
-    elif mode == "rules":
+    rules: list[ConditionalFormattingRule] = []
+    if mode == "rules":
         if not rule:
             console.print("[red]Error:[/red] Rules mode requires at least one --rule value=color pair.")
             raise typer.Exit(1)
-        parsed_rules = []
-        for raw_rule in rule:
-            eq = raw_rule.find("=")
-            if eq == -1:
-                console.print(
-                    f'[red]Error:[/red] Invalid rule "{raw_rule}". Use value=color format (e.g. Compliant=#2B7A4B).'
-                )
-                raise typer.Exit(1)
-            parsed_rules.append({"value": raw_rule[:eq], "color": raw_rule[eq + 1 :]})
-        value = build_rules_format(
-            src_entity,
-            src_prop,
-            parsed_rules,
-            else_color=else_color,
-            field_type=src_field_type,
-        )
-    else:
+        try:
+            rules = [parse_conditional_formatting_rule(raw_rule) for raw_rule in rule]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    min_stop = max_stop = mid_stop = None
+    if mode == "gradient":
         if min_color is None or min_value is None or max_color is None or max_value is None:
             console.print(
                 "[red]Error:[/red] Gradient mode requires --min-color, --min-value, --max-color, and --max-value."
@@ -1185,21 +1149,46 @@ def theme_format_set(
             raise typer.Exit(1)
         min_c = min_color if min_color.startswith("#") else f"#{min_color}"
         max_c = max_color if max_color.startswith("#") else f"#{max_color}"
-        mid_stop = None
+        min_stop = GradientStop(min_c, min_value)
+        max_stop = GradientStop(max_c, max_value)
         if mid_color is not None and mid_value is not None:
             mid_c = mid_color if mid_color.startswith("#") else f"#{mid_color}"
             mid_stop = GradientStop(mid_c, mid_value)
         elif mid_color is not None or mid_value is not None:
             console.print("[red]Error:[/red] Both --mid-color and --mid-value are required for a 3-stop gradient.")
             raise typer.Exit(1)
-        value = build_gradient_format(
-            src_entity,
-            src_prop,
-            min_stop=GradientStop(min_c, min_value),
-            max_stop=GradientStop(max_c, max_value),
-            mid_stop=mid_stop,
-            field_type=src_field_type,
+
+    intent = ConditionalFormattingIntent(
+        target=target,
+        mode=mode,
+        source=source,
+        min_stop=min_stop,
+        max_stop=max_stop,
+        mid_stop=mid_stop,
+        rules=rules,
+        else_color=else_color,
+    )
+
+    def _field_resolver(field_ref: str, preferred_type: str) -> tuple[str, str, str, str | None]:
+        source_field_type = "measure" if preferred_type == "measure" and model is None else preferred_type
+        return resolve_field_info(
+            proj,
+            field_ref,
+            source_field_type,
+            model=model,
+            strict=True,
         )
+
+    resolved = resolve_conditional_formatting(
+        intent,
+        field_resolver=_field_resolver,
+        visual_type=validation_visual_type,
+    )
+    if resolved.errors:
+        console.print(f"[red]Error:[/red] {resolved.errors[0]}")
+        raise typer.Exit(1)
+    value = resolved.value or {}
+    source_label = resolved.source_ref or source
 
     clear_visual_style_property(data, visual_type, obj_name, prop_name, selector=selector, role=role)
     set_visual_style_value(
@@ -1217,15 +1206,15 @@ def theme_format_set(
     role_label = f" ({role})" if role != "*" else ""
     if mode == "measure":
         console.print(
-            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = measure [bold]{src_entity}.{src_prop}[/bold]"
+            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = measure [bold]{source_label}[/bold]"
         )
     elif mode == "rules":
         console.print(
-            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = rules by [bold]{src_entity}.{src_prop}[/bold]"
+            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = rules by [bold]{source_label}[/bold]"
         )
     else:
         console.print(
-            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = gradient by [bold]{src_entity}.{src_prop}[/bold]"
+            f"Set [cyan]{visual_type}:{prop}{selector_label}[/cyan]{role_label} = gradient by [bold]{source_label}[/bold]"
         )
 
 

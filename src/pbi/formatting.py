@@ -7,8 +7,8 @@ object property.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 
 # ── Data types ────────────────────────────────────────────────────
@@ -29,6 +29,142 @@ class ConditionalFormatInfo:
     field_ref: str  # "Table.Field" for the driving measure/field
     details: str  # Human-readable summary
     column: str = ""  # Per-column target (empty = all columns)
+
+
+@dataclass(frozen=True)
+class ConditionalFormattingTarget:
+    """A color property targeted by a Conditional Formatting Intent."""
+    object_name: str
+    property_name: str
+
+    @property
+    def path(self) -> str:
+        return f"{self.object_name}.{self.property_name}"
+
+
+@dataclass(frozen=True)
+class ConditionalFormattingRule:
+    """One equality rule in a rules-based Conditional Formatting Intent."""
+    value: str
+    color: str
+
+
+@dataclass(frozen=True)
+class ConditionalFormattingIntent:
+    """User-facing request to produce a conditional-formatting PBIR value."""
+    target: ConditionalFormattingTarget
+    mode: str
+    source: str
+    min_stop: GradientStop | None = None
+    max_stop: GradientStop | None = None
+    mid_stop: GradientStop | None = None
+    rules: list[ConditionalFormattingRule] = field(default_factory=list)
+    else_color: str | None = None
+    null_strategy: str | None = None
+    column: str | None = None
+
+
+@dataclass
+class ConditionalFormattingResult:
+    """Resolved conditional-formatting target and PBIR value, plus diagnostics."""
+    target: ConditionalFormattingTarget
+    value: dict | None = None
+    column: str | None = None
+    source_ref: str | None = None
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return self.value is not None and not self.errors
+
+
+FieldResolver = Callable[[str, str], tuple[str, str, str, str | None]]
+
+
+def parse_conditional_formatting_target(prop_path: str) -> ConditionalFormattingTarget:
+    """Parse an object.prop path into a ConditionalFormattingTarget."""
+    dot = str(prop_path).find(".")
+    if dot == -1:
+        raise ValueError(f"conditionalFormatting key must be object.prop: {prop_path}")
+    object_name = str(prop_path)[:dot]
+    property_name = str(prop_path)[dot + 1 :]
+    if not object_name or not property_name:
+        raise ValueError(f"conditionalFormatting key must be object.prop: {prop_path}")
+    return ConditionalFormattingTarget(object_name, property_name)
+
+
+def parse_conditional_formatting_rule(raw_rule: str) -> ConditionalFormattingRule:
+    """Parse a CLI value=color rule into a ConditionalFormattingRule."""
+    eq = raw_rule.find("=")
+    if eq == -1:
+        raise ValueError(f'Invalid rule "{raw_rule}". Use value=color format (e.g. Compliant=#2B7A4B).')
+    return ConditionalFormattingRule(raw_rule[:eq], raw_rule[eq + 1 :])
+
+
+def conditional_formatting_intent_from_config(
+    prop_path: str,
+    config: dict,
+) -> ConditionalFormattingIntent:
+    """Build a ConditionalFormattingIntent from a YAML conditionalFormatting entry."""
+    if not isinstance(config, dict):
+        raise ValueError(f"conditionalFormatting.{prop_path} must be a mapping.")
+
+    target = parse_conditional_formatting_target(prop_path)
+    mode = str(config.get("mode", "measure"))
+    source = str(config.get("source", ""))
+    column_ref = config.get("column")
+    column = str(column_ref) if column_ref is not None else None
+
+    min_stop = max_stop = mid_stop = None
+    if mode == "gradient":
+        min_spec = config.get("min", {})
+        max_spec = config.get("max", {})
+        mid_spec = config.get("mid")
+        if not isinstance(min_spec, dict) or not isinstance(max_spec, dict):
+            raise ValueError("conditionalFormatting gradient min/max must be mappings.")
+        min_stop = GradientStop(str(min_spec.get("color", "#FF0000")), float(min_spec.get("value", 0)))
+        max_stop = GradientStop(str(max_spec.get("color", "#00FF00")), float(max_spec.get("value", 100)))
+        if mid_spec is not None:
+            if not isinstance(mid_spec, dict):
+                raise ValueError("conditionalFormatting gradient mid must be a mapping.")
+            mid_stop = GradientStop(str(mid_spec.get("color", "")), float(mid_spec.get("value", 50)))
+
+    rules: list[ConditionalFormattingRule] = []
+    else_color = None
+    if mode == "rules":
+        rules_list = config.get("rules", [])
+        if not isinstance(rules_list, list) or not rules_list:
+            raise ValueError("conditionalFormatting rules mode requires a non-empty 'rules' list.")
+        for raw in rules_list:
+            if not isinstance(raw, dict):
+                raise ValueError("each rule must be a mapping with 'if' and 'color' keys.")
+            rule_value = raw.get("if")
+            rule_color = raw.get("color")
+            if rule_value is None or rule_color is None:
+                raise ValueError("each rule must have 'if' and 'color' keys.")
+            rules.append(ConditionalFormattingRule(str(rule_value), str(rule_color)))
+        else_spec = config.get("else")
+        else_color = (
+            str(else_spec.get("color"))
+            if isinstance(else_spec, dict) and else_spec.get("color") is not None
+            else str(else_spec)
+            if isinstance(else_spec, str)
+            else None
+        )
+
+    return ConditionalFormattingIntent(
+        target=target,
+        mode=mode,
+        source=source,
+        min_stop=min_stop,
+        max_stop=max_stop,
+        mid_stop=mid_stop,
+        rules=rules,
+        else_color=else_color,
+        null_strategy=config.get("nullStrategy"),
+        column=column,
+    )
 
 
 def conditional_source_warning(
@@ -54,6 +190,96 @@ def conditional_source_warning(
             )
 
     return None
+
+
+def resolve_conditional_formatting(
+    intent: ConditionalFormattingIntent,
+    *,
+    field_resolver: FieldResolver | None = None,
+    visual_type: str | None = None,
+) -> ConditionalFormattingResult:
+    """Resolve a Conditional Formatting Intent into a target and PBIR value.
+
+    The caller supplies a field_resolver adapter so this module owns the
+    conditional-formatting validation flow without owning project/model loading.
+    """
+    result = ConditionalFormattingResult(target=intent.target, column=intent.column)
+
+    mode = intent.mode
+    if mode not in {"measure", "gradient", "rules"}:
+        result.errors.append(
+            f"conditionalFormatting mode must be 'measure', 'gradient', or 'rules': {mode}"
+        )
+        return result
+
+    target_warning = conditional_target_warning(
+        visual_type,
+        intent.target.object_name,
+        intent.target.property_name,
+    )
+    if target_warning is not None:
+        result.errors.append(target_warning)
+        return result
+
+    if "." not in intent.source:
+        result.errors.append(f"conditionalFormatting source must be Table.Field: {intent.source}")
+        return result
+
+    src_entity, src_prop = intent.source.split(".", 1)
+    src_field_type = "measure"
+    src_data_type = None
+    if field_resolver is not None:
+        try:
+            preferred_type = "measure" if mode == "measure" else "auto"
+            src_entity, src_prop, src_field_type, src_data_type = field_resolver(
+                intent.source,
+                preferred_type,
+            )
+        except ValueError as e:
+            result.errors.append(str(e))
+            return result
+
+    result.source_ref = f"{src_entity}.{src_prop}"
+    source_warning = conditional_source_warning(
+        mode,
+        result.source_ref,
+        src_field_type,
+        src_data_type,
+    )
+    if source_warning is not None:
+        result.errors.append(source_warning)
+        return result
+
+    if mode == "measure":
+        result.value = build_measure_format(src_entity, src_prop)
+        return result
+
+    if mode == "gradient":
+        if intent.min_stop is None or intent.max_stop is None:
+            result.errors.append("Gradient mode requires min and max stops.")
+            return result
+        result.value = build_gradient_format(
+            src_entity,
+            src_prop,
+            intent.min_stop,
+            intent.max_stop,
+            intent.mid_stop,
+            null_strategy=intent.null_strategy,
+            field_type=src_field_type,
+        )
+        return result
+
+    if not intent.rules:
+        result.errors.append("Rules mode requires at least one rule.")
+        return result
+    result.value = build_rules_format(
+        src_entity,
+        src_prop,
+        [{"value": rule.value, "color": rule.color} for rule in intent.rules],
+        else_color=intent.else_color,
+        field_type=src_field_type,
+    )
+    return result
 
 
 def conditional_target_warning(

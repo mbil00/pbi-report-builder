@@ -140,6 +140,72 @@ class TestBug026FillRuleInput(unittest.TestCase):
         self.assertEqual(formats[0].field_ref, "Measures Table.Total Devices")
         self.assertEqual(formats[0].format_type, "gradient2")
 
+class TestConditionalFormattingIntentResolution(unittest.TestCase):
+    def test_resolve_measure_intent_returns_targeted_value(self):
+        from pbi.formatting import (
+            ConditionalFormattingIntent,
+            ConditionalFormattingTarget,
+            resolve_conditional_formatting,
+        )
+
+        intent = ConditionalFormattingIntent(
+            target=ConditionalFormattingTarget("dataPoint", "fill"),
+            mode="measure",
+            source="Measures.Color",
+        )
+        result = resolve_conditional_formatting(
+            intent,
+            field_resolver=lambda _ref, _preferred: ("Measures", "Color", "measure", None),
+            visual_type="clusteredColumnChart",
+        )
+
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(result.target.path, "dataPoint.fill")
+        self.assertEqual(result.source_ref, "Measures.Color")
+        self.assertIn("Measure", result.value["solid"]["color"]["expr"])
+
+    def test_resolve_reports_field_resolver_errors(self):
+        from pbi.formatting import (
+            ConditionalFormattingIntent,
+            ConditionalFormattingTarget,
+            resolve_conditional_formatting,
+        )
+
+        def fail(_ref: str, _preferred: str):
+            raise ValueError("missing field")
+
+        intent = ConditionalFormattingIntent(
+            target=ConditionalFormattingTarget("dataPoint", "fill"),
+            mode="measure",
+            source="Measures.Missing",
+        )
+        result = resolve_conditional_formatting(intent, field_resolver=fail)
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors, ["missing field"])
+
+    def test_resolve_rejects_non_color_target(self):
+        from pbi.formatting import (
+            ConditionalFormattingIntent,
+            ConditionalFormattingTarget,
+            resolve_conditional_formatting,
+        )
+
+        intent = ConditionalFormattingIntent(
+            target=ConditionalFormattingTarget("legend", "show"),
+            mode="measure",
+            source="Sales.Color",
+        )
+        result = resolve_conditional_formatting(
+            intent,
+            field_resolver=lambda _ref, _preferred: ("Sales", "Color", "measure", None),
+            visual_type="clusteredColumnChart",
+        )
+
+        self.assertTrue(result.errors)
+        self.assertTrue(any("not a color property" in error for error in result.errors))
+
+
 class TestConditionalFormattingListSyntaxGuard(unittest.TestCase):
     """List-syntax conditionalFormatting should produce a clear error, not crash."""
 
@@ -253,6 +319,50 @@ class TestRulesBasedConditionalFormatting(unittest.TestCase):
             result = apply_yaml(project, yaml_content, dry_run=False)
             self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
             self.assertGreater(result.properties_set, 0)
+
+class TestVisualFormatSetCli(unittest.TestCase):
+    def test_visual_format_set_uses_shared_intent_resolution(self):
+        from typer.testing import CliRunner
+
+        from pbi.cli import app
+        from pbi.formatting import get_conditional_formats
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = project.create_page("Test")
+            visual = project.create_visual(page, "tableEx")
+
+            result = CliRunner().invoke(
+                app,
+                [
+                    "--project",
+                    str(root),
+                    "visual",
+                    "format",
+                    "set",
+                    "Test",
+                    visual.name,
+                    "values.backColor",
+                    "--mode",
+                    "rules",
+                    "--source",
+                    "Devices.ComplianceState",
+                    "--rule",
+                    "noncompliant=#B83B3B",
+                    "--rule",
+                    "compliant=#2B7A4B",
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            project.clear_caches()
+            saved = project.find_visual(project.find_page("Test"), visual.name)
+            formats = get_conditional_formats(saved.data)
+            self.assertEqual(len(formats), 1)
+            self.assertEqual(formats[0].format_type, "rules")
+            self.assertEqual(formats[0].field_ref, "Devices.ComplianceState")
+
 
 class TestPerColumnConditionalFormatting(unittest.TestCase):
     """Per-column conditional formatting targeting."""

@@ -16,7 +16,6 @@ from pbi.properties import (
 from pbi.roundtrip import iter_nested_property_assignments
 from pbi.styles import StylePreset, get_style
 from pbi.textbox import set_textbox_content
-from pbi.fields import resolve_field_info
 
 
 def record_schema_warnings(
@@ -125,13 +124,10 @@ def apply_conditional_formatting(
     model: Any = None,
 ) -> None:
     """Apply conditional formatting from the YAML spec."""
+    from pbi.fields import resolve_field_info
     from pbi.formatting import (
-        GradientStop,
-        build_gradient_format,
-        build_measure_format,
-        build_rules_format,
-        conditional_source_warning,
-        conditional_target_warning,
+        conditional_formatting_intent_from_config,
+        resolve_conditional_formatting,
         set_conditional_format,
     )
     if not isinstance(cf_spec, dict):
@@ -145,126 +141,46 @@ def apply_conditional_formatting(
             result.errors.append(f"{context}: conditionalFormatting.{prop_path} must be a mapping.")
             continue
 
-        dot = prop_path.find(".")
-        if dot == -1:
-            result.errors.append(f"{context}: conditionalFormatting key must be object.prop: {prop_path}")
-            continue
-        obj_name = prop_path[:dot]
-        prop_name = prop_path[dot + 1 :]
-
-        target_warning = conditional_target_warning(visual_type, obj_name, prop_name)
-        if target_warning is not None:
-            result.errors.append(f"{context}: {target_warning}")
+        try:
+            intent = conditional_formatting_intent_from_config(prop_path, config)
+        except ValueError as e:
+            result.errors.append(f"{context}: {e}")
             continue
 
-        mode = config.get("mode", "measure")
-        source = config.get("source", "")
-        src_dot = source.find(".")
-        if src_dot == -1:
-            result.errors.append(f"{context}: conditionalFormatting source must be Table.Field: {source}")
-            continue
-        src_entity = source[:src_dot]
-        src_prop = source[src_dot + 1 :]
-        src_field_type = "measure"
-        src_data_type = None
-        if project is not None:
-            try:
-                source_field_type = "measure" if mode == "measure" and model is None else "auto"
-                src_entity, src_prop, src_field_type, src_data_type = resolve_field_info(
-                    project,
-                    source,
-                    source_field_type,
-                    model=model,
-                    strict=True,
-                )
-            except ValueError as e:
-                result.errors.append(f"{context}: {e}")
-                continue
+        def _field_resolver(field_ref: str, preferred_type: str) -> tuple[str, str, str, str | None]:
+            if project is None:
+                entity, prop = field_ref.split(".", 1)
+                return entity, prop, "measure" if preferred_type == "measure" else "column", None
+            effective_type = "measure" if preferred_type == "measure" and model is None else preferred_type
+            return resolve_field_info(
+                project,
+                field_ref,
+                effective_type,
+                model=model,
+                strict=True,
+            )
 
-        source_warning = conditional_source_warning(
-            mode,
-            f"{src_entity}.{src_prop}",
-            src_field_type,
-            src_data_type,
+        resolved = resolve_conditional_formatting(
+            intent,
+            field_resolver=_field_resolver,
+            visual_type=visual_type,
         )
-        if source_warning is not None:
-            result.errors.append(f"{context}: {source_warning}")
+        if resolved.errors:
+            result.errors.extend(f"{context}: {error}" for error in resolved.errors)
             continue
+        result.warnings.extend(f"{context}: {warning}" for warning in resolved.warnings)
 
         if dry_run:
             result.properties_set += 1
             continue
 
-        column_ref = config.get("column")
-
-        if mode == "measure":
-            value = build_measure_format(src_entity, src_prop)
-        elif mode == "gradient":
-            min_spec = config.get("min", {})
-            max_spec = config.get("max", {})
-            mid_spec = config.get("mid")
-            min_stop = GradientStop(str(min_spec.get("color", "#FF0000")), float(min_spec.get("value", 0)))
-            max_stop = GradientStop(str(max_spec.get("color", "#00FF00")), float(max_spec.get("value", 100)))
-            mid_stop = (
-                GradientStop(str(mid_spec.get("color", "")), float(mid_spec.get("value", 50)))
-                if mid_spec
-                else None
-            )
-            null_strategy = config.get("nullStrategy")
-            value = build_gradient_format(
-                src_entity,
-                src_prop,
-                min_stop,
-                max_stop,
-                mid_stop,
-                null_strategy=null_strategy,
-                field_type=src_field_type,
-            )
-        elif mode == "rules":
-            rules_list = config.get("rules", [])
-            if not isinstance(rules_list, list) or not rules_list:
-                result.errors.append(
-                    f"{context}: conditionalFormatting rules mode requires a non-empty 'rules' list."
-                )
-                continue
-            else_spec = config.get("else")
-            else_color = (
-                else_spec.get("color")
-                if isinstance(else_spec, dict)
-                else else_spec
-                if isinstance(else_spec, str)
-                else None
-            )
-            parsed_rules = []
-            for rule in rules_list:
-                if not isinstance(rule, dict):
-                    result.errors.append(
-                        f"{context}: each rule must be a mapping with 'if' and 'color' keys."
-                    )
-                    break
-                rule_value = rule.get("if")
-                rule_color = rule.get("color")
-                if rule_value is None or rule_color is None:
-                    result.errors.append(f"{context}: each rule must have 'if' and 'color' keys.")
-                    break
-                parsed_rules.append({"value": str(rule_value), "color": str(rule_color)})
-            else:
-                value = build_rules_format(
-                    src_entity,
-                    src_prop,
-                    parsed_rules,
-                    else_color=else_color,
-                    field_type=src_field_type,
-                )
-            if len(parsed_rules) != len(rules_list):
-                continue
-        else:
-            result.errors.append(
-                f"{context}: conditionalFormatting mode must be 'measure', 'gradient', or 'rules': {mode}"
-            )
-            continue
-
-        set_conditional_format(data, obj_name, prop_name, value, column=column_ref)
+        set_conditional_format(
+            data,
+            resolved.target.object_name,
+            resolved.target.property_name,
+            resolved.value or {},
+            column=resolved.column,
+        )
         result.properties_set += 1
 
 
