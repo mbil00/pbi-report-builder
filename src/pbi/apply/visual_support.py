@@ -13,7 +13,7 @@ from pbi.properties import (
     normalize_property_name,
     set_property,
 )
-from pbi.roundtrip import iter_nested_property_assignments
+from pbi.roundtrip_primitives import iter_nested_property_assignments
 from pbi.styles import StylePreset, get_style
 from pbi.textbox import set_textbox_content
 

@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from pbi.spec_merge import merge_spec_into
 from pbi.project import Project
 from pbi.themes import apply_theme, get_theme_data, save_theme_data
 
@@ -48,7 +49,7 @@ def apply_theme_spec(
             updated.pop(key, None)
             continue
         if isinstance(updated.get(key), dict) and isinstance(value, dict):
-            _merge_dict(updated[key], value)
+            merge_spec_into(updated[key], value)
         else:
             updated[key] = copy.deepcopy(value)
 
@@ -69,17 +70,6 @@ def apply_theme_spec(
             _apply_new_theme(project, updated)
 
     return True, touched
-
-
-def _merge_dict(target: dict[str, Any], updates: dict[str, Any]) -> None:
-    for key, value in updates.items():
-        if value is None:
-            target.pop(key, None)
-            continue
-        if isinstance(target.get(key), dict) and isinstance(value, dict):
-            _merge_dict(target[key], value)
-        else:
-            target[key] = copy.deepcopy(value)
 
 
 def _apply_new_theme(project: Project, data: dict[str, Any]) -> None:

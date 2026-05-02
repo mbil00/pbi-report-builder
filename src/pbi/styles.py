@@ -15,7 +15,7 @@ from pbi.properties import (
     normalize_property_name,
     set_property,
 )
-from pbi.roundtrip import iter_nested_property_assignments
+from pbi.roundtrip_primitives import iter_nested_property_assignments
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from pbi.spec_merge import merge_spec_into
 from pbi.project import Project
 from pbi.report_io import write_report_json
 from pbi.resources import normalize_resource_packages
@@ -55,20 +56,9 @@ def apply_report_spec(
 def _merge_value(target: dict[str, Any], key: str, value: Any) -> None:
     current = target.get(key)
     if isinstance(current, dict) and isinstance(value, dict):
-        _merge_dict(current, value)
+        merge_spec_into(current, value)
         return
     target[key] = copy.deepcopy(value)
-
-
-def _merge_dict(target: dict[str, Any], updates: dict[str, Any]) -> None:
-    for key, value in updates.items():
-        if value is None:
-            target.pop(key, None)
-            continue
-        if isinstance(target.get(key), dict) and isinstance(value, dict):
-            _merge_dict(target[key], value)
-        else:
-            target[key] = copy.deepcopy(value)
 
 
 def _normalize_top_level_value(key: str, value: Any) -> Any:

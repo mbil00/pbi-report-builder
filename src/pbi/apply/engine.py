@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Callable
+
 import yaml
 
 from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
@@ -50,60 +52,22 @@ def apply_yaml(
         result.errors.append("YAML must be a mapping with a 'pages' key.")
         return result
 
-    pages_spec = spec.get("pages", [])
-    if not isinstance(pages_spec, list):
+    if not isinstance(spec.get("pages", []), list):
         result.errors.append("'pages' must be a list.")
         return result
 
     try:
         try:
-            theme_spec = spec.get("theme")
-            report_spec = spec.get("report")
-            if page_filter is None:
-                if theme_spec is not None and not isinstance(theme_spec, dict):
-                    result.errors.append("'theme' must be a mapping.")
-                elif isinstance(theme_spec, dict) and theme_spec:
-                    session.ensure_snapshot(project)
-                    changed, touched = _apply_theme_spec(project, theme_spec, dry_run=dry_run)
-                    if changed:
-                        result.properties_set += touched
-
-                if report_spec is not None and not isinstance(report_spec, dict):
-                    result.errors.append("'report' must be a mapping.")
-                elif isinstance(report_spec, dict) and report_spec:
-                    session.ensure_snapshot(project)
-                    changed, touched = _apply_report_spec(project, report_spec, dry_run=dry_run)
-                    if changed:
-                        result.properties_set += touched
-
-            for page_spec in pages_spec:
-                if not isinstance(page_spec, dict):
-                    result.errors.append(f"Each page must be a mapping, got: {type(page_spec).__name__}")
-                    continue
-
-                page_name = page_spec.get("name")
-                if not page_name:
-                    result.errors.append("Each page must have a 'name' key.")
-                    continue
-
-                if page_filter and page_name.lower() != page_filter.lower():
-                    continue
-
-                apply_page(
-                    project,
-                    page_spec,
-                    result,
-                    dry_run=dry_run,
-                    overwrite=overwrite,
-                    style_cache=style_cache,
-                    session=session,
-                )
-
-            _finalize_visual_page_refs(project, pages_spec, session=session)
-
-            bookmarks_spec = spec.get("bookmarks", [])
-            if isinstance(bookmarks_spec, list) and bookmarks_spec:
-                _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
+            _apply_top_level_sections(
+                project,
+                spec,
+                result,
+                page_filter=page_filter,
+                dry_run=dry_run,
+                overwrite=overwrite,
+                style_cache=style_cache,
+                session=session,
+            )
 
             if not dry_run:
                 _validate_apply_invariants(project, result)
@@ -125,6 +89,97 @@ def apply_yaml(
         return result
     finally:
         session.cleanup()
+
+
+def _apply_top_level_sections(
+    project: Project,
+    spec: dict[str, Any],
+    result: ApplyResult,
+    *,
+    page_filter: str | None,
+    dry_run: bool,
+    overwrite: bool,
+    style_cache: dict[str, StylePreset],
+    session: _ApplySession,
+) -> None:
+    """Dispatch each top-level YAML section in phase order.
+
+    Phase ordering is load-bearing:
+      1. ``theme``    — document-wide visual style defaults; skipped under ``--page``
+      2. ``report``   — report-level metadata; skipped under ``--page``
+      3. ``pages``    — visual-bearing content; respects ``--page``
+      4. finalize     — fixes cross-page visual refs after all pages applied
+      5. ``bookmarks`` — references visuals, so must run after pages exist
+
+    Adding a new top-level YAML section means editing this function and the
+    symmetric dispatch in ``pbi/export.py``. See ADR-0001 for why the section
+    list stays hard-coded rather than registered through a protocol.
+    """
+    if page_filter is None:
+        _apply_doc_section(
+            project, "theme", spec.get("theme"), result,
+            _apply_theme_spec, dry_run=dry_run, session=session,
+        )
+        _apply_doc_section(
+            project, "report", spec.get("report"), result,
+            _apply_report_spec, dry_run=dry_run, session=session,
+        )
+
+    pages_spec = spec.get("pages", [])
+    for page_spec in pages_spec:
+        if not isinstance(page_spec, dict):
+            result.errors.append(
+                f"Each page must be a mapping, got: {type(page_spec).__name__}"
+            )
+            continue
+
+        page_name = page_spec.get("name")
+        if not page_name:
+            result.errors.append("Each page must have a 'name' key.")
+            continue
+
+        if page_filter and page_name.lower() != page_filter.lower():
+            continue
+
+        apply_page(
+            project,
+            page_spec,
+            result,
+            dry_run=dry_run,
+            overwrite=overwrite,
+            style_cache=style_cache,
+            session=session,
+        )
+
+    _finalize_visual_page_refs(project, pages_spec, session=session)
+
+    bookmarks_spec = spec.get("bookmarks", [])
+    if isinstance(bookmarks_spec, list) and bookmarks_spec:
+        _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
+
+
+def _apply_doc_section(
+    project: Project,
+    name: str,
+    section_spec: Any,
+    result: ApplyResult,
+    apply_fn: Callable[..., tuple[bool, int]],
+    *,
+    dry_run: bool,
+    session: _ApplySession,
+) -> None:
+    """Apply a document-scoped YAML section (``theme`` or ``report``)."""
+    if section_spec is None:
+        return
+    if not isinstance(section_spec, dict):
+        result.errors.append(f"'{name}' must be a mapping.")
+        return
+    if not section_spec:
+        return
+    session.ensure_snapshot(project)
+    changed, touched = apply_fn(project, section_spec, dry_run=dry_run)
+    if changed:
+        result.properties_set += touched
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:

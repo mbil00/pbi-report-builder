@@ -22,7 +22,7 @@ from .visual_support import (
 from .visuals import apply_visual
 from pbi.project import Project
 from pbi.properties import PAGE_PROPERTIES, set_property
-from pbi.roundtrip import apply_page_roundtrip_fields
+from pbi.roundtrip_primitives import apply_page_roundtrip_fields
 from pbi.styles import StylePreset
 from pbi.report_authoring import ReportAuthoring
 

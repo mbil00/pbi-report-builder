@@ -11,7 +11,7 @@ import yaml
 from pbi.apply import apply_yaml
 from pbi.bookmarks import create_bookmark, create_bookmark_group, export_bookmarks, get_bookmark, list_bookmarks
 from pbi.components import apply_component, apply_component_row, get_component, save_component
-from pbi.roundtrip import export_bindings
+from pbi.roundtrip_primitives import export_bindings
 from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml

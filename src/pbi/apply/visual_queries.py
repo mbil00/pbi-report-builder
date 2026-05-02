@@ -11,7 +11,7 @@ from .state import (
 )
 from pbi.project import Project, Visual
 from pbi.roles import normalize_visual_role
-from pbi.roundtrip import (
+from pbi.roundtrip_primitives import (
     build_projection,
     match_existing_projection,
     parse_binding_items,

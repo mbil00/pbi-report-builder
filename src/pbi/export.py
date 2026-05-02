@@ -17,7 +17,7 @@ from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
 from pbi.report_roundtrip import export_report_spec
 from pbi.visual_queries import get_sort
-from pbi.roundtrip import (
+from pbi.roundtrip_primitives import (
     export_bindings,
     export_object_properties,
     export_page_roundtrip_fields,
@@ -89,15 +89,24 @@ def export_page(project: Project, page: Page) -> dict:
 def export_pages(project: Project, page_filter: str | None = None) -> dict:
     """Export pages as a full apply-compatible dict.
 
-    If page_filter is given, only export that page.
+    Top-level YAML sections are emitted in the same phase order the apply
+    engine consumes them (see ``apply/engine.py::_apply_top_level_sections``).
+    Adding a new top-level section means editing both sites — see ADR-0001
+    for why the section list is hard-coded rather than registered.
+
+    Sections (in order):
+      ``version``  — schema discriminator
+      ``theme``    — document-wide style; omitted under ``page_filter``
+      ``report``   — report-level metadata; omitted under ``page_filter``
+      ``pages``    — visual-bearing content; honours ``page_filter``
+      ``bookmarks`` — references visuals, scoped to filtered page when set
     """
     result: dict[str, Any] = {"version": 1}
-    pages = project.get_pages()
 
     if page_filter:
-        page = project.find_page(page_filter)
-        pages = [page]
+        pages = [project.find_page(page_filter)]
     else:
+        pages = project.get_pages()
         theme_spec = export_theme_spec(project)
         if theme_spec:
             result["theme"] = theme_spec
@@ -106,10 +115,12 @@ def export_pages(project: Project, page_filter: str | None = None) -> dict:
             result["report"] = report_spec
 
     result["pages"] = [export_page(project, p) for p in pages]
+
     bookmark_page = pages[0] if page_filter and pages else None
     bookmarks = export_bookmarks(project, page=bookmark_page)
     if bookmarks:
         result["bookmarks"] = bookmarks
+
     return result
 
 
