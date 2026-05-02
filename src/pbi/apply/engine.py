@@ -14,9 +14,10 @@ from .pages import apply_page
 from .ops import (
     apply_bookmarks_spec as _apply_bookmarks,
 )
+from .session import run_apply
 from .state import (
     ApplyResult,
-    ApplySession as _ApplySession,
+    PbirSnapshotSession as _PbirSnapshotSession,
 )
 from .visuals import finalize_visual_page_refs as _finalize_visual_page_refs
 from pbi.project import Project
@@ -34,13 +35,6 @@ def apply_yaml(
 ) -> ApplyResult:
     """Apply a YAML specification to the project."""
     result = ApplyResult()
-    style_cache: dict[str, StylePreset] = {}
-    session = _ApplySession(dry_run=dry_run)
-    baseline_validation = (
-        _validation_issue_keys(validate_project(project, include_model_checks=False))
-        if not dry_run
-        else set()
-    )
 
     try:
         spec = yaml.safe_load(yaml_content)
@@ -56,39 +50,35 @@ def apply_yaml(
         result.errors.append("'pages' must be a list.")
         return result
 
-    try:
-        try:
-            _apply_top_level_sections(
+    style_cache: dict[str, StylePreset] = {}
+    session = _PbirSnapshotSession(project=project, dry_run=dry_run)
+    baseline_validation = (
+        _validation_issue_keys(validate_project(project, include_model_checks=False))
+        if not dry_run
+        else set()
+    )
+
+    def body() -> ApplyResult:
+        _apply_top_level_sections(
+            project,
+            spec,
+            result,
+            page_filter=page_filter,
+            dry_run=dry_run,
+            overwrite=overwrite,
+            style_cache=style_cache,
+            session=session,
+        )
+        if not dry_run:
+            _validate_apply_invariants(project, result)
+            _record_post_apply_validation(
                 project,
-                spec,
                 result,
-                page_filter=page_filter,
-                dry_run=dry_run,
-                overwrite=overwrite,
-                style_cache=style_cache,
-                session=session,
+                baseline_validation=baseline_validation,
             )
-
-            if not dry_run:
-                _validate_apply_invariants(project, result)
-                _record_post_apply_validation(
-                    project,
-                    result,
-                    baseline_validation=baseline_validation,
-                )
-        except Exception:
-            if session.snapshot_dir is not None:
-                session.restore(project)
-                result.rolled_back = True
-            raise
-
-        if result.errors and session.snapshot_dir is not None and not continue_on_error:
-            session.restore(project)
-            result.rolled_back = True
-
         return result
-    finally:
-        session.cleanup()
+
+    return run_apply(session, body, continue_on_error=continue_on_error)
 
 
 def _apply_top_level_sections(
@@ -100,7 +90,7 @@ def _apply_top_level_sections(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
 ) -> None:
     """Dispatch each top-level YAML section in phase order.
 
@@ -166,7 +156,7 @@ def _apply_doc_section(
     apply_fn: Callable[..., tuple[bool, int]],
     *,
     dry_run: bool,
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
 ) -> None:
     """Apply a document-scoped YAML section (``theme`` or ``report``)."""
     if section_spec is None:

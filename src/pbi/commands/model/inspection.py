@@ -183,6 +183,9 @@ def model_apply(
     for error in result.errors:
         console.print(f"[red]Error:[/red] {error}")
 
+    if result.rolled_back:
+        console.print("[yellow]All changes have been rolled back due to errors.[/yellow]")
+
     if result.errors:
         raise typer.Exit(1)
     if not result.has_changes:

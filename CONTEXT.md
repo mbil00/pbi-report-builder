@@ -48,6 +48,10 @@ _Avoid_: theme registry, theme metadata
 The per-visual-type schema extracted from Power BI Desktop capabilities, defining which objects and properties are valid on a **Visual** and the type of each property. Open: extended at runtime by custom visuals shipped inside a **PBIP Project**, so validation is advisory rather than authoritative.
 _Avoid_: capabilities, visual registry, property catalog
 
+**Apply Session**:
+The per-run rollback frame for one execution of the **YAML Round-Trip** apply engine. Defines a `begin`/`commit`/`rollback`/`cleanup` lifecycle that the engine drives via a shared `run_apply` helper. Two substrate adapters: a PBIR snapshot session (filesystem snapshot of the report definition + restore on failure) and a TMDL buffer session (deferred-flush in-memory line buffer for the **Semantic Model**, dropped on failure). The lifecycle is shared; substrate-specific entry points (page/visual save vs. line buffer access) stay on the concrete adapters.
+_Avoid_: transaction, unit of work
+
 ## Relationships
 
 - A **PBIP Project** contains one **PBIR Report** and usually one **Semantic Model**.
@@ -58,6 +62,7 @@ _Avoid_: capabilities, visual registry, property catalog
 - **Conditional Formatting Intent** targets a color property on a **Visual** or theme visual style and uses a **Field Reference** as its source.
 - A **Theme Schema** governs writes to a theme document (the JSON file referenced by a **PBIR Report**'s registered resources).
 - A **Visual Schema** governs writes to **Visual** properties on a **Page**, and also to the visualStyles defaults embedded inside a theme document.
+- An **Apply Session** scopes one execution of the **YAML Round-Trip** apply engine, with one adapter per write substrate (PBIR Report definition vs. Semantic Model TMDL).
 
 ## Example dialogue
 

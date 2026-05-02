@@ -7,7 +7,7 @@ from typing import Any
 
 from .state import (
     ApplyResult,
-    ApplySession as _ApplySession,
+    PbirSnapshotSession as _PbirSnapshotSession,
 )
 from pbi.project import Project, Visual
 from pbi.roles import normalize_visual_role
@@ -26,7 +26,7 @@ def apply_bindings(
     result: ApplyResult,
     *,
     context: str,
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
 ) -> None:
     """Apply data bindings from the YAML spec."""
     from pbi.columns import set_column_width

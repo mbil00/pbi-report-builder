@@ -7,8 +7,8 @@ import copy
 from .ops import apply_filters_spec as _apply_filters
 from .state import (
     ApplyResult,
-    ApplySession as _ApplySession,
     PageVisualState as _PageVisualState,
+    PbirSnapshotSession as _PbirSnapshotSession,
     save_visual_if_changed as _save_visual_if_changed,
 )
 from .visual_queries import (
@@ -43,7 +43,7 @@ def apply_visual(
     dry_run: bool,
     style_cache: dict[str, StylePreset],
     keep_visual_ids: set[str] | None = None,
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
     page_state: _PageVisualState,
 ) -> None:
     """Apply a single visual specification."""
@@ -315,7 +315,7 @@ def finalize_visual_page_refs(
     project: Project,
     pages_spec: list[dict],
     *,
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
 ) -> None:
     """Canonicalize page-linked visual refs after all pages have been created."""
     for page_spec in pages_spec:
@@ -405,7 +405,7 @@ def _apply_group_visual(
     *,
     dry_run: bool,
     keep_visual_ids: set[str] | None,
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
     page_state: _PageVisualState,
 ) -> None:
     """Create or update a group container from a visual spec."""

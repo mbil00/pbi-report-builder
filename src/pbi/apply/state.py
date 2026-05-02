@@ -42,42 +42,59 @@ _MISSING_MODEL = object()
 
 
 @dataclass
-class ApplySession:
-    """Per-run caches and rollback bookkeeping for apply."""
+class PbirSnapshotSession:
+    """Apply Session adapter for the PBIR Report definition substrate.
 
+    Writes are eager (``Page.save`` / ``Visual.save`` write straight to disk),
+    so commit is a no-op; rollback restores from a lazily-created filesystem
+    snapshot of the definition folder.
+    """
+
+    project: Project
     dry_run: bool
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     snapshot_dir: Path | None = None
     model: Any = _MISSING_MODEL
 
-    def ensure_snapshot(self, project: Project) -> None:
+    def ensure_snapshot(self, project: Project | None = None) -> None:
         """Create the definition snapshot lazily on the first write-intent path."""
         if self.dry_run or self.snapshot_dir is not None:
             return
         self.temp_dir = tempfile.TemporaryDirectory()
         self.snapshot_dir = Path(self.temp_dir.name) / "definition"
-        shutil.copytree(project.definition_folder, self.snapshot_dir)
+        shutil.copytree(self.project.definition_folder, self.snapshot_dir)
 
-    def restore(self, project: Project) -> None:
-        if self.snapshot_dir is None:
-            return
-        restore_definition_snapshot(project, self.snapshot_dir)
-        project.clear_caches()
-
-    def get_model(self, project: Project) -> Any | None:
+    def get_model(self, project: Project | None = None) -> Any | None:
         """Load the semantic model once per apply run."""
         if self.model is _MISSING_MODEL:
             try:
                 from pbi.modeling.schema import SemanticModel
 
-                self.model = SemanticModel.load(project.root)
+                self.model = SemanticModel.load(self.project.root)
             except Exception:
                 self.model = None
         return self.model
 
+    # ApplySession lifecycle -------------------------------------------------
+
+    def begin(self) -> None:
+        """No-op: snapshot stays lazy until the first write-intent path."""
+
+    def commit(self) -> None:
+        """No-op: page/visual saves are eager, nothing to flush."""
+
+    def rollback(self) -> None:
+        """Restore the report definition from the snapshot, if one was taken."""
+        if self.snapshot_dir is None:
+            return
+        restore_definition_snapshot(self.project, self.snapshot_dir)
+        self.project.clear_caches()
+
     def cleanup(self) -> None:
         if self.temp_dir is not None:
             self.temp_dir.cleanup()
+            self.temp_dir = None
+            self.snapshot_dir = None
 
 
 def save_page_if_changed(
@@ -85,7 +102,7 @@ def save_page_if_changed(
     page: Page,
     *,
     original_data: dict,
-    session: ApplySession,
+    session: PbirSnapshotSession,
 ) -> bool:
     """Persist page changes only when the serialized content changed."""
     if page.data == original_data:
@@ -100,7 +117,7 @@ def save_visual_if_changed(
     visual: Visual,
     *,
     original_data: dict,
-    session: ApplySession,
+    session: PbirSnapshotSession,
 ) -> bool:
     """Persist visual changes only when the serialized content changed."""
     if visual.data == original_data:

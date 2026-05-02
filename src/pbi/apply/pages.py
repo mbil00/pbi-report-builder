@@ -10,8 +10,8 @@ from .ops import (
 )
 from .state import (
     ApplyResult,
-    ApplySession as _ApplySession,
     PageVisualState as _PageVisualState,
+    PbirSnapshotSession as _PbirSnapshotSession,
     save_page_if_changed as _save_page_if_changed,
 )
 from .visual_support import (
@@ -35,7 +35,7 @@ def apply_page(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
-    session: _ApplySession,
+    session: _PbirSnapshotSession,
 ) -> None:
     """Apply a single page specification."""
     page_name = page_spec["name"]

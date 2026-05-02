@@ -6,7 +6,12 @@ import uuid
 from pathlib import Path
 
 from .schema import SemanticModel
-from .writes import _format_tmdl_name, _write_tmdl_lines, validate_table_name
+from .writes import (
+    TmdlEditSession,
+    _format_tmdl_name,
+    _write_tmdl_lines,
+    validate_table_name,
+)
 
 
 def _format_dax_field_ref(table: str, field: str) -> str:
@@ -23,6 +28,7 @@ def create_field_parameter(
     *,
     dry_run: bool = False,
     model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
 ) -> tuple[str, Path, bool]:
     """Create a field parameter table with the correct TMDL structure.
 
@@ -157,6 +163,9 @@ def create_field_parameter(
     tmdl_path = tables_dir / f"{safe_filename}.tmdl"
 
     if not dry_run:
-        _write_tmdl_lines(tmdl_path, lines)
+        if edit_session is not None:
+            edit_session.replace_file(tmdl_path, lines)
+        else:
+            _write_tmdl_lines(tmdl_path, lines)
 
     return parameter_name, tmdl_path, True

@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from pbi.apply.session import run_apply
 from pbi.model import (
     Column,
     Measure,
@@ -63,6 +64,7 @@ class ModelApplyResult:
     perspectives_updated: list[str] = field(default_factory=list)
     field_parameters_created: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    rolled_back: bool = False
 
     @property
     def has_changes(self) -> bool:
@@ -93,10 +95,15 @@ def apply_model_yaml(
     yaml_content: str,
     *,
     dry_run: bool = False,
+    continue_on_error: bool = True,
 ) -> ModelApplyResult:
-    """Apply declarative model changes from YAML."""
+    """Apply declarative model changes from YAML.
+
+    Defaults to ``continue_on_error=True`` to preserve the historical
+    best-effort behaviour of the model engine. Pass ``continue_on_error=False``
+    to roll back the buffered TMDL writes when errors are collected.
+    """
     result = ModelApplyResult()
-    edit_session = TmdlEditSession()
 
     try:
         spec = yaml.safe_load(yaml_content)
@@ -108,129 +115,138 @@ def apply_model_yaml(
         result.errors.append("YAML must be a mapping.")
         return result
 
+    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "partitions", "roles", "perspectives", "fieldParameters"}
+    if not known_keys.intersection(spec.keys()):
+        result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
+        return result
+
     try:
         model = SemanticModel.load(project_root)
     except FileNotFoundError as e:
         result.errors.append(str(e))
         return result
 
-    measures_spec = spec.get("measures")
-    if measures_spec is not None:
-        _apply_measures(
-            project_root,
-            measures_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+    edit_session = TmdlEditSession()
 
-    columns_spec = spec.get("columns")
-    if columns_spec is not None:
-        _apply_columns(
-            project_root,
-            columns_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+    def body() -> ModelApplyResult:
+        measures_spec = spec.get("measures")
+        if measures_spec is not None:
+            _apply_measures(
+                project_root,
+                measures_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    relationships_spec = spec.get("relationships")
-    if relationships_spec is not None:
-        _apply_relationships(
-            project_root,
-            relationships_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        columns_spec = spec.get("columns")
+        if columns_spec is not None:
+            _apply_columns(
+                project_root,
+                columns_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    hierarchies_spec = spec.get("hierarchies")
-    if hierarchies_spec is not None:
-        _apply_hierarchies(
-            project_root,
-            hierarchies_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        relationships_spec = spec.get("relationships")
+        if relationships_spec is not None:
+            _apply_relationships(
+                project_root,
+                relationships_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    partitions_spec = spec.get("partitions")
-    if partitions_spec is not None:
-        _apply_partitions(
-            project_root,
-            partitions_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        hierarchies_spec = spec.get("hierarchies")
+        if hierarchies_spec is not None:
+            _apply_hierarchies(
+                project_root,
+                hierarchies_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    roles_spec = spec.get("roles")
-    if roles_spec is not None:
-        _apply_roles(
-            project_root,
-            roles_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        partitions_spec = spec.get("partitions")
+        if partitions_spec is not None:
+            _apply_partitions(
+                project_root,
+                partitions_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    perspectives_spec = spec.get("perspectives")
-    if perspectives_spec is not None:
-        _apply_perspectives(
-            project_root,
-            perspectives_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        roles_spec = spec.get("roles")
+        if roles_spec is not None:
+            _apply_roles(
+                project_root,
+                roles_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    model_spec = spec.get("model")
-    if model_spec is not None:
-        _apply_model_settings(
-            project_root,
-            model_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        perspectives_spec = spec.get("perspectives")
+        if perspectives_spec is not None:
+            _apply_perspectives(
+                project_root,
+                perspectives_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    tables_spec = spec.get("tables")
-    if tables_spec is not None:
-        _apply_tables(
-            project_root,
-            tables_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-            edit_session=edit_session,
-        )
+        model_spec = spec.get("model")
+        if model_spec is not None:
+            _apply_model_settings(
+                project_root,
+                model_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    field_params_spec = spec.get("fieldParameters")
-    if field_params_spec is not None:
-        _apply_field_parameters(
-            project_root,
-            field_params_spec,
-            result,
-            dry_run=dry_run,
-            model=model,
-        )
+        tables_spec = spec.get("tables")
+        if tables_spec is not None:
+            _apply_tables(
+                project_root,
+                tables_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    known_keys = {"model", "tables", "measures", "columns", "relationships", "hierarchies", "partitions", "roles", "perspectives", "fieldParameters"}
-    if not known_keys.intersection(spec.keys()):
-        result.errors.append(f"YAML must include at least one of: {', '.join(sorted(known_keys))}.")
+        field_params_spec = spec.get("fieldParameters")
+        if field_params_spec is not None:
+            _apply_field_parameters(
+                project_root,
+                field_params_spec,
+                result,
+                dry_run=dry_run,
+                model=model,
+                edit_session=edit_session,
+            )
 
-    if not dry_run:
-        edit_session.flush()
+        return result
 
-    return result
+    if dry_run:
+        # Dry-run never flushes — buffered edits are dropped at function exit.
+        body()
+        return result
+
+    return run_apply(edit_session, body, continue_on_error=continue_on_error)
 
 
 def _apply_model_settings(
@@ -1093,6 +1109,7 @@ def _apply_field_parameters(
     *,
     dry_run: bool,
     model: SemanticModel,
+    edit_session: TmdlEditSession,
 ) -> None:
     """Apply fieldParameters section."""
     if not isinstance(spec, dict):
@@ -1140,6 +1157,7 @@ def _apply_field_parameters(
                 labels=labels,
                 dry_run=dry_run,
                 model=model,
+                edit_session=edit_session,
             )
             result.field_parameters_created.append(param_name)
         except ValueError as e:

@@ -69,7 +69,12 @@ _DATATABLE_TYPE_MAP = {
 
 @dataclass
 class TmdlEditSession:
-    """Buffer repeated TMDL reads/writes across one logical command."""
+    """Apply Session adapter for the Semantic Model TMDL substrate.
+
+    Buffers repeated TMDL reads/writes across one logical command. Implements
+    the ``ApplySession`` lifecycle: ``commit`` flushes dirty buffers to disk,
+    ``rollback`` discards the buffer so nothing reaches disk.
+    """
 
     _lines_by_path: dict[Path, list[str]] = field(default_factory=dict, init=False, repr=False)
     _dirty_paths: set[Path] = field(default_factory=set, init=False, repr=False)
@@ -89,12 +94,34 @@ class TmdlEditSession:
         """Mark a buffered file as needing a final write."""
         self._dirty_paths.add(path)
 
+    def replace_file(self, path: Path, lines: list[str]) -> None:
+        """Stage a complete file replacement (e.g. for newly-created TMDL)."""
+        self._lines_by_path[path] = list(lines)
+        self._dirty_paths.add(path)
+
     def flush(self) -> None:
         """Write all dirty TMDL buffers back to disk once."""
         for path in sorted(self._dirty_paths):
             path.parent.mkdir(parents=True, exist_ok=True)
             _write_tmdl_lines(path, self._lines_by_path[path])
         self._dirty_paths.clear()
+
+    # ApplySession lifecycle -------------------------------------------------
+
+    def begin(self) -> None:
+        """No-op: buffer starts empty."""
+
+    def commit(self) -> None:
+        """Flush dirty TMDL buffers to disk."""
+        self.flush()
+
+    def rollback(self) -> None:
+        """Discard the buffer; nothing reaches disk."""
+        self._lines_by_path.clear()
+        self._dirty_paths.clear()
+
+    def cleanup(self) -> None:
+        """No-op: buffers are dropped on garbage collection or rollback."""
 
 
 def _get_tmdl_lines(path: Path, session: TmdlEditSession | None) -> list[str]:
