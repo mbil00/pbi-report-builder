@@ -6,8 +6,9 @@ from typing import Any, Callable
 
 import yaml
 
+from pbi.apply.plan_theme import plan_theme_spec
+from pbi.apply.session import PbirWriteSession
 from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
-from pbi.theme_roundtrip import apply_theme_spec as _apply_theme_spec
 from pbi.validate import ValidationIssue, validate_project
 
 from .pages import apply_page
@@ -106,9 +107,9 @@ def _apply_top_level_sections(
     list stays hard-coded rather than registered through a protocol.
     """
     if page_filter is None:
-        _apply_doc_section(
-            project, "theme", spec.get("theme"), result,
-            _apply_theme_spec, dry_run=dry_run, session=session,
+        _apply_theme_branch(
+            project, spec.get("theme"), result,
+            dry_run=dry_run, session=session,
         )
         _apply_doc_section(
             project, "report", spec.get("report"), result,
@@ -148,6 +149,38 @@ def _apply_top_level_sections(
         _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
 
 
+def _apply_theme_branch(
+    project: Project,
+    section_spec: Any,
+    result: ApplyResult,
+    *,
+    dry_run: bool,
+    session: PbirWriteSession,
+) -> None:
+    """Apply the ``theme`` YAML section through the planner + session.
+
+    ``plan_theme_spec`` is the pure-function half (read current theme, merge,
+    default name, detect no-op). The engine then drives the session to
+    persist the plan via ``session.write_theme``. Disk I/O lives nowhere
+    except inside the session method.
+    """
+    if section_spec is None:
+        return
+    if not isinstance(section_spec, dict):
+        result.errors.append("'theme' must be a mapping.")
+        return
+    if not section_spec:
+        return
+
+    plan = plan_theme_spec(project, section_spec)
+    if plan is None:
+        return
+
+    if not dry_run:
+        session.write_theme(plan.payload, first_time=plan.first_time)
+    result.properties_set += plan.keys_touched
+
+
 def _apply_doc_section(
     project: Project,
     name: str,
@@ -158,7 +191,12 @@ def _apply_doc_section(
     dry_run: bool,
     session: _PbirApplySession,
 ) -> None:
-    """Apply a document-scoped YAML section (``theme`` or ``report``)."""
+    """Apply a document-scoped YAML section (currently ``report``).
+
+    The ``theme`` branch has been migrated to the planner + session model
+    (see ``_apply_theme_branch``). The ``report`` branch still routes its
+    legacy write through ``session.write_doc_section`` until slice #6 lands.
+    """
     if section_spec is None:
         return
     if not isinstance(section_spec, dict):

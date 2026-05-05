@@ -53,7 +53,7 @@ The per-run rollback frame for one execution of the **YAML Round-Trip** apply en
 _Avoid_: transaction, unit of work
 
 **Apply Plan**:
-The pure-function output of computing what one section of a **YAML Round-Trip** apply *would* write to a PBIR-substrate document (theme, report, bookmarks), without performing the write. The apply engine drives the **Apply Session** to persist a plan; the same plan can be inspected by `pbi diff` without touching disk.
+The pure-function output of computing what one section of a **YAML Round-Trip** apply *would* write to a PBIR-substrate document, without performing the write. Each section has its own planner: the theme planner (`plan_theme_spec`) reads current theme JSON, merges the spec with `None`-means-delete semantics, defaults the theme name, and detects no-op; report and bookmark planners follow the same shape (landing in later slices). The plan carries the merged payload, a `keys_touched` count for `ApplyResult` accounting, and any flags the persistence step needs (e.g. `first_time` for the theme write path). The apply engine drives the **Apply Session** to persist a plan; the same plan can be inspected by `pbi diff` without touching disk, so partial-key specs render the same diff that apply would actually write.
 _Avoid_: change set, transaction log
 
 ## Relationships

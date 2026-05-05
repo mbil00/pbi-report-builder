@@ -211,7 +211,35 @@ class PbirApplySession:
         return write_fn()
 
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
-        raise NotImplementedError("write_theme lands in slice #5")
+        """Persist a planned theme payload, taking the snapshot lazily.
+
+        ``first_time`` selects the write path: when no custom theme exists yet
+        we route through ``apply_theme`` (copies into RegisteredResources and
+        wires up ``themeCollection``); when one exists we ``save_theme_data``
+        in place.
+        """
+        from pbi.themes import apply_theme, save_theme_data  # composed by adapter
+
+        self.ensure_snapshot()
+        if first_time:
+            import json
+            import tempfile
+            from pathlib import Path
+
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".json",
+                delete=False,
+                encoding="utf-8",
+            ) as handle:
+                json.dump(payload, handle, indent=2, ensure_ascii=False)
+                tmp_path = Path(handle.name)
+            try:
+                apply_theme(self.project, tmp_path)
+            finally:
+                tmp_path.unlink(missing_ok=True)
+        else:
+            save_theme_data(self.project, payload)
 
     def write_report(self, payload: dict[str, Any]) -> None:
         raise NotImplementedError("write_report lands in slice #6")
