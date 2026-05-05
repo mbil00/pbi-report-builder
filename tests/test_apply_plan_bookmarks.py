@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from pbi.apply import apply_yaml
 from pbi.apply.engine import _apply_bookmarks_branch
 from pbi.apply.plan_bookmarks import (
     BookmarkPersist,
@@ -21,7 +22,7 @@ from pbi.apply.plan_bookmarks import (
     plan_bookmarks_spec,
 )
 from pbi.apply.state import ApplyResult
-from pbi.bookmarks import create_bookmark
+from pbi.bookmarks import create_bookmark, list_bookmarks
 from pbi.project import Project
 from pbi.report_authoring import ReportAuthoring
 from pbi.schema_refs import REPORT_SCHEMA
@@ -228,6 +229,70 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         # Reused id and the file path from the existing bookmark.
         self.assertEqual(op.payload["name"], existing_id)
         self.assertEqual(op.file_path.name, f"{existing_id}.bookmark.json")
+
+    def test_duplicate_bookmark_names_are_coalesced_last_spec_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            _, visual = _seed_page_with_visual(project, "Demo", "table1")
+
+            spec = [
+                {
+                    "name": "Overview",
+                    "page": "Demo",
+                    "hide": ["table1"],
+                    "group": "Old",
+                },
+                {
+                    "name": "Overview",
+                    "page": "Demo",
+                    "captureData": False,
+                    "group": "New",
+                },
+            ]
+            plan = plan_bookmarks_spec(project, spec)
+
+        self.assertEqual(plan.errors, [])
+        self.assertEqual(plan.keys_touched, 2)
+        self.assertEqual(len(plan.operations), 1)
+        self.assertEqual(plan.groups, [("Overview", "New")])
+        op = plan.operations[0]
+        self.assertEqual(op.display_name, "Overview")
+        self.assertEqual(op.file_path.name, f"{op.payload['name']}.bookmark.json")
+        options = op.payload["options"]
+        self.assertTrue(options["suppressData"])
+        active_section = op.payload["explorationState"]["activeSection"]
+        containers = op.payload["explorationState"]["sections"][active_section][
+            "visualContainers"
+        ]
+        self.assertNotIn(visual.name, containers)
+
+    def test_apply_duplicate_bookmark_names_creates_one_bookmark(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            _seed_page_with_visual(project, "Demo", "table1")
+
+            result = apply_yaml(
+                project,
+                """
+pages: []
+bookmarks:
+  - name: Overview
+    page: Demo
+    hide: [table1]
+  - name: Overview
+    page: Demo
+    captureData: false
+""",
+            )
+
+            bookmarks = list_bookmarks(project)
+
+        self.assertEqual(result.errors, [])
+        self.assertFalse(result.rolled_back)
+        self.assertEqual(len(bookmarks), 1)
+        self.assertEqual(bookmarks[0].display_name, "Overview")
+        self.assertTrue(bookmarks[0].suppress_data)
+        self.assertEqual(bookmarks[0].hidden_visuals, 0)
 
     def test_relative_ordering_preserved_across_re_apply(self) -> None:
         # Spec order is preserved in plan.operations and plan.groups so that

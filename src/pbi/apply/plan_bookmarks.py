@@ -78,6 +78,7 @@ def plan_bookmarks_spec(
     """
     operations: list[BookmarkPersist] = []
     groups: list[tuple[str, str | None]] = []
+    planned_by_display: dict[str, int] = {}
     errors: list[str] = []
     keys_touched = 0
 
@@ -102,14 +103,23 @@ def plan_bookmarks_spec(
             errors.append(f'Bookmark "{name}": {exc}')
             continue
 
-        try:
-            existing, file_path = _find_bookmark_file(project, name)
-            bookmark_id = existing.get("name")
+        display_name = str(name)
+        planned_index = planned_by_display.get(display_name)
+        if planned_index is not None:
+            planned = operations[planned_index]
+            file_path = planned.file_path
+            bookmark_id = planned.payload.get("name")
             if not isinstance(bookmark_id, str) or not bookmark_id:
                 bookmark_id = secrets.token_hex(10)
-        except FileNotFoundError:
-            bookmark_id = secrets.token_hex(10)
-            file_path = bm_dir / f"{bookmark_id}.bookmark.json"
+        else:
+            try:
+                existing, file_path = _find_bookmark_file(project, name)
+                bookmark_id = existing.get("name")
+                if not isinstance(bookmark_id, str) or not bookmark_id:
+                    bookmark_id = secrets.token_hex(10)
+            except FileNotFoundError:
+                bookmark_id = secrets.token_hex(10)
+                file_path = bm_dir / f"{bookmark_id}.bookmark.json"
 
         visuals = project.get_visuals(page)
         hide = entry.get("hide", []) or None
@@ -146,18 +156,23 @@ def plan_bookmarks_spec(
         if bookmark_options:
             payload["options"] = bookmark_options
 
-        operations.append(
-            BookmarkPersist(
-                payload=payload,
-                file_path=file_path,
-                display_name=str(name),
-            )
+        persist = BookmarkPersist(
+            payload=payload,
+            file_path=file_path,
+            display_name=display_name,
         )
-
         group = entry.get("group")
-        groups.append(
-            (str(name), str(group) if isinstance(group, str) and group else None)
+        group_entry = (
+            display_name,
+            str(group) if isinstance(group, str) and group else None,
         )
+        if planned_index is None:
+            planned_by_display[display_name] = len(operations)
+            operations.append(persist)
+            groups.append(group_entry)
+        else:
+            operations[planned_index] = persist
+            groups[planned_index] = group_entry
 
     return BookmarksApplyPlan(
         operations=operations,
