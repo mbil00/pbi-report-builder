@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
+from pbi.apply.plan_report import plan_report_spec
 from pbi.apply.plan_theme import plan_theme_spec
 from pbi.apply.session import PbirWriteSession
-from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
 from pbi.validate import ValidationIssue, validate_project
 
 from .pages import apply_page
@@ -111,9 +111,9 @@ def _apply_top_level_sections(
             project, spec.get("theme"), result,
             dry_run=dry_run, session=session,
         )
-        _apply_doc_section(
-            project, "report", spec.get("report"), result,
-            _apply_report_spec, dry_run=dry_run, session=session,
+        _apply_report_branch(
+            project, spec.get("report"), result,
+            dry_run=dry_run, session=session,
         )
 
     pages_spec = spec.get("pages", [])
@@ -181,34 +181,37 @@ def _apply_theme_branch(
     result.properties_set += plan.keys_touched
 
 
-def _apply_doc_section(
+def _apply_report_branch(
     project: Project,
-    name: str,
     section_spec: Any,
     result: ApplyResult,
-    apply_fn: Callable[..., tuple[bool, int]],
     *,
     dry_run: bool,
-    session: _PbirApplySession,
+    session: PbirWriteSession,
 ) -> None:
-    """Apply a document-scoped YAML section (currently ``report``).
+    """Apply the ``report`` YAML section through the planner + session.
 
-    The ``theme`` branch has been migrated to the planner + session model
-    (see ``_apply_theme_branch``). The ``report`` branch still routes its
-    legacy write through ``session.write_doc_section`` until slice #6 lands.
+    ``plan_report_spec`` is the pure-function half (read current
+    ``report.json``, normalize ``resourcePackages``, merge per top-level
+    key, detect no-op). The engine then drives the session to persist the
+    plan via ``session.write_report``. Disk I/O lives nowhere except inside
+    the session method.
     """
     if section_spec is None:
         return
     if not isinstance(section_spec, dict):
-        result.errors.append(f"'{name}' must be a mapping.")
+        result.errors.append("'report' must be a mapping.")
         return
     if not section_spec:
         return
-    changed, touched = session.write_doc_section(
-        lambda: apply_fn(project, section_spec, dry_run=dry_run)
-    )
-    if changed:
-        result.properties_set += touched
+
+    plan = plan_report_spec(project, section_spec)
+    if plan is None:
+        return
+
+    if not dry_run:
+        session.write_report(plan.payload)
+    result.properties_set += plan.keys_touched
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:

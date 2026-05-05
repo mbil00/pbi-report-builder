@@ -58,9 +58,9 @@ class PbirApplySession:
     substrate exclusively through these methods; nothing under
     ``src/pbi/apply/`` imports ``ReportAuthoring`` anymore.
 
-    The remaining ``PbirWriteSession`` methods (``write_theme``,
-    ``write_report``, ``write_bookmark``, ``reconcile_bookmark_groups``)
-    raise ``NotImplementedError`` for now; follow-up slices fill them in.
+    The remaining ``PbirWriteSession`` methods (``write_bookmark``,
+    ``reconcile_bookmark_groups``) raise ``NotImplementedError`` for now;
+    slice #7 fills them in.
     """
 
     project: Project
@@ -242,7 +242,11 @@ class PbirApplySession:
             save_theme_data(self.project, payload)
 
     def write_report(self, payload: dict[str, Any]) -> None:
-        raise NotImplementedError("write_report lands in slice #6")
+        """Persist a planned ``report.json`` payload, taking the snapshot lazily."""
+        from pbi.report_io import write_report_json  # composed by adapter
+
+        self.ensure_snapshot()
+        write_report_json(self.project, payload)
 
     def write_bookmark(self, payload: dict[str, Any]) -> None:
         raise NotImplementedError("write_bookmark lands in slice #7")
