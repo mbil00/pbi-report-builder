@@ -17,7 +17,7 @@ from .ops import (
 from .session import run_apply
 from .state import (
     ApplyResult,
-    PbirSnapshotSession as _PbirSnapshotSession,
+    PbirApplySession as _PbirApplySession,
 )
 from .visuals import finalize_visual_page_refs as _finalize_visual_page_refs
 from pbi.project import Project
@@ -51,7 +51,7 @@ def apply_yaml(
         return result
 
     style_cache: dict[str, StylePreset] = {}
-    session = _PbirSnapshotSession(project=project, dry_run=dry_run)
+    session = _PbirApplySession(project=project, dry_run=dry_run)
     baseline_validation = (
         _validation_issue_keys(validate_project(project, include_model_checks=False))
         if not dry_run
@@ -90,7 +90,7 @@ def _apply_top_level_sections(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
 ) -> None:
     """Dispatch each top-level YAML section in phase order.
 
@@ -156,7 +156,7 @@ def _apply_doc_section(
     apply_fn: Callable[..., tuple[bool, int]],
     *,
     dry_run: bool,
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
 ) -> None:
     """Apply a document-scoped YAML section (``theme`` or ``report``)."""
     if section_spec is None:

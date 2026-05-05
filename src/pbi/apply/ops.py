@@ -8,14 +8,14 @@ from pbi.fields import resolve_field_info
 from pbi.filters import add_categorical_filter
 from pbi.project import Page, Project
 
-from .state import ApplyResult, PageVisualState, PbirSnapshotSession
+from .state import ApplyResult, PageVisualState, PbirApplySession
 
 
 def resolve_apply_field(
     field_ref: str,
     project: Project,
     *,
-    session: PbirSnapshotSession | None = None,
+    session: PbirApplySession | None = None,
 ) -> tuple[str, str, str, str | None]:
     """Resolve a field reference to (entity, prop, field_type, data_type)."""
     model = session.get_model(project) if session is not None else None
@@ -30,7 +30,7 @@ def apply_filters_spec(
     context: str,
     dry_run: bool,
     project: Project | None = None,
-    session: PbirSnapshotSession | None = None,
+    session: PbirApplySession | None = None,
 ) -> None:
     """Apply filters from the YAML spec."""
     from pbi.visual_analysis import normalize_semantic_data_type
@@ -297,7 +297,7 @@ def apply_bookmarks_spec(
     result: ApplyResult,
     *,
     dry_run: bool,
-    session: PbirSnapshotSession,
+    session: PbirApplySession,
 ) -> None:
     """Apply bookmark definitions from the YAML spec."""
     from pbi.bookmarks import normalize_bookmark_state, reconcile_bookmark_groups, upsert_bookmark
@@ -368,7 +368,7 @@ def apply_interactions_spec(
     *,
     context: str,
     dry_run: bool,
-    session: PbirSnapshotSession | None = None,
+    session: PbirApplySession | None = None,
     page_state: PageVisualState,
 ) -> None:
     """Apply interaction definitions from the YAML spec."""

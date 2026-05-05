@@ -1,11 +1,16 @@
-"""Tests for the ApplySession lifecycle helper."""
+"""Tests for the ApplySession lifecycle helper and PBIR write seam."""
 
 from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from pbi.apply.session import run_apply
+from pbi.apply.state import save_visual_if_changed
+from pbi.project import Visual
+
+from tests.apply_session_fakes import FakePbirWriteSession
 
 
 @dataclass
@@ -78,6 +83,67 @@ class RunApplyLifecycleTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             run_apply(session, lambda: _FakeResult())
         self.assertEqual(session.calls, ["begin", "commit", "cleanup"])
+
+
+class SaveVisualLeafSeamTests(unittest.TestCase):
+    """Apply leaf paths that persist a Visual go through ``session.save_visual``.
+
+    Drives ``save_visual_if_changed`` against an in-memory
+    ``FakePbirWriteSession`` so the test runs without a PBIP project on disk.
+    """
+
+    def _make_visual(self, *, data: dict | None = None) -> Visual:
+        # Folder is never touched because the fake records the call instead of
+        # invoking ``Visual.save``; an arbitrary Path keeps the dataclass valid.
+        return Visual(folder=Path("/nonexistent/visuals/v1"), data=data or {})
+
+    def test_changed_visual_routes_through_save_visual(self) -> None:
+        baseline = {"name": "v1", "visual": {"visualType": "card"}}
+        visual = self._make_visual(data={**baseline, "isHidden": True})
+        session = FakePbirWriteSession()
+
+        wrote = save_visual_if_changed(
+            project=None,  # type: ignore[arg-type]
+            visual=visual,
+            original_data=baseline,
+            session=session,
+        )
+
+        self.assertTrue(wrote)
+        self.assertEqual(session.call_names(), ["save_visual"])
+        self.assertIs(session.calls[0][1], visual)
+
+    def test_unchanged_visual_does_not_call_save_visual(self) -> None:
+        baseline = {"name": "v1", "visual": {"visualType": "card"}}
+        visual = self._make_visual(data=dict(baseline))
+        session = FakePbirWriteSession()
+
+        wrote = save_visual_if_changed(
+            project=None,  # type: ignore[arg-type]
+            visual=visual,
+            original_data=baseline,
+            session=session,
+        )
+
+        self.assertFalse(wrote)
+        self.assertEqual(session.calls, [])
+
+    def test_save_visual_does_not_call_ensure_snapshot_at_leaf(self) -> None:
+        # Migrated leaf paths must not double-take the snapshot. The session
+        # method absorbs the guard internally; the leaf only records
+        # ``save_visual``.
+        baseline = {"name": "v1"}
+        visual = self._make_visual(data={**baseline, "tooltip": {"show": True}})
+        session = FakePbirWriteSession()
+
+        save_visual_if_changed(
+            project=None,  # type: ignore[arg-type]
+            visual=visual,
+            original_data=baseline,
+            session=session,
+        )
+
+        self.assertNotIn("ensure_snapshot", session.call_names())
 
 
 if __name__ == "__main__":

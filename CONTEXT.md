@@ -49,8 +49,12 @@ The per-visual-type schema extracted from Power BI Desktop capabilities, definin
 _Avoid_: capabilities, visual registry, property catalog
 
 **Apply Session**:
-The per-run rollback frame for one execution of the **YAML Round-Trip** apply engine. Defines a `begin`/`commit`/`rollback`/`cleanup` lifecycle that the engine drives via a shared `run_apply` helper. Two substrate adapters: a PBIR snapshot session (filesystem snapshot of the report definition + restore on failure) and a TMDL buffer session (deferred-flush in-memory line buffer for the **Semantic Model**, dropped on failure). The lifecycle is shared; substrate-specific entry points (page/visual save vs. line buffer access) stay on the concrete adapters.
+The per-run rollback frame for one execution of the **YAML Round-Trip** apply engine. Defines a `begin`/`commit`/`rollback`/`cleanup` lifecycle that the engine drives via a shared `run_apply` helper. Two substrate adapters: a PBIR Apply Session that owns every filesystem-mutating operation against a **PBIR Report** (page/visual structure and save, plus document-level theme/report/bookmark writes) behind a write protocol so apply leaf code never reaches around it to touch disk; and a TMDL buffer session (deferred-flush in-memory line buffer for the **Semantic Model**, dropped on failure).
 _Avoid_: transaction, unit of work
+
+**Apply Plan**:
+The pure-function output of computing what one section of a **YAML Round-Trip** apply *would* write to a PBIR-substrate document (theme, report, bookmarks), without performing the write. The apply engine drives the **Apply Session** to persist a plan; the same plan can be inspected by `pbi diff` without touching disk.
+_Avoid_: change set, transaction log
 
 ## Relationships
 
@@ -63,6 +67,7 @@ _Avoid_: transaction, unit of work
 - A **Theme Schema** governs writes to a theme document (the JSON file referenced by a **PBIR Report**'s registered resources).
 - A **Visual Schema** governs writes to **Visual** properties on a **Page**, and also to the visualStyles defaults embedded inside a theme document.
 - An **Apply Session** scopes one execution of the **YAML Round-Trip** apply engine, with one adapter per write substrate (PBIR Report definition vs. Semantic Model TMDL).
+- An **Apply Plan** is computed for each PBIR-substrate document (theme, report, bookmarks) that a **YAML Round-Trip** apply would touch, and is persisted by the **Apply Session**.
 
 ## Example dialogue
 

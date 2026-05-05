@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pbi.apply.session import PbirWriteSession
 from pbi.lookup import find_visual_by_identifier
 from pbi.project import Page, Project, Visual
 
@@ -42,12 +43,22 @@ _MISSING_MODEL = object()
 
 
 @dataclass
-class PbirSnapshotSession:
+class PbirApplySession:
     """Apply Session adapter for the PBIR Report definition substrate.
 
-    Writes are eager (``Page.save`` / ``Visual.save`` write straight to disk),
-    so commit is a no-op; rollback restores from a lazily-created filesystem
-    snapshot of the definition folder.
+    Implements both ``ApplySession`` (lifecycle) and ``PbirWriteSession``
+    (write seam). Writes are eager (``Page.save`` / ``Visual.save`` write
+    straight to disk) so commit is a no-op; rollback restores from a lazily
+    created filesystem snapshot of the definition folder.
+
+    Per-method status:
+      * ``save_visual`` is implemented and absorbs the snapshot guard. Apply
+        leaf paths that previously called ``ensure_snapshot(project)`` then
+        ``visual.save()`` are migrated to ``session.save_visual(visual)``.
+      * The other ``PbirWriteSession`` methods raise ``NotImplementedError``
+        for now; follow-up slices fill them in. Apply leaf paths for those
+        operations continue to call into ``ReportAuthoring`` / ``Page.save``
+        directly with an explicit ``ensure_snapshot`` until then.
     """
 
     project: Project
@@ -96,13 +107,76 @@ class PbirSnapshotSession:
             self.temp_dir = None
             self.snapshot_dir = None
 
+    # PbirWriteSession -------------------------------------------------------
+
+    def save_visual(self, visual: Visual) -> None:
+        """Persist a Visual, taking the snapshot lazily if one is needed."""
+        self.ensure_snapshot()
+        visual.save()
+
+    def save_page(self, page: Page) -> None:
+        raise NotImplementedError("save_page lands in slice #3")
+
+    def create_page(
+        self,
+        display_name: str,
+        *,
+        width: int = 1280,
+        height: int = 720,
+        display_option: str = "FitToPage",
+    ) -> Page:
+        raise NotImplementedError("create_page lands in slice #4")
+
+    def create_visual(
+        self,
+        page: Page,
+        visual_type: str,
+        *,
+        x: int = 0,
+        y: int = 0,
+        width: int = 300,
+        height: int = 200,
+        behind: bool = False,
+    ) -> Visual:
+        raise NotImplementedError("create_visual lands in slice #4")
+
+    def create_group_container(
+        self,
+        page: Page,
+        *,
+        name: str | None = None,
+        display_name: str | None = None,
+        x: int = 0,
+        y: int = 0,
+        width: int = 0,
+        height: int = 0,
+    ) -> Visual:
+        raise NotImplementedError("create_group_container lands in slice #4")
+
+    def delete_visual(self, visual: Visual) -> None:
+        raise NotImplementedError("delete_visual lands in slice #4")
+
+    def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
+        raise NotImplementedError("write_theme lands in slice #5")
+
+    def write_report(self, payload: dict[str, Any]) -> None:
+        raise NotImplementedError("write_report lands in slice #6")
+
+    def write_bookmark(self, payload: dict[str, Any]) -> None:
+        raise NotImplementedError("write_bookmark lands in slice #7")
+
+    def reconcile_bookmark_groups(
+        self, groups: list[tuple[str, str | None]]
+    ) -> None:
+        raise NotImplementedError("reconcile_bookmark_groups lands in slice #7")
+
 
 def save_page_if_changed(
     project: Project,
     page: Page,
     *,
     original_data: dict,
-    session: PbirSnapshotSession,
+    session: PbirApplySession,
 ) -> bool:
     """Persist page changes only when the serialized content changed."""
     if page.data == original_data:
@@ -117,13 +191,17 @@ def save_visual_if_changed(
     visual: Visual,
     *,
     original_data: dict,
-    session: PbirSnapshotSession,
+    session: PbirWriteSession,
 ) -> bool:
-    """Persist visual changes only when the serialized content changed."""
+    """Persist visual changes only when the serialized content changed.
+
+    Typed against ``PbirWriteSession`` rather than ``PbirApplySession`` so a
+    test fake satisfying the protocol can substitute without touching disk.
+    """
+    del project  # unused: ``session.save_visual`` absorbs the snapshot guard
     if visual.data == original_data:
         return False
-    session.ensure_snapshot(project)
-    visual.save()
+    session.save_visual(visual)
     return True
 
 
