@@ -9,7 +9,8 @@ this fake from here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any
 
 from pbi.project import Page, Visual
 
@@ -126,25 +127,15 @@ class FakePbirWriteSession:
     def write_report(self, payload: dict[str, Any]) -> None:
         self.calls.append(("write_report", payload))
 
-    def write_bookmark(self, payload: dict[str, Any]) -> None:
-        self.calls.append(("write_bookmark", payload))
+    def write_bookmark(
+        self, payload: dict[str, Any], *, file_path: Path
+    ) -> None:
+        self.calls.append(("write_bookmark", payload, file_path))
 
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None:
         self.calls.append(("reconcile_bookmark_groups", groups))
-
-    # Doc-section bridge (interim, see PbirApplySession.write_doc_section) -----
-
-    def write_doc_section(self, write_fn: Callable[[], Any]) -> Any:
-        """Record the call and invoke the write function.
-
-        The fake invokes ``write_fn`` so doc-level apply paths still execute
-        their legacy writes. Tests that want to short-circuit those writes can
-        subclass and override.
-        """
-        self.calls.append(("write_doc_section",))
-        return write_fn()
 
     # Helpers ----------------------------------------------------------------
 

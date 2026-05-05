@@ -15,6 +15,7 @@ guard so leaf code cannot forget to take it.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable, Protocol, TypeVar
 
 from pbi.project import Page, Visual
@@ -78,7 +79,9 @@ class PbirWriteSession(Protocol):
     # Doc-level writes ------------------------------------------------------
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None: ...
     def write_report(self, payload: dict[str, Any]) -> None: ...
-    def write_bookmark(self, payload: dict[str, Any]) -> None: ...
+    def write_bookmark(
+        self, payload: dict[str, Any], *, file_path: Path
+    ) -> None: ...
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None: ...

@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from pbi.apply.session import PbirWriteSession
 from pbi.lookup import find_visual_by_identifier
@@ -58,9 +58,11 @@ class PbirApplySession:
     substrate exclusively through these methods; nothing under
     ``src/pbi/apply/`` imports ``ReportAuthoring`` anymore.
 
-    The remaining ``PbirWriteSession`` methods (``write_bookmark``,
-    ``reconcile_bookmark_groups``) raise ``NotImplementedError`` for now;
-    slice #7 fills them in.
+    Doc-level writes (``write_theme``, ``write_report``, ``write_bookmark``,
+    ``reconcile_bookmark_groups``) are also implemented and each absorbs the
+    snapshot guard. The bookmarks meta file is written exactly once per
+    apply, by ``reconcile_bookmark_groups``; per-bookmark ``write_bookmark``
+    calls touch only the individual bookmark JSON file.
     """
 
     project: Project
@@ -197,19 +199,6 @@ class PbirApplySession:
         self.ensure_snapshot()
         ReportAuthoring(self.project).delete_visual(visual)
 
-    def write_doc_section(self, write_fn: "Callable[[], Any]") -> Any:
-        """Run a legacy document-level or bookmark write under the snapshot guard.
-
-        Bridges ``_apply_doc_section`` and the bookmarks branch in
-        ``apply/ops.py`` to the snapshot guard until each section has a typed
-        ``write_X`` session method (slices #5/#6/#7). The engine and the
-        bookmarks branch invoke this exclusively rather than calling
-        ``ensure_snapshot`` directly so the guard stays inside a session
-        method.
-        """
-        self.ensure_snapshot()
-        return write_fn()
-
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
         """Persist a planned theme payload, taking the snapshot lazily.
 
@@ -248,13 +237,31 @@ class PbirApplySession:
         self.ensure_snapshot()
         write_report_json(self.project, payload)
 
-    def write_bookmark(self, payload: dict[str, Any]) -> None:
-        raise NotImplementedError("write_bookmark lands in slice #7")
+    def write_bookmark(
+        self, payload: dict[str, Any], *, file_path: Path
+    ) -> None:
+        """Persist a single bookmark JSON to disk, taking the snapshot lazily.
+
+        Writes only the bookmark file -- the bookmarks meta file is the
+        responsibility of ``reconcile_bookmark_groups`` exclusively, so the
+        meta is written exactly once per apply with the full group hierarchy.
+        """
+        from pbi.project import _write_json  # composed by adapter
+
+        self.ensure_snapshot()
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(file_path, payload)
 
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None:
-        raise NotImplementedError("reconcile_bookmark_groups lands in slice #7")
+        """Write the bookmarks meta file with the full group hierarchy."""
+        from pbi.bookmarks import (  # composed by adapter
+            reconcile_bookmark_groups as _reconcile,
+        )
+
+        self.ensure_snapshot()
+        _reconcile(self.project, groups)
 
 
 def save_page_if_changed(

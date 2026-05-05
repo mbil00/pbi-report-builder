@@ -1,4 +1,4 @@
-"""Internal filter/bookmark/interaction helpers for the report apply engine."""
+"""Internal filter/interaction helpers for the report apply engine."""
 
 from __future__ import annotations
 
@@ -289,78 +289,6 @@ def apply_filters_spec(
             result.warnings.append(
                 f"{context}: filter type '{filter_type}' not yet supported in apply."
             )
-
-
-def apply_bookmarks_spec(
-    project: Project,
-    bookmarks_spec: list,
-    result: ApplyResult,
-    *,
-    dry_run: bool,
-    session: PbirApplySession,
-) -> None:
-    """Apply bookmark definitions from the YAML spec."""
-    from pbi.bookmarks import normalize_bookmark_state, reconcile_bookmark_groups, upsert_bookmark
-
-    bookmark_groups: list[tuple[str, str | None]] = []
-
-    for entry in bookmarks_spec:
-        if not isinstance(entry, dict):
-            result.errors.append("Bookmark must be a mapping.")
-            continue
-
-        name = entry.get("name", "")
-        page_ref = entry.get("page", "")
-        if not name or not page_ref:
-            result.errors.append("Bookmark requires 'name' and 'page'.")
-            continue
-
-        hide = entry.get("hide", [])
-        target = entry.get("target")
-        capture_data = entry.get("captureData", True)
-        capture_display = entry.get("captureDisplay", True)
-        capture_page = entry.get("capturePage", True)
-        group = entry.get("group")
-        state = entry.get("state")
-        options = entry.get("options")
-
-        if dry_run:
-            result.properties_set += 1
-            if isinstance(group, str):
-                bookmark_groups.append((str(name), group))
-            continue
-
-        try:
-            page = project.find_page(page_ref)
-            visuals = project.get_visuals(page)
-            normalized_state = normalize_bookmark_state(project, state) if isinstance(state, dict) else None
-            session.write_doc_section(
-                lambda: upsert_bookmark(
-                    project,
-                    display_name=name,
-                    page=page,
-                    visuals=visuals,
-                    hidden_visuals=hide if hide else None,
-                    target_visuals=target if target else None,
-                    suppress_data=not bool(capture_data),
-                    suppress_display=not bool(capture_display),
-                    suppress_active_section=not bool(capture_page),
-                    exploration_state_patch=normalized_state,
-                    options_patch=options if isinstance(options, dict) else None,
-                )
-            )
-            bookmark_groups.append((str(name), str(group) if isinstance(group, str) and group else None))
-            result.properties_set += 1
-        except (ValueError, FileNotFoundError) as e:
-            result.errors.append(f'Bookmark "{name}": {e}')
-
-    if bookmark_groups and not dry_run:
-        try:
-            session.write_doc_section(
-                lambda: reconcile_bookmark_groups(project, bookmark_groups)
-            )
-        except (ValueError, FileNotFoundError) as e:
-            result.errors.append(f"Bookmark groups: {e}")
 
 
 def apply_interactions_spec(

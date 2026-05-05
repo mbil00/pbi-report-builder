@@ -6,15 +6,13 @@ from typing import Any
 
 import yaml
 
+from pbi.apply.plan_bookmarks import plan_bookmarks_spec
 from pbi.apply.plan_report import plan_report_spec
 from pbi.apply.plan_theme import plan_theme_spec
 from pbi.apply.session import PbirWriteSession
 from pbi.validate import ValidationIssue, validate_project
 
 from .pages import apply_page
-from .ops import (
-    apply_bookmarks_spec as _apply_bookmarks,
-)
 from .session import run_apply
 from .state import (
     ApplyResult,
@@ -146,7 +144,10 @@ def _apply_top_level_sections(
 
     bookmarks_spec = spec.get("bookmarks", [])
     if isinstance(bookmarks_spec, list) and bookmarks_spec:
-        _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
+        _apply_bookmarks_branch(
+            project, bookmarks_spec, result,
+            dry_run=dry_run, session=session,
+        )
 
 
 def _apply_theme_branch(
@@ -212,6 +213,44 @@ def _apply_report_branch(
     if not dry_run:
         session.write_report(plan.payload)
     result.properties_set += plan.keys_touched
+
+
+def _apply_bookmarks_branch(
+    project: Project,
+    bookmarks_spec: list[Any],
+    result: ApplyResult,
+    *,
+    dry_run: bool,
+    session: PbirWriteSession,
+) -> None:
+    """Apply the ``bookmarks`` YAML section through the planner + session.
+
+    ``plan_bookmarks_spec`` computes per-bookmark target payloads (with state
+    normalization, hide/target lists, capture flags) and the group hierarchy.
+    The engine then drives the session to persist the plan: one
+    ``session.write_bookmark`` per ``BookmarkPersist`` operation, then
+    exactly one ``session.reconcile_bookmark_groups`` at the end. The
+    bookmarks meta file is written exactly once per apply, by
+    ``reconcile_bookmark_groups``, with the full group hierarchy.
+    """
+    plan = plan_bookmarks_spec(project, bookmarks_spec)
+    result.errors.extend(plan.errors)
+    result.properties_set += plan.keys_touched
+
+    if dry_run:
+        return
+
+    for op in plan.operations:
+        try:
+            session.write_bookmark(op.payload, file_path=op.file_path)
+        except (OSError, ValueError) as exc:
+            result.errors.append(f'Bookmark "{op.display_name}": {exc}')
+
+    if plan.groups:
+        try:
+            session.reconcile_bookmark_groups(plan.groups)
+        except (ValueError, FileNotFoundError) as exc:
+            result.errors.append(f"Bookmark groups: {exc}")
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
