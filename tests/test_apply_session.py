@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pbi.apply.session import run_apply
-from pbi.apply.state import save_visual_if_changed
-from pbi.project import Visual
+from pbi.apply.state import save_page_if_changed, save_visual_if_changed
+from pbi.project import Page, Visual
 
 from tests.apply_session_fakes import FakePbirWriteSession
 
@@ -139,6 +139,67 @@ class SaveVisualLeafSeamTests(unittest.TestCase):
         save_visual_if_changed(
             project=None,  # type: ignore[arg-type]
             visual=visual,
+            original_data=baseline,
+            session=session,
+        )
+
+        self.assertNotIn("ensure_snapshot", session.call_names())
+
+
+class SavePageLeafSeamTests(unittest.TestCase):
+    """Apply leaf paths that persist a Page go through ``session.save_page``.
+
+    Drives ``save_page_if_changed`` against an in-memory
+    ``FakePbirWriteSession`` so the test runs without a PBIP project on disk.
+    """
+
+    def _make_page(self, *, data: dict | None = None) -> Page:
+        # Folder is never touched because the fake records the call instead of
+        # invoking ``Page.save``; an arbitrary Path keeps the dataclass valid.
+        return Page(folder=Path("/nonexistent/pages/p1"), data=data or {})
+
+    def test_changed_page_routes_through_save_page(self) -> None:
+        baseline = {"displayName": "Page 1", "width": 1280, "height": 720}
+        page = self._make_page(data={**baseline, "displayOption": "FitToPage"})
+        session = FakePbirWriteSession()
+
+        wrote = save_page_if_changed(
+            project=None,  # type: ignore[arg-type]
+            page=page,
+            original_data=baseline,
+            session=session,
+        )
+
+        self.assertTrue(wrote)
+        self.assertEqual(session.call_names(), ["save_page"])
+        self.assertIs(session.calls[0][1], page)
+
+    def test_unchanged_page_does_not_call_save_page(self) -> None:
+        baseline = {"displayName": "Page 1", "width": 1280, "height": 720}
+        page = self._make_page(data=dict(baseline))
+        session = FakePbirWriteSession()
+
+        wrote = save_page_if_changed(
+            project=None,  # type: ignore[arg-type]
+            page=page,
+            original_data=baseline,
+            session=session,
+        )
+
+        self.assertFalse(wrote)
+        self.assertEqual(session.calls, [])
+
+    def test_save_page_does_not_call_ensure_snapshot_at_leaf(self) -> None:
+        # Migrated leaf paths must not double-take the snapshot. The session
+        # method absorbs the guard internally; the leaf only records
+        # ``save_page``.
+        baseline = {"displayName": "Page 1"}
+        page = self._make_page(data={**baseline, "visibility": "HiddenInViewMode"})
+        session = FakePbirWriteSession()
+
+        save_page_if_changed(
+            project=None,  # type: ignore[arg-type]
+            page=page,
             original_data=baseline,
             session=session,
         )

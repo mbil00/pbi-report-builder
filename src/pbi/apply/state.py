@@ -52,13 +52,15 @@ class PbirApplySession:
     created filesystem snapshot of the definition folder.
 
     Per-method status:
-      * ``save_visual`` is implemented and absorbs the snapshot guard. Apply
-        leaf paths that previously called ``ensure_snapshot(project)`` then
-        ``visual.save()`` are migrated to ``session.save_visual(visual)``.
+      * ``save_visual`` and ``save_page`` are implemented and absorb the
+        snapshot guard. Apply leaf paths that previously called
+        ``ensure_snapshot(project)`` then ``visual.save()`` / ``page.save()``
+        are migrated to ``session.save_visual(visual)`` /
+        ``session.save_page(page)``.
       * The other ``PbirWriteSession`` methods raise ``NotImplementedError``
         for now; follow-up slices fill them in. Apply leaf paths for those
-        operations continue to call into ``ReportAuthoring`` / ``Page.save``
-        directly with an explicit ``ensure_snapshot`` until then.
+        operations continue to call into ``ReportAuthoring`` directly with an
+        explicit ``ensure_snapshot`` until then.
     """
 
     project: Project
@@ -115,7 +117,9 @@ class PbirApplySession:
         visual.save()
 
     def save_page(self, page: Page) -> None:
-        raise NotImplementedError("save_page lands in slice #3")
+        """Persist a Page, taking the snapshot lazily if one is needed."""
+        self.ensure_snapshot()
+        page.save()
 
     def create_page(
         self,
@@ -176,13 +180,17 @@ def save_page_if_changed(
     page: Page,
     *,
     original_data: dict,
-    session: PbirApplySession,
+    session: PbirWriteSession,
 ) -> bool:
-    """Persist page changes only when the serialized content changed."""
+    """Persist page changes only when the serialized content changed.
+
+    Typed against ``PbirWriteSession`` rather than ``PbirApplySession`` so a
+    test fake satisfying the protocol can substitute without touching disk.
+    """
+    del project  # unused: ``session.save_page`` absorbs the snapshot guard
     if page.data == original_data:
         return False
-    session.ensure_snapshot(project)
-    page.save()
+    session.save_page(page)
     return True
 
 
