@@ -166,8 +166,9 @@ def _apply_doc_section(
         return
     if not section_spec:
         return
-    session.ensure_snapshot(project)
-    changed, touched = apply_fn(project, section_spec, dry_run=dry_run)
+    changed, touched = session.write_doc_section(
+        lambda: apply_fn(project, section_spec, dry_run=dry_run)
+    )
     if changed:
         result.properties_set += touched
 

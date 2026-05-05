@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pbi.apply.session import PbirWriteSession
 from pbi.lookup import find_visual_by_identifier
@@ -51,16 +51,16 @@ class PbirApplySession:
     straight to disk) so commit is a no-op; rollback restores from a lazily
     created filesystem snapshot of the definition folder.
 
-    Per-method status:
-      * ``save_visual`` and ``save_page`` are implemented and absorb the
-        snapshot guard. Apply leaf paths that previously called
-        ``ensure_snapshot(project)`` then ``visual.save()`` / ``page.save()``
-        are migrated to ``session.save_visual(visual)`` /
-        ``session.save_page(page)``.
-      * The other ``PbirWriteSession`` methods raise ``NotImplementedError``
-        for now; follow-up slices fill them in. Apply leaf paths for those
-        operations continue to call into ``ReportAuthoring`` directly with an
-        explicit ``ensure_snapshot`` until then.
+    Per-entity persistence (``save_visual``, ``save_page``) and structural
+    creation/deletion (``create_page``, ``create_visual``,
+    ``create_group_container``, ``delete_visual``) are implemented here and
+    each absorbs the snapshot guard. Apply leaf code reaches the PBIR
+    substrate exclusively through these methods; nothing under
+    ``src/pbi/apply/`` imports ``ReportAuthoring`` anymore.
+
+    The remaining ``PbirWriteSession`` methods (``write_theme``,
+    ``write_report``, ``write_bookmark``, ``reconcile_bookmark_groups``)
+    raise ``NotImplementedError`` for now; follow-up slices fill them in.
     """
 
     project: Project
@@ -129,7 +129,16 @@ class PbirApplySession:
         height: int = 720,
         display_option: str = "FitToPage",
     ) -> Page:
-        raise NotImplementedError("create_page lands in slice #4")
+        """Create a Page on the project, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        return ReportAuthoring(self.project).create_page(
+            display_name,
+            width=width,
+            height=height,
+            display_option=display_option,
+        )
 
     def create_visual(
         self,
@@ -142,7 +151,19 @@ class PbirApplySession:
         height: int = 200,
         behind: bool = False,
     ) -> Visual:
-        raise NotImplementedError("create_visual lands in slice #4")
+        """Create a Visual on a Page, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        return ReportAuthoring(self.project).create_visual(
+            page,
+            visual_type,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            behind=behind,
+        )
 
     def create_group_container(
         self,
@@ -155,10 +176,39 @@ class PbirApplySession:
         width: int = 0,
         height: int = 0,
     ) -> Visual:
-        raise NotImplementedError("create_group_container lands in slice #4")
+        """Create an empty group container Visual, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        return ReportAuthoring(self.project).create_group_container(
+            page,
+            name=name,
+            display_name=display_name,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+        )
 
     def delete_visual(self, visual: Visual) -> None:
-        raise NotImplementedError("delete_visual lands in slice #4")
+        """Delete a Visual, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        ReportAuthoring(self.project).delete_visual(visual)
+
+    def write_doc_section(self, write_fn: "Callable[[], Any]") -> Any:
+        """Run a legacy document-level or bookmark write under the snapshot guard.
+
+        Bridges ``_apply_doc_section`` and the bookmarks branch in
+        ``apply/ops.py`` to the snapshot guard until each section has a typed
+        ``write_X`` session method (slices #5/#6/#7). The engine and the
+        bookmarks branch invoke this exclusively rather than calling
+        ``ensure_snapshot`` directly so the guard stays inside a session
+        method.
+        """
+        self.ensure_snapshot()
+        return write_fn()
 
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
         raise NotImplementedError("write_theme lands in slice #5")
