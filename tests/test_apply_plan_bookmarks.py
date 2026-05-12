@@ -483,6 +483,45 @@ class ApplyBookmarksBranchSessionTests(unittest.TestCase):
                 [("Alpha", "Views"), ("Gamma", "Views")],
             )
 
+    def test_dry_run_does_not_count_entries_with_unresolvable_page(self) -> None:
+        # Behavior change vs. the pre-refactor ``apply_bookmarks_spec``:
+        # that function's dry-run branch unconditionally bumped
+        # ``properties_set`` for every dict entry with both ``name`` and
+        # ``page``, before ever calling ``project.find_page``. The new
+        # branch routes dry-run through ``plan_bookmarks_spec``, which
+        # only increments ``keys_touched`` after ``find_page`` succeeds
+        # -- so dry-run and the real apply now agree on the count for
+        # specs that contain unresolvable page refs. This test locks
+        # that convergence in so it can't silently regress.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            _seed_page_with_visual(project, "Demo")
+
+            spec = [
+                {"name": "Valid", "page": "Demo"},
+                {"name": "Bad", "page": "DoesNotExist"},
+            ]
+            session = FakePbirWriteSession()
+            result = ApplyResult()
+
+            _apply_bookmarks_branch(
+                project, spec, result,
+                dry_run=True,
+                session=session,  # type: ignore[arg-type]
+            )
+
+            # Only the valid entry contributes to properties_set.
+            self.assertEqual(result.properties_set, 1)
+            # The bad entry surfaces as a plan error.
+            self.assertTrue(
+                any("Bad" in e for e in result.errors),
+                f"expected Bad in errors, got: {result.errors}",
+            )
+            # No session writes in dry-run.
+            self.assertEqual(
+                [c for c in session.calls if c[0] == "write_bookmark"], []
+            )
+
     def test_apply_branch_surfaces_planner_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
