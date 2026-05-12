@@ -59,6 +59,77 @@ table Sales
             self.assertIn("formatString: #,0", content)
             self.assertIn("displayFolder: 'KPIs'", content)
 
+    def test_model_apply_emits_multi_line_measure_with_correct_indentation(self) -> None:
+        # gh #9: PBI Desktop's TMDL parser is indent-based, so the expression
+        # body must sit one indent level deeper than the property lines that
+        # follow it. Otherwise formatString/lineageTag are read as part of the
+        # DAX expression and the measure opens corrupt in the formula bar.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            table_path = write_model_table(root, "Sales.tmdl", "table Sales\n")
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "measures": {
+                        "Sales": [
+                            {
+                                "name": "Multi Line",
+                                "expression": (
+                                    "VAR _x = [Other]\n"
+                                    "RETURN SWITCH( TRUE(), _x < 0, -1, 1 )"
+                                ),
+                                "format": "0",
+                            }
+                        ]
+                    }
+                },
+                sort_keys=False,
+            )
+
+            result = apply_model_yaml(root, yaml_content, dry_run=False)
+            self.assertEqual(result.errors, [])
+
+            content = table_path.read_text(encoding="utf-8")
+            self.assertIn("\t\t\tVAR _x = [Other]", content)
+            self.assertIn(
+                "\t\t\tRETURN SWITCH( TRUE(), _x < 0, -1, 1 )", content
+            )
+            self.assertIn("\t\tformatString: 0", content)
+            self.assertNotIn("\t\t\tformatString:", content)
+            self.assertNotIn("\t\t\tlineageTag:", content)
+            self.assertEqual(content.count("lineageTag:"), 1)
+
+    def test_model_apply_sets_display_folder_on_newly_created_measure(self) -> None:
+        # gh #10: displayFolder was silently dropped for newly-created measures
+        # (only the existing-measure update path called set_member_property).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            table_path = write_model_table(root, "Sales.tmdl", "table Sales\n")
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "measures": {
+                        "Sales": [
+                            {
+                                "name": "Net Sales",
+                                "expression": "SUM(Sales[Amount])",
+                                "format": "#,##0",
+                                "displayFolder": "KPI",
+                            }
+                        ]
+                    }
+                },
+                sort_keys=False,
+            )
+
+            result = apply_model_yaml(root, yaml_content, dry_run=False)
+            self.assertEqual(result.errors, [])
+
+            content = table_path.read_text(encoding="utf-8")
+            self.assertIn("\t\tdisplayFolder: KPI", content)
+
 
 class ModelManagementRegressionTests(unittest.TestCase):
     def test_model_format_updates_column_and_measure_tmdl(self) -> None:
