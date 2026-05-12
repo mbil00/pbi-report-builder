@@ -14,6 +14,7 @@ from pbi.cli import app
 from pbi.model import (
     SemanticModel,
     create_calculated_column,
+    create_source_column,
     create_hierarchy,
     create_relationship,
     delete_hierarchy,
@@ -311,6 +312,182 @@ table Sales
             column = model.find_table("Sales").find_column("Amount Label")
             self.assertEqual(column.data_type, "string")
 
+    def test_create_source_column_writes_source_bound_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "DimDate.tmdl", """
+table DimDate
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+""")
+            create_source_column(
+                root,
+                "DimDate",
+                "Date",
+                "Date",
+                data_type="dateTime",
+                format_string="MMM YYYY",
+            )
+
+            model = SemanticModel.load(root)
+            column = model.find_table("DimDate").find_column("Date")
+            self.assertEqual(column.data_type, "dateTime")
+            self.assertEqual(column.source_column, "Date")
+            self.assertEqual(column.format_string, "MMM YYYY")
+            self.assertEqual(column.expression, "")
+            self.assertEqual(column.kind, "column")  # not calculatedColumn
+
+    def test_create_source_column_rejects_duplicate_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            with self.assertRaises(ValueError):
+                create_source_column(
+                    root,
+                    "Sales",
+                    "Amount",
+                    "Amount",
+                    data_type="int64",
+                )
+
+    def test_create_source_column_quotes_names_with_spaces(self):
+        """Source column names with spaces must be single-quoted in TMDL and round-trip via the parser."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            create_source_column(
+                root,
+                "Sales",
+                "Order Date",
+                "Order Date",
+                data_type="dateTime",
+            )
+
+            content = path.read_text(encoding="utf-8")
+            # TMDL identifier with spaces must be single-quoted on both the
+            # declaration and the sourceColumn value.
+            self.assertIn("\tcolumn 'Order Date'", content)
+            self.assertIn("\t\tsourceColumn: 'Order Date'", content)
+
+            # Parser must strip the quotes so the value round-trips cleanly.
+            model = SemanticModel.load(root)
+            column = model.find_table("Sales").find_column("Order Date")
+            self.assertEqual(column.source_column, "Order Date")
+
+    def test_create_source_column_escapes_embedded_quotes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            create_source_column(
+                root,
+                "Sales",
+                "Foo Bar",
+                "It's Bad",
+                data_type="string",
+            )
+
+            content = path.read_text(encoding="utf-8")
+            # Embedded single quote is doubled per TMDL escaping rules.
+            self.assertIn("\t\tsourceColumn: 'It''s Bad'", content)
+
+            model = SemanticModel.load(root)
+            column = model.find_table("Sales").find_column("Foo Bar")
+            self.assertEqual(column.source_column, "It's Bad")
+
+    def test_create_source_column_rejects_control_characters(self):
+        """A newline in source_column would break the TMDL block; reject it at the CLI."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            with self.assertRaisesRegex(ValueError, "control characters"):
+                create_source_column(
+                    root,
+                    "Sales",
+                    "OrderDate",
+                    "Foo\nlineageTag: x",
+                    data_type="dateTime",
+                )
+
+    def test_create_source_column_rejects_control_characters_in_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            with self.assertRaisesRegex(ValueError, "control characters"):
+                create_source_column(
+                    root,
+                    "Sales",
+                    "OrderDate",
+                    "OrderDate",
+                    data_type="dateTime",
+                    format_string="MMM\nlineageTag: x",
+                )
+
+    def test_create_calculated_column_rejects_control_characters_in_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            with self.assertRaisesRegex(ValueError, "control characters"):
+                create_calculated_column(
+                    root,
+                    "Sales",
+                    "Doubled",
+                    "[Amount] * 2",
+                    data_type="int64",
+                    format_string="0\nlineageTag: x",
+                )
+
     def test_create_calculated_column_rejects_invalid_data_type(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -463,6 +640,39 @@ table Date
             self.assertEqual(date_table.date_table_column, "Date")
             self.assertTrue(date_table.find_column("Date").is_key)
             self.assertFalse(date_table.find_column("FiscalDate").is_key)
+
+    def test_mark_as_date_table_rejects_calculated_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_model(root, """
+model Model
+\tannotation __PBI_TimeIntelligenceEnabled = 1
+""")
+            _write_table(root, "DimDate.tmdl", """
+table DimDate
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+
+\tcolumn Month
+\t\tdataType: int64
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: Month
+
+\tcolumn Date = DATE(DimDate[Year], DimDate[Month], 1)
+\t\tdataType: dateTime
+\t\tformatString: MMM YYYY
+\t\tlineageTag: c-3
+\t\tsummarizeBy: none
+""")
+            with self.assertRaises(ValueError) as ctx:
+                mark_as_date_table(root, "DimDate", "Date")
+            self.assertIn("calculated column", str(ctx.exception))
+            self.assertIn("sourceColumn", str(ctx.exception))
 
     def test_disabling_time_intelligence_removes_auto_date_tables(self):
         with tempfile.TemporaryDirectory() as tmp:

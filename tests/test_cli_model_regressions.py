@@ -612,6 +612,93 @@ table Devices
             self.assertEqual(result.exit_code, 1, result.stdout)
             self.assertIn("source column", result.stdout)
 
+    def test_model_column_create_source_bound_via_cli(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            path = write_model_table(
+                root,
+                "DimDate.tmdl",
+                """
+table DimDate
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+                """,
+            )
+
+            create_result = runner.invoke(
+                app,
+                [
+                    "model", "column", "create",
+                    "DimDate", "Date",
+                    "--source-column", "Date",
+                    "--type", "dateTime",
+                    "--format", "MMM YYYY",
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(create_result.exit_code, 0, create_result.stdout)
+            self.assertIn("source-bound column", create_result.stdout)
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("\tcolumn Date", content)
+            self.assertIn("\t\tsourceColumn: Date", content)
+            self.assertIn("\t\tdataType: dateTime", content)
+            self.assertIn("\t\tformatString: MMM YYYY", content)
+            self.assertNotIn("column Date =", content)  # not a calculated column
+
+            mark_result = runner.invoke(
+                app,
+                [
+                    "model", "table", "set", "DimDate",
+                    "dateTable=Date",
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(mark_result.exit_code, 0, mark_result.stdout)
+
+            check_result = runner.invoke(
+                app,
+                ["model", "check", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(check_result.exit_code, 0, check_result.stdout)
+            self.assertNotIn("calculated column", check_result.stdout)
+
+    def test_model_column_create_rejects_expression_with_source_column(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root)
+            write_model_table(
+                root,
+                "DimDate.tmdl",
+                """
+table DimDate
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+                """,
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "model", "column", "create",
+                    "DimDate", "Date",
+                    "DATE(DimDate[Year], 1, 1)",
+                    "--source-column", "Date",
+                    "--type", "dateTime",
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("source-bound", result.stdout)
+
     def test_model_apply_creates_and_updates_from_yaml(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

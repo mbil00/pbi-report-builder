@@ -241,6 +241,48 @@ table Sales
             self.assertIn("Avg Revenue", result.stdout)
             self.assertIn("Amount", result.stdout)
 
+    def test_deps_reverse_cli(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tmeasure Revenue = SUM(Sales[Amount])
+\t\tlineageTag: m-1
+
+\tmeasure 'Avg Revenue' = DIVIDE([Revenue], [Count])
+\t\tlineageTag: m-2
+
+\tmeasure Count = COUNTROWS(Sales)
+\t\tlineageTag: m-3
+
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            result = runner.invoke(app, [
+                "model", "deps", "Sales.Revenue", "--reverse",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Avg Revenue", result.stdout)  # dependent retained
+            self.assertNotIn("References", result.stdout)  # forward section suppressed
+            self.assertNotIn("Amount", result.stdout)  # Revenue's forward ref hidden
+
+            json_result = runner.invoke(app, [
+                "model", "deps", "Sales.Revenue", "--reverse", "--json",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(json_result.exit_code, 0, json_result.stdout)
+            import json as _json
+            data = _json.loads(json_result.stdout)
+            self.assertNotIn("references", data)
+            self.assertIn("dependents", data)
+            self.assertTrue(any(d["ref"] == "Sales.Avg Revenue" for d in data["dependents"]))
+
 
 # ── Measure Rename ──────────────────────────────────────────────
 
@@ -1071,6 +1113,74 @@ table {name}
             self.assertIn("Ambiguous active relationship paths", check_result.stdout)
             self.assertIn("D -> B -> A", check_result.stdout)
             self.assertIn("D -> C -> A", check_result.stdout)
+
+    def test_model_check_flags_calculated_date_table_key(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "DimDate.tmdl", """
+table DimDate
+\tdataCategory: Time
+
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+
+\tcolumn Date = DATE(DimDate[Year], 1, 1)
+\t\tdataType: dateTime
+\t\tisKey
+\t\tformatString: MMM YYYY
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+""")
+            result = runner.invoke(app, [
+                "model", "check",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("calculated column", result.stdout)
+            self.assertIn("DimDate.Date", result.stdout)
+
+    def test_model_check_flags_calculated_key_in_multi_key_date_table(self):
+        """Pathological date table with multiple isKey columns still flags the calculated key."""
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "DimDate.tmdl", """
+table DimDate
+\tdataCategory: Time
+
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+
+\tcolumn SourceDate
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: SourceDate
+
+\tcolumn CalcDate = DATE(DimDate[Year], 1, 1)
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-3
+\t\tsummarizeBy: none
+""")
+            result = runner.invoke(app, [
+                "model", "check",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("only one key column", result.stdout)
+            self.assertIn("calculated column", result.stdout)
+            self.assertIn("DimDate.CalcDate", result.stdout)
 
     def test_model_check_accepts_auto_date_table_data_categories(self):
         runner = CliRunner()

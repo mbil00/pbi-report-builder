@@ -141,6 +141,15 @@ pbi model set timeIntelligence=off                   # disable auto date/time ta
 
 Disabling auto date/time removes the local date tables Power BI creates for every date column — cleaner model, faster refresh.
 
+The date-table primary key **must be a source-bound column**, not a calculated column — Power BI Desktop rejects the model on load otherwise. Create the key with `--source-column`:
+
+```bash
+pbi model column create DimDate Date --source-column Date --type dateTime --format "MMM YYYY"
+pbi model table set DimDate dateTable=Date
+```
+
+`pbi model check` and `pbi model table set ... dateTable=<col>` both reject a calculated column used as the date-table key.
+
 ## Step 7: Tables
 
 ```bash
