@@ -91,6 +91,13 @@ def _parse_member_property_value(key: str, value: str) -> str:
     """Normalize parsed member property values that use TMDL identifier syntax."""
     if key == "sortByColumn":
         return _parse_tmdl_name(value)
+    if key == "sourceColumn":
+        # Strip TMDL single-quote escaping only; preserve bracketed forms like
+        # `[Foo]` that calculated-table partitions emit verbatim.
+        stripped = value.strip()
+        if stripped.startswith("'"):
+            return _parse_tmdl_name(stripped)
+        return stripped
     return value.strip()
 
 

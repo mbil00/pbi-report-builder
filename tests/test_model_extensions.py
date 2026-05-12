@@ -362,6 +362,66 @@ table Sales
                     data_type="int64",
                 )
 
+    def test_create_source_column_quotes_names_with_spaces(self):
+        """Source column names with spaces must be single-quoted in TMDL and round-trip via the parser."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            create_source_column(
+                root,
+                "Sales",
+                "Order Date",
+                "Order Date",
+                data_type="dateTime",
+            )
+
+            content = path.read_text(encoding="utf-8")
+            # TMDL identifier with spaces must be single-quoted on both the
+            # declaration and the sourceColumn value.
+            self.assertIn("\tcolumn 'Order Date'", content)
+            self.assertIn("\t\tsourceColumn: 'Order Date'", content)
+
+            # Parser must strip the quotes so the value round-trips cleanly.
+            model = SemanticModel.load(root)
+            column = model.find_table("Sales").find_column("Order Date")
+            self.assertEqual(column.source_column, "Order Date")
+
+    def test_create_source_column_escapes_embedded_quotes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            path = _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            create_source_column(
+                root,
+                "Sales",
+                "Foo Bar",
+                "It's Bad",
+                data_type="string",
+            )
+
+            content = path.read_text(encoding="utf-8")
+            # Embedded single quote is doubled per TMDL escaping rules.
+            self.assertIn("\t\tsourceColumn: 'It''s Bad'", content)
+
+            model = SemanticModel.load(root)
+            column = model.find_table("Sales").find_column("Foo Bar")
+            self.assertEqual(column.source_column, "It's Bad")
+
     def test_create_calculated_column_rejects_invalid_data_type(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

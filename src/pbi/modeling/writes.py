@@ -1234,7 +1234,7 @@ def _build_source_column_block(
         lines.append(f"\t\tformatString: {format_string}")
     lines.append(f"\t\tlineageTag: {lineage_tag}")
     lines.append("\t\tsummarizeBy: none")
-    lines.append(f"\t\tsourceColumn: {source_column}")
+    lines.append(f"\t\tsourceColumn: {_format_tmdl_name(source_column)}")
     return lines
 
 
