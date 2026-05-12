@@ -13,6 +13,7 @@ list that the engine drives the **Apply Session** to persist (via
 
 from __future__ import annotations
 
+import json
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,11 +23,45 @@ from pbi.bookmarks import (
     _bookmarks_dir,
     _build_bookmark_options,
     _build_exploration_state,
-    _find_bookmark_file,
     normalize_bookmark_state,
 )
-from pbi.project import Project
+from pbi.project import Project, _read_json
 from pbi.schema_refs import BOOKMARK_SCHEMA
+
+
+def _find_existing_bookmark_for_upsert(
+    project: Project, display_name: str
+) -> tuple[dict, Path] | None:
+    """Find an existing bookmark by exact ``displayName`` for upsert.
+
+    Returns ``None`` when no existing bookmark matches the spec name
+    exactly -- the caller should generate a fresh id and file path.
+    Raises ``ValueError`` only when multiple existing bookmarks share
+    the same ``displayName`` (genuine ambiguity that can't be resolved
+    without user intervention).
+
+    Distinct from ``pbi.bookmarks._find_bookmark_file`` which also does
+    case-insensitive substring matching -- right for user-facing CLI
+    lookups, wrong for upsert (would clobber unrelated bookmarks on
+    single partial matches, and would surface unrelated-bookmark
+    ambiguity on multi-partial matches against a spec name that should
+    just be a new bookmark).
+    """
+    bm_dir = _bookmarks_dir(project)
+    if not bm_dir.exists():
+        return None
+    matches: list[tuple[dict, Path]] = []
+    for f in bm_dir.glob("*.bookmark.json"):
+        try:
+            data = _read_json(f)
+        except (json.JSONDecodeError, KeyError):
+            continue
+        if data.get("displayName") == display_name:
+            matches.append((data, f))
+    if len(matches) > 1:
+        names = ", ".join(d.get("displayName", "") for d, _ in matches)
+        raise ValueError(f'Ambiguous bookmark "{display_name}". Matches: {names}')
+    return matches[0] if matches else None
 
 
 @dataclass(frozen=True)
@@ -124,26 +159,21 @@ def plan_bookmarks_spec(
                 bookmark_id = secrets.token_hex(10)
         else:
             try:
-                existing, file_path = _find_bookmark_file(project, name)
-                # ``_find_bookmark_file`` falls back to case-insensitive
-                # substring matching when no exact match exists -- right for
-                # user-facing CLI lookups, a footgun for upsert. A spec entry
-                # "Over" against a project with bookmark "OverviewFull" must
-                # not clobber the unrelated bookmark's file; require an
-                # exact display-name match to reuse its id and path.
-                if existing.get("displayName") != name:
-                    raise FileNotFoundError
+                match = _find_existing_bookmark_for_upsert(project, name)
+            except ValueError as exc:
+                # Multiple existing bookmarks share this exact ``displayName``
+                # -- genuine ambiguity. Surface per-bookmark instead of
+                # crashing the whole apply.
+                errors.append(f'Bookmark "{name}": {exc}')
+                continue
+            if match is not None:
+                existing, file_path = match
                 bookmark_id = existing.get("name")
                 if not isinstance(bookmark_id, str) or not bookmark_id:
                     bookmark_id = secrets.token_hex(10)
-            except FileNotFoundError:
+            else:
                 bookmark_id = secrets.token_hex(10)
                 file_path = bm_dir / f"{bookmark_id}.bookmark.json"
-            except ValueError as exc:
-                # Ambiguous display-name match against existing bookmarks --
-                # surface per-bookmark instead of crashing the whole apply.
-                errors.append(f'Bookmark "{name}": {exc}')
-                continue
 
         visuals = project.get_visuals(page)
         hide = entry.get("hide", []) or None

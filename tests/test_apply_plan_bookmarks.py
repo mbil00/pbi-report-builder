@@ -216,18 +216,45 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         # keys_touched (which feeds ``ApplyResult.properties_set``).
         self.assertEqual(plan.keys_touched, 0)
 
-    def test_ambiguous_existing_bookmark_collected_as_plan_error(self) -> None:
-        # Two existing bookmarks whose display names both contain the spec
-        # name as a substring make ``_find_bookmark_file`` raise
-        # ``ValueError``. The planner must catch it and surface a per-
-        # bookmark error -- if it propagates, ``run_apply`` rolls back and
-        # reraises, turning a recoverable spec-level diagnostic into a full
-        # apply failure.
+    def test_partial_match_multi_does_not_block_new_bookmark(self) -> None:
+        # Two existing bookmarks share a substring with the spec name but
+        # neither matches it exactly. The user's intent is to create a new
+        # bookmark; the planner must not treat unrelated-bookmark substring
+        # ambiguity as a spec error (which would trigger run_apply rollback
+        # and turn a valid create-new spec into a full apply failure).
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
             page, _ = _seed_page_with_visual(project, "Demo")
-            create_bookmark(project, "OverviewA", page, [])
-            create_bookmark(project, "OverviewB", page, [])
+            existing_a = create_bookmark(project, "OverviewA", page, [])
+            existing_b = create_bookmark(project, "OverviewB", page, [])
+
+            spec = [{"name": "Overview", "page": "Demo"}]
+            plan = plan_bookmarks_spec(project, spec)
+
+        # No error, no clobber: a fresh bookmark plan with a fresh id and
+        # a fresh file path distinct from both existing siblings.
+        self.assertEqual(plan.errors, [])
+        self.assertEqual(len(plan.operations), 1)
+        op = plan.operations[0]
+        self.assertEqual(op.payload["displayName"], "Overview")
+        self.assertNotEqual(op.payload["name"], existing_a["name"])
+        self.assertNotEqual(op.payload["name"], existing_b["name"])
+        self.assertNotEqual(op.file_path.name, f"{existing_a['name']}.bookmark.json")
+        self.assertNotEqual(op.file_path.name, f"{existing_b['name']}.bookmark.json")
+
+    def test_duplicate_exact_displaynames_surface_as_plan_error(self) -> None:
+        # Genuine ambiguity: two existing bookmark files have *identical*
+        # ``displayName`` (malformed state, but possible). For an upsert
+        # spec targeting that name, the planner can't pick which file to
+        # overwrite, so it surfaces a per-bookmark error rather than
+        # silently clobbering one.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            page, _ = _seed_page_with_visual(project, "Demo")
+            create_bookmark(project, "Overview", page, [])
+            # Write a second bookmark file with the same displayName by
+            # hand (``create_bookmark`` would happily produce one).
+            create_bookmark(project, "Overview", page, [])
 
             spec = [{"name": "Overview", "page": "Demo"}]
             plan = plan_bookmarks_spec(project, spec)
