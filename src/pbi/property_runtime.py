@@ -11,6 +11,10 @@ from .property_catalog import PropertyDef
 logger = logging.getLogger(__name__)
 
 _PROPERTY_ALIAS_CACHE: dict[int, tuple[int, dict[str, str]]] = {}
+_OBJECT_PROPERTY_REVERSE_CACHE: dict[
+    int,
+    tuple[int, dict[tuple[str, str, str, str | None], str]],
+] = {}
 
 # ── Value encoding/decoding ────────────────────────────────────────
 
@@ -294,6 +298,12 @@ def _object_property_reverse_map(
     registry: dict[str, PropertyDef],
 ) -> dict[tuple[str, str, str, str | None], str]:
     """Map raw object properties back to canonical CLI property names."""
+    cache_key = id(registry)
+    registry_size = len(registry)
+    cached = _OBJECT_PROPERTY_REVERSE_CACHE.get(cache_key)
+    if cached is not None and cached[0] == registry_size:
+        return cached[1]
+
     reverse: dict[tuple[str, str, str, str | None], str] = {}
     for canonical, prop_def in registry.items():
         if not (prop_def.container_key and prop_def.container_prop):
@@ -305,6 +315,7 @@ def _object_property_reverse_map(
             prop_def.selector,
         )
         reverse.setdefault(key, canonical)
+    _OBJECT_PROPERTY_REVERSE_CACHE[cache_key] = (registry_size, reverse)
     return reverse
 
 

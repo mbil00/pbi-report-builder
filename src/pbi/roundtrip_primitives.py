@@ -358,7 +358,7 @@ def export_object_properties(
                 canonical = canonical_object_property_name(
                     obj_key,
                     prop_name,
-                    dict(registry),
+                    registry,
                     objects_path=objects_path,
                     selector=selector_id,
                 )
