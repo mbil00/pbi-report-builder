@@ -408,12 +408,15 @@ def _apply_measures(
                     if not has_expression:
                         result.errors.append(f"measures.{table_name}.{name}: missing non-empty 'expression'.")
                         continue
+                    display_folder = entry.get("displayFolder")
+                    display_folder = display_folder if isinstance(display_folder, str) else None
                     create_measure(
                         project_root,
                         table.name,
                         name,
                         expression,
                         format_string=fmt if isinstance(fmt, str) else None,
+                        display_folder=display_folder,
                         dry_run=dry_run,
                         model=model,
                         edit_session=edit_session,
@@ -425,6 +428,7 @@ def _apply_measures(
                                 table=table.name,
                                 expression=expression,
                                 format_string=fmt if isinstance(fmt, str) else "",
+                                display_folder=display_folder or "",
                                 definition_path=table.definition_path,
                             )
                         )

@@ -520,6 +520,7 @@ def create_measure(
     expression: str,
     *,
     format_string: str | None = None,
+    display_folder: str | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
     edit_session: TmdlEditSession | None = None,
@@ -539,6 +540,7 @@ def create_measure(
         measure_name,
         expression,
         format_string=format_string,
+        display_folder=display_folder,
         lineage_tag=str(uuid.uuid4()),
     )
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
@@ -1102,12 +1104,15 @@ def _build_measure_block(
     expression: str,
     *,
     format_string: str | None,
+    display_folder: str | None,
     lineage_tag: str,
 ) -> list[str]:
     """Build a full measure TMDL block."""
     lines = _build_measure_expression_lines(measure_name, expression)
     if format_string:
         lines.append(f"\t\tformatString: {format_string}")
+    if display_folder:
+        lines.append(f"\t\tdisplayFolder: {display_folder}")
     lines.append(f"\t\tlineageTag: {lineage_tag}")
     return lines
 
@@ -1123,8 +1128,11 @@ def _build_measure_expression_lines(measure_name: str, expression: str) -> list[
     if len(expr_lines) == 1:
         return [f"\tmeasure {name} = {expr_lines[0].strip()}"]
 
+    # Body sits one indent deeper than the property lines. PBI Desktop's TMDL
+    # parser is indent-based: properties at the same indent as the body are
+    # read as DAX continuation, which corrupts the measure on load.
     lines = [f"\tmeasure {name} ="]
-    lines.extend(f"\t\t{line}" for line in expr_lines)
+    lines.extend(f"\t\t\t{line}" for line in expr_lines)
     return lines
 
 
