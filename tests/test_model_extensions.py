@@ -422,6 +422,72 @@ table Sales
             column = model.find_table("Sales").find_column("Foo Bar")
             self.assertEqual(column.source_column, "It's Bad")
 
+    def test_create_source_column_rejects_control_characters(self):
+        """A newline in source_column would break the TMDL block; reject it at the CLI."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            with self.assertRaisesRegex(ValueError, "control characters"):
+                create_source_column(
+                    root,
+                    "Sales",
+                    "OrderDate",
+                    "Foo\nlineageTag: x",
+                    data_type="dateTime",
+                )
+
+    def test_create_source_column_rejects_control_characters_in_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Anchor
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Anchor
+""")
+            with self.assertRaisesRegex(ValueError, "control characters"):
+                create_source_column(
+                    root,
+                    "Sales",
+                    "OrderDate",
+                    "OrderDate",
+                    data_type="dateTime",
+                    format_string="MMM\nlineageTag: x",
+                )
+
+    def test_create_calculated_column_rejects_control_characters_in_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+""")
+            with self.assertRaisesRegex(ValueError, "control characters"):
+                create_calculated_column(
+                    root,
+                    "Sales",
+                    "Doubled",
+                    "[Amount] * 2",
+                    data_type="int64",
+                    format_string="0\nlineageTag: x",
+                )
+
     def test_create_calculated_column_rejects_invalid_data_type(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

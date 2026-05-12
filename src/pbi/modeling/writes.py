@@ -168,6 +168,19 @@ def validate_measure_name(measure_name: str) -> None:
     validate_model_object_name(measure_name, "measure")
 
 
+def _validate_tmdl_inline_value(value: str, *, field: str) -> None:
+    """Reject control characters that would split the value across TMDL lines.
+
+    TMDL property values like `sourceColumn:` and `formatString:` occupy a single
+    line. A newline (or other control character) in the value breaks the block
+    at parse time, producing a PBIP that Power BI Desktop rejects on load.
+    """
+    if any(ord(ch) < 32 for ch in value):
+        raise ValueError(
+            f"{field} cannot contain control characters (newlines, tabs, etc.); got {value!r}."
+        )
+
+
 def _normalize_member_property_value(
     loaded_model: SemanticModel,
     *,
@@ -628,6 +641,8 @@ def create_calculated_column(
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
     if any(column.name.lower() == column_name.lower() for column in table.columns):
         raise ValueError(f'Column "{column_name}" already exists in table "{table.name}".')
+    if format_string is not None:
+        _validate_tmdl_inline_value(format_string, field="format_string")
     normalized_data_type = normalize_model_data_type(data_type)
 
     lines = _get_tmdl_lines(table.definition_path, edit_session)
@@ -671,6 +686,9 @@ def create_source_column(
         raise ValueError(f'Column "{column_name}" already exists in table "{table.name}".')
     if not source_column.strip():
         raise ValueError("Source column name cannot be empty.")
+    _validate_tmdl_inline_value(source_column, field="source_column")
+    if format_string is not None:
+        _validate_tmdl_inline_value(format_string, field="format_string")
     normalized_data_type = normalize_model_data_type(data_type)
 
     lines = _get_tmdl_lines(table.definition_path, edit_session)
@@ -1621,8 +1639,9 @@ def _validate_model_metadata(loaded_model: SemanticModel) -> list[dict]:
                     "relationship": table.name,
                     "message": "Date table is missing an isKey date column.",
                 })
-            else:
-                key_column = key_columns[0]
+            # Validate every isKey column independently so a malformed table with
+            # multiple keys (one of them calculated) still surfaces the issue.
+            for key_column in key_columns:
                 if not _is_date_like_model_type(key_column.data_type):
                     findings.append({
                         "severity": "error",

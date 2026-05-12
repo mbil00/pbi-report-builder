@@ -1144,6 +1144,44 @@ table DimDate
             self.assertIn("calculated column", result.stdout)
             self.assertIn("DimDate.Date", result.stdout)
 
+    def test_model_check_flags_calculated_key_in_multi_key_date_table(self):
+        """Pathological date table with multiple isKey columns still flags the calculated key."""
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "DimDate.tmdl", """
+table DimDate
+\tdataCategory: Time
+
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+
+\tcolumn SourceDate
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: SourceDate
+
+\tcolumn CalcDate = DATE(DimDate[Year], 1, 1)
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-3
+\t\tsummarizeBy: none
+""")
+            result = runner.invoke(app, [
+                "model", "check",
+                "--project", str(root / "Sample.pbip"),
+            ])
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("only one key column", result.stdout)
+            self.assertIn("calculated column", result.stdout)
+            self.assertIn("DimDate.CalcDate", result.stdout)
+
     def test_model_check_accepts_auto_date_table_data_categories(self):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
