@@ -29,16 +29,15 @@ from pbi.project import Project, _read_json
 from pbi.schema_refs import BOOKMARK_SCHEMA
 
 
-def _find_existing_bookmark_for_upsert(
-    project: Project, display_name: str
-) -> tuple[dict, Path] | None:
-    """Find an existing bookmark by exact ``displayName`` for upsert.
+def _index_existing_bookmarks_by_display(
+    project: Project,
+) -> dict[str, list[tuple[dict, Path]]]:
+    """Index ``<bm_dir>/*.bookmark.json`` by exact ``displayName``.
 
-    Returns ``None`` when no existing bookmark matches the spec name
-    exactly -- the caller should generate a fresh id and file path.
-    Raises ``ValueError`` only when multiple existing bookmarks share
-    the same ``displayName`` (genuine ambiguity that can't be resolved
-    without user intervention).
+    Scanned once at the top of the planner; the per-entry upsert lookup
+    is a single dict probe afterwards. Pre-refactor dry-run never
+    touched disk; this keeps the cost at O(M) reads per plan rather
+    than O(N*M) for N spec entries.
 
     Distinct from ``pbi.bookmarks._find_bookmark_file`` which also does
     case-insensitive substring matching -- right for user-facing CLI
@@ -49,19 +48,17 @@ def _find_existing_bookmark_for_upsert(
     """
     bm_dir = _bookmarks_dir(project)
     if not bm_dir.exists():
-        return None
-    matches: list[tuple[dict, Path]] = []
+        return {}
+    index: dict[str, list[tuple[dict, Path]]] = {}
     for f in bm_dir.glob("*.bookmark.json"):
         try:
             data = _read_json(f)
         except (json.JSONDecodeError, KeyError):
             continue
-        if data.get("displayName") == display_name:
-            matches.append((data, f))
-    if len(matches) > 1:
-        names = ", ".join(d.get("displayName", "") for d, _ in matches)
-        raise ValueError(f'Ambiguous bookmark "{display_name}". Matches: {names}')
-    return matches[0] if matches else None
+        name = data.get("displayName")
+        if isinstance(name, str):
+            index.setdefault(name, []).append((data, f))
+    return index
 
 
 @dataclass(frozen=True)
@@ -120,6 +117,7 @@ def plan_bookmarks_spec(
     errors: list[str] = []
 
     bm_dir = _bookmarks_dir(project)
+    existing_by_display = _index_existing_bookmarks_by_display(project)
 
     for entry in bookmarks_spec:
         if not isinstance(entry, dict):
@@ -158,16 +156,18 @@ def plan_bookmarks_spec(
             if not isinstance(bookmark_id, str) or not bookmark_id:
                 bookmark_id = secrets.token_hex(10)
         else:
-            try:
-                match = _find_existing_bookmark_for_upsert(project, name)
-            except ValueError as exc:
+            matches = existing_by_display.get(name, [])
+            if len(matches) > 1:
                 # Multiple existing bookmarks share this exact ``displayName``
-                # -- genuine ambiguity. Surface per-bookmark instead of
-                # crashing the whole apply.
-                errors.append(f'Bookmark "{name}": {exc}')
+                # -- genuine ambiguity, we can't pick which to upsert.
+                names = ", ".join(d.get("displayName", "") for d, _ in matches)
+                errors.append(
+                    f'Bookmark "{name}": Ambiguous bookmark "{name}". '
+                    f'Matches: {names}'
+                )
                 continue
-            if match is not None:
-                existing, file_path = match
+            if matches:
+                existing, file_path = matches[0]
                 bookmark_id = existing.get("name")
                 if not isinstance(bookmark_id, str) or not bookmark_id:
                     bookmark_id = secrets.token_hex(10)

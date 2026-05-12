@@ -170,8 +170,6 @@ def _apply_theme_branch(
     if not isinstance(section_spec, dict):
         result.errors.append("'theme' must be a mapping.")
         return
-    if not section_spec:
-        return
 
     plan = plan_theme_spec(project, section_spec)
     if plan is None:
@@ -202,8 +200,6 @@ def _apply_report_branch(
         return
     if not isinstance(section_spec, dict):
         result.errors.append("'report' must be a mapping.")
-        return
-    if not section_spec:
         return
 
     plan = plan_report_spec(project, section_spec)
@@ -260,6 +256,14 @@ def _apply_bookmarks_branch(
     reconcilable_groups = [
         (display, group) for display, group in plan.groups if display in written
     ]
+    # The reconcile still runs even when ``result.errors`` is non-empty.
+    # In the default rollback-on-error mode ``run_apply`` will revert the
+    # meta file as part of the snapshot restore, so the work here is
+    # wasted I/O on a doomed state -- but under ``--continue-on-error``
+    # the apply commits despite errors, and skipping the reconcile would
+    # leave the meta file out of sync with the bookmarks that did write.
+    # Best-effort here keeps both modes honest at the cost of one extra
+    # meta read on the rollback path.
     if reconcilable_groups:
         try:
             session.reconcile_bookmark_groups(reconcilable_groups)
