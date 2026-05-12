@@ -218,6 +218,9 @@ pbi model perspective get "Exec View"         # inspect included tables, columns
 pbi model table get Date                      # table metadata incl. date-table status
 pbi model relationship list                   # list relationships
 pbi model path Sales Products                 # show join path between tables
+pbi model check                                # validate relationships (exit 1 on errors)
+pbi model check --baseline baseline.json       # CI gate: exit 1 only on NEW errors
+pbi model check --json > baseline.json         # snapshot accepted state for the baseline
 
 # Format — same command for columns and measures
 pbi model format "Facts.Revenue" "#,0"

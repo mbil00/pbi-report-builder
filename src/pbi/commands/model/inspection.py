@@ -336,12 +336,47 @@ def model_deps(
         console.print("\n[dim]No dependents.[/dim]")
 
 
+def _finding_key(finding: dict) -> tuple[str, str, str]:
+    """Identity tuple used to match findings against a baseline."""
+    return (
+        str(finding.get("severity", "")),
+        str(finding.get("relationship", "")),
+        str(finding.get("message", "")),
+    )
+
+
+def _print_findings_section(label: str, findings: list[dict], color: str, marker: str, dim_message: bool = False) -> None:
+    if not findings:
+        return
+    console.print(f"\n[bold][{color}]{label} ({len(findings)})[/{color}][/bold]")
+    msg_style = "[dim]" if dim_message else ""
+    msg_close = "[/dim]" if dim_message else ""
+    for finding in findings:
+        console.print(f"  [{color}]{marker}[/{color}] [cyan]{finding['relationship']}[/cyan]")
+        console.print(f"    {msg_style}{finding['message']}{msg_close}")
+
+
 @model_app.command("check")
 def model_check(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    baseline: Annotated[
+        Path | None,
+        typer.Option(
+            "--baseline",
+            help="Path to a JSON baseline file (output of `model check --json`). "
+            "Pre-existing findings present in the baseline are accepted; only new findings can fail the check.",
+        ),
+    ] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Validate model relationships and report potential issues."""
+    """Validate model relationships and report potential issues.
+
+    Use --baseline <file> to gate CI: pre-existing findings in the baseline are
+    accepted; exit 1 only triggers on NEW errors introduced since the baseline.
+    Generate a baseline with `pbi model check --json > baseline.json`.
+    """
+    import json
+
     from pbi.model import validate_relationships
 
     proj = get_project(project)
@@ -351,9 +386,59 @@ def model_check(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if as_json:
-        import json
+    if baseline is not None:
+        try:
+            baseline_findings = json.loads(baseline.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            console.print(f"[red]Error:[/red] Failed to read baseline {baseline}: {e}")
+            raise typer.Exit(1)
+        if not isinstance(baseline_findings, list):
+            console.print(f"[red]Error:[/red] Baseline {baseline} must be a JSON array of finding objects.")
+            raise typer.Exit(1)
 
+        baseline_keys = {_finding_key(f) for f in baseline_findings if isinstance(f, dict)}
+        current_keys = {_finding_key(f) for f in findings}
+        new_findings = [f for f in findings if _finding_key(f) not in baseline_keys]
+        resolved_findings = [
+            f for f in baseline_findings
+            if isinstance(f, dict) and _finding_key(f) not in current_keys
+        ]
+        baseline_remaining = [f for f in findings if _finding_key(f) in baseline_keys]
+        new_errors = [f for f in new_findings if f.get("severity") == "error"]
+
+        if as_json:
+            console.print_json(json.dumps({
+                "new": new_findings,
+                "resolved": resolved_findings,
+                "baseline_remaining": baseline_remaining,
+            }, indent=2))
+            if new_errors:
+                raise typer.Exit(1)
+            return
+
+        if not new_findings and not resolved_findings:
+            console.print("[green]No new findings relative to baseline.[/green]")
+            console.print(f"[dim]{len(baseline_remaining)} pre-existing finding(s) acknowledged by baseline.[/dim]")
+            return
+
+        new_errors_list = [f for f in new_findings if f["severity"] == "error"]
+        new_warnings_list = [f for f in new_findings if f["severity"] == "warning"]
+        new_infos_list = [f for f in new_findings if f["severity"] == "info"]
+        _print_findings_section("New errors", new_errors_list, "red", "x")
+        _print_findings_section("New warnings", new_warnings_list, "yellow", "!")
+        _print_findings_section("New info", new_infos_list, "dim", "-", dim_message=True)
+        _print_findings_section("Resolved (in baseline, no longer reported)", resolved_findings, "green", "✓", dim_message=True)
+        console.print(
+            f"\n[dim]{len(new_errors_list)} new error(s), {len(new_warnings_list)} new warning(s), "
+            f"{len(new_infos_list)} new info(s); "
+            f"{len(resolved_findings)} resolved; "
+            f"{len(baseline_remaining)} acknowledged by baseline.[/dim]"
+        )
+        if new_errors:
+            raise typer.Exit(1)
+        return
+
+    if as_json:
         console.print_json(json.dumps(findings, indent=2))
         return
 
@@ -365,23 +450,9 @@ def model_check(
     warnings = [finding for finding in findings if finding["severity"] == "warning"]
     infos = [finding for finding in findings if finding["severity"] == "info"]
 
-    if errors:
-        console.print(f"\n[bold][red]Errors ({len(errors)})[/red][/bold]")
-        for finding in errors:
-            console.print(f"  [red]x[/red] [cyan]{finding['relationship']}[/cyan]")
-            console.print(f"    {finding['message']}")
-
-    if warnings:
-        console.print(f"\n[bold][yellow]Warnings ({len(warnings)})[/yellow][/bold]")
-        for finding in warnings:
-            console.print(f"  [yellow]![/yellow] [cyan]{finding['relationship']}[/cyan]")
-            console.print(f"    {finding['message']}")
-
-    if infos:
-        console.print(f"\n[bold]Info ({len(infos)})[/bold]")
-        for finding in infos:
-            console.print(f"  [dim]-[/dim] [cyan]{finding['relationship']}[/cyan]")
-            console.print(f"    [dim]{finding['message']}[/dim]")
+    _print_findings_section("Errors", errors, "red", "x")
+    _print_findings_section("Warnings", warnings, "yellow", "!")
+    _print_findings_section("Info", infos, "dim", "-", dim_message=True)
 
     console.print(f"\n[dim]{len(errors)} error(s), {len(warnings)} warning(s), {len(infos)} info(s)[/dim]")
     if errors:

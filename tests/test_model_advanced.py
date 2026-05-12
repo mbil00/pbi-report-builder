@@ -1114,6 +1114,162 @@ table {name}
             self.assertIn("D -> B -> A", check_result.stdout)
             self.assertIn("D -> C -> A", check_result.stdout)
 
+    def test_model_check_baseline_suppresses_pre_existing_findings(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustID
+""")
+            _write_table(root, "Customers.tmdl", """
+table Customers
+\tcolumn CustID
+\t\tdataType: string
+\t\tlineageTag: c-2
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustID
+""")
+            _write_relationships(root, """
+relationship AutoDetected_abc-123
+\tcrossFilteringBehavior: bothDirections
+\tfromColumn: Sales.CustID
+\ttoColumn: Customers.CustID
+""")
+            # Snapshot the current state as baseline.
+            baseline_result = runner.invoke(
+                app,
+                ["model", "check", "--json", "--project", str(root / "Sample.pbip")],
+            )
+            self.assertEqual(baseline_result.exit_code, 0, baseline_result.stdout)
+            baseline_path = root / "baseline.json"
+            baseline_path.write_text(baseline_result.stdout, encoding="utf-8")
+
+            # Re-run with baseline: nothing changed, so no new findings.
+            gated = runner.invoke(
+                app,
+                [
+                    "model", "check",
+                    "--baseline", str(baseline_path),
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(gated.exit_code, 0, gated.stdout)
+            self.assertIn("No new findings", gated.stdout)
+
+    def test_model_check_baseline_reports_new_error(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustID
+""")
+            # Empty baseline: every current finding is new.
+            baseline_path = root / "baseline.json"
+            baseline_path.write_text("[]", encoding="utf-8")
+
+            # Introduce a date-table-key error.
+            _write_table(root, "DimDate.tmdl", """
+table DimDate
+\tdataCategory: Time
+
+\tcolumn Year
+\t\tdataType: int64
+\t\tlineageTag: c-y
+\t\tsummarizeBy: none
+\t\tsourceColumn: Year
+
+\tcolumn Date = DATE(DimDate[Year], 1, 1)
+\t\tdataType: dateTime
+\t\tisKey
+\t\tlineageTag: c-d
+\t\tsummarizeBy: none
+""")
+            result = runner.invoke(
+                app,
+                [
+                    "model", "check",
+                    "--baseline", str(baseline_path),
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("New errors", result.stdout)
+            self.assertIn("calculated column", result.stdout)
+
+    def test_model_check_baseline_reports_resolved_finding(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustID
+""")
+            # Baseline asserts a phantom finding that no longer exists.
+            baseline_path = root / "baseline.json"
+            baseline_path.write_text(json.dumps([
+                {
+                    "severity": "warning",
+                    "relationship": "Phantom -> Gone",
+                    "message": "Was here yesterday.",
+                }
+            ]), encoding="utf-8")
+
+            result = runner.invoke(
+                app,
+                [
+                    "model", "check",
+                    "--baseline", str(baseline_path),
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("Resolved", result.stdout)
+            self.assertIn("Phantom -> Gone", result.stdout)
+
+    def test_model_check_baseline_rejects_invalid_file(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            _write_table(root, "Sales.tmdl", """
+table Sales
+\tcolumn CustID
+\t\tdataType: string
+\t\tlineageTag: c-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustID
+""")
+            baseline_path = root / "broken.json"
+            baseline_path.write_text("not json", encoding="utf-8")
+
+            result = runner.invoke(
+                app,
+                [
+                    "model", "check",
+                    "--baseline", str(baseline_path),
+                    "--project", str(root / "Sample.pbip"),
+                ],
+            )
+            self.assertEqual(result.exit_code, 1, result.stdout)
+            self.assertIn("Failed to read baseline", result.stdout)
+
     def test_model_check_flags_calculated_date_table_key(self):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

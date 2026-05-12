@@ -124,6 +124,13 @@ pbi model check                # find bidirectional cross-filters, auto-detected
 pbi model path Sales Products  # verify join path exists between tables
 ```
 
+**Using `model check` as a CI gate:** snapshot accepted pre-existing findings, then gate against that baseline so only new findings fail the build.
+
+```bash
+pbi model check --json > .pbi/model-check-baseline.json     # snapshot accepted state, commit it
+pbi model check --baseline .pbi/model-check-baseline.json   # exit 1 only on NEW errors
+```
+
 ## Step 5: Hierarchies
 
 ```bash
