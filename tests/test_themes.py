@@ -1521,6 +1521,48 @@ class TestThemeDiffCommand(unittest.TestCase):
             self.assertIn("Theme", result.stdout)
             self.assertIn("theme.visualStyles.columnChart.Series.legend[0].show", result.stdout)
 
+    def test_partial_key_diff_matches_what_apply_writes(self) -> None:
+        """Regression: diff for a partial-key spec matches what apply writes.
+
+        Previous behaviour flattened the YAML spec and compared it to the
+        full exported theme key-by-key. That diverged from apply for two
+        cases: (1) ``null`` values in the spec rendered as ``-> null``
+        instead of ``-> (none)`` (apply *removes* the key, doesn't write
+        the literal string), and (2) the diff couldn't represent siblings
+        the merge would preserve. The planner-driven diff merges the spec
+        into current state first, so the rendered diff is exactly what
+        apply persists.
+        """
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = create_theme("Existing")
+            existing["foreground"] = "#000000"
+            existing["dataColors"] = ["#111111", "#222222"]
+            pbip = _scaffold_project(Path(tmp), theme_data=existing)
+
+            # Partial spec: replace foreground, remove dataColors via null.
+            partial_spec = {
+                "version": 1,
+                "pages": [],
+                "theme": {
+                    "foreground": "#ABCDEF",
+                    "dataColors": None,
+                },
+            }
+            spec_file = Path(tmp) / "partial-theme.yaml"
+            spec_file.write_text(json.dumps(partial_spec), encoding="utf-8")
+
+            result = runner.invoke(app, ["diff", str(spec_file), "-p", str(pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            # The replaced key shows the new value.
+            self.assertIn("theme.foreground", result.stdout)
+            self.assertIn("#ABCDEF", result.stdout)
+            # The null-removed key shows ``(none)`` (reflecting the post-apply
+            # state where the key is gone), never ``-> null`` (the old
+            # flatten-compare bug).
+            self.assertIn("dataColors", result.stdout)
+            self.assertNotIn("-> null", result.stdout)
+
 
 # ── BUG-031: Resource path must preserve .json extension ──────────────
 

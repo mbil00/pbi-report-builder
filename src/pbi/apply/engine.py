@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
-from pbi.report_roundtrip import apply_report_spec as _apply_report_spec
-from pbi.theme_roundtrip import apply_theme_spec as _apply_theme_spec
+from pbi.apply.plan_bookmarks import plan_bookmarks_spec
+from pbi.apply.plan_report import plan_report_spec
+from pbi.apply.plan_theme import plan_theme_spec
+from pbi.apply.session import PbirWriteSession
 from pbi.validate import ValidationIssue, validate_project
 
 from .pages import apply_page
-from .ops import (
-    apply_bookmarks_spec as _apply_bookmarks,
-)
 from .session import run_apply
 from .state import (
     ApplyResult,
-    PbirSnapshotSession as _PbirSnapshotSession,
+    PbirApplySession as _PbirApplySession,
 )
 from .visuals import finalize_visual_page_refs as _finalize_visual_page_refs
 from pbi.project import Project
@@ -51,7 +50,7 @@ def apply_yaml(
         return result
 
     style_cache: dict[str, StylePreset] = {}
-    session = _PbirSnapshotSession(project=project, dry_run=dry_run)
+    session = _PbirApplySession(project=project, dry_run=dry_run)
     baseline_validation = (
         _validation_issue_keys(validate_project(project, include_model_checks=False))
         if not dry_run
@@ -90,7 +89,7 @@ def _apply_top_level_sections(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
 ) -> None:
     """Dispatch each top-level YAML section in phase order.
 
@@ -106,13 +105,13 @@ def _apply_top_level_sections(
     list stays hard-coded rather than registered through a protocol.
     """
     if page_filter is None:
-        _apply_doc_section(
-            project, "theme", spec.get("theme"), result,
-            _apply_theme_spec, dry_run=dry_run, session=session,
+        _apply_theme_branch(
+            project, spec.get("theme"), result,
+            dry_run=dry_run, session=session,
         )
-        _apply_doc_section(
-            project, "report", spec.get("report"), result,
-            _apply_report_spec, dry_run=dry_run, session=session,
+        _apply_report_branch(
+            project, spec.get("report"), result,
+            dry_run=dry_run, session=session,
         )
 
     pages_spec = spec.get("pages", [])
@@ -145,31 +144,136 @@ def _apply_top_level_sections(
 
     bookmarks_spec = spec.get("bookmarks", [])
     if isinstance(bookmarks_spec, list) and bookmarks_spec:
-        _apply_bookmarks(project, bookmarks_spec, result, dry_run=dry_run, session=session)
+        _apply_bookmarks_branch(
+            project, bookmarks_spec, result,
+            dry_run=dry_run, session=session,
+        )
 
 
-def _apply_doc_section(
+def _apply_theme_branch(
     project: Project,
-    name: str,
     section_spec: Any,
     result: ApplyResult,
-    apply_fn: Callable[..., tuple[bool, int]],
     *,
     dry_run: bool,
-    session: _PbirSnapshotSession,
+    session: PbirWriteSession,
 ) -> None:
-    """Apply a document-scoped YAML section (``theme`` or ``report``)."""
+    """Apply the ``theme`` YAML section through the planner + session.
+
+    ``plan_theme_spec`` is the pure-function half (read current theme, merge,
+    default name, detect no-op). The engine then drives the session to
+    persist the plan via ``session.write_theme``. Disk I/O lives nowhere
+    except inside the session method.
+    """
     if section_spec is None:
         return
     if not isinstance(section_spec, dict):
-        result.errors.append(f"'{name}' must be a mapping.")
+        result.errors.append("'theme' must be a mapping.")
         return
-    if not section_spec:
+
+    plan = plan_theme_spec(project, section_spec)
+    if plan is None:
         return
-    session.ensure_snapshot(project)
-    changed, touched = apply_fn(project, section_spec, dry_run=dry_run)
-    if changed:
-        result.properties_set += touched
+
+    if not dry_run:
+        session.write_theme(plan.payload, first_time=plan.first_time)
+    result.properties_set += plan.keys_touched
+
+
+def _apply_report_branch(
+    project: Project,
+    section_spec: Any,
+    result: ApplyResult,
+    *,
+    dry_run: bool,
+    session: PbirWriteSession,
+) -> None:
+    """Apply the ``report`` YAML section through the planner + session.
+
+    ``plan_report_spec`` is the pure-function half (read current
+    ``report.json``, normalize ``resourcePackages``, merge per top-level
+    key, detect no-op). The engine then drives the session to persist the
+    plan via ``session.write_report``. Disk I/O lives nowhere except inside
+    the session method.
+    """
+    if section_spec is None:
+        return
+    if not isinstance(section_spec, dict):
+        result.errors.append("'report' must be a mapping.")
+        return
+
+    plan = plan_report_spec(project, section_spec)
+    if plan is None:
+        return
+
+    if not dry_run:
+        session.write_report(plan.payload)
+    result.properties_set += plan.keys_touched
+
+
+def _apply_bookmarks_branch(
+    project: Project,
+    bookmarks_spec: list[Any],
+    result: ApplyResult,
+    *,
+    dry_run: bool,
+    session: PbirWriteSession,
+) -> None:
+    """Apply the ``bookmarks`` YAML section through the planner + session.
+
+    ``plan_bookmarks_spec`` computes per-bookmark target payloads (with state
+    normalization, hide/target lists, capture flags) and the group hierarchy.
+    The engine then drives the session to persist the plan: one
+    ``session.write_bookmark`` per ``BookmarkPersist`` operation, then
+    exactly one ``session.reconcile_bookmark_groups`` at the end. The
+    bookmarks meta file is written exactly once per apply, by
+    ``reconcile_bookmark_groups``, with the full group hierarchy.
+    """
+    plan = plan_bookmarks_spec(project, bookmarks_spec)
+    result.errors.extend(plan.errors)
+
+    if dry_run:
+        # No writes happen, so credit every resolved spec entry. In real
+        # apply the credit moves to per-op success below so a failed write
+        # doesn't get counted as a property set.
+        result.properties_set += plan.keys_touched
+        return
+
+    written: set[str] = set()
+    for op in plan.operations:
+        try:
+            session.write_bookmark(op.payload, file_path=op.file_path)
+        except (OSError, ValueError) as exc:
+            result.errors.append(f'Bookmark "{op.display_name}": {exc}')
+            continue
+        written.add(op.display_name)
+        result.properties_set += 1
+
+    # ``reconcile_bookmark_groups`` calls ``_find_bookmark_file`` on every
+    # entry; including bookmarks whose write failed would raise and abort
+    # the entire reconcile, losing group membership for the ones that did
+    # write.
+    reconcilable_groups = [
+        (display, group) for display, group in plan.groups if display in written
+    ]
+    # The reconcile still runs even when ``result.errors`` is non-empty.
+    # In the default rollback-on-error mode ``run_apply`` will revert the
+    # meta file as part of the snapshot restore, so the work here is
+    # wasted I/O on a doomed state -- but under ``--continue-on-error``
+    # the apply commits despite errors, and skipping the reconcile would
+    # leave the meta file out of sync with the bookmarks that did write.
+    # Best-effort here keeps both modes honest at the cost of one extra
+    # meta read on the rollback path.
+    if reconcilable_groups:
+        try:
+            session.reconcile_bookmark_groups(reconcilable_groups)
+        except (OSError, ValueError) as exc:
+            # Catch the same exception types as the per-op write loop
+            # above. Narrowing to ``FileNotFoundError`` here would let
+            # ``PermissionError`` / ``IsADirectoryError`` propagate and
+            # trigger full rollback, undoing every per-bookmark write that
+            # did succeed earlier in this branch.
+            result.errors.append(f"Bookmark groups: {exc}")
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:

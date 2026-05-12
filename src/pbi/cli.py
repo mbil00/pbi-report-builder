@@ -298,39 +298,53 @@ def diff_cmd(
 
     has_diffs = False
     if page is None and isinstance(spec.get("theme"), dict):
-        current_theme = yaml_mod.safe_load(export_yaml(proj)).get("theme", {})
-        yaml_theme = spec.get("theme", {})
-        current_flat = flatten_diff_spec(current_theme)
-        yaml_flat = flatten_diff_spec(yaml_theme)
-        theme_diffs = []
-        for key, proposed in yaml_flat.items():
-            curr = str(current_flat.get(key, ""))
-            proposed_text = str(proposed)
-            if curr != proposed_text:
-                theme_diffs.append((key, curr or "(none)", proposed_text))
-        if theme_diffs:
-            has_diffs = True
-            console.print("\n[bold]Theme[/bold]")
-            for prop, old, new in theme_diffs:
-                label = f"theme.{prop}" if prop else "theme"
-                console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
+        from pbi.apply.plan_theme import plan_theme_spec
+        from pbi.theme_roundtrip import export_theme_spec
+
+        current_theme = export_theme_spec(proj)
+        plan = plan_theme_spec(proj, spec.get("theme", {}))
+        if plan is not None:
+            current_flat = flatten_diff_spec(current_theme)
+            planned_flat = flatten_diff_spec(plan.payload)
+            theme_diffs = []
+            keys = set(current_flat) | set(planned_flat)
+            for key in sorted(keys):
+                curr = str(current_flat.get(key, ""))
+                planned = str(planned_flat.get(key, ""))
+                if curr != planned:
+                    theme_diffs.append((key, curr or "(none)", planned or "(none)"))
+            if theme_diffs:
+                has_diffs = True
+                console.print("\n[bold]Theme[/bold]")
+                for prop, old, new in theme_diffs:
+                    label = f"theme.{prop}" if prop else "theme"
+                    console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
     if page is None and isinstance(spec.get("report"), dict):
-        current_report = yaml_mod.safe_load(export_yaml(proj)).get("report", {})
-        yaml_report = spec.get("report", {})
-        current_flat = flatten_diff_spec(current_report)
-        yaml_flat = flatten_diff_spec(yaml_report)
-        report_diffs = []
-        for key, proposed in yaml_flat.items():
-            curr = str(current_flat.get(key, ""))
-            proposed_text = str(proposed)
-            if curr != proposed_text:
-                report_diffs.append((key, curr or "(none)", proposed_text))
-        if report_diffs:
-            has_diffs = True
-            console.print("\n[bold]Report[/bold]")
-            for prop, old, new in report_diffs:
-                label = f"report.{prop}" if prop else "report"
-                console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
+        from pbi.apply.plan_report import plan_report_spec
+        from pbi.report_roundtrip import export_report_spec
+
+        current_report = export_report_spec(proj)
+        plan = plan_report_spec(proj, spec.get("report", {}))
+        if plan is not None:
+            # ``$schema`` is stripped from the YAML round-trip
+            # (``export_report_spec`` removes it) but the planner sets it on
+            # the persisted payload. Hide it from the diff so re-applying an
+            # exported YAML reports no diff.
+            current_flat = flatten_diff_spec(current_report, ignore_keys={"$schema"})
+            planned_flat = flatten_diff_spec(plan.payload, ignore_keys={"$schema"})
+            report_diffs = []
+            keys = set(current_flat) | set(planned_flat)
+            for key in sorted(keys):
+                curr = str(current_flat.get(key, ""))
+                planned = str(planned_flat.get(key, ""))
+                if curr != planned:
+                    report_diffs.append((key, curr or "(none)", planned or "(none)"))
+            if report_diffs:
+                has_diffs = True
+                console.print("\n[bold]Report[/bold]")
+                for prop, old, new in report_diffs:
+                    label = f"report.{prop}" if prop else "report"
+                    console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
     for page_spec in spec["pages"]:
         page_name = page_spec.get("name", "")
         if page and page_name.lower() != page.lower():

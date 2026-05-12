@@ -11,7 +11,7 @@ from .ops import (
 from .state import (
     ApplyResult,
     PageVisualState as _PageVisualState,
-    PbirSnapshotSession as _PbirSnapshotSession,
+    PbirApplySession as _PbirApplySession,
     save_page_if_changed as _save_page_if_changed,
 )
 from .visual_support import (
@@ -24,7 +24,6 @@ from pbi.project import Project
 from pbi.properties import PAGE_PROPERTIES, set_property
 from pbi.roundtrip_primitives import apply_page_roundtrip_fields
 from pbi.styles import StylePreset
-from pbi.report_authoring import ReportAuthoring
 
 
 def apply_page(
@@ -35,7 +34,7 @@ def apply_page(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
 ) -> None:
     """Apply a single page specification."""
     page_name = page_spec["name"]
@@ -61,8 +60,7 @@ def apply_page(
             result.pages_created.append(page_name)
             page = None  # type: ignore[assignment]
         else:
-            session.ensure_snapshot(project)
-            page = ReportAuthoring(project).create_page(
+            page = session.create_page(
                 page_name,
                 width=width,
                 height=height,
@@ -187,8 +185,7 @@ def apply_page(
             if visual.folder.name not in kept_visual_ids:
                 result.visuals_deleted.append((page_name, visual.name))
                 if not dry_run:
-                    session.ensure_snapshot(project)
-                    ReportAuthoring(project).delete_visual(visual)
+                    session.delete_visual(visual)
                     page_state.remove(visual)
 
     if not (dry_run and page_is_new) and "interactions" in page_spec:

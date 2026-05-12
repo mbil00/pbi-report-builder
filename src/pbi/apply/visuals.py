@@ -8,7 +8,7 @@ from .ops import apply_filters_spec as _apply_filters
 from .state import (
     ApplyResult,
     PageVisualState as _PageVisualState,
-    PbirSnapshotSession as _PbirSnapshotSession,
+    PbirApplySession as _PbirApplySession,
     save_visual_if_changed as _save_visual_if_changed,
 )
 from .visual_queries import (
@@ -30,7 +30,6 @@ from .visual_support import (
 )
 from pbi.project import Project, Page, Visual, sanitize_visual_name
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
-from pbi.report_authoring import ReportAuthoring
 from pbi.styles import StylePreset
 
 
@@ -43,7 +42,7 @@ def apply_visual(
     dry_run: bool,
     style_cache: dict[str, StylePreset],
     keep_visual_ids: set[str] | None = None,
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
     page_state: _PageVisualState,
 ) -> None:
     """Apply a single visual specification."""
@@ -99,13 +98,12 @@ def apply_visual(
             result.visuals_deleted.append((page_name, vis_name or visual.name))
             result.visuals_created.append((page_name, vis_name or vis_type))
         else:
-            session.ensure_snapshot(project)
-            ReportAuthoring(project).delete_visual(visual)
+            session.delete_visual(visual)
             page_state.remove(visual)
-            visual = ReportAuthoring(project).create_visual(page, vis_type, x=x, y=y, width=w, height=h)
+            visual = session.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
                 visual.data["name"] = sanitize_visual_name(vis_name)
-                visual.save()
+                session.save_visual(visual)
             visual_baseline = copy.deepcopy(visual.data)
             page_state.add(visual)
             result.visuals_deleted.append((page_name, f"{vis_name or visual.name} ({old_type})"))
@@ -116,11 +114,10 @@ def apply_visual(
         if dry_run:
             result.visuals_created.append((page_name, vis_name or vis_type))
         else:
-            session.ensure_snapshot(project)
-            visual = ReportAuthoring(project).create_visual(page, vis_type, x=x, y=y, width=w, height=h)
+            visual = session.create_visual(page, vis_type, x=x, y=y, width=w, height=h)
             if vis_name:
                 visual.data["name"] = sanitize_visual_name(vis_name)
-                visual.save()
+                session.save_visual(visual)
             visual_baseline = copy.deepcopy(visual.data)
             page_state.add(visual)
             result.visuals_created.append((page_name, vis_name or vis_type))
@@ -315,7 +312,7 @@ def finalize_visual_page_refs(
     project: Project,
     pages_spec: list[dict],
     *,
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
 ) -> None:
     """Canonicalize page-linked visual refs after all pages have been created."""
     for page_spec in pages_spec:
@@ -405,7 +402,7 @@ def _apply_group_visual(
     *,
     dry_run: bool,
     keep_visual_ids: set[str] | None,
-    session: _PbirSnapshotSession,
+    session: _PbirApplySession,
     page_state: _PageVisualState,
 ) -> None:
     """Create or update a group container from a visual spec."""
@@ -441,8 +438,7 @@ def _apply_group_visual(
     if visual is None:
         x, y = parse_position(vis_spec.get("position", "0, 0"))
         w, h = parse_size(vis_spec.get("size", "0 x 0"))
-        session.ensure_snapshot(project)
-        visual = ReportAuthoring(project).create_group_container(
+        visual = session.create_group_container(
             page,
             name=str(group_name) if isinstance(group_name, str) else None,
             display_name=vis_spec.get("displayName") if isinstance(vis_spec.get("displayName"), str) else str(group_name or group_id or "group"),

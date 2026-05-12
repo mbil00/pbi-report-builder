@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pbi.apply.session import PbirWriteSession
 from pbi.lookup import find_visual_by_identifier
 from pbi.project import Page, Project, Visual
 
@@ -42,12 +43,26 @@ _MISSING_MODEL = object()
 
 
 @dataclass
-class PbirSnapshotSession:
+class PbirApplySession:
     """Apply Session adapter for the PBIR Report definition substrate.
 
-    Writes are eager (``Page.save`` / ``Visual.save`` write straight to disk),
-    so commit is a no-op; rollback restores from a lazily-created filesystem
-    snapshot of the definition folder.
+    Implements both ``ApplySession`` (lifecycle) and ``PbirWriteSession``
+    (write seam). Writes are eager (``Page.save`` / ``Visual.save`` write
+    straight to disk) so commit is a no-op; rollback restores from a lazily
+    created filesystem snapshot of the definition folder.
+
+    Per-entity persistence (``save_visual``, ``save_page``) and structural
+    creation/deletion (``create_page``, ``create_visual``,
+    ``create_group_container``, ``delete_visual``) are implemented here and
+    each absorbs the snapshot guard. Apply leaf code reaches the PBIR
+    substrate exclusively through these methods; nothing under
+    ``src/pbi/apply/`` imports ``ReportAuthoring`` anymore.
+
+    Doc-level writes (``write_theme``, ``write_report``, ``write_bookmark``,
+    ``reconcile_bookmark_groups``) are also implemented and each absorbs the
+    snapshot guard. The bookmarks meta file is written exactly once per
+    apply, by ``reconcile_bookmark_groups``; per-bookmark ``write_bookmark``
+    calls touch only the individual bookmark JSON file.
     """
 
     project: Project
@@ -96,19 +111,171 @@ class PbirSnapshotSession:
             self.temp_dir = None
             self.snapshot_dir = None
 
+    # PbirWriteSession -------------------------------------------------------
+
+    def save_visual(self, visual: Visual) -> None:
+        """Persist a Visual, taking the snapshot lazily if one is needed."""
+        self.ensure_snapshot()
+        visual.save()
+
+    def save_page(self, page: Page) -> None:
+        """Persist a Page, taking the snapshot lazily if one is needed."""
+        self.ensure_snapshot()
+        page.save()
+
+    def create_page(
+        self,
+        display_name: str,
+        *,
+        width: int = 1280,
+        height: int = 720,
+        display_option: str = "FitToPage",
+    ) -> Page:
+        """Create a Page on the project, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        return ReportAuthoring(self.project).create_page(
+            display_name,
+            width=width,
+            height=height,
+            display_option=display_option,
+        )
+
+    def create_visual(
+        self,
+        page: Page,
+        visual_type: str,
+        *,
+        x: int = 0,
+        y: int = 0,
+        width: int = 300,
+        height: int = 200,
+        behind: bool = False,
+    ) -> Visual:
+        """Create a Visual on a Page, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        return ReportAuthoring(self.project).create_visual(
+            page,
+            visual_type,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            behind=behind,
+        )
+
+    def create_group_container(
+        self,
+        page: Page,
+        *,
+        name: str | None = None,
+        display_name: str | None = None,
+        x: int = 0,
+        y: int = 0,
+        width: int = 0,
+        height: int = 0,
+    ) -> Visual:
+        """Create an empty group container Visual, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        return ReportAuthoring(self.project).create_group_container(
+            page,
+            name=name,
+            display_name=display_name,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+        )
+
+    def delete_visual(self, visual: Visual) -> None:
+        """Delete a Visual, taking the snapshot lazily."""
+        from pbi.report_authoring import ReportAuthoring  # composed by adapter
+
+        self.ensure_snapshot()
+        ReportAuthoring(self.project).delete_visual(visual)
+
+    def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
+        """Persist a planned theme payload, taking the snapshot lazily.
+
+        ``first_time`` selects the write path: when no custom theme exists yet
+        we route through ``apply_theme`` (copies into RegisteredResources and
+        wires up ``themeCollection``); when one exists we ``save_theme_data``
+        in place.
+
+        Rollback gap (known, pre-existing): the snapshot only covers
+        ``definition/``, so a first-time apply that copies the theme JSON
+        into ``<report>/StaticResources/RegisteredResources/`` and then fails
+        mid-flight will roll back ``report.json`` but leave the orphan
+        resource file behind. Codified by
+        ``test_first_time_theme_orphan_file_survives_rollback`` in
+        ``tests/test_apply_session.py``. Widening the snapshot scope to
+        the whole report folder would close the gap at the cost of larger
+        copies on every apply and restore-over-user-files risk in
+        ``StaticResources/``; deferred until that trade-off is justified.
+        """
+        from pbi.themes import apply_theme_data, save_theme_data  # composed by adapter
+
+        self.ensure_snapshot()
+        if first_time:
+            apply_theme_data(self.project, payload)
+        else:
+            save_theme_data(self.project, payload)
+
+    def write_report(self, payload: dict[str, Any]) -> None:
+        """Persist a planned ``report.json`` payload, taking the snapshot lazily."""
+        from pbi.report_io import write_report_json  # composed by adapter
+
+        self.ensure_snapshot()
+        write_report_json(self.project, payload)
+
+    def write_bookmark(
+        self, payload: dict[str, Any], *, file_path: Path
+    ) -> None:
+        """Persist a single bookmark JSON to disk, taking the snapshot lazily.
+
+        Writes only the bookmark file -- the bookmarks meta file is the
+        responsibility of ``reconcile_bookmark_groups`` exclusively, so the
+        meta is written exactly once per apply with the full group hierarchy.
+        """
+        from pbi.project import _write_json  # composed by adapter
+
+        self.ensure_snapshot()
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(file_path, payload)
+
+    def reconcile_bookmark_groups(
+        self, groups: list[tuple[str, str | None]]
+    ) -> None:
+        """Write the bookmarks meta file with the full group hierarchy."""
+        from pbi.bookmarks import (  # composed by adapter
+            reconcile_bookmark_groups as _reconcile,
+        )
+
+        self.ensure_snapshot()
+        _reconcile(self.project, groups)
+
 
 def save_page_if_changed(
     project: Project,
     page: Page,
     *,
     original_data: dict,
-    session: PbirSnapshotSession,
+    session: PbirWriteSession,
 ) -> bool:
-    """Persist page changes only when the serialized content changed."""
+    """Persist page changes only when the serialized content changed.
+
+    Typed against ``PbirWriteSession`` rather than ``PbirApplySession`` so a
+    test fake satisfying the protocol can substitute without touching disk.
+    """
+    del project  # unused: ``session.save_page`` absorbs the snapshot guard
     if page.data == original_data:
         return False
-    session.ensure_snapshot(project)
-    page.save()
+    session.save_page(page)
     return True
 
 
@@ -117,13 +284,17 @@ def save_visual_if_changed(
     visual: Visual,
     *,
     original_data: dict,
-    session: PbirSnapshotSession,
+    session: PbirWriteSession,
 ) -> bool:
-    """Persist visual changes only when the serialized content changed."""
+    """Persist visual changes only when the serialized content changed.
+
+    Typed against ``PbirWriteSession`` rather than ``PbirApplySession`` so a
+    test fake satisfying the protocol can substitute without touching disk.
+    """
+    del project  # unused: ``session.save_visual`` absorbs the snapshot guard
     if visual.data == original_data:
         return False
-    session.ensure_snapshot(project)
-    visual.save()
+    session.save_visual(visual)
     return True
 
 
