@@ -235,9 +235,12 @@ def _apply_bookmarks_branch(
     """
     plan = plan_bookmarks_spec(project, bookmarks_spec)
     result.errors.extend(plan.errors)
-    result.properties_set += plan.keys_touched
 
     if dry_run:
+        # No writes happen, so credit every resolved spec entry. In real
+        # apply the credit moves to per-op success below so a failed write
+        # doesn't get counted as a property set.
+        result.properties_set += plan.keys_touched
         return
 
     written: set[str] = set()
@@ -248,6 +251,7 @@ def _apply_bookmarks_branch(
             result.errors.append(f'Bookmark "{op.display_name}": {exc}')
             continue
         written.add(op.display_name)
+        result.properties_set += 1
 
     # ``reconcile_bookmark_groups`` calls ``_find_bookmark_file`` on every
     # entry; including bookmarks whose write failed would raise and abort

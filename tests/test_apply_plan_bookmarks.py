@@ -238,6 +238,32 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         self.assertIn("Ambiguous", plan.errors[0])
         self.assertEqual(plan.keys_touched, 0)
 
+    def test_substring_match_does_not_clobber_unrelated_bookmark(self) -> None:
+        # ``_find_bookmark_file`` falls back to case-insensitive substring
+        # matching, which is the right behavior for user-facing CLI lookups
+        # but a footgun for upsert. A spec entry "Over" against a project
+        # whose only existing bookmark is "OverviewFull" must plan a fresh
+        # bookmark file -- not reuse OverviewFull's path and clobber it in
+        # place. Pre-existing flaw in ``upsert_bookmark`` that the planner
+        # is the right place to tighten.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            page, _ = _seed_page_with_visual(project, "Demo")
+
+            existing = create_bookmark(project, "OverviewFull", page, [])
+            existing_id = existing["name"]
+
+            spec = [{"name": "Over", "page": "Demo"}]
+            plan = plan_bookmarks_spec(project, spec)
+
+        self.assertEqual(plan.errors, [])
+        self.assertEqual(len(plan.operations), 1)
+        op = plan.operations[0]
+        # Fresh id distinct from the existing bookmark's, fresh file path.
+        self.assertEqual(op.payload["displayName"], "Over")
+        self.assertNotEqual(op.payload["name"], existing_id)
+        self.assertNotEqual(op.file_path.name, f"{existing_id}.bookmark.json")
+
     def test_upsert_reuses_existing_bookmark_id_and_file_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
@@ -482,6 +508,9 @@ class ApplyBookmarksBranchSessionTests(unittest.TestCase):
                 groups,
                 [("Alpha", "Views"), ("Gamma", "Views")],
             )
+            # The failed Beta write must not be credited to properties_set.
+            # Three resolved spec entries; two successful writes.
+            self.assertEqual(result.properties_set, 2)
 
     def test_dry_run_does_not_count_entries_with_unresolvable_page(self) -> None:
         # Behavior change vs. the pre-refactor ``apply_bookmarks_spec``:

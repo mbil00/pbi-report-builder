@@ -474,6 +474,57 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
             if path.is_file()
         }
 
+    def test_first_time_theme_orphan_file_survives_rollback(self) -> None:
+        # ``PbirApplySession`` snapshots only ``definition/`` for rollback.
+        # First-time ``write_theme`` routes through ``apply_theme``, which
+        # copies the theme JSON into
+        # ``<report>/StaticResources/RegisteredResources/`` -- outside the
+        # snapshot. A mid-flight failure rolls back ``report.json`` (so the
+        # ``themeCollection.customTheme`` reference disappears) but leaves
+        # the resource file behind as an orphan.
+        #
+        # This test codifies the known gap so it stays visible. If the
+        # snapshot scope is widened to the whole report folder (to close
+        # the gap), invert this test rather than delete it; the
+        # orphan-file behaviour shouldn't silently shift one way or the
+        # other.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+
+            session = PbirApplySession(project=project, dry_run=False)
+
+            def body() -> ApplyResult:
+                # First-time theme write: copies into RegisteredResources/
+                # and updates report.json.
+                session.write_theme(
+                    {"name": "OrphanProbe", "dataColors": ["#123456"]},
+                    first_time=True,
+                )
+                raise RuntimeError("forced mid-apply failure")
+
+            with self.assertRaises(RuntimeError):
+                run_apply(session, body)
+
+            registered = (
+                project.report_folder / "StaticResources" / "RegisteredResources"
+            )
+            orphans = list(registered.glob("OrphanProbe*.json")) if registered.exists() else []
+            self.assertEqual(
+                len(orphans), 1,
+                f"expected orphan resource file, got: {orphans}",
+            )
+
+            # report.json reference was rolled back -- the orphan is no
+            # longer referenced from the report definition.
+            project.clear_caches()
+            report = project.get_report_meta()
+            custom = report.get("themeCollection", {}).get("customTheme")
+            self.assertIsNone(
+                custom,
+                f"expected report.json to be rolled back, got customTheme={custom}",
+            )
+
     def test_pbir_apply_session_restores_definition_on_mid_flight_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

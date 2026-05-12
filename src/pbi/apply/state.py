@@ -206,6 +206,17 @@ class PbirApplySession:
         we route through ``apply_theme`` (copies into RegisteredResources and
         wires up ``themeCollection``); when one exists we ``save_theme_data``
         in place.
+
+        Rollback gap (known, pre-existing): the snapshot only covers
+        ``definition/``, so a first-time apply that copies the theme JSON
+        into ``<report>/StaticResources/RegisteredResources/`` and then fails
+        mid-flight will roll back ``report.json`` but leave the orphan
+        resource file behind. Codified by
+        ``test_first_time_theme_orphan_file_survives_rollback`` in
+        ``tests/test_apply_session.py``. Widening the snapshot scope to
+        the whole report folder would close the gap at the cost of larger
+        copies on every apply and restore-over-user-files risk in
+        ``StaticResources/``; deferred until that trade-off is justified.
         """
         from pbi.themes import apply_theme, save_theme_data  # composed by adapter
 

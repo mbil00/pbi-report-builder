@@ -112,6 +112,14 @@ def plan_bookmarks_spec(
         else:
             try:
                 existing, file_path = _find_bookmark_file(project, name)
+                # ``_find_bookmark_file`` falls back to case-insensitive
+                # substring matching when no exact match exists -- right for
+                # user-facing CLI lookups, a footgun for upsert. A spec entry
+                # "Over" against a project with bookmark "OverviewFull" must
+                # not clobber the unrelated bookmark's file; require an
+                # exact display-name match to reuse its id and path.
+                if existing.get("displayName") != name:
+                    raise FileNotFoundError
                 bookmark_id = existing.get("name")
                 if not isinstance(bookmark_id, str) or not bookmark_id:
                     bookmark_id = secrets.token_hex(10)
