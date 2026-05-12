@@ -212,6 +212,31 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         self.assertEqual(plan.operations, [])
         self.assertEqual(len(plan.errors), 1)
         self.assertIn("BadPage", plan.errors[0])
+        # An entry that errors out before producing an op must not bump
+        # keys_touched (which feeds ``ApplyResult.properties_set``).
+        self.assertEqual(plan.keys_touched, 0)
+
+    def test_ambiguous_existing_bookmark_collected_as_plan_error(self) -> None:
+        # Two existing bookmarks whose display names both contain the spec
+        # name as a substring make ``_find_bookmark_file`` raise
+        # ``ValueError``. The planner must catch it and surface a per-
+        # bookmark error -- if it propagates, ``run_apply`` rolls back and
+        # reraises, turning a recoverable spec-level diagnostic into a full
+        # apply failure.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            page, _ = _seed_page_with_visual(project, "Demo")
+            create_bookmark(project, "OverviewA", page, [])
+            create_bookmark(project, "OverviewB", page, [])
+
+            spec = [{"name": "Overview", "page": "Demo"}]
+            plan = plan_bookmarks_spec(project, spec)
+
+        self.assertEqual(plan.operations, [])
+        self.assertEqual(len(plan.errors), 1)
+        self.assertIn("Overview", plan.errors[0])
+        self.assertIn("Ambiguous", plan.errors[0])
+        self.assertEqual(plan.keys_touched, 0)
 
     def test_upsert_reuses_existing_bookmark_id_and_file_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -410,6 +435,53 @@ class ApplyBookmarksBranchSessionTests(unittest.TestCase):
             )
             # keys_touched is still accounted for in dry-run mode.
             self.assertEqual(result.properties_set, 1)
+
+    def test_reconcile_excludes_bookmarks_whose_write_failed(self) -> None:
+        # If a per-bookmark ``write_bookmark`` raises, the engine collects
+        # the error and continues. The final ``reconcile_bookmark_groups``
+        # must run with only the bookmarks that successfully wrote --
+        # otherwise ``_find_bookmark_file`` raises ``FileNotFoundError``
+        # for the missing one and aborts the whole reconcile, so even the
+        # bookmarks that did write lose their group membership in the
+        # meta file.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            _seed_page_with_visual(project, "Demo")
+
+            spec = [
+                {"name": "Alpha", "page": "Demo", "group": "Views"},
+                {"name": "Beta", "page": "Demo", "group": "Views"},
+                {"name": "Gamma", "page": "Demo", "group": "Views"},
+            ]
+
+            class _FailOnBeta(FakePbirWriteSession):
+                def write_bookmark(self, payload, *, file_path):  # type: ignore[override]
+                    super().write_bookmark(payload, file_path=file_path)
+                    if payload.get("displayName") == "Beta":
+                        raise OSError("disk full")
+
+            session = _FailOnBeta()
+            result = ApplyResult()
+
+            _apply_bookmarks_branch(
+                project, spec, result,
+                dry_run=False,
+                session=session,  # type: ignore[arg-type]
+            )
+
+            self.assertTrue(
+                any("Beta" in e for e in result.errors),
+                f"expected Beta in errors, got: {result.errors}",
+            )
+            reconcile_calls = [
+                c for c in session.calls if c[0] == "reconcile_bookmark_groups"
+            ]
+            self.assertEqual(len(reconcile_calls), 1)
+            (_, groups) = reconcile_calls[0]
+            self.assertEqual(
+                groups,
+                [("Alpha", "Views"), ("Gamma", "Views")],
+            )
 
     def test_apply_branch_surfaces_planner_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

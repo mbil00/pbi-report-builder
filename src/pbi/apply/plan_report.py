@@ -1,11 +1,13 @@
 """Report **Apply Plan** planner.
 
 Pure-function side of the report apply path: ``plan_report_spec`` reads the
-project's current ``report.json``, normalizes ``resourcePackages``, merges
-each top-level spec key with ``None``-means-delete semantics, and detects
-no-op. The plan it returns is what the engine drives the **Apply Session**
-to persist (via ``session.write_report``) and what ``pbi diff`` uses to
-render a faithful preview without touching disk.
+project's current ``report.json``, normalizes ``resourcePackages`` on both
+sides (so legacy ``{"resourcePackage": {...}}`` wrappers don't survive a
+no-op detection or appear as phantom diffs), merges each top-level spec
+key with ``None``-means-delete semantics, and detects no-op. The plan it
+returns is what the engine drives the **Apply Session** to persist (via
+``session.write_report``) and what ``pbi diff`` uses to render a faithful
+preview without touching disk.
 """
 
 from __future__ import annotations
@@ -50,6 +52,10 @@ def plan_report_spec(
 
     current = copy.deepcopy(project.get_report_meta())
     current.setdefault("$schema", REPORT_SCHEMA)
+    # Migrate legacy ``{"resourcePackage": {...}}`` wrapper shapes to the
+    # published schema on the current snapshot so re-applies don't show a
+    # phantom diff and ``pbi diff`` previews match what apply would write.
+    normalize_resource_packages(current)
     before = copy.deepcopy(current)
 
     updated = copy.deepcopy(current)

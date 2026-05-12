@@ -95,8 +95,6 @@ def plan_bookmarks_spec(
             errors.append("Bookmark requires 'name' and 'page'.")
             continue
 
-        keys_touched += 1
-
         try:
             page = project.find_page(page_ref)
         except ValueError as exc:
@@ -120,6 +118,13 @@ def plan_bookmarks_spec(
             except FileNotFoundError:
                 bookmark_id = secrets.token_hex(10)
                 file_path = bm_dir / f"{bookmark_id}.bookmark.json"
+            except ValueError as exc:
+                # Ambiguous display-name match against existing bookmarks --
+                # surface per-bookmark instead of crashing the whole apply.
+                errors.append(f'Bookmark "{name}": {exc}')
+                continue
+
+        keys_touched += 1
 
         visuals = project.get_visuals(page)
         hide = entry.get("hide", []) or None

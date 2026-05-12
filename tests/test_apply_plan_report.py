@@ -158,6 +158,66 @@ class PlanReportSpecTests(unittest.TestCase):
         # ``.json`` path or naming).
         self.assertIn("type", item)
 
+    def test_legacy_resource_packages_normalized_when_spec_does_not_touch_them(
+        self,
+    ) -> None:
+        # A project whose ``report.json`` carries the legacy
+        # ``{"resourcePackage": {...}}`` wrapper shape, plus a spec that
+        # touches only an unrelated key, must produce a plan whose payload
+        # carries the *normalized* resourcePackages -- not the legacy
+        # wrapper. Without normalization on the current side, ``pbi diff``
+        # showed phantom resourcePackages diffs and apply would write the
+        # legacy shape back to disk verbatim.
+        existing = {
+            "$schema": REPORT_SCHEMA,
+            "layoutOptimization": "None",
+            "resourcePackages": [
+                {
+                    "resourcePackage": {
+                        "name": "RegisteredResources",
+                        "items": [{"name": "Logo", "path": "Logo.png"}],
+                    }
+                }
+            ],
+        }
+        spec = {"layoutOptimization": "Vertical"}
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project_with_report(Path(tmp), existing)
+            plan = plan_report_spec(project, spec)
+
+        assert plan is not None
+        packages = plan.payload["resourcePackages"]
+        self.assertEqual(len(packages), 1)
+        self.assertEqual(packages[0]["name"], "RegisteredResources")
+        # Wrapper unwrapped on the current side even though the spec did
+        # not mention resourcePackages.
+        self.assertNotIn("resourcePackage", packages[0])
+        self.assertIn("type", packages[0])
+
+    def test_legacy_resource_packages_pure_no_op_still_returns_none(self) -> None:
+        # When the legacy wrapper is the only thing that would change and
+        # the spec is otherwise a no-op, the planner must still return
+        # ``None`` so apply doesn't rewrite the file just to migrate. The
+        # migration only happens as a side effect of a real spec change.
+        existing = {
+            "$schema": REPORT_SCHEMA,
+            "layoutOptimization": "None",
+            "resourcePackages": [
+                {
+                    "resourcePackage": {
+                        "name": "RegisteredResources",
+                        "items": [{"name": "Logo", "path": "Logo.png"}],
+                    }
+                }
+            ],
+        }
+        spec = {"layoutOptimization": "None"}
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project_with_report(Path(tmp), existing)
+            plan = plan_report_spec(project, spec)
+
+        self.assertIsNone(plan)
+
     def test_no_op_detection_returns_none(self) -> None:
         existing = {
             "$schema": REPORT_SCHEMA,

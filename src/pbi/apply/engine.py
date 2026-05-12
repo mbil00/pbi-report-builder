@@ -240,15 +240,25 @@ def _apply_bookmarks_branch(
     if dry_run:
         return
 
+    written: set[str] = set()
     for op in plan.operations:
         try:
             session.write_bookmark(op.payload, file_path=op.file_path)
         except (OSError, ValueError) as exc:
             result.errors.append(f'Bookmark "{op.display_name}": {exc}')
+            continue
+        written.add(op.display_name)
 
-    if plan.groups:
+    # ``reconcile_bookmark_groups`` calls ``_find_bookmark_file`` on every
+    # entry; including bookmarks whose write failed would raise and abort
+    # the entire reconcile, losing group membership for the ones that did
+    # write.
+    reconcilable_groups = [
+        (display, group) for display, group in plan.groups if display in written
+    ]
+    if reconcilable_groups:
         try:
-            session.reconcile_bookmark_groups(plan.groups)
+            session.reconcile_bookmark_groups(reconcilable_groups)
         except (ValueError, FileNotFoundError) as exc:
             result.errors.append(f"Bookmark groups: {exc}")
 
