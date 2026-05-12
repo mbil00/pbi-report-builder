@@ -284,6 +284,12 @@ pbi model column hide Sales.InternalId         # hide columns from report view
 pbi model column unhide Sales.InternalId
 ```
 
+**Source-bound columns** (use when binding to a partition column — required for date-table primary keys, which PBI Desktop rejects if calculated):
+```bash
+pbi model column create DimDate Date --source-column Date --type dateTime --format "MMM YYYY"
+pbi model table set DimDate dateTable=Date     # promote to date-table key
+```
+
 **Model apply — bulk changes from YAML:**
 ```bash
 pbi model apply model.yaml                     # create/update measures and columns

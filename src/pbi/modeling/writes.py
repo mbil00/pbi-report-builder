@@ -356,6 +356,11 @@ def mark_as_date_table(
         raise ValueError(
             f'Column "{table.name}.{column.name}" must use a date/dateTime data type to mark the table as a date table.'
         )
+    if column.kind == "calculatedColumn":
+        raise ValueError(
+            f'Column "{table.name}.{column.name}" is a calculated column and cannot be used as the date-table key. '
+            "Power BI Desktop requires a source-bound column (declared with sourceColumn) for the primary key of a date table."
+        )
 
     changed = False
     _, table_changed = set_table_property(
@@ -630,6 +635,49 @@ def create_calculated_column(
     block = _build_calculated_column_block(
         column_name,
         expression,
+        data_type=normalized_data_type,
+        format_string=format_string,
+        lineage_tag=str(uuid.uuid4()),
+    )
+    lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
+    return table.name, column_name, True
+
+
+def create_source_column(
+    project_root: Path,
+    table_name: str,
+    column_name: str,
+    source_column: str,
+    *,
+    data_type: str,
+    format_string: str | None = None,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, str, bool]:
+    """Create a new source-bound column in a table TMDL file.
+
+    The source column must be produced by the table's partition (e.g. an M query
+    column). The CLI cannot verify the partition contains it; opening the PBIP
+    in Power BI Desktop is the source of truth.
+    """
+    loaded_model = model or SemanticModel.load(project_root)
+    validate_column_name(column_name)
+    table = loaded_model.find_table(table_name)
+    if table.definition_path is None:
+        raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+    if any(column.name.lower() == column_name.lower() for column in table.columns):
+        raise ValueError(f'Column "{column_name}" already exists in table "{table.name}".')
+    if not source_column.strip():
+        raise ValueError("Source column name cannot be empty.")
+    normalized_data_type = normalize_model_data_type(data_type)
+
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
+    insert_at = _column_insert_index(lines)
+    block = _build_source_column_block(
+        column_name,
+        source_column.strip(),
         data_type=normalized_data_type,
         format_string=format_string,
         lineage_tag=str(uuid.uuid4()),
@@ -1171,6 +1219,25 @@ def _build_calculated_column_block(
     return lines
 
 
+def _build_source_column_block(
+    column_name: str,
+    source_column: str,
+    *,
+    data_type: str,
+    format_string: str | None,
+    lineage_tag: str,
+) -> list[str]:
+    """Build a full source-bound column TMDL block."""
+    lines = [f"\tcolumn {_format_tmdl_name(column_name)}"]
+    lines.append(f"\t\tdataType: {data_type}")
+    if format_string:
+        lines.append(f"\t\tformatString: {format_string}")
+    lines.append(f"\t\tlineageTag: {lineage_tag}")
+    lines.append("\t\tsummarizeBy: none")
+    lines.append(f"\t\tsourceColumn: {source_column}")
+    return lines
+
+
 def _build_calculated_column_expression_lines(column_name: str, expression: str) -> list[str]:
     """Build the declaration and expression lines for a calculated column."""
     normalized = textwrap.dedent(expression).strip("\n")
@@ -1561,6 +1628,16 @@ def _validate_model_metadata(loaded_model: SemanticModel) -> list[dict]:
                         "severity": "error",
                         "relationship": f"{table.name}.{key_column.name}",
                         "message": "Date table key column must use a date or dateTime data type.",
+                    })
+                if key_column.kind == "calculatedColumn":
+                    findings.append({
+                        "severity": "error",
+                        "relationship": f"{table.name}.{key_column.name}",
+                        "message": (
+                            "Date table key column is a calculated column. "
+                            "Power BI Desktop requires a source-bound column (declared with sourceColumn) "
+                            "for the date-table primary key."
+                        ),
                     })
 
         sort_targets: dict[str, str] = {}

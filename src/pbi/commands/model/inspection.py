@@ -286,6 +286,10 @@ def model_export_cmd(
 @model_app.command("deps")
 def model_deps(
     field: Annotated[str, typer.Argument(help="Field reference as Table.Field.")],
+    reverse: Annotated[
+        bool,
+        typer.Option("--reverse", help="Show only dependents (what references this field), suppress forward references."),
+    ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     project: ProjectOpt = None,
 ) -> None:
@@ -295,7 +299,7 @@ def model_deps(
     proj = get_project(project)
     try:
         dependents = find_field_dependents(proj.root, field)
-        references = find_field_references(proj.root, field)
+        references = [] if reverse else find_field_references(proj.root, field)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -303,22 +307,26 @@ def model_deps(
     if as_json:
         import json
 
-        data = {
-            "field": field,
-            "references": [{"ref": f"{table}.{name}", "type": field_type} for table, name, field_type in references],
-            "dependents": [{"ref": f"{table}.{name}", "type": field_type} for table, name, field_type in dependents],
-        }
+        data: dict = {"field": field}
+        if not reverse:
+            data["references"] = [
+                {"ref": f"{table}.{name}", "type": field_type} for table, name, field_type in references
+            ]
+        data["dependents"] = [
+            {"ref": f"{table}.{name}", "type": field_type} for table, name, field_type in dependents
+        ]
         console.print_json(json.dumps(data, indent=2))
         return
 
     console.print(f"[bold]{field}[/bold]")
 
-    if references:
-        console.print(f"\n[bold]References[/bold] [dim](what {field} uses)[/dim]")
-        for table_name, name, field_type in references:
-            console.print(f"  [cyan]{table_name}.{name}[/cyan] [dim]({field_type})[/dim]")
-    else:
-        console.print("\n[dim]No forward references (leaf field).[/dim]")
+    if not reverse:
+        if references:
+            console.print(f"\n[bold]References[/bold] [dim](what {field} uses)[/dim]")
+            for table_name, name, field_type in references:
+                console.print(f"  [cyan]{table_name}.{name}[/cyan] [dim]({field_type})[/dim]")
+        else:
+            console.print("\n[dim]No forward references (leaf field).[/dim]")
 
     if dependents:
         console.print(f"\n[bold]Dependents[/bold] [dim](what uses {field})[/dim]")

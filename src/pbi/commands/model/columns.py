@@ -115,19 +115,40 @@ def model_column_hide(
 @model_column_app.command("create")
 def model_column_create(
     table_name: Annotated[str, typer.Argument(help="Table name.")],
-    column_name: Annotated[str, typer.Argument(help="Calculated column name.")],
-    expression: Annotated[str | None, typer.Argument(help="DAX expression (omit to read from stdin or use --from-file).")] = None,
-    data_type: Annotated[str, typer.Option("--type", help="Calculated column data type.")] = "string",
+    column_name: Annotated[str, typer.Argument(help="Column name.")],
+    expression: Annotated[str | None, typer.Argument(help="DAX expression for a calculated column (omit to read from stdin or use --from-file). Ignored when --source-column is set.")] = None,
+    data_type: Annotated[str, typer.Option("--type", help="Column data type.")] = "string",
     format_string: Annotated[str | None, typer.Option("--format", help="Optional format string.")] = None,
     from_file: Annotated[Path | None, typer.Option("--from-file", help="Read the DAX expression from a file.")] = None,
+    source_column: Annotated[str | None, typer.Option("--source-column", help="Bind to a partition column (creates a source-bound column instead of a calculated one). Required for date-table primary keys.")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview the change without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Create a calculated column in the semantic model."""
-    from pbi.model import create_calculated_column
+    """Create a column in the semantic model (calculated by default, source-bound with --source-column)."""
+    from pbi.model import create_calculated_column, create_source_column
 
     proj = get_project(project)
     try:
+        if source_column is not None:
+            if expression is not None or from_file is not None:
+                console.print(
+                    "[red]Error:[/red] --source-column creates a source-bound column; "
+                    "do not pass a DAX expression or --from-file."
+                )
+                raise typer.Exit(1)
+            table, name, _changed = create_source_column(
+                proj.root,
+                table_name,
+                column_name,
+                source_column,
+                data_type=data_type,
+                format_string=format_string,
+                dry_run=dry_run,
+            )
+            prefix = "[dim](dry run)[/dim] " if dry_run else ""
+            console.print(f'{prefix}Created source-bound column [cyan]{table}.{name}[/cyan]')
+            return
+
         dax = resolve_model_expression_input(expression, from_file)
         table, name, _changed = create_calculated_column(
             proj.root,
