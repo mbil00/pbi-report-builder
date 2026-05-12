@@ -218,26 +218,11 @@ class PbirApplySession:
         copies on every apply and restore-over-user-files risk in
         ``StaticResources/``; deferred until that trade-off is justified.
         """
-        from pbi.themes import apply_theme, save_theme_data  # composed by adapter
+        from pbi.themes import apply_theme_data, save_theme_data  # composed by adapter
 
         self.ensure_snapshot()
         if first_time:
-            import json
-            import tempfile
-            from pathlib import Path
-
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".json",
-                delete=False,
-                encoding="utf-8",
-            ) as handle:
-                json.dump(payload, handle, indent=2, ensure_ascii=False)
-                tmp_path = Path(handle.name)
-            try:
-                apply_theme(self.project, tmp_path)
-            finally:
-                tmp_path.unlink(missing_ok=True)
+            apply_theme_data(self.project, payload)
         else:
             save_theme_data(self.project, payload)
 

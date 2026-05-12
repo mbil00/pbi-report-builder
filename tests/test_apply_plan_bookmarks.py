@@ -303,7 +303,10 @@ class PlanBookmarksSpecTests(unittest.TestCase):
             plan = plan_bookmarks_spec(project, spec)
 
         self.assertEqual(plan.errors, [])
-        self.assertEqual(plan.keys_touched, 2)
+        # Duplicates collapse to a single op, and ``keys_touched`` reports
+        # that single op (not the per-spec-entry count) so dry-run and
+        # real-apply credit the same number into ``properties_set``.
+        self.assertEqual(plan.keys_touched, 1)
         self.assertEqual(len(plan.operations), 1)
         self.assertEqual(plan.groups, [("Overview", "New")])
         op = plan.operations[0]
@@ -344,6 +347,32 @@ bookmarks:
         self.assertEqual(bookmarks[0].display_name, "Overview")
         self.assertTrue(bookmarks[0].suppress_data)
         self.assertEqual(bookmarks[0].hidden_visuals, 0)
+
+    def test_duplicate_bookmark_names_with_different_pages_surface_as_error(
+        self,
+    ) -> None:
+        # Identical duplicates collapse via last-wins. Duplicates that
+        # differ in their ``page`` field can't be coalesced -- a bookmark
+        # belongs to exactly one page -- so the planner should surface a
+        # spec error instead of silently letting the second entry win.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project(Path(tmp))
+            _seed_page_with_visual(project, "PageA")
+            _seed_page_with_visual(project, "PageB")
+
+            spec = [
+                {"name": "Overview", "page": "PageA"},
+                {"name": "Overview", "page": "PageB"},
+            ]
+            plan = plan_bookmarks_spec(project, spec)
+
+        self.assertEqual(len(plan.operations), 1)
+        self.assertEqual(plan.operations[0].display_name, "Overview")
+        # First occurrence wins for the persisted op; the second is
+        # surfaced as a spec error rather than silently coercing.
+        self.assertEqual(len(plan.errors), 1)
+        self.assertIn("Overview", plan.errors[0])
+        self.assertIn("page", plan.errors[0])
 
     def test_relative_ordering_preserved_across_re_apply(self) -> None:
         # Spec order is preserved in plan.operations and plan.groups so that

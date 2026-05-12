@@ -55,8 +55,10 @@ class BookmarksApplyPlan:
     is written exactly once per apply, with the full group hierarchy.
     ``errors`` is collected from missing-required-field failures rather
     than raised, so the engine surfaces them through ``ApplyResult.errors``.
-    ``keys_touched`` mirrors the prior per-bookmark ``properties_set``
-    accounting.
+    ``keys_touched`` is ``len(operations)`` -- the number of unique
+    bookmark writes the plan represents. Duplicate spec entries that
+    collapsed into a single upsert count once, so dry-run and real-apply
+    agree on the ``ApplyResult.properties_set`` total.
     """
 
     operations: list[BookmarkPersist] = field(default_factory=list)
@@ -79,8 +81,8 @@ def plan_bookmarks_spec(
     operations: list[BookmarkPersist] = []
     groups: list[tuple[str, str | None]] = []
     planned_by_display: dict[str, int] = {}
+    planned_pages: dict[str, str] = {}
     errors: list[str] = []
-    keys_touched = 0
 
     bm_dir = _bookmarks_dir(project)
 
@@ -104,6 +106,17 @@ def plan_bookmarks_spec(
         display_name = str(name)
         planned_index = planned_by_display.get(display_name)
         if planned_index is not None:
+            if planned_pages.get(display_name) != page.name:
+                # A second spec entry sharing a display name with an
+                # earlier one but targeting a different page can't be
+                # coalesced -- a bookmark belongs to exactly one page.
+                # Surface the conflict instead of silently letting the
+                # second entry win.
+                errors.append(
+                    f'Bookmark "{display_name}" listed multiple times '
+                    f'with different "page" values; spec is ambiguous.'
+                )
+                continue
             planned = operations[planned_index]
             file_path = planned.file_path
             bookmark_id = planned.payload.get("name")
@@ -131,8 +144,6 @@ def plan_bookmarks_spec(
                 # surface per-bookmark instead of crashing the whole apply.
                 errors.append(f'Bookmark "{name}": {exc}')
                 continue
-
-        keys_touched += 1
 
         visuals = project.get_visuals(page)
         hide = entry.get("hide", []) or None
@@ -181,6 +192,7 @@ def plan_bookmarks_spec(
         )
         if planned_index is None:
             planned_by_display[display_name] = len(operations)
+            planned_pages[display_name] = page.name
             operations.append(persist)
             groups.append(group_entry)
         else:
@@ -191,5 +203,5 @@ def plan_bookmarks_spec(
         operations=operations,
         groups=groups,
         errors=errors,
-        keys_touched=keys_touched,
+        keys_touched=len(operations),
     )

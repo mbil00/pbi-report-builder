@@ -263,7 +263,12 @@ def _apply_bookmarks_branch(
     if reconcilable_groups:
         try:
             session.reconcile_bookmark_groups(reconcilable_groups)
-        except (ValueError, FileNotFoundError) as exc:
+        except (OSError, ValueError) as exc:
+            # Catch the same exception types as the per-op write loop
+            # above. Narrowing to ``FileNotFoundError`` here would let
+            # ``PermissionError`` / ``IsADirectoryError`` propagate and
+            # trigger full rollback, undoing every per-bookmark write that
+            # did succeed earlier in this branch.
             result.errors.append(f"Bookmark groups: {exc}")
 
 
