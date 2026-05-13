@@ -39,6 +39,9 @@ class PbirWriteSession(Protocol):
     ``Page.save`` / ``ReportAuthoring`` directly.
     """
 
+    # Shared read/cache helpers --------------------------------------------
+    def get_model(self, project: Any | None = None) -> Any | None: ...
+
     # Per-entity persistence ------------------------------------------------
     def save_page(self, page: Page) -> None: ...
     def save_visual(self, visual: Visual) -> None: ...
@@ -85,6 +88,10 @@ class PbirWriteSession(Protocol):
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None: ...
+
+
+class PbirApplyRunSession(ApplySession, PbirWriteSession, Protocol):
+    """Combined lifecycle + PBIR write protocol for report apply runs."""
 
 
 class ApplyDiagnostics(Protocol):
