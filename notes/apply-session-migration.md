@@ -145,6 +145,13 @@ Verification:
 - parity case: empty report + YAML with one page and one visual;
 - on-disk project remains unchanged before commit, if practical to assert at session level.
 
+Status: initial implementation complete.
+
+- `BufferedPbirApplySession.create_page(...)` stages page folder, visuals folder, `page.json`, and `pages/pages.json` order metadata.
+- `BufferedPbirApplySession.create_visual(...)` stages visual folder and `visual.json` with the same role/query scaffolding as eager authoring.
+- The buffered session updates in-memory project caches so later apply phases can see staged pages/visuals before commit.
+- The parity test now covers one page with one card visual and deterministic generated IDs.
+
 ### Slice 2 — update existing page/visual
 
 Goal: prove dirty-document buffering for existing entities.

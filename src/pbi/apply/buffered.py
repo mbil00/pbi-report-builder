@@ -9,11 +9,13 @@ vertical slice at a time.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import secrets
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pbi.project import Page, Project, Visual
+from pbi.project import Page, Project, Visual, _read_json, _write_json
+from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, VISUAL_CONTAINER_SCHEMA
 
 
 _MISSING_MODEL = object()
@@ -31,6 +33,10 @@ class BufferedPbirApplySession:
     project: Project
     dry_run: bool
     model: Any = _MISSING_MODEL
+    dirty_pages: dict[Path, Page] = field(default_factory=dict)
+    dirty_visuals: dict[Path, Visual] = field(default_factory=dict)
+    dirty_json: dict[Path, dict[str, Any]] = field(default_factory=dict)
+    created_dirs: set[Path] = field(default_factory=set)
 
     # ApplySession lifecycle -------------------------------------------------
 
@@ -38,14 +44,25 @@ class BufferedPbirApplySession:
         """Start the buffered unit of work."""
 
     def commit(self) -> None:
-        """Flush staged operations.
+        """Flush staged operations to disk."""
+        if self.dry_run:
+            return
 
-        Slice 0 has no staged operations yet; later slices will make this the
-        only place where the buffered path mutates the PBIR filesystem.
-        """
+        for folder in sorted(self.created_dirs):
+            folder.mkdir(parents=True, exist_ok=True)
+
+        for path, payload in sorted(self.dirty_json.items()):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(path, payload)
+
+        self.project.clear_caches()
 
     def rollback(self) -> None:
         """Discard staged operations."""
+        self.dirty_pages.clear()
+        self.dirty_visuals.clear()
+        self.dirty_json.clear()
+        self.created_dirs.clear()
 
     def cleanup(self) -> None:
         """Release buffered-session resources."""
@@ -66,10 +83,12 @@ class BufferedPbirApplySession:
     # PbirWriteSession -------------------------------------------------------
 
     def save_page(self, page: Page) -> None:
-        self._unsupported("save_page")
+        self.dirty_pages[page.folder] = page
+        self.dirty_json[page.folder / "page.json"] = page.data
 
     def save_visual(self, visual: Visual) -> None:
-        self._unsupported("save_visual")
+        self.dirty_visuals[visual.folder] = visual
+        self.dirty_json[visual.folder / "visual.json"] = visual.data
 
     def create_page(
         self,
@@ -79,7 +98,28 @@ class BufferedPbirApplySession:
         height: int = 720,
         display_option: str = "FitToPage",
     ) -> Page:
-        self._unsupported("create_page")
+        page_id = secrets.token_hex(10)
+        page_dir = self.project.definition_folder / "pages" / page_id
+        data = {
+            "$schema": PAGE_SCHEMA,
+            "name": page_id,
+            "displayName": display_name,
+            "displayOption": display_option,
+            "width": width,
+            "height": height,
+            "visibility": "AlwaysVisible",
+        }
+        page = Page(folder=page_dir, data=data)
+
+        self.created_dirs.add(page_dir)
+        self.created_dirs.add(page_dir / "visuals")
+        self.save_page(page)
+        self._add_page_to_order(page_id)
+
+        if self.project._pages_cache is not None:
+            self.project._pages_cache.append(page)
+        self.project._visuals_cache[page_dir] = []
+        return page
 
     def create_visual(
         self,
@@ -92,7 +132,50 @@ class BufferedPbirApplySession:
         height: int = 200,
         behind: bool = False,
     ) -> Visual:
-        self._unsupported("create_visual")
+        from pbi.roles import get_visual_roles
+
+        visual_id = secrets.token_hex(10)
+        visual_dir = page.folder / "visuals" / visual_id
+        existing = self.project._get_visuals_cached(page)
+        if behind:
+            min_z = min((visual.position.get("z", 0) for visual in existing), default=0)
+            z = min_z - 1000
+        else:
+            max_z = max((visual.position.get("z", 0) for visual in existing), default=0)
+            z = max_z + 1000
+
+        query_state: dict[str, Any] = {}
+        for role in get_visual_roles(visual_type):
+            query_state[role["name"]] = {"projections": []}
+
+        data = {
+            "$schema": VISUAL_CONTAINER_SCHEMA,
+            "name": visual_id,
+            "position": {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "z": z,
+                "tabOrder": len(existing),
+            },
+            "visual": {
+                "visualType": visual_type,
+                "query": {"queryState": query_state},
+                "objects": {},
+            },
+        }
+        visual = Visual(folder=visual_dir, data=data)
+        self.created_dirs.add(visual_dir)
+        self.save_visual(visual)
+        existing.append(visual)
+        existing.sort(
+            key=lambda candidate: (
+                candidate.position.get("y", 0),
+                candidate.position.get("x", 0),
+            )
+        )
+        return visual
 
     def create_group_container(
         self,
@@ -125,6 +208,17 @@ class BufferedPbirApplySession:
         self, groups: list[tuple[str, str | None]]
     ) -> None:
         self._unsupported("reconcile_bookmark_groups")
+
+    def _add_page_to_order(self, page_id: str) -> None:
+        meta_path = self.project.definition_folder / "pages" / "pages.json"
+        if meta_path in self.dirty_json:
+            meta = self.dirty_json[meta_path]
+        elif meta_path.exists():
+            meta = _read_json(meta_path)
+        else:
+            meta = {"$schema": PAGES_METADATA_SCHEMA}
+        meta.setdefault("pageOrder", []).append(page_id)
+        self.dirty_json[meta_path] = meta
 
     def _unsupported(self, operation: str) -> None:
         raise NotImplementedError(
