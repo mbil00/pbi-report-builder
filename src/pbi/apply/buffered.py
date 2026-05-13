@@ -39,8 +39,6 @@ class BufferedPbirApplySession:
     project: Project
     dry_run: bool
     model: Any = _MISSING_MODEL
-    dirty_pages: dict[Path, Page] = field(default_factory=dict)
-    dirty_visuals: dict[Path, Visual] = field(default_factory=dict)
     dirty_json: dict[Path, dict[str, Any]] = field(default_factory=dict)
     created_dirs: set[Path] = field(default_factory=set)
     unsupported_errors: list[str] = field(default_factory=list)
@@ -79,8 +77,6 @@ class BufferedPbirApplySession:
 
     def rollback(self) -> None:
         """Discard staged operations."""
-        self.dirty_pages.clear()
-        self.dirty_visuals.clear()
         self.dirty_json.clear()
         self.created_dirs.clear()
 
@@ -131,14 +127,12 @@ class BufferedPbirApplySession:
     # PbirWriteSession -------------------------------------------------------
 
     def save_page(self, page: Page) -> None:
-        self.dirty_pages[page.folder] = page
         # Store the live payload reference intentionally: apply mutates
         # Page.data in place after save_page can be called, and commit should
         # mirror eager Page.save() by writing the latest object state.
         self.dirty_json[page.folder / "page.json"] = page.data
 
     def save_visual(self, visual: Visual) -> None:
-        self.dirty_visuals[visual.folder] = visual
         # Store the live payload reference intentionally; see save_page.
         self.dirty_json[visual.folder / "visual.json"] = visual.data
 
