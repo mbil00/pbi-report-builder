@@ -24,6 +24,10 @@ from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, VISUAL_CONTAINER
 _MISSING_MODEL = object()
 
 
+class UnsupportedBufferedOperation(NotImplementedError):
+    """Raised when the experimental buffered path reaches a future slice."""
+
+
 @dataclass
 class BufferedPbirApplySession:
     """Buffered PBIR apply session under active development.
@@ -65,6 +69,7 @@ class BufferedPbirApplySession:
             self._flush_to_project_root(self.project.root)
         except Exception:
             restore_definition_snapshot(self.project, snapshot_dir)
+            self.rollback()
             self.project.clear_caches()
             raise
         finally:
@@ -99,7 +104,12 @@ class BufferedPbirApplySession:
             self.temp_dir.cleanup()
         self.temp_dir = tempfile.TemporaryDirectory()
         temp_root = Path(self.temp_dir.name) / self.project.root.name
-        shutil.copytree(self.project.root, temp_root)
+        temp_root.mkdir(parents=True)
+        shutil.copy2(self.project.pbip_file, temp_root / self.project.pbip_file.name)
+        shutil.copytree(
+            self.project.report_folder,
+            temp_root / self.project.report_folder.name,
+        )
         self._flush_to_project_root(temp_root)
         return Project.find(temp_root / self.project.pbip_file.name)
 
@@ -156,9 +166,7 @@ class BufferedPbirApplySession:
         self.save_page(page)
         self._add_page_to_order(page_id)
 
-        pages = self.project._get_pages_cached()
-        pages.append(page)
-        self.project._visuals_cache[page_dir] = []
+        self.project.stage_page_in_cache(page)
         return page
 
     def create_visual(
@@ -273,7 +281,7 @@ class BufferedPbirApplySession:
         self.dirty_json[meta_path] = meta
 
     def _unsupported(self, operation: str) -> None:
-        raise NotImplementedError(
+        raise UnsupportedBufferedOperation(
             f"Buffered apply session does not implement {operation} yet. "
             "Add it in the corresponding vertical slice."
         )

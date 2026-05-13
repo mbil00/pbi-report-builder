@@ -175,6 +175,15 @@ class Project:
     def _invalidate_visuals_cache(self, page: Page | Path) -> None:
         self._visuals_cache.pop(self._visual_cache_key(page), None)
 
+    def stage_page_in_cache(self, page: Page) -> None:
+        """Add an in-memory page before it exists on disk.
+
+        Buffered/session write paths use this so project lookups can see staged
+        pages before commit without reaching into cache internals directly.
+        """
+        self._get_pages_cached().append(page)
+        self._visuals_cache[page.folder] = []
+
     def _get_pages_cached(self) -> list[Page]:
         if self._pages_cache is not None:
             return self._pages_cache

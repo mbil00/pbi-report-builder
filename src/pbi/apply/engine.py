@@ -11,7 +11,7 @@ from pbi.apply.plan_report import plan_report_spec
 from pbi.apply.plan_theme import plan_theme_spec
 from pbi.validate import ValidationIssue, validate_project
 
-from .buffered import BufferedPbirApplySession
+from .buffered import BufferedPbirApplySession, UnsupportedBufferedOperation
 from .pages import apply_page
 from .session import PbirApplyRunSession, PbirWriteSession, run_apply
 from .state import (
@@ -105,16 +105,20 @@ def _apply_yaml_with_session(
     )
 
     def body() -> ApplyResult:
-        _apply_top_level_sections(
-            project,
-            spec,
-            result,
-            page_filter=page_filter,
-            dry_run=dry_run,
-            overwrite=overwrite,
-            style_cache=style_cache,
-            session=session,
-        )
+        try:
+            _apply_top_level_sections(
+                project,
+                spec,
+                result,
+                page_filter=page_filter,
+                dry_run=dry_run,
+                overwrite=overwrite,
+                style_cache=style_cache,
+                session=session,
+            )
+        except UnsupportedBufferedOperation as exc:
+            result.errors.append(str(exc))
+            return result
         if not dry_run:
             validation_project = session.project_for_validation()
             _validate_apply_invariants(validation_project, result)
