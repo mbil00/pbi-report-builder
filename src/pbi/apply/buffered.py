@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pbi.apply.state import restore_definition_snapshot
 from pbi.project import Page, Project, Visual, _read_json, _write_json
 from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, VISUAL_CONTAINER_SCHEMA
 
@@ -44,6 +43,7 @@ class BufferedPbirApplySession:
     dirty_visuals: dict[Path, Visual] = field(default_factory=dict)
     dirty_json: dict[Path, dict[str, Any]] = field(default_factory=dict)
     created_dirs: set[Path] = field(default_factory=set)
+    unsupported_errors: list[str] = field(default_factory=list)
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
 
     # ApplySession lifecycle -------------------------------------------------
@@ -68,7 +68,7 @@ class BufferedPbirApplySession:
         try:
             self._flush_to_project_root(self.project.root)
         except Exception:
-            restore_definition_snapshot(self.project, snapshot_dir)
+            self._restore_definition_snapshot_safely(snapshot_dir)
             self.rollback()
             self.project.clear_caches()
             raise
@@ -106,9 +106,11 @@ class BufferedPbirApplySession:
         temp_root = Path(self.temp_dir.name) / self.project.root.name
         temp_root.mkdir(parents=True)
         shutil.copy2(self.project.pbip_file, temp_root / self.project.pbip_file.name)
+        temp_report = temp_root / self.project.report_folder.name
+        temp_report.mkdir()
         shutil.copytree(
-            self.project.report_folder,
-            temp_root / self.project.report_folder.name,
+            self.project.definition_folder,
+            temp_report / self.project.definition_folder.name,
         )
         self._flush_to_project_root(temp_root)
         return Project.find(temp_root / self.project.pbip_file.name)
@@ -242,20 +244,25 @@ class BufferedPbirApplySession:
         self._unsupported("delete_visual")
 
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
-        self._unsupported("write_theme")
+        self._unsupported("write_theme", fatal=False)
 
     def write_report(self, payload: dict[str, Any]) -> None:
-        self._unsupported("write_report")
+        self._unsupported("write_report", fatal=False)
 
     def write_bookmark(
         self, payload: dict[str, Any], *, file_path: Path
     ) -> None:
-        self._unsupported("write_bookmark")
+        self._unsupported("write_bookmark", fatal=False)
 
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None:
-        self._unsupported("reconcile_bookmark_groups")
+        self._unsupported("reconcile_bookmark_groups", fatal=False)
+
+    def drain_unsupported_errors(self) -> list[str]:
+        errors = list(dict.fromkeys(self.unsupported_errors))
+        self.unsupported_errors.clear()
+        return errors
 
     def _flush_to_project_root(self, target_root: Path) -> None:
         for folder in sorted(self.created_dirs):
@@ -280,8 +287,32 @@ class BufferedPbirApplySession:
         meta.setdefault("pageOrder", []).append(page_id)
         self.dirty_json[meta_path] = meta
 
-    def _unsupported(self, operation: str) -> None:
-        raise UnsupportedBufferedOperation(
+    def _restore_definition_snapshot_safely(self, snapshot_dir: Path) -> None:
+        """Restore definition without deleting the only on-disk copy first."""
+        definition = self.project.definition_folder
+        restore_dir = definition.with_name(f".{definition.name}.restore")
+        failed_dir = definition.with_name(f".{definition.name}.failed")
+        if restore_dir.exists():
+            shutil.rmtree(restore_dir)
+        if failed_dir.exists():
+            shutil.rmtree(failed_dir)
+        shutil.copytree(snapshot_dir, restore_dir)
+        if definition.exists():
+            definition.rename(failed_dir)
+        try:
+            restore_dir.rename(definition)
+        except Exception:
+            if failed_dir.exists() and not definition.exists():
+                failed_dir.rename(definition)
+            raise
+        if failed_dir.exists():
+            shutil.rmtree(failed_dir)
+
+    def _unsupported(self, operation: str, *, fatal: bool = True) -> None:
+        message = (
             f"Buffered apply session does not implement {operation} yet. "
             "Add it in the corresponding vertical slice."
         )
+        self.unsupported_errors.append(message)
+        if fatal:
+            raise UnsupportedBufferedOperation(message)

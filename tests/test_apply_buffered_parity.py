@@ -108,13 +108,14 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")
 
-    def test_unsupported_buffered_operation_returns_apply_result_error(self) -> None:
+    def test_unsupported_buffered_operation_returns_apply_result_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
             spec = yaml.safe_dump(
                 {
                     "version": 1,
+                    "theme": {"name": "Demo Theme"},
                     "report": {"layoutOptimization": "MobilePortrait"},
                     "pages": [],
                 },
@@ -125,7 +126,8 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
 
             self.assertTrue(result.errors)
             self.assertTrue(result.rolled_back)
-            self.assertIn("write_report", result.errors[0])
+            self.assertTrue(any("write_theme" in error for error in result.errors))
+            self.assertTrue(any("write_report" in error for error in result.errors))
 
     def test_buffered_validation_sees_staged_invalid_visual_and_rolls_back(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

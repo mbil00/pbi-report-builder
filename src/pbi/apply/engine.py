@@ -116,8 +116,10 @@ def _apply_yaml_with_session(
                 style_cache=style_cache,
                 session=session,
             )
-        except UnsupportedBufferedOperation as exc:
-            result.errors.append(str(exc))
+        except UnsupportedBufferedOperation:
+            pass
+        _record_session_errors(session, result)
+        if result.errors:
             return result
         if not dry_run:
             validation_project = session.project_for_validation()
@@ -326,6 +328,14 @@ def _apply_bookmarks_branch(
             # trigger full rollback, undoing every per-bookmark write that
             # did succeed earlier in this branch.
             result.errors.append(f"Bookmark groups: {exc}")
+
+
+def _record_session_errors(session: PbirApplyRunSession, result: ApplyResult) -> None:
+    drain = getattr(session, "drain_unsupported_errors", None)
+    if drain is None:
+        return
+    for error in drain():
+        _append_unique(result.errors, error)
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
