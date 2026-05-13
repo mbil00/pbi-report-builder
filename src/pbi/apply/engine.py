@@ -9,11 +9,11 @@ import yaml
 from pbi.apply.plan_bookmarks import plan_bookmarks_spec
 from pbi.apply.plan_report import plan_report_spec
 from pbi.apply.plan_theme import plan_theme_spec
-from pbi.apply.session import PbirWriteSession
 from pbi.validate import ValidationIssue, validate_project
 
+from .buffered import BufferedPbirApplySession, UnsupportedBufferedOperation
 from .pages import apply_page
-from .session import run_apply
+from .session import PbirApplyRunSession, PbirWriteSession, run_apply
 from .state import (
     ApplyResult,
     PbirApplySession as _PbirApplySession,
@@ -32,7 +32,55 @@ def apply_yaml(
     overwrite: bool = False,
     continue_on_error: bool = False,
 ) -> ApplyResult:
-    """Apply a YAML specification to the project."""
+    """Apply a YAML specification to the project using the eager PBIR writer."""
+    return _apply_yaml_with_session(
+        project,
+        yaml_content,
+        session=_PbirApplySession(project=project, dry_run=dry_run),
+        page_filter=page_filter,
+        dry_run=dry_run,
+        overwrite=overwrite,
+        continue_on_error=continue_on_error,
+    )
+
+
+def apply_yaml_buffered(
+    project: Project,
+    yaml_content: str,
+    *,
+    page_filter: str | None = None,
+    dry_run: bool = False,
+    overwrite: bool = False,
+    continue_on_error: bool = False,
+) -> ApplyResult:
+    """Apply YAML through the experimental buffered/session PBIR writer.
+
+    This entry point is intentionally Python-only while the buffered session is
+    developed behind parity tests against ``apply_yaml``. It is not wired to CLI
+    UX yet.
+    """
+    return _apply_yaml_with_session(
+        project,
+        yaml_content,
+        session=BufferedPbirApplySession(project=project, dry_run=dry_run),
+        page_filter=page_filter,
+        dry_run=dry_run,
+        overwrite=overwrite,
+        continue_on_error=continue_on_error,
+    )
+
+
+def _apply_yaml_with_session(
+    project: Project,
+    yaml_content: str,
+    *,
+    session: PbirApplyRunSession,
+    page_filter: str | None = None,
+    dry_run: bool = False,
+    overwrite: bool = False,
+    continue_on_error: bool = False,
+) -> ApplyResult:
+    """Shared apply orchestration for eager and buffered PBIR sessions."""
     result = ApplyResult()
 
     try:
@@ -50,7 +98,6 @@ def apply_yaml(
         return result
 
     style_cache: dict[str, StylePreset] = {}
-    session = _PbirApplySession(project=project, dry_run=dry_run)
     baseline_validation = (
         _validation_issue_keys(validate_project(project, include_model_checks=False))
         if not dry_run
@@ -58,20 +105,27 @@ def apply_yaml(
     )
 
     def body() -> ApplyResult:
-        _apply_top_level_sections(
-            project,
-            spec,
-            result,
-            page_filter=page_filter,
-            dry_run=dry_run,
-            overwrite=overwrite,
-            style_cache=style_cache,
-            session=session,
-        )
-        if not dry_run:
-            _validate_apply_invariants(project, result)
-            _record_post_apply_validation(
+        try:
+            _apply_top_level_sections(
                 project,
+                spec,
+                result,
+                page_filter=page_filter,
+                dry_run=dry_run,
+                overwrite=overwrite,
+                style_cache=style_cache,
+                session=session,
+            )
+        except UnsupportedBufferedOperation:
+            pass
+        _record_session_errors(session, result)
+        if result.errors:
+            return result
+        if not dry_run:
+            validation_project = session.project_for_validation()
+            _validate_apply_invariants(validation_project, result)
+            _record_post_apply_validation(
+                validation_project,
                 result,
                 baseline_validation=baseline_validation,
             )
@@ -89,7 +143,7 @@ def _apply_top_level_sections(
     dry_run: bool,
     overwrite: bool,
     style_cache: dict[str, StylePreset],
-    session: _PbirApplySession,
+    session: PbirWriteSession,
 ) -> None:
     """Dispatch each top-level YAML section in phase order.
 
@@ -274,6 +328,14 @@ def _apply_bookmarks_branch(
             # trigger full rollback, undoing every per-bookmark write that
             # did succeed earlier in this branch.
             result.errors.append(f"Bookmark groups: {exc}")
+
+
+def _record_session_errors(session: PbirApplyRunSession, result: ApplyResult) -> None:
+    drain = getattr(session, "drain_unsupported_errors", None)
+    if drain is None:
+        return
+    for error in drain():
+        _append_unique(result.errors, error)
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:

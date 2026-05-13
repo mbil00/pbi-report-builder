@@ -83,16 +83,18 @@ class RunApplyLifecycleTests(unittest.TestCase):
         self.assertEqual(session.calls, ["begin", "commit", "cleanup"])
         self.assertFalse(result.rolled_back)
 
-    def test_cleanup_runs_even_when_commit_raises(self) -> None:
+    def test_commit_exception_rolls_back_and_marks_result(self) -> None:
         class _CommitFails(_FakeSession):
             def commit(self) -> None:
                 self.calls.append("commit")
                 raise RuntimeError("commit blew up")
 
         session = _CommitFails()
-        with self.assertRaises(RuntimeError):
-            run_apply(session, lambda: _FakeResult())
-        self.assertEqual(session.calls, ["begin", "commit", "cleanup"])
+        result = run_apply(session, lambda: _FakeResult())
+
+        self.assertEqual(session.calls, ["begin", "commit", "rollback", "cleanup"])
+        self.assertTrue(result.rolled_back)
+        self.assertEqual(result.errors, ["Commit failed: commit blew up"])
 
 
 class SaveVisualLeafSeamTests(unittest.TestCase):

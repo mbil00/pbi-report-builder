@@ -111,6 +111,10 @@ class PbirApplySession:
             self.temp_dir = None
             self.snapshot_dir = None
 
+    def project_for_validation(self) -> Project:
+        """Return the project state validation should inspect."""
+        return self.project
+
     # PbirWriteSession -------------------------------------------------------
 
     def save_visual(self, visual: Visual) -> None:

@@ -28,6 +28,7 @@ class ApplySession(Protocol):
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
     def cleanup(self) -> None: ...
+    def project_for_validation(self) -> Any: ...
 
 
 class PbirWriteSession(Protocol):
@@ -38,6 +39,9 @@ class PbirWriteSession(Protocol):
     apply leaf code cannot bypass rollback by reaching for ``Visual.save`` /
     ``Page.save`` / ``ReportAuthoring`` directly.
     """
+
+    # Shared read/cache helpers --------------------------------------------
+    def get_model(self, project: Any | None = None) -> Any | None: ...
 
     # Per-entity persistence ------------------------------------------------
     def save_page(self, page: Page) -> None: ...
@@ -87,6 +91,10 @@ class PbirWriteSession(Protocol):
     ) -> None: ...
 
 
+class PbirApplyRunSession(ApplySession, PbirWriteSession, Protocol):
+    """Combined lifecycle + PBIR write protocol for report apply runs."""
+
+
 class ApplyDiagnostics(Protocol):
     """Result shape that ``run_apply`` inspects to decide commit vs rollback."""
 
@@ -122,7 +130,12 @@ def run_apply(
             session.rollback()
             result.rolled_back = True
         else:
-            session.commit()
+            try:
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                result.errors.append(f"Commit failed: {exc}")
+                result.rolled_back = True
         return result
     finally:
         session.cleanup()
