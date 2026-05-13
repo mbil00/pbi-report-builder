@@ -59,7 +59,7 @@ class BufferedPbirApplySession:
         failure during this early implementation does not leave a partially
         materialized report definition behind.
         """
-        if self.dry_run:
+        if self.dry_run or (not self.created_dirs and not self.dirty_json):
             return
 
         snapshot_parent = tempfile.TemporaryDirectory()

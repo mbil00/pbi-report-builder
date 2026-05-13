@@ -130,7 +130,12 @@ def run_apply(
             session.rollback()
             result.rolled_back = True
         else:
-            session.commit()
+            try:
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                result.errors.append(f"Commit failed: {exc}")
+                result.rolled_back = True
         return result
     finally:
         session.cleanup()

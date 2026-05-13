@@ -34,6 +34,18 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_noop_buffered_apply_does_not_snapshot_definition_on_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump({"version": 1, "pages": []}, sort_keys=False)
+
+            with mock.patch("pbi.apply.buffered.shutil.copytree", wraps=__import__("shutil").copytree) as copytree_mock:
+                result = apply_yaml_buffered(project, spec)
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(copytree_mock.call_count, 0)
+
     def test_simple_page_and_visual_creation_matches_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -68,6 +80,33 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
 
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
+
+    def test_buffered_commit_failure_returns_rolled_back_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]), \
+                 mock.patch("pbi.apply.buffered.BufferedPbirApplySession._flush_to_project_root", side_effect=[None, OSError("disk full")]):
+                result = apply_yaml_buffered(project, spec)
+
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(result.errors, ["Commit failed: disk full"])
+            restored = Project.find(root / "Sample.pbip")
+            with self.assertRaises(ValueError):
+                restored.find_page("Demo")
 
     def test_unsupported_buffered_operation_returns_apply_result_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
