@@ -14,6 +14,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from pbi.project import Page, Project, Visual, _read_json, _write_json
@@ -77,10 +78,11 @@ class BufferedPbirApplySession:
         self.project.clear_caches()
 
     def rollback(self) -> None:
-        """Discard staged operations."""
+        """Discard staged operations and any in-memory project cache mutations."""
         self.dirty_json.clear()
         self.created_dirs.clear()
         self.deleted_dirs.clear()
+        self.project.clear_caches()
 
     def cleanup(self) -> None:
         """Release buffered-session resources."""
@@ -250,6 +252,10 @@ class BufferedPbirApplySession:
                 ),
                 None,
             )
+            if page is None:
+                page_json = page_dir / "page.json"
+                if page_json.exists():
+                    page = Page(folder=page_dir, data=_read_json(page_json))
             visuals = self.project._get_visuals_cached(page) if page is not None else []
             for candidate in visuals:
                 is_child = candidate.data.get("parentGroupName") == visual.name
@@ -284,6 +290,11 @@ class BufferedPbirApplySession:
             return
 
         original = _read_json(report_path) if report_path.exists() else {}
+        # A prior buffered theme write may already have staged report.json.
+        # The report planner still reads the on-disk baseline, so overlay only
+        # keys the report payload changed relative to that baseline. This keeps
+        # omitted theme keys staged while preserving eager overwrite semantics
+        # for explicitly supplied report keys such as resourcePackages.
         for key, value in payload.items():
             if original.get(key) != value:
                 staged[key] = value
@@ -304,7 +315,10 @@ class BufferedPbirApplySession:
         from pbi.bookmarks import _existing_group_id, _load_meta, _meta_path
 
         meta_path = _meta_path(self.project)
-        meta = self.dirty_json.get(meta_path) or _load_meta(self.project)
+        meta = self._staged_or_read_json(
+            meta_path,
+            read_default=lambda: _load_meta(self.project),
+        )
         id_by_display: dict[str, str] = {}
         for display_name, _group in groups:
             bookmark_name = self._find_bookmark_id_by_display(display_name)
@@ -371,6 +385,18 @@ class BufferedPbirApplySession:
     def _has_no_staged_changes(self) -> bool:
         return not self.created_dirs and not self.deleted_dirs and not self.dirty_json
 
+    def _staged_or_read_json(
+        self,
+        path: Path,
+        *,
+        read_default: Callable[[], dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        if path in self.dirty_json:
+            return self.dirty_json[path]
+        if read_default is not None:
+            return read_default()
+        return _read_json(path)
+
     def _flush_to_project_root(self, target_root: Path) -> None:
         deleted_dirs = sorted(
             self.deleted_dirs,
@@ -425,7 +451,7 @@ class BufferedPbirApplySession:
         self.dirty_json[theme_path] = payload
 
         report_path = self.project.definition_folder / "report.json"
-        report = self.dirty_json.get(report_path) or _read_json(report_path)
+        report = self._staged_or_read_json(report_path)
         _normalize_resource_packages(report)
         report.setdefault("$schema", REPORT_SCHEMA)
         report.setdefault("themeCollection", {})
@@ -450,7 +476,7 @@ class BufferedPbirApplySession:
         from pbi.themes import _custom_theme_paths
 
         report_path = self.project.definition_folder / "report.json"
-        report = self.dirty_json.get(report_path) or _read_json(report_path)
+        report = self._staged_or_read_json(report_path)
         custom = report.get("themeCollection", {}).get("customTheme")
         if not custom:
             raise FileNotFoundError("No custom theme applied to this project")
@@ -465,25 +491,37 @@ class BufferedPbirApplySession:
 
     def _find_bookmark_id_by_display(self, display_name: str) -> str | None:
         bookmarks_dir = self.project.definition_folder / "bookmarks"
+        matches: dict[Path, str] = {}
         for path, payload in self.dirty_json.items():
             if path.parent == bookmarks_dir and path.name.endswith(".bookmark.json"):
                 if payload.get("displayName") == display_name:
                     name = payload.get("name")
-                    return name if isinstance(name, str) and name else None
+                    if isinstance(name, str) and name:
+                        matches[path] = name
 
-        if not bookmarks_dir.exists():
-            return None
-        for path in sorted(bookmarks_dir.glob("*.bookmark.json")):
-            if any(_is_relative_to(path, deleted) for deleted in self.deleted_dirs):
-                continue
-            try:
-                payload = _read_json(path)
-            except Exception:
-                continue
-            if payload.get("displayName") == display_name:
-                name = payload.get("name")
-                return name if isinstance(name, str) and name else None
-        return None
+        if bookmarks_dir.exists():
+            for path in sorted(bookmarks_dir.glob("*.bookmark.json")):
+                if path in matches or any(
+                    _is_relative_to(path, deleted) for deleted in self.deleted_dirs
+                ):
+                    continue
+                try:
+                    payload = _read_json(path)
+                except Exception:
+                    continue
+                if payload.get("displayName") == display_name:
+                    name = payload.get("name")
+                    if isinstance(name, str) and name:
+                        matches[path] = name
+
+        unique_names = set(matches.values())
+        if len(unique_names) > 1:
+            names = ", ".join(display_name for _name in unique_names)
+            raise ValueError(
+                f'Bookmark "{display_name}": Ambiguous bookmark "{display_name}". '
+                f"Matches: {names}"
+            )
+        return next(iter(unique_names), None)
 
     def _restore_definition_snapshot_safely(self, snapshot_dir: Path) -> None:
         """Restore definition without deleting the only on-disk copy first."""

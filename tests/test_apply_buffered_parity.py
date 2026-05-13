@@ -105,6 +105,8 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
 
             self.assertTrue(result.rolled_back)
             self.assertEqual(result.errors, ["Commit failed: disk full"])
+            with self.assertRaises(ValueError):
+                project.find_page("Demo")
             restored = Project.find(root / "Sample.pbip")
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")
@@ -298,6 +300,39 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_report_resource_packages_with_first_time_theme_matches_eager(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eager_root = root / "eager"
+            buffered_root = root / "buffered"
+            eager_project = make_project(eager_root)
+            buffered_project = make_project(buffered_root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "theme": {"name": "Demo Theme", "dataColors": ["#118DFF"]},
+                    "report": {
+                        "resourcePackages": [
+                            {
+                                "name": "RegisteredResources",
+                                "type": "RegisteredResources",
+                                "items": [
+                                    {"name": "Logo", "path": "logo.png", "type": "Image"}
+                                ],
+                            }
+                        ]
+                    },
+                    "pages": [],
+                },
+                sort_keys=False,
+            )
+
+            eager_result = apply_yaml(eager_project, spec)
+            buffered_result = apply_yaml_buffered(buffered_project, spec)
+
+            assert_apply_results_equivalent(self, eager_result, buffered_result)
+            assert_project_trees_equivalent(self, eager_root, buffered_root)
+
     def test_existing_theme_update_matches_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -376,6 +411,8 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             self.assertTrue(result.rolled_back)
             self.assertTrue(any("Schema:" in error for error in result.errors))
 
+            with self.assertRaises(ValueError):
+                project.find_page("Demo")
             restored = Project.find(root / "Sample.pbip")
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")
