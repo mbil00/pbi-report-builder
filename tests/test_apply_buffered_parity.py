@@ -241,6 +241,49 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_bookmark_reconcile_preserves_legacy_meta_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eager_root = root / "eager"
+            buffered_root = root / "buffered"
+            eager_project = make_project(eager_root)
+            buffered_project = make_project(buffered_root)
+            initial = yaml.safe_dump({"version": 1, "pages": [{"name": "Demo"}]}, sort_keys=False)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [],
+                    "bookmarks": [{"name": "New", "page": "Demo"}],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("secrets.token_hex", side_effect=["page000001"]):
+                apply_yaml(eager_project, initial)
+            with mock.patch("secrets.token_hex", side_effect=["page000001"]):
+                apply_yaml(buffered_project, initial)
+            for project in (eager_project, buffered_project):
+                bookmarks_dir = project.definition_folder / "bookmarks"
+                bookmarks_dir.mkdir()
+                _write_json(
+                    bookmarks_dir / "oldid.bookmark.json",
+                    {
+                        "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/1.4.0/schema.json",
+                        "displayName": "Old",
+                        "name": "oldid",
+                        "explorationState": {"activeSection": "page000001", "sections": {}},
+                    },
+                )
+                _write_json(bookmarks_dir / "bookmarks.json", {"bookmarkOrder": ["oldid"]})
+
+            with mock.patch("secrets.token_hex", side_effect=["newid"]):
+                eager_result = apply_yaml(eager_project, spec)
+            with mock.patch("secrets.token_hex", side_effect=["newid"]):
+                buffered_result = apply_yaml_buffered(buffered_project, spec)
+
+            assert_apply_results_equivalent(self, eager_result, buffered_result)
+            assert_project_trees_equivalent(self, eager_root, buffered_root)
+
     def test_ambiguous_staged_bookmark_error_lists_bookmark_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

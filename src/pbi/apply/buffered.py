@@ -312,13 +312,13 @@ class BufferedPbirApplySession:
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None:
-        from pbi.bookmarks import _existing_group_id, _load_meta, _meta_path
+        from pbi.bookmarks import _existing_group_id, _load_meta, _meta_path, _normalize_meta
 
         meta_path = _meta_path(self.project)
-        meta = self._staged_or_read_json(
-            meta_path,
-            read_default=lambda: _load_meta(self.project),
-        )
+        if meta_path in self.dirty_json:
+            meta = _normalize_meta(self.dirty_json[meta_path])
+        else:
+            meta = _load_meta(self.project)
         id_by_display: dict[str, str] = {}
         for display_name, _group in groups:
             bookmark_name = self._find_bookmark_id_by_display(display_name)
