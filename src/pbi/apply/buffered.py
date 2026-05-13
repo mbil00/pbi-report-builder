@@ -10,10 +10,13 @@ vertical slice at a time.
 from __future__ import annotations
 
 import secrets
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pbi.apply.state import restore_definition_snapshot
 from pbi.project import Page, Project, Visual, _read_json, _write_json
 from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, VISUAL_CONTAINER_SCHEMA
 
@@ -37,6 +40,7 @@ class BufferedPbirApplySession:
     dirty_visuals: dict[Path, Visual] = field(default_factory=dict)
     dirty_json: dict[Path, dict[str, Any]] = field(default_factory=dict)
     created_dirs: set[Path] = field(default_factory=set)
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
 
     # ApplySession lifecycle -------------------------------------------------
 
@@ -44,16 +48,27 @@ class BufferedPbirApplySession:
         """Start the buffered unit of work."""
 
     def commit(self) -> None:
-        """Flush staged operations to disk."""
+        """Flush staged operations to disk.
+
+        Commit is the only normal filesystem mutation point for the buffered
+        path. A definition snapshot is retained around the flush so a write
+        failure during this early implementation does not leave a partially
+        materialized report definition behind.
+        """
         if self.dry_run:
             return
 
-        for folder in sorted(self.created_dirs):
-            folder.mkdir(parents=True, exist_ok=True)
-
-        for path, payload in sorted(self.dirty_json.items()):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _write_json(path, payload)
+        snapshot_parent = tempfile.TemporaryDirectory()
+        snapshot_dir = Path(snapshot_parent.name) / "definition"
+        shutil.copytree(self.project.definition_folder, snapshot_dir)
+        try:
+            self._flush_to_project_root(self.project.root)
+        except Exception:
+            restore_definition_snapshot(self.project, snapshot_dir)
+            self.project.clear_caches()
+            raise
+        finally:
+            snapshot_parent.cleanup()
 
         self.project.clear_caches()
 
@@ -66,6 +81,27 @@ class BufferedPbirApplySession:
 
     def cleanup(self) -> None:
         """Release buffered-session resources."""
+        if self.temp_dir is not None:
+            self.temp_dir.cleanup()
+            self.temp_dir = None
+
+    def project_for_validation(self) -> Project:
+        """Return a materialized project containing staged buffered writes.
+
+        The generic validator reads PBIR files from disk. To preserve eager
+        apply semantics without committing yet, the buffered path validates a
+        temporary copy of the project with staged operations flushed into it.
+        """
+        if self.dry_run or (not self.created_dirs and not self.dirty_json):
+            return self.project
+
+        if self.temp_dir is not None:
+            self.temp_dir.cleanup()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        temp_root = Path(self.temp_dir.name) / self.project.root.name
+        shutil.copytree(self.project.root, temp_root)
+        self._flush_to_project_root(temp_root)
+        return Project.find(temp_root / self.project.pbip_file.name)
 
     # Shared read/cache helpers ---------------------------------------------
 
@@ -84,10 +120,14 @@ class BufferedPbirApplySession:
 
     def save_page(self, page: Page) -> None:
         self.dirty_pages[page.folder] = page
+        # Store the live payload reference intentionally: apply mutates
+        # Page.data in place after save_page can be called, and commit should
+        # mirror eager Page.save() by writing the latest object state.
         self.dirty_json[page.folder / "page.json"] = page.data
 
     def save_visual(self, visual: Visual) -> None:
         self.dirty_visuals[visual.folder] = visual
+        # Store the live payload reference intentionally; see save_page.
         self.dirty_json[visual.folder / "visual.json"] = visual.data
 
     def create_page(
@@ -116,8 +156,8 @@ class BufferedPbirApplySession:
         self.save_page(page)
         self._add_page_to_order(page_id)
 
-        if self.project._pages_cache is not None:
-            self.project._pages_cache.append(page)
+        pages = self.project._get_pages_cached()
+        pages.append(page)
         self.project._visuals_cache[page_dir] = []
         return page
 
@@ -208,6 +248,18 @@ class BufferedPbirApplySession:
         self, groups: list[tuple[str, str | None]]
     ) -> None:
         self._unsupported("reconcile_bookmark_groups")
+
+    def _flush_to_project_root(self, target_root: Path) -> None:
+        for folder in sorted(self.created_dirs):
+            self._translate_path(folder, target_root).mkdir(parents=True, exist_ok=True)
+
+        for path, payload in sorted(self.dirty_json.items()):
+            target = self._translate_path(path, target_root)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(target, payload)
+
+    def _translate_path(self, path: Path, target_root: Path) -> Path:
+        return target_root / path.relative_to(self.project.root)
 
     def _add_page_to_order(self, page_id: str) -> None:
         meta_path = self.project.definition_folder / "pages" / "pages.json"

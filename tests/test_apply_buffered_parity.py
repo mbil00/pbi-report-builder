@@ -8,6 +8,7 @@ import yaml
 from unittest import mock
 
 from pbi.apply import apply_yaml, apply_yaml_buffered
+from pbi.project import Project
 from tests.apply_parity_support import (
     assert_apply_results_equivalent,
     assert_project_trees_equivalent,
@@ -67,6 +68,40 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
 
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
+
+    def test_buffered_validation_sees_staged_invalid_visual_and_rolls_back(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "badchart",
+                                    "type": "clusteredColumnChart",
+                                    "chart:legnd.show": True,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]):
+                result = apply_yaml_buffered(project, spec)
+
+            self.assertTrue(result.errors)
+            self.assertTrue(result.rolled_back)
+            self.assertTrue(any("Schema:" in error for error in result.errors))
+
+            restored = Project.find(root / "Sample.pbip")
+            with self.assertRaises(ValueError):
+                restored.find_page("Demo")
 
 
 if __name__ == "__main__":

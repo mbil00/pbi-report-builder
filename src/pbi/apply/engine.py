@@ -116,9 +116,10 @@ def _apply_yaml_with_session(
             session=session,
         )
         if not dry_run:
-            _validate_apply_invariants(project, result)
+            validation_project = session.project_for_validation()
+            _validate_apply_invariants(validation_project, result)
             _record_post_apply_validation(
-                project,
+                validation_project,
                 result,
                 baseline_validation=baseline_validation,
             )
