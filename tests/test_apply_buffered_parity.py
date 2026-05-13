@@ -9,7 +9,7 @@ from unittest import mock
 
 from pbi.apply import apply_yaml, apply_yaml_buffered
 from pbi.apply.buffered import BufferedPbirApplySession
-from pbi.project import Project
+from pbi.project import Project, _write_json
 from tests.apply_parity_support import (
     assert_apply_results_equivalent,
     assert_project_trees_equivalent,
@@ -241,6 +241,24 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_ambiguous_staged_bookmark_error_lists_bookmark_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            session = BufferedPbirApplySession(project=project, dry_run=False)
+            bookmarks_dir = project.definition_folder / "bookmarks"
+            session.dirty_json[bookmarks_dir / "one.bookmark.json"] = {
+                "displayName": "Open",
+                "name": "bookmark01",
+            }
+            session.dirty_json[bookmarks_dir / "two.bookmark.json"] = {
+                "displayName": "Open",
+                "name": "bookmark02",
+            }
+
+            with self.assertRaisesRegex(ValueError, "bookmark01, bookmark02"):
+                session._find_bookmark_id_by_display("Open")
+
     def test_staged_visual_delete_does_not_touch_disk_until_commit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -276,6 +294,30 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             self.assertTrue(visual_json.exists())
             session.commit()
             self.assertFalse(visual_json.exists())
+
+    def test_first_time_theme_with_missing_report_matches_eager_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eager_root = root / "eager"
+            buffered_root = root / "buffered"
+            eager_project = make_project(eager_root)
+            buffered_project = make_project(buffered_root)
+            (eager_project.definition_folder / "report.json").unlink()
+            (buffered_project.definition_folder / "report.json").unlink()
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "theme": {"name": "Demo Theme", "dataColors": ["#118DFF"]},
+                    "pages": [],
+                },
+                sort_keys=False,
+            )
+
+            eager_result = apply_yaml(eager_project, spec)
+            buffered_result = apply_yaml_buffered(buffered_project, spec)
+
+            assert_apply_results_equivalent(self, eager_result, buffered_result)
+            assert_project_trees_equivalent(self, eager_root, buffered_root)
 
     def test_report_and_first_time_theme_writes_match_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -326,6 +368,39 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
                 },
                 sort_keys=False,
             )
+
+            eager_result = apply_yaml(eager_project, spec)
+            buffered_result = apply_yaml_buffered(buffered_project, spec)
+
+            assert_apply_results_equivalent(self, eager_result, buffered_result)
+            assert_project_trees_equivalent(self, eager_root, buffered_root)
+
+    def test_existing_theme_update_repairs_resource_path_like_eager_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eager_root = root / "eager"
+            buffered_root = root / "buffered"
+            eager_project = make_project(eager_root)
+            buffered_project = make_project(buffered_root)
+            initial = yaml.safe_dump(
+                {"version": 1, "theme": {"name": "Demo Theme", "dataColors": ["#118DFF"]}, "pages": []},
+                sort_keys=False,
+            )
+            spec = yaml.safe_dump(
+                {"version": 1, "theme": {"dataColors": ["#118DFF", "#107C10"]}, "pages": []},
+                sort_keys=False,
+            )
+
+            apply_yaml(eager_project, initial)
+            apply_yaml(buffered_project, initial)
+            for project in (eager_project, buffered_project):
+                report = project.get_report_meta()
+                for package in report.get("resourcePackages", []):
+                    for item in package.get("items", []):
+                        if item.get("type") == "CustomTheme":
+                            item["name"] = "Demo Theme"
+                            item["path"] = "Demo Theme"
+                _write_json(project.definition_folder / "report.json", report)
 
             eager_result = apply_yaml(eager_project, spec)
             buffered_result = apply_yaml_buffered(buffered_project, spec)

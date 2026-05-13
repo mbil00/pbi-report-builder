@@ -393,9 +393,12 @@ class BufferedPbirApplySession:
     ) -> dict[str, Any]:
         if path in self.dirty_json:
             return self.dirty_json[path]
-        if read_default is not None:
-            return read_default()
-        return _read_json(path)
+        try:
+            return _read_json(path)
+        except FileNotFoundError:
+            if read_default is not None:
+                return read_default()
+            raise
 
     def _flush_to_project_root(self, target_root: Path) -> None:
         deleted_dirs = sorted(
@@ -451,7 +454,7 @@ class BufferedPbirApplySession:
         self.dirty_json[theme_path] = payload
 
         report_path = self.project.definition_folder / "report.json"
-        report = self._staged_or_read_json(report_path)
+        report = self._staged_or_read_json(report_path, read_default=lambda: {})
         _normalize_resource_packages(report)
         report.setdefault("$schema", REPORT_SCHEMA)
         report.setdefault("themeCollection", {})
@@ -473,17 +476,20 @@ class BufferedPbirApplySession:
         self.dirty_json[report_path] = report
 
     def _stage_existing_theme_update(self, payload: dict[str, Any]) -> None:
-        from pbi.themes import _custom_theme_paths
+        from pbi.themes import _custom_theme_paths, _fix_theme_resource_path
 
         report_path = self.project.definition_folder / "report.json"
-        report = self._staged_or_read_json(report_path)
+        report = self._staged_or_read_json(report_path, read_default=lambda: {})
         custom = report.get("themeCollection", {}).get("customTheme")
         if not custom:
             raise FileNotFoundError("No custom theme applied to this project")
         theme_name = custom.get("name", "")
+        fixed_report = _fix_theme_resource_path(report, theme_name)
         for candidate in _custom_theme_paths(self.project, report, theme_name):
             if candidate.exists() or candidate in self.dirty_json:
                 self.dirty_json[candidate] = payload
+                if fixed_report:
+                    self.dirty_json[report_path] = report
                 return
         raise FileNotFoundError(
             f'Theme file for "{theme_name}" not found in RegisteredResources'
@@ -516,7 +522,7 @@ class BufferedPbirApplySession:
 
         unique_names = set(matches.values())
         if len(unique_names) > 1:
-            names = ", ".join(display_name for _name in unique_names)
+            names = ", ".join(sorted(unique_names))
             raise ValueError(
                 f'Bookmark "{display_name}": Ambiguous bookmark "{display_name}". '
                 f"Matches: {names}"
