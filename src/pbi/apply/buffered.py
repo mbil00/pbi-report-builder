@@ -9,11 +9,14 @@ vertical slice at a time.
 
 from __future__ import annotations
 
+import copy
+import json
 import secrets
 import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from pbi.project import Page, Project, Visual, _read_json, _write_json
@@ -41,6 +44,7 @@ class BufferedPbirApplySession:
     model: Any = _MISSING_MODEL
     dirty_json: dict[Path, dict[str, Any]] = field(default_factory=dict)
     created_dirs: set[Path] = field(default_factory=set)
+    deleted_dirs: set[Path] = field(default_factory=set)
     unsupported_errors: list[str] = field(default_factory=list)
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
 
@@ -57,16 +61,16 @@ class BufferedPbirApplySession:
         failure during this early implementation does not leave a partially
         materialized report definition behind.
         """
-        if self.dry_run or (not self.created_dirs and not self.dirty_json):
+        if self.dry_run or self._has_no_staged_changes():
             return
 
         snapshot_parent = tempfile.TemporaryDirectory()
-        snapshot_dir = Path(snapshot_parent.name) / "definition"
-        shutil.copytree(self.project.definition_folder, snapshot_dir)
+        snapshot_dir = Path(snapshot_parent.name) / self.project.report_folder.name
+        shutil.copytree(self.project.report_folder, snapshot_dir)
         try:
             self._flush_to_project_root(self.project.root)
         except Exception:
-            self._restore_definition_snapshot_safely(snapshot_dir)
+            self._restore_report_snapshot_safely(snapshot_dir)
             self.rollback()
             self.project.clear_caches()
             raise
@@ -76,9 +80,11 @@ class BufferedPbirApplySession:
         self.project.clear_caches()
 
     def rollback(self) -> None:
-        """Discard staged operations."""
+        """Discard staged operations and any in-memory project cache mutations."""
         self.dirty_json.clear()
         self.created_dirs.clear()
+        self.deleted_dirs.clear()
+        self.project.clear_caches()
 
     def cleanup(self) -> None:
         """Release buffered-session resources."""
@@ -93,7 +99,7 @@ class BufferedPbirApplySession:
         apply semantics without committing yet, the buffered path validates a
         temporary copy of the project with staged operations flushed into it.
         """
-        if self.dry_run or (not self.created_dirs and not self.dirty_json):
+        if self.dry_run or self._has_no_staged_changes():
             return self.project
 
         if self.temp_dir is not None:
@@ -235,34 +241,189 @@ class BufferedPbirApplySession:
         self._unsupported("create_group_container")
 
     def delete_visual(self, visual: Visual) -> None:
-        self._unsupported("delete_visual")
+        """Stage deletion of a visual folder and update in-memory page state."""
+        visual_dir = visual.folder
+        page_dir = visual_dir.parent.parent
+
+        if "visualGroup" in visual.data:
+            page = next(
+                (
+                    candidate
+                    for candidate in self.project.get_pages()
+                    if candidate.folder == page_dir
+                ),
+                None,
+            )
+            if page is None:
+                page_json = page_dir / "page.json"
+                if page_json.exists():
+                    page = Page(folder=page_dir, data=_read_json(page_json))
+            visuals = self.project._get_visuals_cached(page) if page is not None else []
+            for candidate in visuals:
+                is_child = candidate.data.get("parentGroupName") == visual.name
+                if candidate.folder != visual_dir and is_child:
+                    candidate.data.pop("parentGroupName", None)
+                    self.save_visual(candidate)
+
+        self.deleted_dirs.add(visual_dir)
+        self.created_dirs.discard(visual_dir)
+        for path in list(self.dirty_json):
+            try:
+                path.relative_to(visual_dir)
+            except ValueError:
+                continue
+            self.dirty_json.pop(path, None)
+
+        cached = self.project._visuals_cache.get(page_dir)
+        if cached is not None:
+            self.project._visuals_cache[page_dir] = [
+                candidate for candidate in cached if candidate.folder != visual_dir
+            ]
 
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
-        self._unsupported("write_theme", fatal=False)
+        if first_time:
+            self._stage_first_time_theme(payload)
+            return
+        self._stage_existing_theme_update(payload)
 
     def write_report(self, payload: dict[str, Any]) -> None:
-        self._unsupported("write_report", fatal=False)
+        report_path = self.project.definition_folder / "report.json"
+        staged = self.dirty_json.get(report_path)
+        if staged is None:
+            self.dirty_json[report_path] = payload
+            return
+
+        original = _read_json(report_path) if report_path.exists() else {}
+        # A prior buffered theme write may already have staged report.json.
+        # The report planner still reads the on-disk baseline, so overlay only
+        # keys the report payload changed relative to that baseline. This keeps
+        # omitted theme keys staged while preserving eager overwrite semantics
+        # for explicitly supplied report keys such as resourcePackages.
+        for key, value in payload.items():
+            if original.get(key) != value:
+                staged[key] = value
+        for key in original:
+            if key not in payload and key in staged:
+                staged.pop(key, None)
+        self.dirty_json[report_path] = staged
 
     def write_bookmark(
         self, payload: dict[str, Any], *, file_path: Path
     ) -> None:
-        self._unsupported("write_bookmark", fatal=False)
+        self.created_dirs.add(file_path.parent)
+        self.dirty_json[file_path] = payload
 
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None:
-        self._unsupported("reconcile_bookmark_groups", fatal=False)
+        from pbi.bookmarks import _existing_group_id, _load_meta, _meta_path, _normalize_meta
+
+        meta_path = _meta_path(self.project)
+        if meta_path in self.dirty_json:
+            meta = _normalize_meta(copy.deepcopy(self.dirty_json[meta_path]))
+        else:
+            meta = _load_meta(self.project)
+        id_by_display: dict[str, str] = {}
+        for display_name, _group in groups:
+            bookmark_name = self._find_staged_bookmark_id_by_display(display_name)
+            if bookmark_name is None:
+                raise FileNotFoundError(f'Bookmark "{display_name}" not found')
+            id_by_display[display_name] = bookmark_name
+
+        targeted_ids = set(id_by_display.values())
+        preserved_items: list[dict[str, Any]] = []
+        for item in meta.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            if "children" in item:
+                children = [
+                    child
+                    for child in item.get("children", [])
+                    if isinstance(child, str) and child not in targeted_ids
+                ]
+                if not children:
+                    continue
+                updated = dict(item)
+                updated["children"] = children
+                preserved_items.append(updated)
+                continue
+            name = item.get("name")
+            if isinstance(name, str) and name not in targeted_ids:
+                preserved_items.append(item)
+
+        grouped_children: dict[str, list[str]] = {}
+        grouped_order: list[str] = []
+        for display_name, group_name in groups:
+            bookmark_id = id_by_display.get(display_name)
+            if bookmark_id is None:
+                continue
+            if not group_name:
+                preserved_items.append({"name": bookmark_id})
+                continue
+            if group_name not in grouped_children:
+                grouped_children[group_name] = []
+                grouped_order.append(group_name)
+            grouped_children[group_name].append(bookmark_id)
+
+        for group_name in grouped_order:
+            children = grouped_children[group_name]
+            if len(children) == 1:
+                preserved_items.append({"name": children[0]})
+                continue
+            preserved_items.append(
+                {
+                    "name": _existing_group_id(meta, group_name) or secrets.token_hex(10),
+                    "displayName": group_name,
+                    "children": children,
+                }
+            )
+
+        meta["items"] = preserved_items
+        self.created_dirs.add(meta_path.parent)
+        self.dirty_json[meta_path] = meta
 
     def drain_unsupported_errors(self) -> list[str]:
         errors = list(dict.fromkeys(self.unsupported_errors))
         self.unsupported_errors.clear()
         return errors
 
+    def _has_no_staged_changes(self) -> bool:
+        return not self.created_dirs and not self.deleted_dirs and not self.dirty_json
+
+    def _staged_or_read_json(
+        self,
+        path: Path,
+        *,
+        read_default: Callable[[], dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        if path in self.dirty_json:
+            return self.dirty_json[path]
+        try:
+            return _read_json(path)
+        except FileNotFoundError:
+            if read_default is not None:
+                return read_default()
+            raise
+
     def _flush_to_project_root(self, target_root: Path) -> None:
+        deleted_dirs = sorted(
+            self.deleted_dirs,
+            key=lambda candidate: len(candidate.parts),
+            reverse=True,
+        )
+        for folder in deleted_dirs:
+            target = self._translate_path(folder, target_root)
+            if target.exists():
+                shutil.rmtree(target)
+
         for folder in sorted(self.created_dirs):
+            if any(_is_relative_to(folder, deleted) for deleted in self.deleted_dirs):
+                continue
             self._translate_path(folder, target_root).mkdir(parents=True, exist_ok=True)
 
         for path, payload in sorted(self.dirty_json.items()):
+            if any(_is_relative_to(path, deleted) for deleted in self.deleted_dirs):
+                continue
             target = self._translate_path(path, target_root)
             target.parent.mkdir(parents=True, exist_ok=True)
             _write_json(target, payload)
@@ -281,23 +442,121 @@ class BufferedPbirApplySession:
         meta.setdefault("pageOrder", []).append(page_id)
         self.dirty_json[meta_path] = meta
 
-    def _restore_definition_snapshot_safely(self, snapshot_dir: Path) -> None:
-        """Restore definition without deleting the only on-disk copy first."""
-        definition = self.project.definition_folder
-        restore_dir = definition.with_name(f".{definition.name}.restore")
-        failed_dir = definition.with_name(f".{definition.name}.failed")
+    def _stage_first_time_theme(self, payload: dict[str, Any]) -> None:
+        from pbi.schema_refs import REPORT_SCHEMA
+        from pbi.themes import (
+            _ensure_resource_entry,
+            _normalize_resource_packages,
+            _registered_resources_dir,
+            _remove_resource_items_by_type,
+            _theme_filename,
+            _validate_theme_name,
+        )
+
+        theme_name = _validate_theme_name(payload.get("name", "Theme"))
+        theme_filename = _theme_filename(theme_name)
+        resources_dir = _registered_resources_dir(self.project)
+        theme_path = resources_dir / theme_filename
+        self.created_dirs.add(resources_dir)
+        self.dirty_json[theme_path] = payload
+
+        report_path = self.project.definition_folder / "report.json"
+        report = copy.deepcopy(
+            self._staged_or_read_json(report_path, read_default=lambda: {})
+        )
+        _normalize_resource_packages(report)
+        report.setdefault("$schema", REPORT_SCHEMA)
+        report.setdefault("themeCollection", {})
+        base_theme = report.get("themeCollection", {}).get("baseTheme", {})
+        if isinstance(base_theme, dict):
+            version_at_import = base_theme.get("reportVersionAtImport", {})
+        else:
+            version_at_import = {}
+        if not isinstance(version_at_import, dict):
+            version_at_import = {}
+        report["themeCollection"]["customTheme"] = {
+            "name": theme_filename,
+            "reportVersionAtImport": version_at_import,
+            "type": "RegisteredResources",
+        }
+        report.pop("layoutOptimization", None)
+        _remove_resource_items_by_type(report, "CustomTheme")
+        _ensure_resource_entry(report, theme_name)
+        self.dirty_json[report_path] = report
+
+    def _stage_existing_theme_update(self, payload: dict[str, Any]) -> None:
+        from pbi.themes import _custom_theme_paths, _fix_theme_resource_path
+
+        report_path = self.project.definition_folder / "report.json"
+        report = copy.deepcopy(
+            self._staged_or_read_json(report_path, read_default=lambda: {})
+        )
+        custom = report.get("themeCollection", {}).get("customTheme")
+        if not custom:
+            raise FileNotFoundError("No custom theme applied to this project")
+        theme_name = custom.get("name", "")
+        fixed_report = _fix_theme_resource_path(report, theme_name)
+        for candidate in _custom_theme_paths(self.project, report, theme_name):
+            if candidate.exists() or candidate in self.dirty_json:
+                self.dirty_json[candidate] = payload
+                if fixed_report:
+                    self.dirty_json[report_path] = report
+                return
+        raise FileNotFoundError(
+            f'Theme file for "{theme_name}" not found in RegisteredResources'
+        )
+
+    def _find_staged_bookmark_id_by_display(self, display_name: str) -> str | None:
+        bookmarks_dir = self.project.definition_folder / "bookmarks"
+        matches: dict[Path, str] = {}
+        for path, payload in self.dirty_json.items():
+            if path.parent == bookmarks_dir and path.name.endswith(".bookmark.json"):
+                if payload.get("displayName") == display_name:
+                    name = payload.get("name")
+                    if isinstance(name, str) and name:
+                        matches[path] = name
+
+        if bookmarks_dir.exists():
+            for path in sorted(bookmarks_dir.glob("*.bookmark.json")):
+                if path in self.dirty_json or any(
+                    _is_relative_to(path, deleted) for deleted in self.deleted_dirs
+                ):
+                    continue
+                try:
+                    payload = _read_json(path)
+                except (json.JSONDecodeError, KeyError):
+                    continue
+                if payload.get("displayName") == display_name:
+                    name = payload.get("name")
+                    if isinstance(name, str) and name:
+                        matches[path] = name
+
+        unique_names = set(matches.values())
+        if len(unique_names) > 1:
+            names = ", ".join(sorted(unique_names))
+            raise ValueError(
+                f'Bookmark "{display_name}": Ambiguous bookmark "{display_name}". '
+                f"Matches: {names}"
+            )
+        return next(iter(unique_names), None)
+
+    def _restore_report_snapshot_safely(self, snapshot_dir: Path) -> None:
+        """Restore the report folder without deleting the only on-disk copy first."""
+        report = self.project.report_folder
+        restore_dir = report.with_name(f".{report.name}.restore")
+        failed_dir = report.with_name(f".{report.name}.failed")
         if restore_dir.exists():
             shutil.rmtree(restore_dir)
         if failed_dir.exists():
             shutil.rmtree(failed_dir)
         shutil.copytree(snapshot_dir, restore_dir)
-        if definition.exists():
-            definition.rename(failed_dir)
+        if report.exists():
+            report.rename(failed_dir)
         try:
-            restore_dir.rename(definition)
+            restore_dir.rename(report)
         except Exception:
-            if failed_dir.exists() and not definition.exists():
-                failed_dir.rename(definition)
+            if failed_dir.exists() and not report.exists():
+                failed_dir.rename(report)
             raise
         if failed_dir.exists():
             shutil.rmtree(failed_dir)
@@ -310,3 +569,11 @@ class BufferedPbirApplySession:
         self.unsupported_errors.append(message)
         if fatal:
             raise UnsupportedBufferedOperation(message)
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True

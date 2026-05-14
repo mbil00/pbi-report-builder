@@ -182,6 +182,14 @@ Verification:
 - parity case: existing visual converted to a different type;
 - parity case: `overwrite=True` removes visuals absent from YAML.
 
+Status: initial implementation complete.
+
+- `BufferedPbirApplySession.delete_visual(...)` stages visual-folder deletion and updates the in-memory visual cache.
+- Commit order deletes staged folders before creating/writing staged documents, matching the current type-conversion path where the old visual is removed before the replacement is created.
+- Dirty JSON writes under a deleted visual folder are discarded/skipped.
+- Session-level coverage asserts staged deletion leaves disk untouched until `commit()` and can be discarded by `rollback()`.
+- Parity tests cover visual type conversion and overwrite deletion.
+
 ### Slice 4 — bookmarks
 
 Goal: prove non-page/visual document staging.
@@ -195,6 +203,12 @@ Scope:
 Verification:
 
 - parity case: create/update bookmarks referencing staged/existing visuals and groups.
+
+Status: initial implementation complete.
+
+- `BufferedPbirApplySession.write_bookmark(...)` stages individual bookmark JSON writes.
+- `BufferedPbirApplySession.reconcile_bookmark_groups(...)` stages `definition/bookmarks/bookmarks.json` using staged bookmark payloads as well as existing on-disk bookmarks.
+- Parity coverage creates grouped bookmarks that reference a staged page/visual in the same YAML apply.
 
 ### Slice 5 — theme/resource writes
 
@@ -212,6 +226,14 @@ Verification:
 - parity case: first-time theme apply;
 - parity case: update existing theme;
 - compare `definition/` and relevant `StaticResources/RegisteredResources/` files.
+
+Status: initial implementation complete.
+
+- `BufferedPbirApplySession.write_report(...)` stages `definition/report.json` and preserves earlier staged report-level mutations from theme writes.
+- `BufferedPbirApplySession.write_theme(...)` stages first-time theme resource JSON plus the corresponding `report.json` theme/resource metadata updates.
+- Existing theme updates stage the active custom theme JSON file.
+- Parity coverage includes first-time theme + report apply and updating an existing theme.
+- Buffered commit now snapshots the full report folder so resource writes under `StaticResources/RegisteredResources/` are restored if a later staged write fails.
 
 ### Slice 6 — performance/write-count benchmark
 
