@@ -47,6 +47,9 @@ class BufferedPbirApplySession:
     deleted_dirs: set[Path] = field(default_factory=set)
     unsupported_errors: list[str] = field(default_factory=list)
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    commit_snapshot_temp: tempfile.TemporaryDirectory[str] | None = None
+    commit_snapshot_dir: Path | None = None
+    committed: bool = False
 
     # ApplySession lifecycle -------------------------------------------------
 
@@ -64,26 +67,29 @@ class BufferedPbirApplySession:
         if self.dry_run or self._has_no_staged_changes():
             return
 
-        snapshot_parent = tempfile.TemporaryDirectory()
-        snapshot_dir = Path(snapshot_parent.name) / self.project.report_folder.name
-        shutil.copytree(self.project.report_folder, snapshot_dir)
+        snapshot_temp = tempfile.TemporaryDirectory()
+        snapshot_dir = Path(snapshot_temp.name) / self.project.report_folder.name
         try:
-            self._flush_to_project_root(self.project.root)
+            shutil.copytree(self.project.report_folder, snapshot_dir)
         except Exception:
-            self._restore_report_snapshot_safely(snapshot_dir)
-            self.rollback()
-            self.project.clear_caches()
+            snapshot_temp.cleanup()
             raise
-        finally:
-            snapshot_parent.cleanup()
 
+        self.commit_snapshot_temp = snapshot_temp
+        self.commit_snapshot_dir = snapshot_dir
+        self._flush_to_project_root(self.project.root)
+
+        self.committed = True
         self.project.clear_caches()
 
     def rollback(self) -> None:
-        """Discard staged operations and any in-memory project cache mutations."""
+        """Discard staged operations and restore committed changes if needed."""
+        if self.commit_snapshot_dir is not None:
+            self._restore_report_snapshot_safely(self.commit_snapshot_dir)
         self.dirty_json.clear()
         self.created_dirs.clear()
         self.deleted_dirs.clear()
+        self.committed = False
         self.project.clear_caches()
 
     def cleanup(self) -> None:
@@ -91,6 +97,10 @@ class BufferedPbirApplySession:
         if self.temp_dir is not None:
             self.temp_dir.cleanup()
             self.temp_dir = None
+        if self.commit_snapshot_temp is not None:
+            self.commit_snapshot_temp.cleanup()
+            self.commit_snapshot_temp = None
+            self.commit_snapshot_dir = None
 
     def project_for_validation(self) -> Project:
         """Return a materialized project containing staged buffered writes.
@@ -99,7 +109,7 @@ class BufferedPbirApplySession:
         apply semantics without committing yet, the buffered path validates a
         temporary copy of the project with staged operations flushed into it.
         """
-        if self.dry_run or self._has_no_staged_changes():
+        if self.dry_run or self.committed or self._has_no_staged_changes():
             return self.project
 
         if self.temp_dir is not None:
@@ -267,12 +277,10 @@ class BufferedPbirApplySession:
 
         self.deleted_dirs.add(visual_dir)
         self.created_dirs.discard(visual_dir)
+        visual_prefix = _path_prefix(visual_dir)
         for path in list(self.dirty_json):
-            try:
-                path.relative_to(visual_dir)
-            except ValueError:
-                continue
-            self.dirty_json.pop(path, None)
+            if _path_prefix(path).startswith(visual_prefix):
+                self.dirty_json.pop(path, None)
 
         cached = self.project._visuals_cache.get(page_dir)
         if cached is not None:
@@ -411,18 +419,19 @@ class BufferedPbirApplySession:
             key=lambda candidate: len(candidate.parts),
             reverse=True,
         )
+        deleted_prefixes = _path_prefixes(deleted_dirs)
         for folder in deleted_dirs:
             target = self._translate_path(folder, target_root)
             if target.exists():
                 shutil.rmtree(target)
 
         for folder in sorted(self.created_dirs):
-            if any(_is_relative_to(folder, deleted) for deleted in self.deleted_dirs):
+            if _is_under_any_prefix(folder, deleted_prefixes):
                 continue
             self._translate_path(folder, target_root).mkdir(parents=True, exist_ok=True)
 
         for path, payload in sorted(self.dirty_json.items()):
-            if any(_is_relative_to(path, deleted) for deleted in self.deleted_dirs):
+            if _is_under_any_prefix(path, deleted_prefixes):
                 continue
             target = self._translate_path(path, target_root)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -577,3 +586,18 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _path_prefixes(paths: list[Path]) -> tuple[str, ...]:
+    return tuple(_path_prefix(path) for path in paths)
+
+
+def _path_prefix(path: Path) -> str:
+    return f"{path.as_posix().rstrip('/')}/"
+
+
+def _is_under_any_prefix(path: Path, prefixes: tuple[str, ...]) -> bool:
+    if not prefixes:
+        return False
+    path_string = f"{path.as_posix().rstrip('/')}/"
+    return any(path_string.startswith(prefix) for prefix in prefixes)

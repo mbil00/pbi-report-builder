@@ -119,6 +119,27 @@ def run_apply(
         mark ``result.rolled_back``, cleanup, return.
       * Otherwise — commit, cleanup, return.
     """
+    return run_apply_with_post_commit(
+        session,
+        body,
+        post_commit=None,
+        continue_on_error=continue_on_error,
+    )
+
+
+def run_apply_with_post_commit(
+    session: ApplySession,
+    body: Callable[[], R],
+    *,
+    post_commit: Callable[[R], None] | None = None,
+    continue_on_error: bool = False,
+) -> R:
+    """Run ``body`` with an optional validation hook after ``commit``.
+
+    Buffered/session-backed apply can use this to avoid materializing staged
+    writes twice: commit the staged unit once, then validate the committed
+    project while the session rollback snapshot is still alive.
+    """
     session.begin()
     try:
         try:
@@ -132,6 +153,11 @@ def run_apply(
         else:
             try:
                 session.commit()
+                if post_commit is not None:
+                    post_commit(result)
+                if result.errors and not continue_on_error:
+                    session.rollback()
+                    result.rolled_back = True
             except Exception as exc:
                 session.rollback()
                 result.errors.append(f"Commit failed: {exc}")
