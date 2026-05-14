@@ -113,6 +113,45 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")
 
+    def test_buffered_snapshot_failure_does_not_restore_partial_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            original_report = (project.definition_folder / "report.json").read_text(
+                encoding="utf-8"
+            )
+
+            def fail_after_partial_snapshot(src: Path, dst: Path, *args, **kwargs):
+                dst.mkdir(parents=True)
+                (dst / "PARTIAL").write_text("not a valid report snapshot\n", encoding="utf-8")
+                raise OSError("snapshot failed")
+
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]), \
+                 mock.patch("pbi.apply.buffered.shutil.copytree", side_effect=fail_after_partial_snapshot):
+                result = apply_yaml_buffered(project, spec)
+
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(result.errors, ["Commit failed: snapshot failed"])
+            self.assertEqual(
+                (project.definition_folder / "report.json").read_text(encoding="utf-8"),
+                original_report,
+            )
+            restored = Project.find(root / "Sample.pbip")
+            with self.assertRaises(ValueError):
+                restored.find_page("Demo")
+
     def test_buffered_post_commit_validation_failure_rolls_back(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -67,18 +67,17 @@ class BufferedPbirApplySession:
         if self.dry_run or self._has_no_staged_changes():
             return
 
-        self.commit_snapshot_temp = tempfile.TemporaryDirectory()
-        self.commit_snapshot_dir = (
-            Path(self.commit_snapshot_temp.name) / self.project.report_folder.name
-        )
-        shutil.copytree(self.project.report_folder, self.commit_snapshot_dir)
+        snapshot_temp = tempfile.TemporaryDirectory()
+        snapshot_dir = Path(snapshot_temp.name) / self.project.report_folder.name
         try:
-            self._flush_to_project_root(self.project.root)
+            shutil.copytree(self.project.report_folder, snapshot_dir)
         except Exception:
-            self._restore_report_snapshot_safely(self.commit_snapshot_dir)
-            self.rollback()
-            self.project.clear_caches()
+            snapshot_temp.cleanup()
             raise
+
+        self.commit_snapshot_temp = snapshot_temp
+        self.commit_snapshot_dir = snapshot_dir
+        self._flush_to_project_root(self.project.root)
 
         self.committed = True
         self.project.clear_caches()
