@@ -9,6 +9,7 @@ vertical slice at a time.
 
 from __future__ import annotations
 
+import copy
 import json
 import secrets
 import shutil
@@ -319,7 +320,7 @@ class BufferedPbirApplySession:
 
         meta_path = _meta_path(self.project)
         if meta_path in self.dirty_json:
-            meta = _normalize_meta(self.dirty_json[meta_path])
+            meta = _normalize_meta(copy.deepcopy(self.dirty_json[meta_path]))
         else:
             meta = _load_meta(self.project)
         id_by_display: dict[str, str] = {}
@@ -415,6 +416,8 @@ class BufferedPbirApplySession:
                 shutil.rmtree(target)
 
         for folder in sorted(self.created_dirs):
+            if any(_is_relative_to(folder, deleted) for deleted in self.deleted_dirs):
+                continue
             self._translate_path(folder, target_root).mkdir(parents=True, exist_ok=True)
 
         for path, payload in sorted(self.dirty_json.items()):
@@ -510,7 +513,7 @@ class BufferedPbirApplySession:
 
         if bookmarks_dir.exists():
             for path in sorted(bookmarks_dir.glob("*.bookmark.json")):
-                if path in matches or any(
+                if path in self.dirty_json or any(
                     _is_relative_to(path, deleted) for deleted in self.deleted_dirs
                 ):
                     continue

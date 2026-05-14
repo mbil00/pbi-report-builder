@@ -285,6 +285,71 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_created_dirs_under_deleted_visual_are_not_recreated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "remove", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]):
+                apply_yaml(project, initial)
+            page = project.find_page("Demo")
+            visual = project.find_visual(page, "remove")
+            orphan_dir = visual.folder / "subresource"
+            session = BufferedPbirApplySession(project=project, dry_run=False)
+            session.created_dirs.add(orphan_dir)
+            session.delete_visual(visual)
+
+            session.commit()
+
+            self.assertFalse(visual.folder.exists())
+            self.assertFalse(orphan_dir.exists())
+
+    def test_staged_bookmark_lookup_ignores_rewritten_path_old_display_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            bookmarks_dir = project.definition_folder / "bookmarks"
+            bookmarks_dir.mkdir()
+            _write_json(
+                bookmarks_dir / "bookmark01.bookmark.json",
+                {"displayName": "Old", "name": "bookmark01"},
+            )
+            session = BufferedPbirApplySession(project=project, dry_run=False)
+            session.dirty_json[bookmarks_dir / "bookmark01.bookmark.json"] = {
+                "displayName": "New",
+                "name": "bookmark01",
+            }
+
+            self.assertIsNone(session._find_staged_bookmark_id_by_display("Old"))
+
+    def test_reconcile_bookmark_groups_does_not_mutate_staged_meta_before_replacing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            bookmarks_dir = project.definition_folder / "bookmarks"
+            session = BufferedPbirApplySession(project=project, dry_run=False)
+            meta_path = bookmarks_dir / "bookmarks.json"
+            staged_meta = {"items": [{"displayName": "Group", "children": []}]}
+            session.dirty_json[meta_path] = staged_meta
+
+            with mock.patch("secrets.token_hex", return_value="groupid"):
+                session.reconcile_bookmark_groups([])
+
+            self.assertNotIn("$schema", staged_meta)
+            self.assertNotIn("name", staged_meta["items"][0])
+            self.assertIsNot(session.dirty_json[meta_path], staged_meta)
+
     def test_staged_delete_replaces_cached_visual_list(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
