@@ -9,6 +9,7 @@ vertical slice at a time.
 
 from __future__ import annotations
 
+import json
 import secrets
 import shutil
 import tempfile
@@ -274,7 +275,9 @@ class BufferedPbirApplySession:
 
         cached = self.project._visuals_cache.get(page_dir)
         if cached is not None:
-            cached[:] = [candidate for candidate in cached if candidate.folder != visual_dir]
+            self.project._visuals_cache[page_dir] = [
+                candidate for candidate in cached if candidate.folder != visual_dir
+            ]
 
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
         if first_time:
@@ -513,7 +516,7 @@ class BufferedPbirApplySession:
                     continue
                 try:
                     payload = _read_json(path)
-                except Exception:
+                except (json.JSONDecodeError, KeyError):
                     continue
                 if payload.get("displayName") == display_name:
                     name = payload.get("name")

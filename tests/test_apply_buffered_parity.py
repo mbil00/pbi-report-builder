@@ -285,6 +285,37 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_staged_delete_replaces_cached_visual_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {"name": "keep", "type": "cardVisual"},
+                                {"name": "remove", "type": "cardVisual", "position": "50, 0"},
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001", "visual0002"]):
+                apply_yaml(project, initial)
+            page = project.find_page("Demo")
+            original_cached = project._get_visuals_cached(page)
+            visual = project.find_visual(page, "remove")
+
+            BufferedPbirApplySession(project=project, dry_run=False).delete_visual(visual)
+
+            self.assertIsNot(project._get_visuals_cached(page), original_cached)
+            self.assertEqual([visual.name for visual in original_cached], ["keep", "remove"])
+            self.assertEqual([visual.name for visual in project._get_visuals_cached(page)], ["keep"])
+
     def test_ambiguous_staged_bookmark_error_lists_bookmark_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
