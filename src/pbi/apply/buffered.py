@@ -326,8 +326,9 @@ class BufferedPbirApplySession:
         id_by_display: dict[str, str] = {}
         for display_name, _group in groups:
             bookmark_name = self._find_staged_bookmark_id_by_display(display_name)
-            if bookmark_name:
-                id_by_display[display_name] = bookmark_name
+            if bookmark_name is None:
+                raise FileNotFoundError(f'Bookmark "{display_name}" not found')
+            id_by_display[display_name] = bookmark_name
 
         targeted_ids = set(id_by_display.values())
         preserved_items: list[dict[str, Any]] = []
@@ -460,7 +461,9 @@ class BufferedPbirApplySession:
         self.dirty_json[theme_path] = payload
 
         report_path = self.project.definition_folder / "report.json"
-        report = self._staged_or_read_json(report_path, read_default=lambda: {})
+        report = copy.deepcopy(
+            self._staged_or_read_json(report_path, read_default=lambda: {})
+        )
         _normalize_resource_packages(report)
         report.setdefault("$schema", REPORT_SCHEMA)
         report.setdefault("themeCollection", {})
@@ -485,7 +488,9 @@ class BufferedPbirApplySession:
         from pbi.themes import _custom_theme_paths, _fix_theme_resource_path
 
         report_path = self.project.definition_folder / "report.json"
-        report = self._staged_or_read_json(report_path, read_default=lambda: {})
+        report = copy.deepcopy(
+            self._staged_or_read_json(report_path, read_default=lambda: {})
+        )
         custom = report.get("themeCollection", {}).get("customTheme")
         if not custom:
             raise FileNotFoundError("No custom theme applied to this project")

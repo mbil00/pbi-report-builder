@@ -285,6 +285,28 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
 
+    def test_reconcile_bookmark_groups_raises_for_missing_bookmark(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_project(Path(tmp))
+            session = BufferedPbirApplySession(project=project, dry_run=False)
+
+            with self.assertRaisesRegex(FileNotFoundError, 'Bookmark "Missing" not found'):
+                session.reconcile_bookmark_groups([("Missing", "Group")])
+
+    def test_first_time_theme_does_not_mutate_existing_staged_report_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_project(Path(tmp))
+            session = BufferedPbirApplySession(project=project, dry_run=False)
+            report_path = project.definition_folder / "report.json"
+            staged_report = {"layoutOptimization": "MobilePortrait"}
+            session.dirty_json[report_path] = staged_report
+
+            session.write_theme({"name": "Demo Theme"}, first_time=True)
+
+            self.assertEqual(staged_report, {"layoutOptimization": "MobilePortrait"})
+            self.assertIsNot(session.dirty_json[report_path], staged_report)
+            self.assertIn("themeCollection", session.dirty_json[report_path])
+
     def test_created_dirs_under_deleted_visual_are_not_recreated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
