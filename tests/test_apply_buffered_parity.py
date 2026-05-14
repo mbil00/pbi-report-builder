@@ -10,6 +10,7 @@ from unittest import mock
 from pbi.apply import apply_yaml, apply_yaml_buffered
 from pbi.apply.buffered import BufferedPbirApplySession
 from pbi.project import Project, _write_json
+from pbi.themes import get_theme_data
 from tests.apply_parity_support import (
     assert_apply_results_equivalent,
     assert_project_trees_equivalent,
@@ -300,7 +301,7 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             }
 
             with self.assertRaisesRegex(ValueError, "bookmark01, bookmark02"):
-                session._find_bookmark_id_by_display("Open")
+                session._find_staged_bookmark_id_by_display("Open")
 
     def test_staged_visual_delete_does_not_touch_disk_until_commit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -417,6 +418,45 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
 
             assert_apply_results_equivalent(self, eager_result, buffered_result)
             assert_project_trees_equivalent(self, eager_root, buffered_root)
+
+    def test_existing_theme_commit_failure_restores_theme_resource(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {"version": 1, "theme": {"name": "Demo Theme", "dataColors": ["#118DFF"]}, "pages": []},
+                sort_keys=False,
+            )
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "theme": {"dataColors": ["#118DFF", "#107C10"]},
+                    "report": {"layoutOptimization": "MobilePortrait"},
+                    "pages": [],
+                },
+                sort_keys=False,
+            )
+            apply_yaml(project, initial)
+            before = get_theme_data(project)
+            real_write_json = _write_json
+            writes = 0
+
+            def fail_after_first_write(path: Path, data: dict) -> None:
+                nonlocal writes
+                writes += 1
+                if writes > 1:
+                    raise OSError("disk full")
+                real_write_json(path, data)
+
+            with mock.patch(
+                "pbi.apply.buffered.BufferedPbirApplySession.project_for_validation",
+                return_value=project,
+            ), mock.patch("pbi.apply.buffered._write_json", side_effect=fail_after_first_write):
+                result = apply_yaml_buffered(project, spec)
+
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(result.errors, ["Commit failed: disk full"])
+            self.assertEqual(get_theme_data(Project.find(root / "Sample.pbip")), before)
 
     def test_existing_theme_update_repairs_resource_path_like_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

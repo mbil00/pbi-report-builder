@@ -63,12 +63,12 @@ class BufferedPbirApplySession:
             return
 
         snapshot_parent = tempfile.TemporaryDirectory()
-        snapshot_dir = Path(snapshot_parent.name) / "definition"
-        shutil.copytree(self.project.definition_folder, snapshot_dir)
+        snapshot_dir = Path(snapshot_parent.name) / self.project.report_folder.name
+        shutil.copytree(self.project.report_folder, snapshot_dir)
         try:
             self._flush_to_project_root(self.project.root)
         except Exception:
-            self._restore_definition_snapshot_safely(snapshot_dir)
+            self._restore_report_snapshot_safely(snapshot_dir)
             self.rollback()
             self.project.clear_caches()
             raise
@@ -321,7 +321,7 @@ class BufferedPbirApplySession:
             meta = _load_meta(self.project)
         id_by_display: dict[str, str] = {}
         for display_name, _group in groups:
-            bookmark_name = self._find_bookmark_id_by_display(display_name)
+            bookmark_name = self._find_staged_bookmark_id_by_display(display_name)
             if bookmark_name:
                 id_by_display[display_name] = bookmark_name
 
@@ -495,7 +495,7 @@ class BufferedPbirApplySession:
             f'Theme file for "{theme_name}" not found in RegisteredResources'
         )
 
-    def _find_bookmark_id_by_display(self, display_name: str) -> str | None:
+    def _find_staged_bookmark_id_by_display(self, display_name: str) -> str | None:
         bookmarks_dir = self.project.definition_folder / "bookmarks"
         matches: dict[Path, str] = {}
         for path, payload in self.dirty_json.items():
@@ -529,23 +529,23 @@ class BufferedPbirApplySession:
             )
         return next(iter(unique_names), None)
 
-    def _restore_definition_snapshot_safely(self, snapshot_dir: Path) -> None:
-        """Restore definition without deleting the only on-disk copy first."""
-        definition = self.project.definition_folder
-        restore_dir = definition.with_name(f".{definition.name}.restore")
-        failed_dir = definition.with_name(f".{definition.name}.failed")
+    def _restore_report_snapshot_safely(self, snapshot_dir: Path) -> None:
+        """Restore the report folder without deleting the only on-disk copy first."""
+        report = self.project.report_folder
+        restore_dir = report.with_name(f".{report.name}.restore")
+        failed_dir = report.with_name(f".{report.name}.failed")
         if restore_dir.exists():
             shutil.rmtree(restore_dir)
         if failed_dir.exists():
             shutil.rmtree(failed_dir)
         shutil.copytree(snapshot_dir, restore_dir)
-        if definition.exists():
-            definition.rename(failed_dir)
+        if report.exists():
+            report.rename(failed_dir)
         try:
-            restore_dir.rename(definition)
+            restore_dir.rename(report)
         except Exception:
-            if failed_dir.exists() and not definition.exists():
-                failed_dir.rename(definition)
+            if failed_dir.exists() and not report.exists():
+                failed_dir.rename(report)
             raise
         if failed_dir.exists():
             shutil.rmtree(failed_dir)

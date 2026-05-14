@@ -233,7 +233,7 @@ Status: initial implementation complete.
 - `BufferedPbirApplySession.write_theme(...)` stages first-time theme resource JSON plus the corresponding `report.json` theme/resource metadata updates.
 - Existing theme updates stage the active custom theme JSON file.
 - Parity coverage includes first-time theme + report apply and updating an existing theme.
-- The current rollback behavior intentionally preserves the eager path's known orphan-resource gap for first-time theme writes if commit fails after writing resources.
+- Buffered commit now snapshots the full report folder so resource writes under `StaticResources/RegisteredResources/` are restored if a later staged write fails.
 
 ### Slice 6 — performance/write-count benchmark
 
