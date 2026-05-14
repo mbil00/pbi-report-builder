@@ -10,6 +10,7 @@ from unittest import mock
 from pbi.apply import apply_yaml, apply_yaml_buffered
 from pbi.apply.buffered import BufferedPbirApplySession
 from pbi.project import Project, _write_json
+from pbi.validate import ValidationIssue
 from pbi.themes import get_theme_data
 from tests.apply_parity_support import (
     assert_apply_results_equivalent,
@@ -101,13 +102,48 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             )
 
             with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]), \
-                 mock.patch("pbi.apply.buffered.BufferedPbirApplySession._flush_to_project_root", side_effect=[None, OSError("disk full")]):
+                 mock.patch("pbi.apply.buffered.BufferedPbirApplySession._flush_to_project_root", side_effect=OSError("disk full")):
                 result = apply_yaml_buffered(project, spec)
 
             self.assertTrue(result.rolled_back)
             self.assertEqual(result.errors, ["Commit failed: disk full"])
             with self.assertRaises(ValueError):
                 project.find_page("Demo")
+            restored = Project.find(root / "Sample.pbip")
+            with self.assertRaises(ValueError):
+                restored.find_page("Demo")
+
+    def test_buffered_post_commit_validation_failure_rolls_back(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            issue = ValidationIssue(
+                "definition/report.json", "error", "forced validation failure"
+            )
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]), \
+                 mock.patch("pbi.apply.engine.validate_project", side_effect=[[], [issue]]):
+                result = apply_yaml_buffered(project, spec)
+
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(
+                result.errors,
+                [
+                    "Post-apply validation: definition/report.json: forced validation failure"
+                ],
+            )
             restored = Project.find(root / "Sample.pbip")
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")

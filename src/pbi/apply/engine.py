@@ -13,7 +13,12 @@ from pbi.validate import ValidationIssue, validate_project
 
 from .buffered import BufferedPbirApplySession, UnsupportedBufferedOperation
 from .pages import apply_page
-from .session import PbirApplyRunSession, PbirWriteSession, run_apply
+from .session import (
+    PbirApplyRunSession,
+    PbirWriteSession,
+    run_apply,
+    run_apply_with_post_commit,
+)
 from .state import (
     ApplyResult,
     PbirApplySession as _PbirApplySession,
@@ -67,6 +72,7 @@ def apply_yaml_buffered(
         dry_run=dry_run,
         overwrite=overwrite,
         continue_on_error=continue_on_error,
+        validate_after_commit=True,
     )
 
 
@@ -79,6 +85,7 @@ def _apply_yaml_with_session(
     dry_run: bool = False,
     overwrite: bool = False,
     continue_on_error: bool = False,
+    validate_after_commit: bool = False,
 ) -> ApplyResult:
     """Shared apply orchestration for eager and buffered PBIR sessions."""
     result = ApplyResult()
@@ -121,15 +128,19 @@ def _apply_yaml_with_session(
         _record_session_errors(session, result)
         if result.errors:
             return result
-        if not dry_run:
-            validation_project = session.project_for_validation()
-            _validate_apply_invariants(validation_project, result)
-            _record_post_apply_validation(
-                validation_project,
-                result,
-                baseline_validation=baseline_validation,
-            )
+        if not dry_run and not validate_after_commit:
+            _validate_session_project(session, result, baseline_validation)
         return result
+
+    if validate_after_commit and not dry_run:
+        return run_apply_with_post_commit(
+            session,
+            body,
+            post_commit=lambda committed_result: _validate_session_project(
+                session, committed_result, baseline_validation
+            ),
+            continue_on_error=continue_on_error,
+        )
 
     return run_apply(session, body, continue_on_error=continue_on_error)
 
@@ -336,6 +347,20 @@ def _record_session_errors(session: PbirApplyRunSession, result: ApplyResult) ->
         return
     for error in drain():
         _append_unique(result.errors, error)
+
+
+def _validate_session_project(
+    session: PbirApplyRunSession,
+    result: ApplyResult,
+    baseline_validation: set[tuple[str, str, str, str]],
+) -> None:
+    validation_project = session.project_for_validation()
+    _validate_apply_invariants(validation_project, result)
+    _record_post_apply_validation(
+        validation_project,
+        result,
+        baseline_validation=baseline_validation,
+    )
 
 
 def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
