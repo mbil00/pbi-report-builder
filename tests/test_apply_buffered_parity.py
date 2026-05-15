@@ -159,6 +159,94 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             self.assertEqual(result.errors, [])
             validate_mock.assert_not_called()
 
+    def test_apply_validation_is_limited_to_touched_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "type": "cardVisual"}],
+                        },
+                        {
+                            "name": "Other",
+                            "visuals": [{"name": "bad", "type": "cardVisual"}],
+                        },
+                    ],
+                },
+                sort_keys=False,
+            )
+            with mock.patch(
+                "secrets.token_hex",
+                side_effect=["page000001", "visual0001", "page000002", "visual0002"],
+            ):
+                self.assertEqual(apply_yaml(project, initial).errors, [])
+
+            other = project.find_page("Other")
+            bad = project.find_visual(other, "bad")
+            bad.data["visual"].pop("visualType")
+            bad.save()
+            project.clear_caches()
+
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "position": "10, 20"}],
+                        },
+                    ],
+                },
+                sort_keys=False,
+            )
+            result = apply_yaml(project, spec)
+
+            self.assertEqual(result.errors, [])
+            restored = Project.find(root / "Sample.pbip")
+            updated = restored.find_visual(restored.find_page("Demo"), "card1")
+            self.assertEqual(updated.position["x"], 10)
+            self.assertEqual(updated.position["y"], 20)
+
+    def test_page_filtered_apply_still_validates_bookmarks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [{"name": "Demo", "visuals": []}],
+                },
+                sort_keys=False,
+            )
+            self.assertEqual(apply_yaml(project, initial).errors, [])
+
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [{"name": "Demo"}],
+                    "bookmarks": [{"name": "Open", "page": "Demo"}],
+                },
+                sort_keys=False,
+            )
+            include_bookmarks_values: list[bool | None] = []
+
+            def record_validation(*args, **kwargs):
+                include_bookmarks_values.append(kwargs.get("include_bookmarks"))
+                return []
+
+            with mock.patch(
+                "pbi.apply.engine.validate_project",
+                side_effect=record_validation,
+            ):
+                result = apply_yaml(project, spec, page_filter="Demo")
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(include_bookmarks_values, [True, True])
+
     def test_simple_page_and_visual_creation_matches_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -423,14 +511,18 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             )._validate_apply_invariants
             observed: list[list[str]] = []
 
-            def assert_cached_current_state(validation_project: Project, result) -> None:
+            def assert_cached_current_state(
+                validation_project: Project,
+                result,
+                validation_scope,
+            ) -> None:
                 self.assertIsNotNone(validation_project._pages_cache)
                 page = validation_project.find_page("Demo")
                 visuals = validation_project.get_visuals(page)
                 names = [visual.name for visual in visuals]
                 observed.append(names)
                 self.assertEqual(names, ["keep"])
-                original_invariants(validation_project, result)
+                original_invariants(validation_project, result, validation_scope)
 
             with mock.patch(
                 "pbi.apply.engine._validate_apply_invariants",
