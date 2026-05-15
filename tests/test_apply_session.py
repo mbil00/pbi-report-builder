@@ -477,6 +477,44 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
             if path.is_file()
         }
 
+    def _capture_report(self, project: Project) -> dict[str, bytes | None]:
+        """Capture files and empty directories under the report folder."""
+        folder = project.report_folder
+        captured: dict[str, bytes | None] = {}
+        for path in sorted(folder.rglob("*")):
+            rel = str(path.relative_to(folder))
+            if path.is_file():
+                captured[rel] = path.read_bytes()
+            elif path.is_dir() and not any(path.iterdir()):
+                captured[f"{rel}/"] = None
+        return captured
+
+    def test_first_time_theme_temp_file_is_removed_when_replace_fails(self) -> None:
+        # ``apply_theme_data`` writes .Theme.json.tmp before atomically
+        # replacing the final resource file. If replace fails after the temp
+        # file is written, rollback must remove that temp file too.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            registered = project.report_folder / "StaticResources" / "RegisteredResources"
+            registered.mkdir(parents=True)
+            before = self._capture_report(project)
+            session = PbirApplySession(project=project, dry_run=False)
+
+            def body() -> ApplyResult:
+                with mock.patch("pathlib.Path.replace", side_effect=OSError("replace failed")):
+                    session.write_theme(
+                        {"name": "TempProbe", "dataColors": ["#123456"]},
+                        first_time=True,
+                    )
+                return ApplyResult()
+
+            with self.assertRaises(OSError):
+                run_apply(session, body)
+
+            self.assertEqual(self._capture_report(project), before)
+            self.assertFalse((registered / ".TempProbe.json.tmp").exists())
+
     def test_first_time_theme_resource_is_removed_on_rollback(self) -> None:
         # Journal-backed eager rollback captures the report.json change and
         # first-time theme resource file, closing the old definition-snapshot

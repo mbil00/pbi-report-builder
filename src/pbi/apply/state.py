@@ -333,7 +333,9 @@ class PbirApplySession:
         self._capture_created_dir(resources_dir)
         if first_time:
             theme_name = _validate_theme_name(payload.get("name", "Theme"))
-            self._capture_file(resources_dir / _theme_filename(theme_name))
+            theme_filename = _theme_filename(theme_name)
+            self._capture_file(resources_dir / theme_filename)
+            self._capture_file(resources_dir / f".{theme_filename}.tmp")
         else:
             custom = report.get("themeCollection", {}).get("customTheme")
             if isinstance(custom, dict):
