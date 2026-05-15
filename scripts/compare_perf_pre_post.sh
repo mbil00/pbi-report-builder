@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compare performance smoke benchmark on git HEAD (pre-change) vs current working tree.
+# Compare performance smoke benchmark on the base branch vs current working tree.
 #
 # Usage:
 #   scripts/compare_perf_pre_post.sh
@@ -10,9 +10,11 @@ set -euo pipefail
 PAGES="${PBI_PERF_PAGES:-12}"
 VISUALS="${PBI_PERF_VISUALS:-25}"
 REPEAT="${PBI_PERF_REPEAT:-3}"
-BASE_REF="${PBI_PERF_BASE_REF:-HEAD}"
-
 repo_root="$(git rev-parse --show-toplevel)"
+origin_head="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+default_base="${origin_head:-origin/master}"
+BASE_REF="${PBI_PERF_BASE_REF:-$default_base}"
+
 tmp="$(mktemp -d)"
 cleanup() {
   if [[ -d "${tmp}/baseline" ]]; then
@@ -61,7 +63,7 @@ baseline = {row["scenario"]: row for row in json.loads(Path(sys.argv[1]).read_te
 current = {row["scenario"]: row for row in json.loads(Path(sys.argv[2]).read_text())}
 pages, visuals, repeat = sys.argv[3:6]
 
-print(f"Comparison: git HEAD vs current ({pages} page(s) x {visuals} visual(s), repeat={repeat})")
+print(f"Comparison: baseline vs current ({pages} page(s) x {visuals} visual(s), repeat={repeat})")
 print("")
 print(f"{'scenario':<18} {'base':>9} {'current':>9} {'delta':>9} {'scan delta':>13} {'write delta':>12}")
 print("-" * 78)
