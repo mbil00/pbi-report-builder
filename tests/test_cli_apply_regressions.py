@@ -250,6 +250,46 @@ pages:
             self.assertEqual(updated.position["x"], 10)
             self.assertEqual(updated.position["y"], 20)
 
+    def test_apply_type_conversion_with_reused_visual_id_rolls_back_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "textSlicer", x=5, y=7, width=100, height=50)
+            visual.data["name"] = "vis1"
+            visual.save()
+            before = (visual.folder / "visual.json").read_bytes()
+
+            yaml_content = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {
+                                    "name": "vis1",
+                                    "type": "cardVisual",
+                                    "position": "77, 66",
+                                    "notARealProperty": {"bogus": True},
+                                }
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("secrets.token_hex", return_value=visual.folder.name):
+                result = apply_yaml(project, yaml_content, dry_run=False)
+            self.assertTrue(result.errors)
+
+            restored = Project.find(root / "Sample.pbip")
+            page = restored.find_page("Demo")
+            updated = restored.find_visual(page, "vis1")
+            self.assertEqual(updated.visual_type, "textSlicer")
+            self.assertEqual((updated.folder / "visual.json").read_bytes(), before)
+
     def test_apply_type_conversion_rolls_back_on_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

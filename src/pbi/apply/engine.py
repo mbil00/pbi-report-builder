@@ -323,7 +323,7 @@ def _apply_bookmarks_branch(
     ]
     # The reconcile still runs even when ``result.errors`` is non-empty.
     # In the default rollback-on-error mode ``run_apply`` will revert the
-    # meta file as part of the snapshot restore, so the work here is
+    # meta file through the session rollback journal, so the work here is
     # wasted I/O on a doomed state -- but under ``--continue-on-error``
     # the apply commits despite errors, and skipping the reconcile would
     # leave the meta file out of sync with the bookmarks that did write.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from dataclasses import dataclass, field
+from unittest import mock
 from pathlib import Path
 
 from pbi.apply.session import run_apply
@@ -141,9 +142,9 @@ class SaveVisualLeafSeamTests(unittest.TestCase):
         self.assertEqual(session.calls, [])
 
     def test_save_visual_does_not_call_ensure_snapshot_at_leaf(self) -> None:
-        # Migrated leaf paths must not double-take the snapshot. The session
-        # method absorbs the guard internally; the leaf only records
-        # ``save_visual``.
+        # Migrated leaf paths must not manage rollback protection directly.
+        # The session method absorbs journaling internally; the leaf only
+        # records ``save_visual``.
         baseline = {"name": "v1"}
         visual = self._make_visual(data={**baseline, "tooltip": {"show": True}})
         session = FakePbirWriteSession()
@@ -202,9 +203,9 @@ class SavePageLeafSeamTests(unittest.TestCase):
         self.assertEqual(session.calls, [])
 
     def test_save_page_does_not_call_ensure_snapshot_at_leaf(self) -> None:
-        # Migrated leaf paths must not double-take the snapshot. The session
-        # method absorbs the guard internally; the leaf only records
-        # ``save_page``.
+        # Migrated leaf paths must not manage rollback protection directly.
+        # The session method absorbs journaling internally; the leaf only
+        # records ``save_page``.
         baseline = {"displayName": "Page 1"}
         page = self._make_page(data={**baseline, "visibility": "HiddenInViewMode"})
         session = FakePbirWriteSession()
@@ -476,20 +477,48 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
             if path.is_file()
         }
 
-    def test_first_time_theme_orphan_file_survives_rollback(self) -> None:
-        # ``PbirApplySession`` snapshots only ``definition/`` for rollback.
-        # First-time ``write_theme`` routes through ``apply_theme``, which
-        # copies the theme JSON into
-        # ``<report>/StaticResources/RegisteredResources/`` -- outside the
-        # snapshot. A mid-flight failure rolls back ``report.json`` (so the
-        # ``themeCollection.customTheme`` reference disappears) but leaves
-        # the resource file behind as an orphan.
-        #
-        # This test codifies the known gap so it stays visible. If the
-        # snapshot scope is widened to the whole report folder (to close
-        # the gap), invert this test rather than delete it; the
-        # orphan-file behaviour shouldn't silently shift one way or the
-        # other.
+    def _capture_report(self, project: Project) -> dict[str, bytes | None]:
+        """Capture files and empty directories under the report folder."""
+        folder = project.report_folder
+        captured: dict[str, bytes | None] = {}
+        for path in sorted(folder.rglob("*")):
+            rel = str(path.relative_to(folder))
+            if path.is_file():
+                captured[rel] = path.read_bytes()
+            elif path.is_dir() and not any(path.iterdir()):
+                captured[f"{rel}/"] = None
+        return captured
+
+    def test_first_time_theme_temp_file_is_removed_when_replace_fails(self) -> None:
+        # ``apply_theme_data`` writes .Theme.json.tmp before atomically
+        # replacing the final resource file. If replace fails after the temp
+        # file is written, rollback must remove that temp file too.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            registered = project.report_folder / "StaticResources" / "RegisteredResources"
+            registered.mkdir(parents=True)
+            before = self._capture_report(project)
+            session = PbirApplySession(project=project, dry_run=False)
+
+            def body() -> ApplyResult:
+                with mock.patch("pathlib.Path.replace", side_effect=OSError("replace failed")):
+                    session.write_theme(
+                        {"name": "TempProbe", "dataColors": ["#123456"]},
+                        first_time=True,
+                    )
+                return ApplyResult()
+
+            with self.assertRaises(OSError):
+                run_apply(session, body)
+
+            self.assertEqual(self._capture_report(project), before)
+            self.assertFalse((registered / ".TempProbe.json.tmp").exists())
+
+    def test_first_time_theme_resource_is_removed_on_rollback(self) -> None:
+        # Journal-backed eager rollback captures the report.json change and
+        # first-time theme resource file, closing the old definition-snapshot
+        # gap where orphan resource files survived rollback.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
@@ -512,13 +541,9 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
                 project.report_folder / "StaticResources" / "RegisteredResources"
             )
             orphans = list(registered.glob("OrphanProbe*.json")) if registered.exists() else []
-            self.assertEqual(
-                len(orphans), 1,
-                f"expected orphan resource file, got: {orphans}",
-            )
+            self.assertEqual(orphans, [])
 
-            # report.json reference was rolled back -- the orphan is no
-            # longer referenced from the report definition.
+            # report.json reference was rolled back.
             project.clear_caches()
             report = project.get_report_meta()
             custom = report.get("themeCollection", {}).get("customTheme")
@@ -526,6 +551,81 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
                 custom,
                 f"expected report.json to be rolled back, got customTheme={custom}",
             )
+
+    def test_eager_create_page_failure_removes_generated_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            pages_dir = project.definition_folder / "pages"
+            session = PbirApplySession(project=project, dry_run=False)
+            real_write_json = __import__("pbi.page_authoring", fromlist=["_write_json"])._write_json
+
+            def fail_pages_meta(path: Path, data: dict) -> None:
+                if path.name == "pages.json":
+                    raise OSError("pages meta write failed")
+                real_write_json(path, data)
+
+            def body() -> ApplyResult:
+                with mock.patch("pbi.page_authoring._write_json", side_effect=fail_pages_meta):
+                    session.create_page("Generated")
+                return ApplyResult()
+
+            with mock.patch("secrets.token_hex", return_value="page000001"):
+                with self.assertRaises(OSError):
+                    run_apply(session, body)
+
+            self.assertFalse((pages_dir / "page000001").exists())
+
+    def test_eager_create_visual_failure_removes_generated_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            visuals_dir = page.folder / "visuals"
+            session = PbirApplySession(project=project, dry_run=False)
+            real_write_json = __import__("pbi.visual_authoring", fromlist=["_write_json"])._write_json
+
+            def fail_visual_write(path: Path, data: dict) -> None:
+                if path.name == "visual.json":
+                    raise OSError("visual write failed")
+                real_write_json(path, data)
+
+            def body() -> ApplyResult:
+                with mock.patch("pbi.visual_authoring._write_json", side_effect=fail_visual_write):
+                    session.create_visual(page, "cardVisual")
+                return ApplyResult()
+
+            with mock.patch("secrets.token_hex", return_value="visual0001"):
+                with self.assertRaises(OSError):
+                    run_apply(session, body)
+
+            self.assertFalse((visuals_dir / "visual0001").exists())
+
+    def test_eager_visual_update_rollback_uses_journal_without_copytree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(
+                page, "cardVisual", x=10, y=20, width=100, height=50
+            )
+            visual.data["name"] = "v1"
+            visual.save()
+            before = (visual.folder / "visual.json").read_bytes()
+
+            session = PbirApplySession(project=project, dry_run=False)
+
+            def body() -> ApplyResult:
+                visual.data["position"]["x"] = 999
+                session.save_visual(visual)
+                raise RuntimeError("forced mid-apply failure")
+
+            with mock.patch("shutil.copytree", wraps=__import__("shutil").copytree) as copytree_mock:
+                with self.assertRaises(RuntimeError):
+                    run_apply(session, body)
+
+            self.assertEqual(copytree_mock.call_count, 0)
+            self.assertEqual((visual.folder / "visual.json").read_bytes(), before)
 
     def test_pbir_apply_session_restores_definition_on_mid_flight_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -544,7 +644,7 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
             session = PbirApplySession(project=project, dry_run=False)
 
             def body() -> ApplyResult:
-                # First leaf write triggers the lazy snapshot, then the
+                # First leaf write creates the rollback journal, then the
                 # in-flight failure forces rollback.
                 session.create_visual(
                     page, "lineChart", x=200, y=300, width=400, height=250

@@ -9,8 +9,8 @@ Model engines drive the same state machine.
 The ``PbirWriteSession`` protocol below is the PBIR-specific write seam that
 apply leaf code uses instead of touching ``ReportAuthoring`` / ``Visual.save``
 / ``Page.save`` / ``save_theme_data`` / ``write_report_json`` / bookmark I/O
-directly. The concrete adapter (``PbirApplySession``) absorbs the snapshot
-guard so leaf code cannot forget to take it.
+directly. The concrete adapters absorb rollback journaling so leaf code cannot
+forget to protect touched paths.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class PbirWriteSession(Protocol):
     """PBIR Report write seam.
 
     Every filesystem-mutating operation against the PBIR Report substrate goes
-    through a method on this protocol. Adapters absorb the snapshot guard so
+    through a method on this protocol. Adapters absorb rollback journaling so
     apply leaf code cannot bypass rollback by reaching for ``Visual.save`` /
     ``Page.save`` / ``ReportAuthoring`` directly.
     """
@@ -138,7 +138,7 @@ def run_apply_with_post_commit(
 
     Buffered/session-backed apply can use this to avoid materializing staged
     writes twice: commit the staged unit once, then validate the committed
-    project while the session rollback snapshot is still alive.
+    project while the session rollback journal is still alive.
     """
     session.begin()
     try:

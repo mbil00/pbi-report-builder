@@ -19,6 +19,7 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
+from pbi.apply.rollback import RollbackJournal
 from pbi.project import Page, Project, Visual, _read_json, _write_json
 from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, VISUAL_CONTAINER_SCHEMA
 
@@ -32,11 +33,10 @@ class UnsupportedBufferedOperation(NotImplementedError):
 
 @dataclass
 class BufferedPbirApplySession:
-    """Buffered PBIR apply session under active development.
+    """Buffered PBIR apply session with touched-path rollback journaling.
 
-    Lifecycle hooks are functional, but write methods deliberately raise until
-    their vertical slice is implemented. This lets no-write/no-op parity tests
-    establish the harness without accidentally falling back to eager writes.
+    Writes are staged in memory and flushed at commit. Rollback records only
+    paths the flush may touch, avoiding broad report-folder snapshots.
     """
 
     project: Project
@@ -47,9 +47,9 @@ class BufferedPbirApplySession:
     deleted_dirs: set[Path] = field(default_factory=set)
     unsupported_errors: list[str] = field(default_factory=list)
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
-    commit_snapshot_temp: tempfile.TemporaryDirectory[str] | None = None
-    commit_snapshot_dir: Path | None = None
+    rollback_journal: RollbackJournal | None = None
     committed: bool = False
+    clear_caches_on_cleanup: bool = False
 
     # ApplySession lifecycle -------------------------------------------------
 
@@ -60,36 +60,40 @@ class BufferedPbirApplySession:
         """Flush staged operations to disk.
 
         Commit is the only normal filesystem mutation point for the buffered
-        path. A definition snapshot is retained around the flush so a write
-        failure during this early implementation does not leave a partially
-        materialized report definition behind.
+        path. A touched-path rollback journal is retained around the flush so
+        a write or validation failure can restore the pre-commit state without
+        copying the whole report folder.
         """
         if self.dry_run or self._has_no_staged_changes():
             return
 
-        snapshot_temp = tempfile.TemporaryDirectory()
-        snapshot_dir = Path(snapshot_temp.name) / self.project.report_folder.name
-        try:
-            shutil.copytree(self.project.report_folder, snapshot_dir)
-        except Exception:
-            snapshot_temp.cleanup()
-            raise
-
-        self.commit_snapshot_temp = snapshot_temp
-        self.commit_snapshot_dir = snapshot_dir
+        self.rollback_journal = RollbackJournal.capture_buffered_changes(
+            root=self.project.root,
+            dirty_json=self.dirty_json,
+            created_dirs=self.created_dirs,
+            deleted_dirs=self.deleted_dirs,
+        )
         self._flush_to_project_root(self.project.root)
 
         self.committed = True
-        self.project.clear_caches()
+        # Keep apply-populated page/visual caches alive through post-commit
+        # validation. The invariant pass runs immediately after commit and can
+        # safely inspect the in-memory state that buffered apply has maintained
+        # while staging creates/deletes/updates. Clearing here forced a full
+        # page/visual reload before the subsequent broad validate_project disk
+        # scan; defer the cache drop to cleanup/rollback instead.
+        self.clear_caches_on_cleanup = True
 
     def rollback(self) -> None:
         """Discard staged operations and restore committed changes if needed."""
-        if self.commit_snapshot_dir is not None:
-            self._restore_report_snapshot_safely(self.commit_snapshot_dir)
+        if self.rollback_journal is not None:
+            self.rollback_journal.restore()
         self.dirty_json.clear()
         self.created_dirs.clear()
         self.deleted_dirs.clear()
         self.committed = False
+        self.rollback_journal = None
+        self.clear_caches_on_cleanup = False
         self.project.clear_caches()
 
     def cleanup(self) -> None:
@@ -97,10 +101,10 @@ class BufferedPbirApplySession:
         if self.temp_dir is not None:
             self.temp_dir.cleanup()
             self.temp_dir = None
-        if self.commit_snapshot_temp is not None:
-            self.commit_snapshot_temp.cleanup()
-            self.commit_snapshot_temp = None
-            self.commit_snapshot_dir = None
+        self.rollback_journal = None
+        if self.clear_caches_on_cleanup:
+            self.project.clear_caches()
+            self.clear_caches_on_cleanup = False
 
     def project_for_validation(self) -> Project:
         """Return a materialized project containing staged buffered writes.
@@ -548,27 +552,6 @@ class BufferedPbirApplySession:
                 f"Matches: {names}"
             )
         return next(iter(unique_names), None)
-
-    def _restore_report_snapshot_safely(self, snapshot_dir: Path) -> None:
-        """Restore the report folder without deleting the only on-disk copy first."""
-        report = self.project.report_folder
-        restore_dir = report.with_name(f".{report.name}.restore")
-        failed_dir = report.with_name(f".{report.name}.failed")
-        if restore_dir.exists():
-            shutil.rmtree(restore_dir)
-        if failed_dir.exists():
-            shutil.rmtree(failed_dir)
-        shutil.copytree(snapshot_dir, restore_dir)
-        if report.exists():
-            report.rename(failed_dir)
-        try:
-            restore_dir.rename(report)
-        except Exception:
-            if failed_dir.exists() and not report.exists():
-                failed_dir.rename(report)
-            raise
-        if failed_dir.exists():
-            shutil.rmtree(failed_dir)
 
     def _unsupported(self, operation: str, *, fatal: bool = True) -> None:
         message = (
