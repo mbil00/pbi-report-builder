@@ -27,6 +27,12 @@ class _DeletedTreeBeforeImage:
 
 
 @dataclass
+class _DirectoryChildrenBeforeImage:
+    existed: bool
+    children: set[Path] = field(default_factory=set)
+
+
+@dataclass
 class RollbackJournal:
     """Before-image journal for restoring touched filesystem paths."""
 
@@ -34,6 +40,7 @@ class RollbackJournal:
     files: dict[Path, _FileBeforeImage] = field(default_factory=dict)
     created_dirs: dict[Path, bool] = field(default_factory=dict)
     deleted_trees: dict[Path, _DeletedTreeBeforeImage] = field(default_factory=dict)
+    directory_children: dict[Path, _DirectoryChildrenBeforeImage] = field(default_factory=dict)
 
     @classmethod
     def capture_buffered_changes(
@@ -92,6 +99,25 @@ class RollbackJournal:
         path = self._normalize(path)
         self.created_dirs[path] = False
 
+    def capture_directory_children(self, path: Path) -> None:
+        """Record direct children of a directory before an operation.
+
+        This protects eager authoring helpers that choose their own generated
+        folder name internally: if the helper creates a child directory and
+        then raises before returning it, rollback can still remove the unknown
+        child and match whole-tree restore semantics.
+        """
+        path = self._normalize(path)
+        if path in self.directory_children:
+            return
+        if not path.exists():
+            self.directory_children[path] = _DirectoryChildrenBeforeImage(False)
+            return
+        self.directory_children[path] = _DirectoryChildrenBeforeImage(
+            True,
+            children=set(path.iterdir()),
+        )
+
     def capture_deleted_tree(self, path: Path) -> None:
         """Record a directory subtree before it may be deleted."""
         path = self._normalize(path)
@@ -116,6 +142,7 @@ class RollbackJournal:
 
     def restore(self) -> None:
         """Restore captured paths to their pre-change state."""
+        self._remove_new_directory_children()
         self._restore_deleted_trees()
         self._restore_existing_files()
         self._remove_new_files()
@@ -152,6 +179,24 @@ class RollbackJournal:
                 continue
             if path.exists():
                 path.unlink()
+
+    def _remove_new_directory_children(self) -> None:
+        for path, image in sorted(
+            self.directory_children.items(), key=lambda item: len(item[0].parts), reverse=True
+        ):
+            if not image.existed:
+                if path.exists():
+                    shutil.rmtree(path)
+                continue
+            if not path.exists():
+                continue
+            for child in list(path.iterdir()):
+                if child in image.children:
+                    continue
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
 
     def _remove_new_dirs(self) -> None:
         for path, existed in sorted(

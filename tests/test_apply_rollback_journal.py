@@ -84,6 +84,24 @@ class RollbackJournalTests(unittest.TestCase):
             self.assertEqual((folder / "visual.json").read_bytes(), b"visual")
             self.assertEqual(nested.read_bytes(), b"resource")
 
+    def test_directory_children_capture_removes_unknown_new_child(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            parent = root / "definition" / "pages"
+            existing = parent / "existing"
+            existing.mkdir(parents=True)
+            (existing / "page.json").write_bytes(b"existing")
+            journal = RollbackJournal(root=root)
+
+            journal.capture_directory_children(parent)
+            new_child = parent / "generated"
+            new_child.mkdir()
+            (new_child / "page.json").write_bytes(b"new")
+            journal.restore()
+
+            self.assertTrue(existing.exists())
+            self.assertFalse(new_child.exists())
+
     def test_capture_buffered_changes_dedupes_dirty_file_under_deleted_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

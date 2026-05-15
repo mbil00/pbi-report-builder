@@ -133,7 +133,10 @@ class PbirApplySession:
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
         self.ensure_rollback_journal()
-        self._capture_file(self.project.definition_folder / "pages" / "pages.json")
+        pages_dir = self.project.definition_folder / "pages"
+        self._capture_created_dir(pages_dir)
+        self._capture_directory_children(pages_dir)
+        self._capture_file(pages_dir / "pages.json")
         page = ReportAuthoring(self.project).create_page(
             display_name,
             width=width,
@@ -158,6 +161,9 @@ class PbirApplySession:
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
         self.ensure_rollback_journal()
+        visuals_dir = page.folder / "visuals"
+        self._capture_created_dir(visuals_dir)
+        self._capture_directory_children(visuals_dir)
         visual = ReportAuthoring(self.project).create_visual(
             page,
             visual_type,
@@ -185,6 +191,9 @@ class PbirApplySession:
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
         self.ensure_rollback_journal()
+        visuals_dir = page.folder / "visuals"
+        self._capture_created_dir(visuals_dir)
+        self._capture_directory_children(visuals_dir)
         visual = ReportAuthoring(self.project).create_group_container(
             page,
             name=name,
@@ -275,6 +284,10 @@ class PbirApplySession:
     def _capture_created_dir(self, path: Path) -> None:
         if self.rollback_journal is not None:
             self.rollback_journal.capture_created_dir(path)
+
+    def _capture_directory_children(self, path: Path) -> None:
+        if self.rollback_journal is not None:
+            self.rollback_journal.capture_directory_children(path)
 
     def _record_created_dir(self, path: Path) -> None:
         if self.rollback_journal is not None:

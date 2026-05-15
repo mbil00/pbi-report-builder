@@ -514,6 +514,55 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
                 f"expected report.json to be rolled back, got customTheme={custom}",
             )
 
+    def test_eager_create_page_failure_removes_generated_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            pages_dir = project.definition_folder / "pages"
+            session = PbirApplySession(project=project, dry_run=False)
+            real_write_json = __import__("pbi.page_authoring", fromlist=["_write_json"])._write_json
+
+            def fail_pages_meta(path: Path, data: dict) -> None:
+                if path.name == "pages.json":
+                    raise OSError("pages meta write failed")
+                real_write_json(path, data)
+
+            def body() -> ApplyResult:
+                with mock.patch("pbi.page_authoring._write_json", side_effect=fail_pages_meta):
+                    session.create_page("Generated")
+                return ApplyResult()
+
+            with mock.patch("secrets.token_hex", return_value="page000001"):
+                with self.assertRaises(OSError):
+                    run_apply(session, body)
+
+            self.assertFalse((pages_dir / "page000001").exists())
+
+    def test_eager_create_visual_failure_removes_generated_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            visuals_dir = page.folder / "visuals"
+            session = PbirApplySession(project=project, dry_run=False)
+            real_write_json = __import__("pbi.visual_authoring", fromlist=["_write_json"])._write_json
+
+            def fail_visual_write(path: Path, data: dict) -> None:
+                if path.name == "visual.json":
+                    raise OSError("visual write failed")
+                real_write_json(path, data)
+
+            def body() -> ApplyResult:
+                with mock.patch("pbi.visual_authoring._write_json", side_effect=fail_visual_write):
+                    session.create_visual(page, "cardVisual")
+                return ApplyResult()
+
+            with mock.patch("secrets.token_hex", return_value="visual0001"):
+                with self.assertRaises(OSError):
+                    run_apply(session, body)
+
+            self.assertFalse((visuals_dir / "visual0001").exists())
+
     def test_eager_visual_update_rollback_uses_journal_without_copytree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
