@@ -199,10 +199,13 @@ class RollbackJournal:
                     child.unlink()
 
     def _remove_new_dirs(self) -> None:
+        deleted_prefixes = tuple(_path_prefix(path) for path in self.deleted_trees)
         for path, existed in sorted(
             self.created_dirs.items(), key=lambda item: len(item[0].parts), reverse=True
         ):
             if existed or not path.exists():
+                continue
+            if path in self.deleted_trees or _is_under_any_prefix(path, deleted_prefixes):
                 continue
             shutil.rmtree(path)
 

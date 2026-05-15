@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -83,6 +84,24 @@ class RollbackJournalTests(unittest.TestCase):
 
             self.assertEqual((folder / "visual.json").read_bytes(), b"visual")
             self.assertEqual(nested.read_bytes(), b"resource")
+
+    def test_created_dir_same_as_deleted_tree_keeps_restored_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "definition" / "pages" / "p1" / "visuals" / "v1"
+            visual_json = folder / "visual.json"
+            folder.mkdir(parents=True)
+            visual_json.write_bytes(b"original")
+            journal = RollbackJournal(root=root)
+
+            journal.capture_deleted_tree(folder)
+            journal.record_created_dir(folder)
+            shutil.rmtree(folder)
+            folder.mkdir(parents=True)
+            visual_json.write_bytes(b"replacement")
+            journal.restore()
+
+            self.assertEqual(visual_json.read_bytes(), b"original")
 
     def test_directory_children_capture_removes_unknown_new_child(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
