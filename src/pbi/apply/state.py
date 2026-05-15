@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pbi.apply.rollback import RollbackJournal
 from pbi.apply.session import PbirWriteSession
 from pbi.lookup import find_visual_by_identifier
 from pbi.project import Page, Project, Visual
@@ -48,36 +47,33 @@ class PbirApplySession:
 
     Implements both ``ApplySession`` (lifecycle) and ``PbirWriteSession``
     (write seam). Writes are eager (``Page.save`` / ``Visual.save`` write
-    straight to disk) so commit is a no-op; rollback restores from a lazily
-    created filesystem snapshot of the definition folder.
+    straight to disk) so commit is a no-op; rollback restores touched paths
+    from a lazily-created rollback journal.
 
     Per-entity persistence (``save_visual``, ``save_page``) and structural
     creation/deletion (``create_page``, ``create_visual``,
     ``create_group_container``, ``delete_visual``) are implemented here and
-    each absorbs the snapshot guard. Apply leaf code reaches the PBIR
+    each absorbs rollback journaling. Apply leaf code reaches the PBIR
     substrate exclusively through these methods; nothing under
     ``src/pbi/apply/`` imports ``ReportAuthoring`` anymore.
 
     Doc-level writes (``write_theme``, ``write_report``, ``write_bookmark``,
-    ``reconcile_bookmark_groups``) are also implemented and each absorbs the
-    snapshot guard. The bookmarks meta file is written exactly once per
+    ``reconcile_bookmark_groups``) are also implemented and each absorbs
+    rollback journaling. The bookmarks meta file is written exactly once per
     apply, by ``reconcile_bookmark_groups``; per-bookmark ``write_bookmark``
     calls touch only the individual bookmark JSON file.
     """
 
     project: Project
     dry_run: bool
-    temp_dir: tempfile.TemporaryDirectory[str] | None = None
-    snapshot_dir: Path | None = None
+    rollback_journal: RollbackJournal | None = None
     model: Any = _MISSING_MODEL
 
-    def ensure_snapshot(self, project: Project | None = None) -> None:
-        """Create the definition snapshot lazily on the first write-intent path."""
-        if self.dry_run or self.snapshot_dir is not None:
+    def ensure_rollback_journal(self) -> None:
+        """Create the rollback journal lazily on the first write-intent path."""
+        if self.dry_run or self.rollback_journal is not None:
             return
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.snapshot_dir = Path(self.temp_dir.name) / "definition"
-        shutil.copytree(self.project.definition_folder, self.snapshot_dir)
+        self.rollback_journal = RollbackJournal(root=self.project.root)
 
     def get_model(self, project: Project | None = None) -> Any | None:
         """Load the semantic model once per apply run."""
@@ -93,23 +89,19 @@ class PbirApplySession:
     # ApplySession lifecycle -------------------------------------------------
 
     def begin(self) -> None:
-        """No-op: snapshot stays lazy until the first write-intent path."""
+        """No-op: rollback journal stays lazy until the first write-intent path."""
 
     def commit(self) -> None:
         """No-op: page/visual saves are eager, nothing to flush."""
 
     def rollback(self) -> None:
-        """Restore the report definition from the snapshot, if one was taken."""
-        if self.snapshot_dir is None:
-            return
-        restore_definition_snapshot(self.project, self.snapshot_dir)
+        """Restore touched paths from the rollback journal, if one was taken."""
+        if self.rollback_journal is not None:
+            self.rollback_journal.restore()
         self.project.clear_caches()
 
     def cleanup(self) -> None:
-        if self.temp_dir is not None:
-            self.temp_dir.cleanup()
-            self.temp_dir = None
-            self.snapshot_dir = None
+        self.rollback_journal = None
 
     def project_for_validation(self) -> Project:
         """Return the project state validation should inspect."""
@@ -118,13 +110,15 @@ class PbirApplySession:
     # PbirWriteSession -------------------------------------------------------
 
     def save_visual(self, visual: Visual) -> None:
-        """Persist a Visual, taking the snapshot lazily if one is needed."""
-        self.ensure_snapshot()
+        """Persist a Visual, journaling the previous file state if needed."""
+        self.ensure_rollback_journal()
+        self._capture_file(visual.folder / "visual.json")
         visual.save()
 
     def save_page(self, page: Page) -> None:
-        """Persist a Page, taking the snapshot lazily if one is needed."""
-        self.ensure_snapshot()
+        """Persist a Page, journaling the previous file state if needed."""
+        self.ensure_rollback_journal()
+        self._capture_file(page.folder / "page.json")
         page.save()
 
     def create_page(
@@ -135,16 +129,19 @@ class PbirApplySession:
         height: int = 720,
         display_option: str = "FitToPage",
     ) -> Page:
-        """Create a Page on the project, taking the snapshot lazily."""
+        """Create a Page on the project, journaling rollback state."""
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
-        self.ensure_snapshot()
-        return ReportAuthoring(self.project).create_page(
+        self.ensure_rollback_journal()
+        self._capture_file(self.project.definition_folder / "pages" / "pages.json")
+        page = ReportAuthoring(self.project).create_page(
             display_name,
             width=width,
             height=height,
             display_option=display_option,
         )
+        self._record_created_dir(page.folder)
+        return page
 
     def create_visual(
         self,
@@ -157,11 +154,11 @@ class PbirApplySession:
         height: int = 200,
         behind: bool = False,
     ) -> Visual:
-        """Create a Visual on a Page, taking the snapshot lazily."""
+        """Create a Visual on a Page, journaling rollback state."""
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
-        self.ensure_snapshot()
-        return ReportAuthoring(self.project).create_visual(
+        self.ensure_rollback_journal()
+        visual = ReportAuthoring(self.project).create_visual(
             page,
             visual_type,
             x=x,
@@ -170,6 +167,8 @@ class PbirApplySession:
             height=height,
             behind=behind,
         )
+        self._record_created_dir(visual.folder)
+        return visual
 
     def create_group_container(
         self,
@@ -182,11 +181,11 @@ class PbirApplySession:
         width: int = 0,
         height: int = 0,
     ) -> Visual:
-        """Create an empty group container Visual, taking the snapshot lazily."""
+        """Create an empty group container Visual, journaling rollback state."""
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
-        self.ensure_snapshot()
-        return ReportAuthoring(self.project).create_group_container(
+        self.ensure_rollback_journal()
+        visual = ReportAuthoring(self.project).create_group_container(
             page,
             name=name,
             display_name=display_name,
@@ -195,52 +194,52 @@ class PbirApplySession:
             width=width,
             height=height,
         )
+        self._record_created_dir(visual.folder)
+        return visual
 
     def delete_visual(self, visual: Visual) -> None:
-        """Delete a Visual, taking the snapshot lazily."""
+        """Delete a Visual, journaling rollback state."""
         from pbi.report_authoring import ReportAuthoring  # composed by adapter
 
-        self.ensure_snapshot()
+        self.ensure_rollback_journal()
+        self._capture_visual_delete_side_effects(visual)
+        self._capture_deleted_tree(visual.folder)
         ReportAuthoring(self.project).delete_visual(visual)
 
     def write_theme(self, payload: dict[str, Any], *, first_time: bool) -> None:
-        """Persist a planned theme payload, taking the snapshot lazily.
+        """Persist a planned theme payload, journaling rollback state.
 
         ``first_time`` selects the write path: when no custom theme exists yet
         we route through ``apply_theme`` (copies into RegisteredResources and
         wires up ``themeCollection``); when one exists we ``save_theme_data``
         in place.
 
-        Rollback gap (known, pre-existing): the snapshot only covers
-        ``definition/``, so a first-time apply that copies the theme JSON
-        into ``<report>/StaticResources/RegisteredResources/`` and then fails
-        mid-flight will roll back ``report.json`` but leave the orphan
-        resource file behind. Codified by
-        ``test_first_time_theme_orphan_file_survives_rollback`` in
-        ``tests/test_apply_session.py``. Widening the snapshot scope to
-        the whole report folder would close the gap at the cost of larger
-        copies on every apply and restore-over-user-files risk in
-        ``StaticResources/``; deferred until that trade-off is justified.
+        Theme writes journal both ``report.json`` and registered resource
+        files so rollback can restore the whole report tree without copying
+        it up front.
         """
         from pbi.themes import apply_theme_data, save_theme_data  # composed by adapter
 
-        self.ensure_snapshot()
+        self.ensure_rollback_journal()
+        self._capture_file(self.project.definition_folder / "report.json")
+        self._capture_theme_side_effects(payload, first_time=first_time)
         if first_time:
             apply_theme_data(self.project, payload)
         else:
             save_theme_data(self.project, payload)
 
     def write_report(self, payload: dict[str, Any]) -> None:
-        """Persist a planned ``report.json`` payload, taking the snapshot lazily."""
+        """Persist a planned ``report.json`` payload, journaling previous state."""
         from pbi.report_io import write_report_json  # composed by adapter
 
-        self.ensure_snapshot()
+        self.ensure_rollback_journal()
+        self._capture_file(self.project.definition_folder / "report.json")
         write_report_json(self.project, payload)
 
     def write_bookmark(
         self, payload: dict[str, Any], *, file_path: Path
     ) -> None:
-        """Persist a single bookmark JSON to disk, taking the snapshot lazily.
+        """Persist a single bookmark JSON to disk, journaling previous state.
 
         Writes only the bookmark file -- the bookmarks meta file is the
         responsibility of ``reconcile_bookmark_groups`` exclusively, so the
@@ -248,7 +247,9 @@ class PbirApplySession:
         """
         from pbi.project import _write_json  # composed by adapter
 
-        self.ensure_snapshot()
+        self.ensure_rollback_journal()
+        self._capture_created_dir(file_path.parent)
+        self._capture_file(file_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         _write_json(file_path, payload)
 
@@ -257,11 +258,74 @@ class PbirApplySession:
     ) -> None:
         """Write the bookmarks meta file with the full group hierarchy."""
         from pbi.bookmarks import (  # composed by adapter
+            _meta_path,
             reconcile_bookmark_groups as _reconcile,
         )
 
-        self.ensure_snapshot()
+        self.ensure_rollback_journal()
+        meta_path = _meta_path(self.project)
+        self._capture_created_dir(meta_path.parent)
+        self._capture_file(meta_path)
         _reconcile(self.project, groups)
+
+    def _capture_file(self, path: Path) -> None:
+        if self.rollback_journal is not None:
+            self.rollback_journal.capture_file(path)
+
+    def _capture_created_dir(self, path: Path) -> None:
+        if self.rollback_journal is not None:
+            self.rollback_journal.capture_created_dir(path)
+
+    def _record_created_dir(self, path: Path) -> None:
+        if self.rollback_journal is not None:
+            self.rollback_journal.record_created_dir(path)
+
+    def _capture_deleted_tree(self, path: Path) -> None:
+        if self.rollback_journal is not None:
+            self.rollback_journal.capture_deleted_tree(path)
+
+    def _capture_visual_delete_side_effects(self, visual: Visual) -> None:
+        if "visualGroup" not in visual.data:
+            return
+        page_path = visual.folder.parent.parent
+        page = next(
+            (
+                candidate
+                for candidate in self.project.get_pages()
+                if candidate.folder == page_path
+            ),
+            None,
+        )
+        if page is None:
+            return
+        for candidate in self.project.get_visuals(page):
+            if candidate.data.get("parentGroupName") == visual.name:
+                self._capture_file(candidate.folder / "visual.json")
+
+    def _capture_theme_side_effects(
+        self,
+        payload: dict[str, Any],
+        *,
+        first_time: bool,
+    ) -> None:
+        from pbi.themes import (
+            _custom_theme_paths,
+            _registered_resources_dir,
+            _theme_filename,
+            _validate_theme_name,
+        )
+
+        report = self.project.get_report_meta()
+        resources_dir = _registered_resources_dir(self.project)
+        self._capture_created_dir(resources_dir)
+        if first_time:
+            theme_name = _validate_theme_name(payload.get("name", "Theme"))
+            self._capture_file(resources_dir / _theme_filename(theme_name))
+        else:
+            custom = report.get("themeCollection", {}).get("customTheme")
+            if isinstance(custom, dict):
+                for path in _custom_theme_paths(self.project, report, custom.get("name", "")):
+                    self._capture_file(path)
 
 
 def save_page_if_changed(
@@ -276,7 +340,7 @@ def save_page_if_changed(
     Typed against ``PbirWriteSession`` rather than ``PbirApplySession`` so a
     test fake satisfying the protocol can substitute without touching disk.
     """
-    del project  # unused: ``session.save_page`` absorbs the snapshot guard
+    del project  # unused: ``session.save_page`` absorbs rollback journaling
     if page.data == original_data:
         return False
     session.save_page(page)
@@ -295,7 +359,7 @@ def save_visual_if_changed(
     Typed against ``PbirWriteSession`` rather than ``PbirApplySession`` so a
     test fake satisfying the protocol can substitute without touching disk.
     """
-    del project  # unused: ``session.save_visual`` absorbs the snapshot guard
+    del project  # unused: ``session.save_visual`` absorbs rollback journaling
     if visual.data == original_data:
         return False
     session.save_visual(visual)
@@ -356,10 +420,3 @@ class PageVisualState:
             by_folder=self._by_folder,
             by_name=self._by_name,
         )
-
-
-def restore_definition_snapshot(project: Project, snapshot_dir: Path) -> None:
-    """Restore the report definition directory from a pre-apply snapshot."""
-    if project.definition_folder.exists():
-        shutil.rmtree(project.definition_folder)
-    shutil.copytree(snapshot_dir, project.definition_folder)

@@ -19,6 +19,62 @@ from tests.apply_parity_support import (
 from tests.cli_regressions_support import make_project
 
 
+def _capture_tree(root: Path) -> dict[str, bytes | None]:
+    """Capture files and empty directories below root for byte equality checks."""
+    captured: dict[str, bytes | None] = {}
+    if not root.exists():
+        return captured
+    for path in sorted(root.rglob("*")):
+        rel = str(path.relative_to(root))
+        if path.is_file():
+            captured[rel] = path.read_bytes()
+        elif path.is_dir() and not any(path.iterdir()):
+            captured[f"{rel}/"] = None
+    return captured
+
+
+def _complex_rollback_initial_spec() -> str:
+    return yaml.safe_dump(
+        {
+            "version": 1,
+            "pages": [
+                {
+                    "name": "Demo",
+                    "visuals": [
+                        {"name": "keep", "type": "cardVisual", "position": "0, 0"},
+                        {"name": "remove", "type": "cardVisual", "position": "50, 0"},
+                    ],
+                }
+            ],
+        },
+        sort_keys=False,
+    )
+
+
+def _complex_rollback_spec() -> str:
+    return yaml.safe_dump(
+        {
+            "version": 1,
+            "theme": {"name": "Rollback Theme", "dataColors": ["#118DFF"]},
+            "report": {"layoutOptimization": "MobilePortrait"},
+            "pages": [
+                {
+                    "name": "Demo",
+                    "visuals": [
+                        {"name": "keep", "position": "100, 100", "size": "200 x 100"},
+                        {"name": "new", "type": "cardVisual", "position": "200, 0"},
+                    ],
+                }
+            ],
+            "bookmarks": [
+                {"name": "Open", "page": "Demo", "group": "Flow"},
+                {"name": "Closed", "page": "Demo", "group": "Flow", "hide": ["keep"]},
+            ],
+        },
+        sort_keys=False,
+    )
+
+
 class BufferedApplyParityHarnessTests(unittest.TestCase):
     """Parity harness for the experimental buffered apply path."""
 
@@ -113,7 +169,7 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")
 
-    def test_buffered_snapshot_failure_does_not_restore_partial_snapshot(self) -> None:
+    def test_buffered_commit_uses_journal_instead_of_report_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root)
@@ -129,28 +185,14 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
                 },
                 sort_keys=False,
             )
-            original_report = (project.definition_folder / "report.json").read_text(
-                encoding="utf-8"
-            )
-
-            def fail_after_partial_snapshot(src: Path, dst: Path, *args, **kwargs):
-                dst.mkdir(parents=True)
-                (dst / "PARTIAL").write_text("not a valid report snapshot\n", encoding="utf-8")
-                raise OSError("snapshot failed")
 
             with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001"]), \
-                 mock.patch("pbi.apply.buffered.shutil.copytree", side_effect=fail_after_partial_snapshot):
+                 mock.patch("pbi.apply.buffered.shutil.copytree", wraps=__import__("shutil").copytree) as copytree_mock:
                 result = apply_yaml_buffered(project, spec)
 
-            self.assertTrue(result.rolled_back)
-            self.assertEqual(result.errors, ["Commit failed: snapshot failed"])
-            self.assertEqual(
-                (project.definition_folder / "report.json").read_text(encoding="utf-8"),
-                original_report,
-            )
-            restored = Project.find(root / "Sample.pbip")
-            with self.assertRaises(ValueError):
-                restored.find_page("Demo")
+            self.assertEqual(result.errors, [])
+            self.assertEqual(copytree_mock.call_count, 0)
+            self.assertIsNotNone(project.find_page("Demo"))
 
     def test_buffered_post_commit_validation_failure_rolls_back(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,6 +228,166 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
             restored = Project.find(root / "Sample.pbip")
             with self.assertRaises(ValueError):
                 restored.find_page("Demo")
+
+    def test_eager_complex_validation_failure_restores_whole_report_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001", "visual0002"]):
+                initial_result = apply_yaml(project, _complex_rollback_initial_spec())
+            self.assertEqual(initial_result.errors, [])
+            project.clear_caches()
+            before = _capture_tree(project.report_folder)
+            issue = ValidationIssue(
+                "definition/report.json", "error", "forced validation failure"
+            )
+            tokens = ["visual0003", "bookmark01", "bookmark02", "group00001"]
+
+            with mock.patch("secrets.token_hex", side_effect=tokens), \
+                 mock.patch("pbi.apply.engine.validate_project", side_effect=[[], [issue]]):
+                result = apply_yaml(project, _complex_rollback_spec(), overwrite=True)
+
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(_capture_tree(project.report_folder), before)
+
+    def test_buffered_complex_validation_failure_restores_whole_report_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001", "visual0002"]):
+                initial_result = apply_yaml(project, _complex_rollback_initial_spec())
+            self.assertEqual(initial_result.errors, [])
+            project.clear_caches()
+            before = _capture_tree(project.report_folder)
+            issue = ValidationIssue(
+                "definition/report.json", "error", "forced validation failure"
+            )
+            tokens = ["visual0003", "bookmark01", "bookmark02", "group00001"]
+
+            with mock.patch("secrets.token_hex", side_effect=tokens), \
+                 mock.patch("pbi.apply.engine.validate_project", side_effect=[[], [issue]]):
+                result = apply_yaml_buffered(project, _complex_rollback_spec(), overwrite=True)
+
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(_capture_tree(project.report_folder), before)
+
+    def test_buffered_validation_failure_rolls_back_overwrite_with_deleted_visual(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {"name": "keep", "type": "cardVisual", "position": "0, 0"},
+                                {"name": "remove", "type": "cardVisual", "position": "50, 0"},
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "keep", "position": "100, 100"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001", "visual0002"]):
+                apply_yaml(project, initial)
+            page = project.find_page("Demo")
+            before = {
+                visual.name: (visual.folder / "visual.json").read_bytes()
+                for visual in project.get_visuals(page)
+            }
+            issue = ValidationIssue(
+                "definition/report.json", "error", "forced validation failure"
+            )
+
+            with mock.patch("pbi.apply.engine.validate_project", side_effect=[[], [issue]]):
+                result = apply_yaml_buffered(project, spec, overwrite=True)
+
+            self.assertTrue(result.rolled_back)
+            restored = Project.find(root / "Sample.pbip")
+            restored_page = restored.find_page("Demo")
+            restored_visuals = restored.get_visuals(restored_page)
+            self.assertEqual([visual.name for visual in restored_visuals], ["keep", "remove"])
+            self.assertEqual(
+                {
+                    visual.name: (visual.folder / "visual.json").read_bytes()
+                    for visual in restored_visuals
+                },
+                before,
+            )
+
+    def test_buffered_post_commit_invariants_use_current_cached_state_until_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            initial = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [
+                                {"name": "keep", "type": "cardVisual"},
+                                {"name": "remove", "type": "cardVisual", "position": "50, 0"},
+                            ],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "keep", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+            with mock.patch("secrets.token_hex", side_effect=["page000001", "visual0001", "visual0002"]):
+                apply_yaml(project, initial)
+            project.clear_caches()
+
+            original_invariants = __import__(
+                "pbi.apply.engine", fromlist=["_validate_apply_invariants"]
+            )._validate_apply_invariants
+            observed: list[list[str]] = []
+
+            def assert_cached_current_state(validation_project: Project, result) -> None:
+                self.assertIsNotNone(validation_project._pages_cache)
+                page = validation_project.find_page("Demo")
+                visuals = validation_project.get_visuals(page)
+                names = [visual.name for visual in visuals]
+                observed.append(names)
+                self.assertEqual(names, ["keep"])
+                original_invariants(validation_project, result)
+
+            with mock.patch(
+                "pbi.apply.engine._validate_apply_invariants",
+                side_effect=assert_cached_current_state,
+            ):
+                result = apply_yaml_buffered(project, spec, overwrite=True)
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(observed, [["keep"]])
+            self.assertIsNone(project._pages_cache)
+            self.assertEqual(project._visuals_cache, {})
 
     def test_visual_type_conversion_matches_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
