@@ -6,7 +6,8 @@ then measures the hot paths agents use before/after edits:
 
   * YAML export (`pbi.export.export_yaml`)
   * Project map generation (`pbi.mapper.generate_map`)
-  * Batch visual mutation (`pbi visual set-all ... --all-pages`)
+  * Batch visual mutation write path (`pbi visual set-all ... --all-pages`)
+  * Batch visual mutation no-op path (same command after values are already set)
 
 It reports elapsed time plus coarse instrumentation counters for project scans
 and JSON I/O. Timings are intentionally lightweight smoke numbers: compare them
@@ -122,26 +123,40 @@ def run_benchmarks(
     visuals_per_page: int,
     repeat: int,
 ) -> list[Scenario]:
-    project_root = workdir / "project"
-    project = synthesize_fixture_project(
-        fixture,
-        project_root,
-        page_count=pages,
-        visuals_per_page=visuals_per_page,
-    )
-    pbip_path = project.pbip_file
-
-    scenarios: list[tuple[str, Callable[[], int]]] = [
-        ("export-all", lambda: len(export_yaml(Project.find(pbip_path)))),
-        ("map-all", lambda: len(generate_map(Project.find(pbip_path)))),
-        ("visual-set-all", lambda: _run_visual_set_all(pbip_path)),
+    scenarios: list[tuple[str, Callable[[Path], None], Callable[[Path], int]]] = [
+        ("export-all", _no_prepare, lambda pbip_path: len(export_yaml(Project.find(pbip_path)))),
+        ("map-all", _no_prepare, lambda pbip_path: len(generate_map(Project.find(pbip_path)))),
+        ("visual-set-all-write", _no_prepare, _run_visual_set_all),
+        ("visual-set-all-noop", _prime_visual_set_all, _run_visual_set_all),
     ]
 
     results: list[Scenario] = []
-    for name, func in scenarios:
-        runs = [_measure(func) for _ in range(repeat)]
+    for name, prepare, func in scenarios:
+        runs: list[RunMetrics] = []
+        for run_index in range(repeat):
+            # Build a fresh synthetic project for every measured run. This is
+            # especially important for mutating scenarios: otherwise the first
+            # visual-set-all repeat measures writes and subsequent repeats
+            # measure the no-op path, making medians depend on repeat count.
+            project_root = workdir / f"{name}-{run_index}"
+            project = synthesize_fixture_project(
+                fixture,
+                project_root,
+                page_count=pages,
+                visuals_per_page=visuals_per_page,
+            )
+            prepare(project.pbip_file)
+            runs.append(_measure(lambda pbip=project.pbip_file: func(pbip)))
         results.append(Scenario(name=name, metrics=_median(runs)))
     return results
+
+
+def _no_prepare(_pbip_path: Path) -> None:
+    return None
+
+
+def _prime_visual_set_all(pbip_path: Path) -> None:
+    _run_visual_set_all(pbip_path)
 
 
 def _run_visual_set_all(pbip_path: Path) -> int:
