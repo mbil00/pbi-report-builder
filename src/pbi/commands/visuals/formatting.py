@@ -9,6 +9,7 @@ import typer
 from rich import box
 from rich.table import Table
 
+from pbi.batch import BatchProjectWriter
 from pbi.fields import resolve_field_info
 
 from ..common import ProjectOpt, console, get_project
@@ -247,17 +248,19 @@ def visual_column(
 
         proj = get_project(project)
         total = 0
+        writer = BatchProjectWriter(proj)
         for pg in proj.get_pages():
             for vis in proj.get_visuals(pg):
                 try:
                     col = find_column(vis, column)
                 except ValueError:
                     continue
+                writer.track_visual(vis)
                 if rename is not None:
                     rename_column(vis, col.query_ref, rename)
                 if width is not None:
                     set_column_width(vis, col.query_ref, width)
-                vis.save()
+                writer.stage_tracked_visual(vis)
                 total += 1
                 parts = []
                 if rename:
@@ -269,7 +272,11 @@ def visual_column(
         if total == 0:
             console.print(f'[yellow]Column "{column}" not found on any visual.[/yellow]')
         else:
-            console.print(f"Updated [cyan]{total}[/cyan] visual(s) across all pages.")
+            writer.commit()
+            if writer.dirty_visual_count == 0:
+                console.print("[dim]No changes applied.[/dim]")
+            else:
+                console.print(f"Updated [cyan]{writer.dirty_visual_count}[/cyan] visual(s) across all pages.")
         return
 
     _proj, _pg, vis = resolve_visual_target(project, page, visual)
@@ -445,6 +452,9 @@ def visual_paste_style(
 
     from pbi.visual_schema import get_object_names
 
+    writer = BatchProjectWriter(proj)
+    writer.track_visuals(target_visuals)
+
     for tgt_vis in target_visuals:
         if scope in {"all", "container"}:
             if container:
@@ -467,7 +477,12 @@ def visual_paste_style(
                 tgt_vis.data.setdefault("visual", {})["objects"] = filtered
             else:
                 tgt_vis.data.get("visual", {}).pop("objects", None)
-        tgt_vis.save()
+
+    writer.stage_tracked_visuals(target_visuals)
+    if writer.dirty_visual_count == 0:
+        console.print("[dim]No changes applied.[/dim]")
+        return
+    writer.commit()
 
     copied_scope = " + ".join(copied)
     if target:

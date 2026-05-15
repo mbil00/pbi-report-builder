@@ -296,6 +296,32 @@ class Project:
             visual_type=lambda visual: visual.visual_type,
         )
 
+    def save_pages(self, pages: list[Page], *, pretty: bool | None = None) -> None:
+        """Save pages once each, preserving first-seen order."""
+        seen: set[Path] = set()
+        for page in pages:
+            path = page.folder / "page.json"
+            if path in seen:
+                continue
+            seen.add(path)
+            _write_json(path, page.data, pretty=pretty)
+
+    def save_visuals(self, visuals: list[Visual], *, pretty: bool | None = None) -> None:
+        """Save visuals once each, preserving first-seen order.
+
+        Bulk CLI commands may touch the same visual more than once when users
+        pass duplicate identifiers. Deduplicating at the project I/O boundary
+        avoids redundant JSON serialization and disk writes while keeping the
+        live in-memory objects unchanged.
+        """
+        seen: set[Path] = set()
+        for visual in visuals:
+            path = visual.folder / "visual.json"
+            if path in seen:
+                continue
+            seen.add(path)
+            _write_json(path, visual.data, pretty=pretty)
+
 
 def _read_json(path: Path) -> dict:
     with open(path, encoding="utf-8-sig") as f:

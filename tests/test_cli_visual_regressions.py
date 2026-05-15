@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -929,6 +930,44 @@ class VisualSetRegressionTests(unittest.TestCase):
             page = restored.find_page("Demo")
             for visual in restored.get_visuals(page):
                 self.assertIsNone(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
+
+    def test_visual_set_all_skips_noop_writes(self) -> None:
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            for idx in range(2):
+                visual = ReportAuthoring(project).create_visual(page, "cardVisual")
+                visual.data["name"] = f"card{idx}"
+                set_property(visual.data, "background.show", "true", VISUAL_PROPERTIES)
+                visual.save()
+
+            real_write_json = __import__("pbi.project", fromlist=["_write_json"])._write_json
+            visual_writes = 0
+
+            def counted_write_json(path, data, **kwargs):
+                nonlocal visual_writes
+                if path.name == "visual.json":
+                    visual_writes += 1
+                return real_write_json(path, data, **kwargs)
+
+            with mock.patch("pbi.project._write_json", side_effect=counted_write_json):
+                result = runner.invoke(
+                    app,
+                    [
+                        "visual",
+                        "set-all",
+                        "background.show=true",
+                        "--page", "Demo",
+                        "--project",
+                        str(root / "Sample.pbip"),
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("No changes applied", result.stdout)
+            self.assertEqual(visual_writes, 0)
 
     def test_visual_sort_cli_uses_get_set_clear_subcommands(self) -> None:
         runner = CliRunner()

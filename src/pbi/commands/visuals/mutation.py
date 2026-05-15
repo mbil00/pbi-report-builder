@@ -6,6 +6,8 @@ from typing import Annotated
 
 import typer
 
+from pbi.batch import BatchProjectWriter
+
 from ..common import ProjectOpt, console, parse_property_assignments
 from .app import visual_app
 from .helpers import prepare_visual_property_updates, resolve_page_target, resolve_visual_target
@@ -141,11 +143,14 @@ def visual_set_all(
             console.print(f"[dim](dry run)[/dim] {prop} on [cyan]{count}[/cyan] visual(s)")
         return
 
-    count_done = 0
+    writer = BatchProjectWriter(proj)
     for vis, updated, _changes in prepared:
-        vis.data = updated
-        vis.save()
-        count_done += 1
+        writer.stage_visual_data(vis, updated)
+    if writer.dirty_visual_count == 0:
+        console.print("[dim]No changes applied.[/dim]")
+        return
+    writer.commit()
+    count_done = writer.dirty_visual_count
 
     scope = f"visual-type={visual_type}" if visual_type else "all"
     page_scope = "all pages" if all_pages else f'page "{page}"'

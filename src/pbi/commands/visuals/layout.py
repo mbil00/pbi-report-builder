@@ -6,6 +6,8 @@ from typing import Annotated
 
 import typer
 
+from pbi.batch import BatchProjectWriter
+
 from ..common import ProjectOpt, console, get_project
 from .app import visual_arrange_app
 
@@ -32,13 +34,17 @@ def visual_arrange_row(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    writer = BatchProjectWriter(proj)
+    writer.track_visuals(ordered_visuals)
+
     cursor_x = x
     for vis in ordered_visuals:
         width = int(vis.position.get("width", 0))
         vis.data.setdefault("position", {})["x"] = cursor_x
         vis.data["position"]["y"] = y
-        vis.save()
         cursor_x += width + gap
+    writer.stage_tracked_visuals(ordered_visuals)
+    writer.commit()
 
     console.print(
         f'Arranged [cyan]{len(ordered_visuals)}[/cyan] visuals in a row on "{pg.display_name}" '
@@ -73,6 +79,9 @@ def visual_arrange_grid(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    writer = BatchProjectWriter(proj)
+    writer.track_visuals(ordered_visuals)
+
     cursor_x = x
     cursor_y = y
     row_height = 0
@@ -82,7 +91,6 @@ def visual_arrange_grid(
         height = int(vis.position.get("height", 0))
         vis.data.setdefault("position", {})["x"] = cursor_x
         vis.data["position"]["y"] = cursor_y
-        vis.save()
 
         row_height = max(row_height, height)
         is_last_in_row = (index + 1) % columns == 0
@@ -92,6 +100,9 @@ def visual_arrange_grid(
             row_height = 0
         else:
             cursor_x += width + column_gap
+
+    writer.stage_tracked_visuals(ordered_visuals)
+    writer.commit()
 
     console.print(
         f'Arranged [cyan]{len(ordered_visuals)}[/cyan] visuals in a [cyan]{columns}[/cyan]-column grid '
@@ -121,13 +132,17 @@ def visual_arrange_column(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    writer = BatchProjectWriter(proj)
+    writer.track_visuals(ordered_visuals)
+
     cursor_y = y
     for vis in ordered_visuals:
         height = int(vis.position.get("height", 0))
         vis.data.setdefault("position", {})["x"] = x
         vis.data["position"]["y"] = cursor_y
-        vis.save()
         cursor_y += height + gap
+    writer.stage_tracked_visuals(ordered_visuals)
+    writer.commit()
 
     console.print(
         f'Arranged [cyan]{len(ordered_visuals)}[/cyan] visuals in a column on "{pg.display_name}" '
@@ -162,6 +177,8 @@ def visual_align(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    writer = BatchProjectWriter(proj)
+    writer.track_visuals(ordered_visuals)
     actions: list[str] = []
 
     if align:
@@ -238,8 +255,8 @@ def visual_align(
             vis.data.setdefault("position", {})["height"] = target
         actions.append(f"matched height={target}")
 
-    for vis in ordered_visuals:
-        vis.save()
+    writer.stage_tracked_visuals(ordered_visuals)
+    writer.commit()
 
     console.print(
         f'Aligned [cyan]{len(ordered_visuals)}[/cyan] visuals on "{pg.display_name}": '
