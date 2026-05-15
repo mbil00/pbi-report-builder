@@ -30,29 +30,46 @@ def validate_project(
     *,
     include_model_checks: bool = True,
     include_layout_checks: bool = True,
+    page_names: set[str] | None = None,
+    include_report: bool = True,
+    include_pages_meta: bool = True,
+    include_bookmarks: bool = True,
 ) -> list[ValidationIssue]:
-    """Validate the entire project. Returns list of issues found."""
+    """Validate the project. Returns list of issues found.
+
+    ``page_names`` narrows page/visual/layout/model-binding validation to the
+    supplied PBIR page folder names. By default validation remains project-wide.
+    """
     issues: list[ValidationIssue] = []
     loaded_pages: dict[str, dict] = {}
     loaded_visuals: dict[str, list[tuple[str, dict]]] = {}
 
     # Validate report.json
-    report_path = project.definition_folder / "report.json"
-    if report_path.exists():
-        issues.extend(_validate_report(report_path))
-    else:
-        issues.append(ValidationIssue(
-            "definition/report.json", "error", "Missing report.json"
-        ))
+    if include_report:
+        report_path = project.definition_folder / "report.json"
+        if report_path.exists():
+            issues.extend(_validate_report(report_path))
+        else:
+            issues.append(ValidationIssue(
+                "definition/report.json", "error", "Missing report.json"
+            ))
 
     # Validate pages
     pages_dir = project.definition_folder / "pages"
     if pages_dir.exists():
         pages_meta = pages_dir / "pages.json"
-        if pages_meta.exists():
+        if include_pages_meta and pages_meta.exists():
             issues.extend(_validate_pages_meta(pages_meta, pages_dir))
 
-        for page_dir in sorted(pages_dir.iterdir()):
+        if page_names is None:
+            page_dirs = [
+                page_dir for page_dir in sorted(pages_dir.iterdir())
+                if page_dir.is_dir()
+            ]
+        else:
+            page_dirs = [pages_dir / page_name for page_name in sorted(page_names)]
+
+        for page_dir in page_dirs:
             if not page_dir.is_dir():
                 continue
             page_json = page_dir / "page.json"
@@ -130,7 +147,7 @@ def validate_project(
 
     # Validate bookmarks
     bookmarks_dir = project.definition_folder / "bookmarks"
-    if bookmarks_dir.exists():
+    if include_bookmarks and bookmarks_dir.exists():
         meta_path = bookmarks_dir / "bookmarks.json"
         if meta_path.exists():
             issues.extend(_validate_bookmarks_meta(meta_path))

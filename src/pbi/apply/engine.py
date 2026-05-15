@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import yaml
@@ -32,6 +33,25 @@ from pbi.styles import StylePreset
 
 
 _YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+@dataclass(frozen=True)
+class _ApplyValidationScope:
+    """Validation scope inferred from the YAML spec before mutation."""
+
+    page_display_names: set[str]
+    include_report: bool = False
+    include_pages_meta: bool = False
+    include_bookmarks: bool = False
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.page_display_names
+            or self.include_report
+            or self.include_pages_meta
+            or self.include_bookmarks
+        )
 
 
 def _safe_load_yaml(content: str) -> Any:
@@ -131,9 +151,14 @@ def _apply_yaml_with_session(
         return result
 
     style_cache: dict[str, StylePreset] = {}
+    validation_scope = _infer_apply_validation_scope(
+        project,
+        spec,
+        page_filter=page_filter,
+    )
     baseline_validation = (
-        _validation_issue_keys(validate_project(project, include_model_checks=False))
-        if validate and not dry_run
+        _validation_issue_keys(_validate_project_scope(project, validation_scope))
+        if validate and not dry_run and not validation_scope.is_empty
         else set()
     )
 
@@ -155,7 +180,12 @@ def _apply_yaml_with_session(
         if result.errors:
             return result
         if validate and not dry_run and not validate_after_commit:
-            _validate_session_project(session, result, baseline_validation)
+            _validate_session_project(
+                session,
+                result,
+                baseline_validation,
+                validation_scope,
+            )
         return result
 
     if validate and validate_after_commit and not dry_run:
@@ -163,7 +193,10 @@ def _apply_yaml_with_session(
             session,
             body,
             post_commit=lambda committed_result: _validate_session_project(
-                session, committed_result, baseline_validation
+                session,
+                committed_result,
+                baseline_validation,
+                validation_scope,
             ),
             continue_on_error=continue_on_error,
         )
@@ -376,25 +409,76 @@ def _record_session_errors(session: PbirApplyRunSession, result: ApplyResult) ->
         _append_unique(result.errors, error)
 
 
+def _infer_apply_validation_scope(
+    project: Project,
+    spec: dict[str, Any],
+    *,
+    page_filter: str | None,
+) -> _ApplyValidationScope:
+    """Infer the narrowest safe post-apply validation scope from the spec."""
+    page_names: set[str] = set()
+    pages_spec = spec.get("pages", [])
+    if isinstance(pages_spec, list):
+        for page_spec in pages_spec:
+            if not isinstance(page_spec, dict):
+                continue
+            page_name = page_spec.get("name")
+            if not isinstance(page_name, str) or not page_name:
+                continue
+            if page_filter and page_name.lower() != page_filter.lower():
+                continue
+            page_names.add(page_name)
+
+    # If --page refers to an existing page by id/index/partial display name but
+    # the spec uses a different display-name spelling, include the resolved page
+    # so validation still follows the command's narrowed scope.
+    if page_filter:
+        try:
+            page_names.add(project.find_page(page_filter).display_name)
+        except ValueError:
+            pass
+
+    return _ApplyValidationScope(
+        page_display_names=page_names,
+        include_report=page_filter is None
+        and (spec.get("report") is not None or spec.get("theme") is not None),
+        include_pages_meta=bool(page_names),
+        include_bookmarks=bool(spec.get("bookmarks")),
+    )
+
+
 def _validate_session_project(
     session: PbirApplyRunSession,
     result: ApplyResult,
     baseline_validation: set[tuple[str, str, str, str]],
+    validation_scope: _ApplyValidationScope,
 ) -> None:
+    if validation_scope.is_empty:
+        return
     validation_project = session.project_for_validation()
-    _validate_apply_invariants(validation_project, result)
+    _validate_apply_invariants(validation_project, result, validation_scope)
     _record_post_apply_validation(
         validation_project,
         result,
         baseline_validation=baseline_validation,
+        validation_scope=validation_scope,
     )
 
 
-def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
+def _validate_apply_invariants(
+    project: Project,
+    result: ApplyResult,
+    validation_scope: _ApplyValidationScope,
+) -> None:
     """Catch critical structural breakage before apply returns success."""
     from pbi.bookmarks import _load_meta
 
-    for page in project.get_pages():
+    page_filter = _resolve_validation_page_names(project, validation_scope)
+    pages = [
+        page for page in project.get_pages()
+        if page_filter is None or page.name in page_filter
+    ]
+    for page in pages:
         group_names = {
             visual.name
             for visual in project.get_visuals(page)
@@ -412,10 +496,11 @@ def _validate_apply_invariants(project: Project, result: ApplyResult) -> None:
                         f'{page.display_name}/{visual.name}: parentGroupName "{parent}" has no matching group container.'
                     )
 
-    for item in _load_meta(project).get("items", []):
-        if isinstance(item, dict) and isinstance(item.get("children"), list):
-            if not isinstance(item.get("name"), str) or not item.get("name"):
-                result.errors.append("Bookmark groups must include a name identifier.")
+    if validation_scope.include_bookmarks:
+        for item in _load_meta(project).get("items", []):
+            if isinstance(item, dict) and isinstance(item.get("children"), list):
+                if not isinstance(item.get("name"), str) or not item.get("name"):
+                    result.errors.append("Bookmark groups must include a name identifier.")
 
 
 def _record_post_apply_validation(
@@ -423,9 +508,10 @@ def _record_post_apply_validation(
     result: ApplyResult,
     *,
     baseline_validation: set[tuple[str, str, str, str]],
+    validation_scope: _ApplyValidationScope,
 ) -> None:
     """Promote new structural/schema validation issues into apply results."""
-    for issue in validate_project(project, include_model_checks=False):
+    for issue in _validate_project_scope(project, validation_scope):
         identity = _validation_issue_identity(issue)
         if identity in baseline_validation:
             continue
@@ -435,6 +521,39 @@ def _record_post_apply_validation(
             _append_unique(result.errors, message)
         else:
             _append_unique(result.warnings, message)
+
+
+def _validate_project_scope(
+    project: Project,
+    validation_scope: _ApplyValidationScope,
+) -> list[ValidationIssue]:
+    """Run PBIR validation only for the report pieces touched by apply."""
+    return validate_project(
+        project,
+        include_model_checks=False,
+        page_names=_resolve_validation_page_names(project, validation_scope),
+        include_report=validation_scope.include_report,
+        include_pages_meta=validation_scope.include_pages_meta,
+        include_bookmarks=validation_scope.include_bookmarks,
+    )
+
+
+def _resolve_validation_page_names(
+    project: Project,
+    validation_scope: _ApplyValidationScope,
+) -> set[str] | None:
+    if not validation_scope.page_display_names:
+        return set()
+
+    page_names: set[str] = set()
+    for display_name in validation_scope.page_display_names:
+        try:
+            page_names.add(project.find_page(display_name).name)
+        except ValueError:
+            # Missing pages are either pre-existing baseline misses or apply
+            # errors that were already recorded before validation.
+            continue
+    return page_names
 
 
 def _validation_issue_keys(issues: list[ValidationIssue]) -> set[tuple[str, str, str, str]]:
