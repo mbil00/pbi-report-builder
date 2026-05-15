@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 import yaml
 
@@ -329,12 +329,21 @@ def extract_style_properties(visual_spec: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-def match_style_preset(project: Project, visual_spec: Mapping[str, Any]) -> StylePreset | None:
-    """Return the exact saved style preset for a visual spec, if one exists."""
+def match_style_preset(
+    project: Project,
+    visual_spec: Mapping[str, Any],
+    *,
+    presets: Iterable[StylePreset] | None = None,
+) -> StylePreset | None:
+    """Return the exact saved style preset for a visual spec, if one exists.
+
+    ``presets`` lets broad export paths load style files once instead of
+    re-reading project/global style directories for every visual.
+    """
     visual_properties = extract_style_properties(visual_spec)
     if not visual_properties:
         return None
-    for preset in list_styles(project):
+    for preset in presets if presets is not None else list_styles(project):
         if preset.properties == visual_properties:
             return preset
     return None

@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pbi.batch import BatchProjectWriter
 from pbi.project import Project
 
 
@@ -80,6 +81,7 @@ def migrate_theme(
             ColorReplacement(old_color=old_color, new_color=new_color, property_path="")
         )
 
+    writer = BatchProjectWriter(project)
     for page in project.get_pages():
         page_background = get_property(page.data, "background.color", PAGE_PROPERTIES)
         if isinstance(page_background, str):
@@ -87,7 +89,7 @@ def migrate_theme(
             if mapped:
                 if not dry_run:
                     set_property(page.data, "background.color", mapped, PAGE_PROPERTIES)
-                    page.save()
+                    writer.mark_page(page)
                 result.page_background_changes += 1
 
         for visual in project.get_visuals(page):
@@ -104,9 +106,12 @@ def migrate_theme(
                 skipped=result.skipped,
             )
             if changed and not dry_run:
-                visual.save()
+                writer.mark_visual(visual)
             for replacement in result.replacements:
                 replacement.count += match_counts[replacement.old_color]
+
+    if not dry_run:
+        writer.commit()
 
     return result
 

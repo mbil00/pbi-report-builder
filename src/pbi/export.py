@@ -7,6 +7,8 @@ fed back into pbi apply to reproduce or update the report state.
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -23,13 +25,23 @@ from pbi.roundtrip_primitives import (
     export_page_roundtrip_fields,
     prune_visual_pbir,
 )
-from pbi.styles import apply_style_reference, match_style_preset
+from pbi.styles import StylePreset, apply_style_reference, list_styles, match_style_preset
 from pbi.textbox import extract_textbox_spec
 from pbi.theme_roundtrip import export_theme_spec
 
 
-def export_page(project: Project, page: Page) -> dict:
+@dataclass(frozen=True)
+class _ExportContext:
+    """Precomputed project-wide lookup data for broad exports."""
+
+    page_lookup: dict[str, str]
+    group_names_by_page: dict[Path, set[str]]
+    style_presets: tuple[StylePreset, ...]
+
+
+def export_page(project: Project, page: Page, context: _ExportContext | None = None) -> dict:
     """Export a single page as a dict suitable for YAML serialization."""
+    context = context or _build_export_context(project, group_pages=[page])
     visuals = project.get_visuals(page)
     page_dict: dict[str, Any] = {
         "name": page.display_name,
@@ -74,7 +86,7 @@ def export_page(project: Project, page: Page) -> dict:
         if "visualGroup" in vis.data:
             visual_list.append(_export_group(vis))
             continue
-        exported = _export_visual(project, vis)
+        exported = _export_visual(project, vis, context)
         parent_group = vis.data.get("parentGroupName")
         if isinstance(parent_group, str) and parent_group in groups:
             exported["group"] = parent_group
@@ -114,7 +126,8 @@ def export_pages(project: Project, page_filter: str | None = None) -> dict:
         if report_spec:
             result["report"] = report_spec
 
-    result["pages"] = [export_page(project, p) for p in pages]
+    context = _build_export_context(project, group_pages=pages)
+    result["pages"] = [export_page(project, p, context) for p in pages]
 
     bookmark_page = pages[0] if page_filter and pages else None
     bookmarks = export_bookmarks(project, page=bookmark_page)
@@ -143,11 +156,38 @@ def export_visual_spec(project: Project, visual: Visual) -> dict:
     return _export_visual(project, visual)
 
 
-def _export_visual(project: Project, visual: Visual) -> dict:
+def _build_export_context(
+    project: Project,
+    *,
+    group_pages: list[Page] | None = None,
+) -> _ExportContext:
+    pages = project.get_pages()
+    target_group_pages = group_pages if group_pages is not None else pages
+    group_names_by_page: dict[Path, set[str]] = {}
+    for page in target_group_pages:
+        group_names_by_page[page.folder] = {
+            visual.name
+            for visual in project.get_visuals(page)
+            if "visualGroup" in visual.data
+        }
+    return _ExportContext(
+        page_lookup={page.name: page.display_name for page in pages},
+        group_names_by_page=group_names_by_page,
+        style_presets=tuple(list_styles(project)),
+    )
+
+
+def _export_visual(
+    project: Project,
+    visual: Visual,
+    context: _ExportContext | None = None,
+) -> dict:
     """Export a single visual as a dict."""
+    context = context or _build_export_context(project)
     pos = visual.position
-    page_lookup = {page.name: page.display_name for page in project.get_pages()}
-    group_names = _group_names_for_visual(project, visual)
+    page_lookup = context.page_lookup
+    page_dir = visual.folder.parent.parent
+    group_names = context.group_names_by_page.get(page_dir, set())
     result: dict[str, Any] = {}
     result["id"] = visual.folder.name
 
@@ -242,7 +282,7 @@ def _export_visual(project: Project, visual: Visual) -> dict:
     if raw_visual:
         result["pbir"] = raw_visual
 
-    matched_style = match_style_preset(project, result)
+    matched_style = match_style_preset(project, result, presets=context.style_presets)
     if matched_style is not None:
         result = apply_style_reference(result, matched_style.name)
 
@@ -266,19 +306,6 @@ def _export_group(group: Visual) -> dict[str, Any]:
     if isinstance(parent_group, str) and parent_group:
         result["group"] = parent_group
     return result
-
-
-def _group_names_for_visual(project: Project, visual: Visual) -> set[str]:
-    """Return group names available on the visual's page."""
-    page_dir = visual.folder.parent.parent
-    for page in project.get_pages():
-        if page.folder == page_dir:
-            return {
-                candidate.name
-                for candidate in project.get_visuals(page)
-                if "visualGroup" in candidate.data
-            }
-    return set()
 
 
 def _normalize_exported_visual_page_refs(
