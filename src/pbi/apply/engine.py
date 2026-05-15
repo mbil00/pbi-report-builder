@@ -23,9 +23,20 @@ from .state import (
     ApplyResult,
     PbirApplySession as _PbirApplySession,
 )
-from .visuals import finalize_visual_page_refs as _finalize_visual_page_refs
+from .visuals import (
+    finalize_visual_page_refs as _finalize_visual_page_refs,
+    visual_page_refs_present as _visual_page_refs_present,
+)
 from pbi.project import Project
 from pbi.styles import StylePreset
+
+
+_YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def _safe_load_yaml(content: str) -> Any:
+    """Parse report specs with PyYAML's safe C loader when available."""
+    return yaml.load(content, Loader=_YAML_SAFE_LOADER)
 
 
 def apply_yaml(
@@ -36,16 +47,23 @@ def apply_yaml(
     dry_run: bool = False,
     overwrite: bool = False,
     continue_on_error: bool = False,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> ApplyResult:
     """Apply a YAML specification to the project using the eager PBIR writer."""
     return _apply_yaml_with_session(
         project,
         yaml_content,
-        session=_PbirApplySession(project=project, dry_run=dry_run),
+        session=_PbirApplySession(
+            project=project,
+            dry_run=dry_run,
+            json_pretty=not compact_json,
+        ),
         page_filter=page_filter,
         dry_run=dry_run,
         overwrite=overwrite,
         continue_on_error=continue_on_error,
+        validate=validate,
     )
 
 
@@ -57,6 +75,8 @@ def apply_yaml_buffered(
     dry_run: bool = False,
     overwrite: bool = False,
     continue_on_error: bool = False,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> ApplyResult:
     """Apply YAML through the experimental buffered/session PBIR writer.
 
@@ -67,12 +87,17 @@ def apply_yaml_buffered(
     return _apply_yaml_with_session(
         project,
         yaml_content,
-        session=BufferedPbirApplySession(project=project, dry_run=dry_run),
+        session=BufferedPbirApplySession(
+            project=project,
+            dry_run=dry_run,
+            json_pretty=not compact_json,
+        ),
         page_filter=page_filter,
         dry_run=dry_run,
         overwrite=overwrite,
         continue_on_error=continue_on_error,
         validate_after_commit=True,
+        validate=validate,
     )
 
 
@@ -86,12 +111,13 @@ def _apply_yaml_with_session(
     overwrite: bool = False,
     continue_on_error: bool = False,
     validate_after_commit: bool = False,
+    validate: bool = True,
 ) -> ApplyResult:
     """Shared apply orchestration for eager and buffered PBIR sessions."""
     result = ApplyResult()
 
     try:
-        spec = yaml.safe_load(yaml_content)
+        spec = _safe_load_yaml(yaml_content)
     except yaml.YAMLError as e:
         result.errors.append(f"Invalid YAML: {e}")
         return result
@@ -107,7 +133,7 @@ def _apply_yaml_with_session(
     style_cache: dict[str, StylePreset] = {}
     baseline_validation = (
         _validation_issue_keys(validate_project(project, include_model_checks=False))
-        if not dry_run
+        if validate and not dry_run
         else set()
     )
 
@@ -128,11 +154,11 @@ def _apply_yaml_with_session(
         _record_session_errors(session, result)
         if result.errors:
             return result
-        if not dry_run and not validate_after_commit:
+        if validate and not dry_run and not validate_after_commit:
             _validate_session_project(session, result, baseline_validation)
         return result
 
-    if validate_after_commit and not dry_run:
+    if validate and validate_after_commit and not dry_run:
         return run_apply_with_post_commit(
             session,
             body,
@@ -205,7 +231,8 @@ def _apply_top_level_sections(
             session=session,
         )
 
-    _finalize_visual_page_refs(project, pages_spec, session=session)
+    if _visual_page_refs_present(pages_spec):
+        _finalize_visual_page_refs(project, pages_spec, session=session)
 
     bookmarks_spec = spec.get("bookmarks", [])
     if isinstance(bookmarks_spec, list) and bookmarks_spec:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,6 +12,17 @@ from pbi.lookup import find_page_by_identifier, find_visual_by_identifier
 
 
 _UNSAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_-]")
+_JSON_PRETTY: ContextVar[bool] = ContextVar("pbi_json_pretty", default=True)
+
+
+def set_json_pretty(pretty: bool) -> Token[bool]:
+    """Set the default PBIR JSON write format for the current context."""
+    return _JSON_PRETTY.set(pretty)
+
+
+def reset_json_pretty(token: Token[bool]) -> None:
+    """Restore the previous PBIR JSON write format for the current context."""
+    _JSON_PRETTY.reset(token)
 
 
 def sanitize_visual_name(name: str) -> str:
@@ -44,9 +56,9 @@ class Visual:
     def position(self) -> dict:
         return self.data.get("position", {})
 
-    def save(self) -> None:
+    def save(self, *, pretty: bool | None = None) -> None:
         path = self.folder / "visual.json"
-        _write_json(path, self.data)
+        _write_json(path, self.data, pretty=pretty)
 
 
 @dataclass
@@ -80,9 +92,9 @@ class Page:
     def visibility(self) -> str:
         return self.data.get("visibility", "AlwaysVisible")
 
-    def save(self) -> None:
+    def save(self, *, pretty: bool | None = None) -> None:
         path = self.folder / "page.json"
-        _write_json(path, self.data)
+        _write_json(path, self.data, pretty=pretty)
 
 
 @dataclass
@@ -290,9 +302,20 @@ def _read_json(path: Path) -> dict:
         return json.load(f)
 
 
-def _write_json(path: Path, data: dict) -> None:
+def _write_json(path: Path, data: dict, *, pretty: bool | None = None) -> None:
     with open(path, "w", encoding="utf-8", newline="\r\n") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+        if pretty is None:
+            pretty = _JSON_PRETTY.get()
+        if pretty:
+            json.dump(data, f, indent=2, ensure_ascii=False, check_circular=False)
+        else:
+            json.dump(
+                data,
+                f,
+                ensure_ascii=False,
+                check_circular=False,
+                separators=(",", ":"),
+            )
         f.write("\n")
 
 

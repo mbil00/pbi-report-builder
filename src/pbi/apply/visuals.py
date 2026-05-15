@@ -308,6 +308,19 @@ def apply_visual(
     page_state.refresh()
 
 
+def visual_page_refs_present(pages_spec: list[dict]) -> bool:
+    """Return whether a page spec contains visual refs that need finalization."""
+    for page_spec in pages_spec:
+        if not isinstance(page_spec, dict):
+            continue
+        for vis_spec in page_spec.get("visuals", []):
+            if not isinstance(vis_spec, dict):
+                continue
+            if _visual_spec_has_page_refs(vis_spec):
+                return True
+    return False
+
+
 def finalize_visual_page_refs(
     project: Project,
     pages_spec: list[dict],
@@ -359,6 +372,10 @@ def finalize_visual_page_refs(
 
 def _normalize_visual_page_refs(project: Project, vis_spec: dict) -> dict:
     """Resolve exported page display names back to target page folder ids."""
+    page_ref_keys = ("action.page", "action.drillthrough", "tooltip.section")
+    if not _visual_spec_has_page_refs(vis_spec):
+        return vis_spec
+
     normalized = copy.deepcopy(vis_spec)
 
     action = normalized.get("action")
@@ -376,13 +393,22 @@ def _normalize_visual_page_refs(project: Project, vis_spec: dict) -> dict:
         if resolved is not None:
             tooltip["section"] = resolved
 
-    for key in ("action.page", "action.drillthrough", "tooltip.section"):
+    for key in page_ref_keys:
         value = normalized.get(key)
         resolved = _resolve_page_ref(project, value)
         if resolved is not None:
             normalized[key] = resolved
 
     return normalized
+
+
+def _visual_spec_has_page_refs(vis_spec: dict) -> bool:
+    page_ref_keys = ("action.page", "action.drillthrough", "tooltip.section")
+    return (
+        isinstance(vis_spec.get("action"), dict)
+        or isinstance(vis_spec.get("tooltip"), dict)
+        or any(key in vis_spec for key in page_ref_keys)
+    )
 
 
 def _resolve_page_ref(project: Project, value: object) -> str | None:

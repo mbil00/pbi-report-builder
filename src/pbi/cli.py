@@ -173,6 +173,8 @@ def apply_cmd(
     page: Annotated[Optional[str], typer.Option("--page", help="Only apply to this page.")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Full reconciliation: remove visuals not in YAML. Backs up the page first.")] = False,
     continue_on_error: Annotated[bool, typer.Option("--continue-on-error", help="Apply what is possible and report errors without rollback.")] = False,
+    compact_json: Annotated[bool, typer.Option("--compact-json", help="Write compact PBIR JSON instead of pretty-printed JSON.")] = False,
+    skip_validation: Annotated[bool, typer.Option("--skip-validation", help="Skip post-apply PBIR validation for faster large applies.")] = False,
     project: ProjectOpt = None,
 ) -> None:
     """Apply a declarative YAML specification to the report.
@@ -221,6 +223,8 @@ def apply_cmd(
         dry_run=dry_run,
         overwrite=overwrite,
         continue_on_error=continue_on_error,
+        compact_json=compact_json,
+        validate=not skip_validation,
     )
 
     # Report results

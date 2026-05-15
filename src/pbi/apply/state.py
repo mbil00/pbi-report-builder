@@ -9,7 +9,7 @@ from typing import Any
 from pbi.apply.rollback import RollbackJournal
 from pbi.apply.session import PbirWriteSession
 from pbi.lookup import find_visual_by_identifier
-from pbi.project import Page, Project, Visual
+from pbi.project import Page, Project, Visual, reset_json_pretty, set_json_pretty
 
 
 @dataclass
@@ -68,6 +68,8 @@ class PbirApplySession:
     dry_run: bool
     rollback_journal: RollbackJournal | None = None
     model: Any = _MISSING_MODEL
+    json_pretty: bool = True
+    _json_pretty_token: Any = None
 
     def ensure_rollback_journal(self) -> None:
         """Create the rollback journal lazily on the first write-intent path."""
@@ -89,7 +91,8 @@ class PbirApplySession:
     # ApplySession lifecycle -------------------------------------------------
 
     def begin(self) -> None:
-        """No-op: rollback journal stays lazy until the first write-intent path."""
+        """Start the apply run and configure JSON write formatting."""
+        self._json_pretty_token = set_json_pretty(self.json_pretty)
 
     def commit(self) -> None:
         """No-op: page/visual saves are eager, nothing to flush."""
@@ -102,6 +105,9 @@ class PbirApplySession:
 
     def cleanup(self) -> None:
         self.rollback_journal = None
+        if self._json_pretty_token is not None:
+            reset_json_pretty(self._json_pretty_token)
+            self._json_pretty_token = None
 
     def project_for_validation(self) -> Project:
         """Return the project state validation should inspect."""
