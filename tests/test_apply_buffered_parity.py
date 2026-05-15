@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -104,6 +105,59 @@ class BufferedApplyParityHarnessTests(unittest.TestCase):
 
             self.assertEqual(result.errors, [])
             self.assertEqual(copytree_mock.call_count, 0)
+
+    def test_compact_json_apply_writes_valid_minified_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            result = apply_yaml(project, spec, compact_json=True)
+
+            self.assertEqual(result.errors, [])
+            visual_path = next(
+                path
+                for path in project.definition_folder.glob("pages/*/visuals/*/visual.json")
+                if json.loads(path.read_text(encoding="utf-8"))["name"] == "card1"
+            )
+            text = visual_path.read_text(encoding="utf-8")
+            self.assertTrue(text.endswith("\n"))
+            self.assertNotIn("\n  ", text)
+            self.assertEqual(json.loads(text)["name"], "card1")
+
+    def test_apply_can_skip_validation_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            spec = yaml.safe_dump(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "Demo",
+                            "visuals": [{"name": "card1", "type": "cardVisual"}],
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+
+            with mock.patch("pbi.apply.engine.validate_project") as validate_mock:
+                result = apply_yaml(project, spec, validate=False)
+
+            self.assertEqual(result.errors, [])
+            validate_mock.assert_not_called()
 
     def test_simple_page_and_visual_creation_matches_eager_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

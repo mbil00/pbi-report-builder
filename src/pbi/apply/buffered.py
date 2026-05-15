@@ -20,7 +20,15 @@ from collections.abc import Callable
 from typing import Any
 
 from pbi.apply.rollback import RollbackJournal
-from pbi.project import Page, Project, Visual, _read_json, _write_json
+from pbi.project import (
+    Page,
+    Project,
+    Visual,
+    _read_json,
+    _write_json,
+    reset_json_pretty,
+    set_json_pretty,
+)
 from pbi.schema_refs import PAGE_SCHEMA, PAGES_METADATA_SCHEMA, VISUAL_CONTAINER_SCHEMA
 
 
@@ -49,12 +57,15 @@ class BufferedPbirApplySession:
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     rollback_journal: RollbackJournal | None = None
     committed: bool = False
+    json_pretty: bool = True
+    _json_pretty_token: Any = None
     clear_caches_on_cleanup: bool = False
 
     # ApplySession lifecycle -------------------------------------------------
 
     def begin(self) -> None:
-        """Start the buffered unit of work."""
+        """Start the buffered unit of work and configure JSON write formatting."""
+        self._json_pretty_token = set_json_pretty(self.json_pretty)
 
     def commit(self) -> None:
         """Flush staged operations to disk.
@@ -105,6 +116,9 @@ class BufferedPbirApplySession:
         if self.clear_caches_on_cleanup:
             self.project.clear_caches()
             self.clear_caches_on_cleanup = False
+        if self._json_pretty_token is not None:
+            reset_json_pretty(self._json_pretty_token)
+            self._json_pretty_token = None
 
     def project_for_validation(self) -> Project:
         """Return a materialized project containing staged buffered writes.

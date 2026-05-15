@@ -109,6 +109,16 @@ def main() -> None:
         type=Path,
         help="Write one cProfile .prof file per scenario/mode/run to this directory.",
     )
+    parser.add_argument(
+        "--compact-json",
+        action="store_true",
+        help="Measure writes using compact JSON instead of pretty-printed PBIR JSON.",
+    )
+    parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Measure apply time without PBIR validation passes.",
+    )
     parser.add_argument("--keep-workdir", action="store_true")
     args = parser.parse_args()
 
@@ -133,6 +143,8 @@ def main() -> None:
                 visuals_per_page=args.create_visuals_per_page,
                 repeat=args.repeat,
                 profile_dir=args.profile_dir,
+                compact_json=args.compact_json,
+                validate=not args.skip_validation,
             ),
             benchmark_fixture_update(
                 workdir,
@@ -141,6 +153,8 @@ def main() -> None:
                 visuals_per_page=args.visuals_per_page,
                 repeat=args.repeat,
                 profile_dir=args.profile_dir,
+                compact_json=args.compact_json,
+                validate=not args.skip_validation,
             ),
             benchmark_fixture_mixed(
                 workdir,
@@ -149,6 +163,8 @@ def main() -> None:
                 visuals_per_page=args.visuals_per_page,
                 repeat=args.repeat,
                 profile_dir=args.profile_dir,
+                compact_json=args.compact_json,
+                validate=not args.skip_validation,
             ),
         ]
         print_results(results, detail=args.detail)
@@ -165,6 +181,8 @@ def benchmark_create_heavy(
     visuals_per_page: int,
     repeat: int,
     profile_dir: Path | None = None,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> ScenarioResult:
     spec = yaml.safe_dump(
         {
@@ -200,6 +218,8 @@ def benchmark_create_heavy(
         overwrite=False,
         workdir=workdir,
         profile_dir=profile_dir,
+        compact_json=compact_json,
+        validate=validate,
     )
 
 
@@ -211,6 +231,8 @@ def benchmark_fixture_update(
     visuals_per_page: int,
     repeat: int,
     profile_dir: Path | None = None,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> ScenarioResult:
     def factory(root: Path) -> Project:
         return synthesize_fixture_project(
@@ -231,6 +253,8 @@ def benchmark_fixture_update(
         overwrite=False,
         workdir=workdir,
         profile_dir=profile_dir,
+        compact_json=compact_json,
+        validate=validate,
     )
 
 
@@ -242,6 +266,8 @@ def benchmark_fixture_mixed(
     visuals_per_page: int,
     repeat: int,
     profile_dir: Path | None = None,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> ScenarioResult:
     def factory(root: Path) -> Project:
         return synthesize_fixture_project(
@@ -262,6 +288,8 @@ def benchmark_fixture_mixed(
         overwrite=True,
         workdir=workdir,
         profile_dir=profile_dir,
+        compact_json=compact_json,
+        validate=validate,
     )
 
 
@@ -274,6 +302,8 @@ def _benchmark_from_project_factory(
     overwrite: bool,
     workdir: Path,
     profile_dir: Path | None = None,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> ScenarioResult:
     eager_runs: list[Metrics] = []
     buffered_runs: list[Metrics] = []
@@ -293,6 +323,8 @@ def _benchmark_from_project_factory(
                 spec,
                 overwrite=overwrite,
                 profile_path=_profile_path(profile_dir, name, "eager", run_index),
+                compact_json=compact_json,
+                validate=validate,
             )
         )
         buffered_runs.append(
@@ -302,6 +334,8 @@ def _benchmark_from_project_factory(
                 spec,
                 overwrite=overwrite,
                 profile_path=_profile_path(profile_dir, name, "buffered", run_index),
+                compact_json=compact_json,
+                validate=validate,
             )
         )
 
@@ -330,6 +364,8 @@ def run_apply_measured(
     *,
     overwrite: bool,
     profile_path: Path | None = None,
+    compact_json: bool = False,
+    validate: bool = True,
 ) -> Metrics:
     counters = Counters()
     diagnostics = Diagnostics()
@@ -340,7 +376,7 @@ def run_apply_measured(
     real_rmtree = shutil.rmtree
 
     engine = __import__("pbi.apply.engine", fromlist=["yaml"])
-    real_safe_load = engine.yaml.safe_load
+    real_safe_load = engine._safe_load_yaml
     real_apply_sections = engine._apply_top_level_sections
     real_validate_session_project = engine._validate_session_project
     real_validate_apply_invariants = engine._validate_apply_invariants
@@ -366,7 +402,7 @@ def run_apply_measured(
             add_phase(name, time.perf_counter() - start)
             diagnostics.current_phase = previous_phase
 
-    def counted_project_write_json(path: Path, data: dict[str, Any]) -> None:
+    def counted_project_write_json(path: Path, data: dict[str, Any], **kwargs: Any) -> None:
         counters.json_writes += 1
         category = _json_category(path)
         _increment(diagnostics.write_categories, category)
@@ -375,9 +411,9 @@ def run_apply_measured(
             diagnostics.current_phase,
             category,
         )
-        return real_project_write_json(path, data)
+        return real_project_write_json(path, data, pretty=not compact_json)
 
-    def counted_buffered_write_json(path: Path, data: dict[str, Any]) -> None:
+    def counted_buffered_write_json(path: Path, data: dict[str, Any], **kwargs: Any) -> None:
         counters.json_writes += 1
         category = _json_category(path)
         _increment(diagnostics.write_categories, category)
@@ -386,7 +422,7 @@ def run_apply_measured(
             diagnostics.current_phase,
             category,
         )
-        return real_buffered_write_json(path, data)
+        return real_buffered_write_json(path, data, pretty=not compact_json)
 
     def counted_read_json(path: Path) -> dict[str, Any]:
         counters.json_reads += 1
@@ -420,7 +456,7 @@ def run_apply_measured(
         mock.patch("pbi.project._read_json", side_effect=counted_read_json), \
         mock.patch("pbi.apply.buffered._read_json", side_effect=counted_read_json), \
         mock.patch("pbi.validate._read_json", side_effect=counted_read_json), \
-        mock.patch("pbi.apply.engine.yaml.safe_load", side_effect=lambda content: timed("yaml_parse", real_safe_load, content)), \
+        mock.patch("pbi.apply.engine._safe_load_yaml", side_effect=lambda content: timed("yaml_parse", real_safe_load, content)), \
         mock.patch("pbi.apply.engine._apply_top_level_sections", side_effect=lambda *args, **kwargs: timed("apply_body", real_apply_sections, *args, **kwargs)), \
         mock.patch("pbi.apply.engine._validate_session_project", side_effect=lambda *args, **kwargs: timed("session_validation", real_validate_session_project, *args, **kwargs)), \
         mock.patch("pbi.apply.engine._validate_apply_invariants", side_effect=lambda *args, **kwargs: timed("apply_invariants", real_validate_apply_invariants, *args, **kwargs)), \
@@ -434,12 +470,24 @@ def run_apply_measured(
         mock.patch("shutil.rmtree", side_effect=counted_rmtree):
         start = time.perf_counter()
         if profile_path is None:
-            result = apply_func(project, spec, overwrite=overwrite)
+            result = apply_func(
+                project,
+                spec,
+                overwrite=overwrite,
+                compact_json=compact_json,
+                validate=validate,
+            )
         else:
             profiler = cProfile.Profile()
             profiler.enable()
             try:
-                result = apply_func(project, spec, overwrite=overwrite)
+                result = apply_func(
+                    project,
+                    spec,
+                    overwrite=overwrite,
+                    compact_json=compact_json,
+                    validate=validate,
+                )
             finally:
                 profiler.disable()
                 profiler.dump_stats(profile_path)
