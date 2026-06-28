@@ -22,6 +22,7 @@ pbi <object> <verb> <target> [key=value...] [--flags]
 | `delete` | Remove item (prompts unless `--force`) | page, visual, filter, style, component, model measure, model column |
 | `clear` | Remove configuration | visual sort, visual format, interaction, page drillthrough, page tooltip |
 | `apply` | Apply from YAML/preset | top-level, model, style, component, page template, theme |
+| `batch` | Run many sub-commands in one process (alias: `run`) | top-level |
 | `export` | Export to YAML/JSON | page (YAML), theme (JSON) |
 
 **Common flags across all commands:**
@@ -195,6 +196,33 @@ pbi apply overview.yaml                       # 4. apply
 ```
 
 **YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
+
+---
+
+## Batch — Imperative Sequences
+
+When you have many small, heterogeneous edits to make in sequence (and a declarative `apply` YAML is awkward), run them in one process instead of one `pbi ...` invocation per edit. Each line is an ordinary pbi sub-command; the command tree is built once and reused, so a long sequence runs ~15–25× faster than separate invocations.
+
+```bash
+pbi batch edits.txt                    # run a script of sub-commands, one per line
+pbi batch edits.txt --stop-on-error    # halt at first failure (default: continue, report at end)
+cat edits.txt | pbi batch -            # read the script from stdin
+pbi run edits.txt                      # 'run' is an alias for 'batch'
+```
+
+**Script format** — one sub-command per line (the text you'd type after `pbi`). Blank lines and lines starting with `#` are ignored:
+```
+# Tidy up the Slicers page
+visual set "11 Slicers" 1 title.show=true
+visual set "11 Slicers" 1 title.text="Region"
+page set "11 Slicers" displayName="Slicers Panel"
+model measure set Sales.Total format="#,0"
+```
+
+- A batch-level `-p/--project` applies to every line (a line's own `-p` still wins).
+- Each line sees fresh project state, exactly as if run standalone — and keeps its own per-command schema validation.
+- Destructive commands still prompt unless the line passes `--force/-f`; nested `batch`/`run` lines are rejected.
+- **`batch` vs `apply`:** use `apply` for declarative "export → edit → apply" of page/visual state; use `batch` for imperative sequences (targeted deletes, renames, mixed model + visual + theme edits).
 
 ---
 
