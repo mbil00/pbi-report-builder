@@ -357,6 +357,19 @@ class RunBatchTests(unittest.TestCase):
             self.assertFalse(summary.results[0].ok)
             self.assertEqual(summary.results[0].exit_code, 2)
 
+    def test_bare_group_reports_actionable_message_not_blank(self) -> None:
+        # A line that is just a command group (forgotten subcommand) raises an
+        # empty-message NoArgsIsHelpError; the batch must record an actionable
+        # error, not a blank "Error:".
+        console = _CapturingConsole()
+        lines = parse_batch_lines("visual")
+        summary = run_batch(self._cmd(), lines, console=console)
+        self.assertEqual(summary.ran, 1)
+        self.assertFalse(summary.results[0].ok)
+        self.assertEqual(summary.results[0].exit_code, 2)
+        self.assertIn("subcommand", summary.results[0].error or "")
+        self.assertIn("visual", summary.results[0].error or "")
+
     def test_nested_batch_with_stop_on_error_halts_immediately(self) -> None:
         console = _CapturingConsole()
         lines = parse_batch_lines("batch other.txt\nvisual set Demo 1 title.show=true")

@@ -224,7 +224,10 @@ def run_batch(
                 code = rv if isinstance(rv, int) else 0
             except click.exceptions.UsageError as e:
                 code = e.exit_code or 2
-                error = e.format_message()
+                # A bare command group (e.g. "visual" with no subcommand) raises
+                # NoArgsIsHelpError, whose format_message() is empty; fall back to
+                # an actionable message instead of a blank "Error:".
+                error = e.format_message() or f"missing or invalid subcommand: {line}"
                 console.print(f"[red]Error:[/red] {escape(error)}")
             except click.exceptions.Abort as e:
                 # Click converts a Ctrl-C raised *inside* a command into an Abort
