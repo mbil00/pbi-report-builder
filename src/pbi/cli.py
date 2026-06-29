@@ -514,11 +514,18 @@ def _run_batch_command(
     if failures:
         console.print(
             f"\n[yellow]Ran {summary.ran} command(s): "
-            f"{summary.ok_count} ok, {len(failures)} failed.[/yellow]"
+            f"{summary.ok_count} ok, {len(failures)} failed"
+            f"{' (interrupted)' if summary.interrupted else ''}.[/yellow]"
         )
         for r in failures:
             console.print(f"  [red]line {r.lineno}[/red]: {r.command}")
-        raise typer.Exit(1)
+        raise typer.Exit(130 if summary.interrupted else 1)
+
+    if summary.interrupted:
+        console.print(
+            f"[yellow]Stopped after {summary.ran} command(s) (interrupted).[/yellow]"
+        )
+        raise typer.Exit(130)
 
     console.print(f"\n[green]Ran {summary.ran} command(s) successfully.[/green]")
 
@@ -532,14 +539,33 @@ def batch_cmd(
     """Run many pbi sub-commands in one process — one per line.
 
     Each line is an ordinary pbi sub-command (the same text you would type after
-    'pbi'), e.g. 'visual set "Overview" 1 title.show=true'. Blank lines and lines
-    starting with '#' are ignored. Building the command tree once and reusing it
-    avoids paying per-process startup for every edit, making long edit sequences
-    far faster than separate 'pbi ...' invocations — without a YAML round-trip.
+    'pbi'), e.g. 'visual set "Overview" 1 title.show=true'. Building the command
+    tree once and reusing it avoids paying per-process startup for every edit,
+    making long edit sequences far faster than separate 'pbi ...' invocations —
+    without a YAML round-trip.
+
+    Script format: only a line whose first non-blank character is '#' is a
+    comment (so values like the color '#EDEBE9' are preserved); blank lines are
+    skipped. Trailing inline comments are NOT supported — '# note' after a
+    command is parsed as arguments. Backslashes are literal, so Windows paths
+    like 'C:\\Users\\me\\Report.pbip' work without doubling.
+
+    Project selection (precedence: line -p > batch-level -p > cwd auto-detect):
+    a batch-level -p/--project applies to every line; a line's own -p overrides
+    it for that line only. A line with no -p uses the batch-level project if one
+    was given, otherwise auto-detects from the current directory — lines never
+    inherit a previous line's -p. nested 'batch'/'run' lines are rejected.
+
+    Quoting: backslashes are literal (so Windows paths work), which means the
+    shell idiom of escaping a quote with a backslash (\\") is not supported; wrap
+    a value containing a double quote in single quotes instead.
 
     By default every line runs and failures are reported at the end; use
-    --stop-on-error to halt at the first failure. Destructive commands still
-    prompt unless the line passes --force/-f.
+    --stop-on-error to halt at the first failure. Ctrl-C stops the whole batch
+    (including at a confirmation prompt) and still prints a summary of what ran.
+    Destructive commands still prompt unless the line passes --force/-f. When
+    the script itself is read from stdin ('pbi batch -'), stdin is consumed, so a
+    line cannot also read from stdin (e.g. 'apply -'); pass such inputs as files.
     """
     _run_batch_command(script, stop_on_error=stop_on_error, project=project)
 

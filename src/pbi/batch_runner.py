@@ -11,7 +11,9 @@ faster than separate ``pbi ...`` invocations without requiring a YAML round-trip
 from __future__ import annotations
 
 import shlex
+import signal
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -40,6 +42,7 @@ class BatchSummary:
     """Aggregate outcome of a batch run."""
 
     results: list[BatchLineResult] = field(default_factory=list)
+    interrupted: bool = False
 
     @property
     def ran(self) -> int:
@@ -76,6 +79,24 @@ def resolve_batch_input(source: str | None) -> str:
     )
 
 
+def split_command_line(line: str) -> list[str]:
+    """Tokenize one batch line into argv, treating backslashes literally.
+
+    Unlike ``shlex.split`` (POSIX mode), backslashes are *not* escape
+    characters, so Windows-style paths such as
+    ``--project=C:\\Users\\me\\Report.pbip`` survive intact — Power BI Desktop
+    is Windows-only, so this is the natural path format. Quoting (``"..."`` /
+    ``'...'``) and whitespace splitting still work as expected, and ``#`` is kept
+    literal so color values like ``#EDEBE9`` are preserved. Unbalanced quotes
+    raise ``ValueError``, matching ``shlex.split``.
+    """
+    lexer = shlex.shlex(line, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""  # '#' is a valid value char (e.g. colors), not a comment
+    lexer.escape = ""  # backslash is literal so Windows paths are not mangled
+    return list(lexer)
+
+
 def parse_batch_lines(text: str) -> list[tuple[int, str]]:
     """Return (lineno, command) for each non-blank, non-comment line.
 
@@ -90,6 +111,39 @@ def parse_batch_lines(text: str) -> list[tuple[int, str]]:
             continue
         lines.append((lineno, stripped))
     return lines
+
+
+def _install_sigint_handler():
+    """Install a SIGINT handler that records a Ctrl-C and re-raises it.
+
+    Returns ``(flag, restore)``: ``flag["hit"]`` becomes True if SIGINT fires,
+    and ``restore()`` puts the previous handler back. The handler is installed
+    only on the main thread (``signal.signal`` raises elsewhere). The flag lets
+    ``run_batch`` recognise a Ctrl-C that a command's confirmation prompt
+    swallowed as a bare ``Abort`` — Click's ``click.confirm`` does
+    ``raise Abort() from None``, leaving no ``__cause__`` to distinguish it from
+    a declined prompt.
+    """
+    flag = {"hit": False}
+    if threading.current_thread() is not threading.main_thread():
+        return flag, (lambda: None)
+
+    def _handler(signum, frame):
+        flag["hit"] = True
+        raise KeyboardInterrupt
+
+    try:
+        previous = signal.signal(signal.SIGINT, _handler)
+    except (ValueError, OSError):
+        return flag, (lambda: None)
+
+    def _restore():
+        try:
+            signal.signal(signal.SIGINT, previous)
+        except (TypeError, ValueError, OSError):
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+
+    return flag, _restore
 
 
 def run_batch(
@@ -107,65 +161,88 @@ def run_batch(
     it is injected as the root ``--project`` for every line (a line's own
     ``-p``/``--project`` still takes precedence), so a batch run targets one
     project without repeating the flag on each line.
+
+    Ctrl-C stops the whole batch (whether pressed during a command, between
+    commands, or at a confirmation prompt) and still returns the summary of what
+    ran so far, with ``BatchSummary.interrupted`` set.
     """
     summary = BatchSummary()
     project_args = ["--project", str(project)] if project is not None else []
+    interrupted, _restore_sigint = _install_sigint_handler()
 
-    for lineno, line in lines:
-        try:
-            tokens = shlex.split(line)
-        except ValueError as e:
-            _record(summary, lineno, line, 2, f"parse error: {e}", console)
-            if stop_on_error:
+    try:
+        for lineno, line in lines:
+            try:
+                tokens = split_command_line(line)
+            except ValueError as e:
+                _record(summary, lineno, line, 2, f"parse error: {e}", console)
+                if stop_on_error:
+                    break
+                continue
+            if not tokens:
+                continue
+            root_command = _root_command_token(tokens)
+            if root_command in _NESTED_COMMANDS:
+                _record(
+                    summary,
+                    lineno,
+                    line,
+                    2,
+                    f"nested '{root_command}' is not allowed inside a batch script",
+                    console,
+                )
+                if stop_on_error:
+                    break
+                continue
+
+            if echo:
+                console.print(f"[dim]{lineno}:[/dim] [cyan]{line}[/cyan]")
+
+            args = [*project_args, *tokens]
+            error: str | None = None
+            try:
+                rv = cmd.main(args, prog_name="pbi", standalone_mode=False)
+                # Success returns the command's return value (None); a command
+                # that signals failure via ``raise typer.Exit(code)`` returns the
+                # int code.
+                code = rv if isinstance(rv, int) else 0
+            except click.exceptions.UsageError as e:
+                code = e.exit_code or 2
+                error = e.format_message()
+                console.print(f"[red]Error:[/red] {error}")
+            except click.exceptions.Abort as e:
+                # Click converts a Ctrl-C raised *inside* a command into an Abort
+                # whose ``__cause__`` is the original KeyboardInterrupt; a Ctrl-C
+                # at a confirmation prompt instead arrives with no ``__cause__``
+                # but trips our SIGINT flag. Either way, stop the whole batch. A
+                # plain Abort (a declined prompt) just skips this one line.
+                if isinstance(e.__cause__, KeyboardInterrupt) or interrupted["hit"]:
+                    raise KeyboardInterrupt from e
+                code = 1
+                error = "aborted"
+                console.print("[yellow]Aborted.[/yellow]")
+            except SystemExit as e:  # defensive: a command called sys.exit directly
+                code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+                if code:
+                    error = f"exited with code {code}"
+            except Exception as e:  # a command raised an unexpected error
+                code = 1
+                error = f"{type(e).__name__}: {e}"
+                console.print(f"[red]Error:[/red] {error}")
+
+            ok = code == 0
+            summary.results.append(BatchLineResult(lineno, line, ok, code, error))
+            if not ok and stop_on_error:
                 break
-            continue
-        if not tokens:
-            continue
-        root_command = _root_command_token(tokens)
-        if root_command in _NESTED_COMMANDS:
-            _record(
-                summary,
-                lineno,
-                line,
-                2,
-                f"nested '{root_command}' is not allowed inside a batch script",
-                console,
-            )
-            if stop_on_error:
-                break
-            continue
-
-        if echo:
-            console.print(f"[dim]{lineno}:[/dim] [cyan]{line}[/cyan]")
-
-        args = [*project_args, *tokens]
-        error: str | None = None
-        try:
-            rv = cmd.main(args, prog_name="pbi", standalone_mode=False)
-            # Success returns the command's return value (None); a command that
-            # signals failure via ``raise typer.Exit(code)`` returns the int code.
-            code = rv if isinstance(rv, int) else 0
-        except click.exceptions.UsageError as e:
-            code = e.exit_code or 2
-            error = e.format_message()
-            console.print(f"[red]Error:[/red] {error}")
-        except click.exceptions.Abort:
-            code = 1
-            error = "aborted"
-            console.print("[yellow]Aborted.[/yellow]")
-        except SystemExit as e:  # defensive: a command called sys.exit directly
-            code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
-            if code:
-                error = f"exited with code {code}"
-        except Exception as e:  # a command raised an unexpected error
-            code = 1
-            error = f"{type(e).__name__}: {e}"
-            console.print(f"[red]Error:[/red] {error}")
-
-        ok = code == 0
-        summary.results.append(BatchLineResult(lineno, line, ok, code, error))
-        if not ok and stop_on_error:
-            break
+    except KeyboardInterrupt:
+        # A Ctrl-C anywhere in the loop (inside a command via the re-raise above,
+        # at a confirmation prompt, or between commands) stops the batch but
+        # still returns the summary of everything that ran, so the caller can
+        # report partial progress.
+        summary.interrupted = True
+        console.print("\n[yellow]Interrupted; stopping batch.[/yellow]")
+    finally:
+        _restore_sigint()
 
     return summary
 

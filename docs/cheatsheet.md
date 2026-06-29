@@ -201,7 +201,7 @@ pbi apply overview.yaml                       # 4. apply
 
 ## Batch — Imperative Sequences
 
-When you have many small, heterogeneous edits to make in sequence (and a declarative `apply` YAML is awkward), run them in one process instead of one `pbi ...` invocation per edit. Each line is an ordinary pbi sub-command; the command tree is built once and reused, so a long sequence runs ~15–25× faster than separate invocations.
+When you have many small, heterogeneous edits to make in sequence (and a declarative `apply` YAML is awkward), run them in one process instead of one `pbi ...` invocation per edit. Each line is an ordinary pbi sub-command; the command tree is built once and reused, so a long sequence runs dramatically faster than separate invocations (a local profiling run measured ~15–25× for a 20-edit sequence; not a CI-tracked benchmark).
 
 ```bash
 pbi batch edits.txt                    # run a script of sub-commands, one per line
@@ -210,7 +210,7 @@ cat edits.txt | pbi batch -            # read the script from stdin
 pbi run edits.txt                      # 'run' is an alias for 'batch'
 ```
 
-**Script format** — one sub-command per line (the text you'd type after `pbi`). Blank lines and lines starting with `#` are ignored:
+**Script format** — one sub-command per line (the text you'd type after `pbi`). Blank lines and full-line `#` comments are ignored (only a line whose first non-blank char is `#`, so color values like `#EDEBE9` survive). Trailing inline comments are **not** supported. Backslashes are literal, so Windows paths like `C:\Users\me\Report.pbip` need no doubling (the shell `\"` escape is therefore unsupported — wrap a value that contains a double quote in single quotes):
 ```
 # Tidy up the Slicers page
 visual set "11 Slicers" 1 title.show=true
@@ -219,9 +219,10 @@ page set "11 Slicers" displayName="Slicers Panel"
 model measure set Sales.Total format="#,0"
 ```
 
-- A batch-level `-p/--project` applies to every line (a line's own `-p` still wins).
-- Each line sees fresh project state, exactly as if run standalone — and keeps its own per-command schema validation.
-- Destructive commands still prompt unless the line passes `--force/-f`; nested `batch`/`run` lines are rejected.
+- **Project selection:** a batch-level `-p/--project` applies to every line; a line's own `-p` overrides it for that line only. A line with no `-p` uses the batch-level project if one was given, otherwise auto-detects from the current directory — lines never inherit a previous line's `-p`.
+- Each line reloads the project from disk, so edits made by earlier lines are visible to later ones — and each line keeps its own per-command schema validation.
+- Destructive commands still prompt unless the line passes `--force/-f`; nested `batch`/`run` lines are rejected. **Ctrl-C** stops the whole batch and still prints a summary of what ran.
+- **stdin:** when the script itself is read from stdin (`… | pbi batch -`), stdin is consumed — a line cannot then also read from stdin (e.g. `apply -`); use files for those inputs.
 - **`batch` vs `apply`:** use `apply` for declarative "export → edit → apply" of page/visual state; use `batch` for imperative sequences (targeted deletes, renames, mixed model + visual + theme edits).
 
 ---

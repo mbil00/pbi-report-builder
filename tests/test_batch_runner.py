@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import io
+import signal
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import click
 import typer
 from typer.testing import CliRunner
 
@@ -13,10 +18,56 @@ from pbi.batch_runner import (
     parse_batch_lines,
     resolve_batch_input,
     run_batch,
+    split_command_line,
 )
 from pbi.cli import app
 from pbi.report_authoring import ReportAuthoring
 from tests.cli_regressions_support import make_project
+
+
+# A minimal root group used to exercise run_batch's exception ladder with
+# commands that raise specific exceptions, without depending on real command
+# internals. run_batch only needs a click root command.
+@click.group()
+@click.option("--project", "-p", default=None)
+def _fake_root(project=None):  # noqa: D401 - test fixture
+    pass
+
+
+@_fake_root.command("ok")
+def _fake_ok():
+    pass
+
+
+@_fake_root.command("boom")
+def _fake_boom():
+    raise KeyboardInterrupt()
+
+
+@_fake_root.command("decline")
+def _fake_decline():
+    raise click.Abort()  # mimics `raise typer.Abort()` on a declined confirm
+
+
+@_fake_root.command("exit0")
+def _fake_exit0():
+    raise typer.Exit(0)
+
+
+@_fake_root.command("exit1")
+def _fake_exit1():
+    raise typer.Exit(1)
+
+
+@_fake_root.command("prompt_interrupt")
+def _fake_prompt_interrupt():
+    # Mimic click.confirm()'s handling of Ctrl-C at a prompt: the SIGINT fires
+    # (tripping run_batch's flag), the prompt catches the KeyboardInterrupt and
+    # re-raises it as a bare Abort with no __cause__.
+    try:
+        signal.raise_signal(signal.SIGINT)
+    except KeyboardInterrupt:
+        raise click.Abort() from None
 
 
 class _CapturingConsole:
@@ -64,6 +115,34 @@ class ParseBatchLinesTests(unittest.TestCase):
         )
 
 
+class SplitCommandLineTests(unittest.TestCase):
+    def test_keeps_backslashes_and_handles_quotes(self) -> None:
+        # Windows paths must survive intact; quotes are still processed away.
+        self.assertEqual(
+            split_command_line(
+                r'--project=C:\Users\me\Report.pbip visual set "11 Slicers" 1 title.text="A B"'
+            ),
+            [
+                r"--project=C:\Users\me\Report.pbip",
+                "visual",
+                "set",
+                "11 Slicers",
+                "1",
+                "title.text=A B",
+            ],
+        )
+
+    def test_hash_in_value_is_preserved(self) -> None:
+        self.assertEqual(
+            split_command_line("page set Demo border.color=#EDEBE9"),
+            ["page", "set", "Demo", "border.color=#EDEBE9"],
+        )
+
+    def test_unbalanced_quote_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            split_command_line('visual set "unterminated')
+
+
 class ResolveBatchInputTests(unittest.TestCase):
     def test_reads_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -84,6 +163,25 @@ class ResolveBatchInputTests(unittest.TestCase):
             path.write_text("   \n", encoding="utf-8")
             with self.assertRaises(ValueError):
                 resolve_batch_input(str(path))
+
+    def test_reads_from_piped_stdin_when_source_is_none(self) -> None:
+        fake = io.StringIO("visual set Demo 1 title.show=true\n")
+        with mock.patch("sys.stdin", fake):
+            self.assertEqual(
+                resolve_batch_input(None), "visual set Demo 1 title.show=true\n"
+            )
+
+    def test_reads_from_piped_stdin_with_dash(self) -> None:
+        fake = io.StringIO("page set Demo displayName=Hi\n")
+        with mock.patch("sys.stdin", fake):
+            self.assertEqual(resolve_batch_input("-"), "page set Demo displayName=Hi\n")
+
+    def test_tty_stdin_with_no_source_raises(self) -> None:
+        fake = io.StringIO("")
+        fake.isatty = lambda: True  # type: ignore[method-assign]
+        with mock.patch("sys.stdin", fake):
+            with self.assertRaises(ValueError):
+                resolve_batch_input(None)
 
 
 class RunBatchTests(unittest.TestCase):
@@ -206,6 +304,114 @@ class RunBatchTests(unittest.TestCase):
             self.assertFalse(summary.results[0].ok)
             self.assertEqual(summary.results[0].exit_code, 2)
 
+    def test_nested_batch_with_stop_on_error_halts_immediately(self) -> None:
+        console = _CapturingConsole()
+        lines = parse_batch_lines("batch other.txt\nvisual set Demo 1 title.show=true")
+        summary = run_batch(
+            self._cmd(), lines, console=console, stop_on_error=True
+        )
+        # The nested line is recorded as a failure and the batch halts before
+        # the second line runs.
+        self.assertEqual(summary.ran, 1)
+        self.assertEqual(summary.ok_count, 0)
+        self.assertFalse(summary.interrupted)
+
+    def test_echo_true_prints_each_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project_with_visuals(Path(tmp))
+            console = _CapturingConsole()
+            lines = parse_batch_lines("visual set Demo 1 title.show=true")
+            run_batch(self._cmd(), lines, console=console, project=project.pbip_file)
+            self.assertTrue(
+                any("visual set Demo 1 title.show=true" in line for line in console.lines)
+            )
+
+    def test_echo_false_suppresses_line_echo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = _make_project_with_visuals(Path(tmp))
+            console = _CapturingConsole()
+            lines = parse_batch_lines("visual set Demo 1 title.show=true")
+            run_batch(
+                self._cmd(),
+                lines,
+                console=console,
+                project=project.pbip_file,
+                echo=False,
+            )
+            # run_batch's console only captures its own echo/error output (a
+            # command's own success output goes to a different console), so a
+            # clean run with echo disabled prints nothing here.
+            self.assertEqual(console.lines, [])
+
+    def test_line_level_project_overrides_batch_level(self) -> None:
+        with tempfile.TemporaryDirectory() as ta, tempfile.TemporaryDirectory() as tb:
+            proj_a = _make_project_with_visuals(Path(ta))
+            proj_b = _make_project_with_visuals(Path(tb))
+            console = _CapturingConsole()
+            # Batch-level project is A, but the line explicitly targets B.
+            lines = parse_batch_lines(
+                f'visual set Demo 1 title.text="OnlyInB" -p {proj_b.pbip_file}'
+            )
+            summary = run_batch(
+                self._cmd(), lines, console=console, project=proj_a.pbip_file
+            )
+            self.assertEqual(summary.ok_count, 1)
+
+            proj_a.clear_caches()
+            proj_b.clear_caches()
+            a_card = proj_a.find_visual(proj_a.find_page("Demo"), "card1")
+            b_card = proj_b.find_visual(proj_b.find_page("Demo"), "card1")
+            self.assertIn(
+                "OnlyInB", b_card.folder.joinpath("visual.json").read_text()
+            )
+            self.assertNotIn(
+                "OnlyInB", a_card.folder.joinpath("visual.json").read_text()
+            )
+
+
+class RunBatchExceptionLadderTests(unittest.TestCase):
+    """Exercise run_batch's exception handling with a synthetic command group."""
+
+    def test_keyboard_interrupt_stops_batch_and_returns_summary(self) -> None:
+        console = _CapturingConsole()
+        lines = parse_batch_lines("ok\nboom\nok")
+        summary = run_batch(_fake_root, lines, console=console)
+        self.assertTrue(summary.interrupted)
+        # The first line ran; the interrupted line and everything after it did not.
+        self.assertEqual(summary.ran, 1)
+        self.assertEqual(summary.ok_count, 1)
+
+    def test_keyboard_interrupt_at_confirmation_prompt_stops_batch(self) -> None:
+        if threading.current_thread() is not threading.main_thread():
+            self.skipTest("SIGINT handler is only installed on the main thread")
+        console = _CapturingConsole()
+        lines = parse_batch_lines("ok\nprompt_interrupt\nok")
+        summary = run_batch(_fake_root, lines, console=console)
+        # A Ctrl-C swallowed by a confirmation prompt (Abort with no __cause__)
+        # must still stop the whole batch, not just skip the prompting line.
+        self.assertTrue(summary.interrupted)
+        self.assertEqual(summary.ran, 1)
+        self.assertEqual(summary.ok_count, 1)
+
+    def test_plain_abort_is_recorded_and_batch_continues(self) -> None:
+        console = _CapturingConsole()
+        lines = parse_batch_lines("ok\ndecline\nok")
+        summary = run_batch(_fake_root, lines, console=console)
+        self.assertFalse(summary.interrupted)
+        self.assertEqual(summary.ran, 3)
+        self.assertEqual(summary.ok_count, 2)
+        self.assertEqual([r.lineno for r in summary.failures], [2])
+
+    def test_typer_exit_codes_are_captured(self) -> None:
+        console = _CapturingConsole()
+        lines = parse_batch_lines("exit0\nexit1")
+        summary = run_batch(_fake_root, lines, console=console)
+        self.assertEqual(summary.ran, 2)
+        self.assertTrue(summary.results[0].ok)
+        self.assertEqual(summary.results[0].exit_code, 0)
+        self.assertFalse(summary.results[1].ok)
+        self.assertEqual(summary.results[1].exit_code, 1)
+
 
 class BatchCommandCliTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -274,6 +480,23 @@ class BatchCommandCliTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 1, result.output)
             self.assertIn("failed", result.output)
 
+    def test_batch_reads_script_from_stdin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = _make_project_with_visuals(root)
+            result = self.runner.invoke(
+                app,
+                ["batch", "-", "-p", str(project.pbip_file)],
+                input='visual set Demo 1 title.text="FromStdin"\n',
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+
+            project.clear_caches()
+            card1 = project.find_visual(project.find_page("Demo"), "card1")
+            self.assertIn(
+                "FromStdin", card1.folder.joinpath("visual.json").read_text()
+            )
+
     def test_empty_script_is_a_noop(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -310,6 +533,18 @@ class LazyGroupTests(unittest.TestCase):
                 ["visual", "set", "Demo", "1", "title.show=true", "-p", str(project.pbip_file)],
             )
             self.assertEqual(result.exit_code, 0, result.output)
+
+    def test_lazy_group_help_imports_and_lists_subcommands(self) -> None:
+        # `pbi visual --help` must build the lazy group on demand and show it.
+        result = CliRunner().invoke(app, ["visual", "--help"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("set", result.output)
+
+    def test_root_help_advertises_lazy_groups(self) -> None:
+        result = CliRunner().invoke(app, ["--help"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        for group in ("visual", "model", "theme", "batch", "run"):
+            self.assertIn(group, result.output)
 
 
 if __name__ == "__main__":
