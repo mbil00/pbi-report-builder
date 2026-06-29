@@ -490,7 +490,10 @@ def _run_batch_command(
     try:
         text = resolve_batch_input(script)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        # The message embeds the user-supplied script path, which may contain
+        # Rich-markup characters (e.g. 'report-[v2].pbip'); escape it so a stray
+        # tag cannot crash reporting or silently drop part of the filename.
+        console.print(f"[red]Error:[/red] {escape(str(e))}")
         raise typer.Exit(1)
 
     lines = parse_batch_lines(text)
@@ -561,6 +564,10 @@ def batch_cmd(
     shell idiom of escaping a quote with a backslash (\\") is not supported; wrap
     a value containing a double quote in single quotes, and a value containing a
     single quote/apostrophe in double quotes (e.g. displayName="Customer's Page").
+    A value that contains BOTH a single and a double quote has no reliable inline
+    form — common in DAX, e.g. IF('Sales Table'[x]>0,"Yes","No"). Pass such
+    values out-of-band instead: 'model ... edit/create --from-file <file>' (or
+    pipe them via stdin) rather than on a 'model ... set key=value' batch line.
 
     By default every line runs and failures are reported at the end; use
     --stop-on-error to halt at the first failure. Ctrl-C stops the whole batch

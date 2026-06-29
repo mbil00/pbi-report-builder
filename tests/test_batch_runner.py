@@ -12,6 +12,7 @@ from unittest import mock
 import click
 import typer
 from rich.console import Console
+from rich.errors import MarkupError
 from typer.testing import CliRunner
 
 from pbi import cli
@@ -150,6 +151,20 @@ class SplitCommandLineTests(unittest.TestCase):
     def test_unbalanced_quote_raises(self) -> None:
         with self.assertRaises(ValueError):
             split_command_line('visual set "unterminated')
+
+    def test_value_with_both_quote_types_is_mis_split(self) -> None:
+        # Documented limitation: with backslash kept literal (escape=""), a value
+        # containing BOTH a single and a double quote has no faithful inline
+        # encoding — wrapping in double quotes silently strips the inner double
+        # quotes. Lock this in so the docstring/help guidance (pass such DAX via
+        # `model ... edit --from-file`) stays honest if the tokenizer changes.
+        tokens = split_command_line(
+            'model measure set Sales.Flag expression="IF(\'Sales T\'[x]>0,"Yes","No")"'
+        )
+        self.assertEqual(
+            tokens[-1],
+            "expression=IF('Sales T'[x]>0,Yes,No)",  # inner "Yes"/"No" quotes lost
+        )
 
     def test_unquoted_apostrophe_error_explains_the_quoting_rule(self) -> None:
         # A bare apostrophe is an opening quote in POSIX shlex; the error must
@@ -644,6 +659,22 @@ class BatchCommandCliTests(unittest.TestCase):
         ):
             result = self.runner.invoke(app, ["batch", "ignored.txt"])
         self.assertEqual(result.exit_code, 130, result.output)
+
+    def test_resolve_error_with_markup_in_path_is_escaped_not_crashed(self) -> None:
+        # A bad script path containing Rich-markup characters must surface a clean
+        # error, not crash reporting (a stray closing tag -> MarkupError) and not
+        # silently drop part of the filename (a tag-like token -> vanishes).
+        cases = [("[/red]", "[/red]"), ("report-[v2].pbip", "[v2]")]
+        for bad_path, marker in cases:
+            for verb in ("batch", "run"):
+                with self.subTest(verb=verb, path=bad_path):
+                    result = self.runner.invoke(app, [verb, bad_path])
+                    self.assertEqual(result.exit_code, 1, result.output)
+                    self.assertNotIsInstance(result.exception, MarkupError)
+                    self.assertIn("File not found", result.output)
+                    # The markup token survives literally rather than crashing
+                    # reporting or being swallowed by Rich's markup parser.
+                    self.assertIn(marker, result.output)
 
 
 class LazyGroupTests(unittest.TestCase):

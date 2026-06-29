@@ -223,6 +223,7 @@ model measure set Sales.Total format="#,0"
 - Each line reloads the project from disk, so edits made by earlier lines are visible to later ones — and each line keeps its own per-command schema validation.
 - Destructive commands still prompt unless the line passes `--force/-f`; nested `batch`/`run` lines are rejected. **Ctrl-C** stops the whole batch and still prints a summary of what ran.
 - **stdin:** when the script itself is read from stdin (`… | pbi batch -`), stdin is consumed — a line cannot then also read from stdin (e.g. `apply -`); use files for those inputs.
+- **Quoting both quote types:** wrap a value containing a single quote *or* a double quote in the other quote (e.g. `displayName="Customer's Page"`), but a value containing **both** — common in DAX, e.g. `IF('Sales Table'[x]>0,"Yes","No")` — has no reliable inline form and is silently mis-split; pass it via `model … edit/create --from-file` (or stdin) instead.
 - **`batch` vs `apply`:** use `apply` for declarative "export → edit → apply" of page/visual state; use `batch` for imperative sequences (targeted deletes, renames, mixed model + visual + theme edits).
 
 ---

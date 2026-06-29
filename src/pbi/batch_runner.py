@@ -90,6 +90,12 @@ def split_command_line(line: str) -> list[str]:
     ``'...'``) and whitespace splitting still work as expected, and ``#`` is kept
     literal so color values like ``#EDEBE9`` are preserved. Unbalanced quotes
     raise ``ValueError``, matching ``shlex.split``.
+
+    Because backslash is not an escape character, a value that contains *both* a
+    single and a double quote (e.g. a DAX measure mixing a ``'Quoted Table'``
+    name with ``"string"`` literals) has no faithful inline encoding here and is
+    silently mis-split; supply such values out-of-band (``model ... edit
+    --from-file`` / stdin) rather than on a batch line.
     """
     lexer = shlex.shlex(line, posix=True)
     lexer.whitespace_split = True
