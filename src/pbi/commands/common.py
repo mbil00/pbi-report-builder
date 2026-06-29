@@ -28,6 +28,11 @@ def set_global_project(project: Path | None) -> None:
     _GLOBAL_PROJECT = project
 
 
+def get_global_project() -> Path | None:
+    """Return the root-level --project value for commands that need to forward it."""
+    return _GLOBAL_PROJECT
+
+
 def find_project(project: Path | None) -> Project:
     """Resolve a PBIP project or exit with a CLI-friendly error."""
     try:

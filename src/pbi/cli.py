@@ -17,6 +17,7 @@ from pbi.commands.common import (
     ProjectOpt,
     console,
     find_project,
+    get_global_project,
     get_project,
     resolve_yaml_input,
     resolve_output_path,
@@ -500,8 +501,13 @@ def _run_batch_command(
     # whole point: the per-process startup cost is paid here a single time
     # instead of once per `pbi ...` invocation.
     cmd = typer.main.get_command(app)
+    effective_project = project if project is not None else get_global_project()
     summary = run_batch(
-        cmd, lines, console=console, project=project, stop_on_error=stop_on_error
+        cmd,
+        lines,
+        console=console,
+        project=effective_project,
+        stop_on_error=stop_on_error,
     )
 
     failures = summary.failures

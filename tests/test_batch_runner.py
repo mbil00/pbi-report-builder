@@ -175,6 +175,24 @@ class RunBatchTests(unittest.TestCase):
             self.assertEqual(summary.ran, 2)
             self.assertEqual(summary.ok_count, 0)
 
+    def test_nested_batch_with_root_project_option_is_rejected(self) -> None:
+        console = _CapturingConsole()
+        lines = parse_batch_lines(
+            "\n".join(
+                [
+                    "--project /tmp/Sample.pbip batch other.txt",
+                    "-p /tmp/Sample.pbip run other.txt",
+                ]
+            )
+        )
+        summary = run_batch(self._cmd(), lines, console=console)
+        self.assertEqual(summary.ran, 2)
+        self.assertEqual(summary.ok_count, 0)
+        self.assertEqual([r.error for r in summary.results], [
+            "nested 'batch' is not allowed inside a batch script",
+            "nested 'run' is not allowed inside a batch script",
+        ])
+
     def test_usage_error_is_caught_as_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -218,6 +236,22 @@ class BatchCommandCliTests(unittest.TestCase):
             project.clear_caches()
             page = project.find_page("Renamed")
             self.assertEqual(page.display_name, "Renamed")
+
+    def test_batch_honors_root_level_project_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = _make_project_with_visuals(root)
+            script = root / "edits.txt"
+            script.write_text("visual set Demo 1 title.show=true\n", encoding="utf-8")
+            result = self.runner.invoke(
+                app, ["-p", str(project.pbip_file), "batch", str(script)]
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+
+            project.clear_caches()
+            page = project.find_page("Demo")
+            card1 = project.find_visual(page, "card1")
+            self.assertIn("title", card1.folder.joinpath("visual.json").read_text())
 
     def test_run_alias_reports_failure_with_nonzero_exit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

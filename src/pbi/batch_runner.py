@@ -20,6 +20,8 @@ import click
 # Sub-commands that would re-enter this runner; disallowed inside a script to
 # avoid surprising recursion / stdin re-reads.
 _NESTED_COMMANDS = {"batch", "run"}
+_ROOT_VALUE_OPTIONS = {"--project", "-p"}
+_ROOT_VALUE_OPTION_PREFIXES = ("--project=",)
 
 
 @dataclass
@@ -119,10 +121,14 @@ def run_batch(
             continue
         if not tokens:
             continue
-        if tokens[0] in _NESTED_COMMANDS:
+        root_command = _root_command_token(tokens)
+        if root_command in _NESTED_COMMANDS:
             _record(
-                summary, lineno, line, 2,
-                f"nested '{tokens[0]}' is not allowed inside a batch script",
+                summary,
+                lineno,
+                line,
+                2,
+                f"nested '{root_command}' is not allowed inside a batch script",
                 console,
             )
             if stop_on_error:
@@ -162,6 +168,24 @@ def run_batch(
             break
 
     return summary
+
+
+def _root_command_token(tokens: list[str]) -> str | None:
+    """Return the root command token after valid root-level options."""
+    idx = 0
+    while idx < len(tokens):
+        token = tokens[idx]
+        if token in _ROOT_VALUE_OPTIONS:
+            idx += 2
+            continue
+        if any(token.startswith(prefix) for prefix in _ROOT_VALUE_OPTION_PREFIXES):
+            idx += 1
+            continue
+        if token.startswith("-p") and token != "-p":
+            idx += 1
+            continue
+        return token
+    return None
 
 
 def _record(
