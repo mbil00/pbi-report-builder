@@ -1,6 +1,6 @@
 ---
 name: pbi-cli
-description: "General-purpose guide for the `pbi` CLI tool that edits Power BI PBIP project files — use when you need to understand CLI grammar, discover commands, orient in a project, choose between YAML and imperative workflows, or perform common operations like project validation, page management, visual inspection, catalog asset management, or report metadata. Triggers on: pbi commands, Power BI project, PBIP files, report structure, command help, project setup, page management, visual listing, project overview, CLI usage, catalog, reusable assets, report metadata."
+description: "General-purpose guide for the `pbi` CLI tool that edits Power BI PBIP project files — use when you need to understand CLI grammar, discover commands, orient in a project, choose between YAML and imperative workflows, run many edits in one batch, or perform common operations like project validation, page management, visual inspection, catalog asset management, or report metadata. Triggers on: pbi commands, Power BI project, PBIP files, report structure, command help, project setup, page management, visual listing, project overview, CLI usage, batch editing, batch runner, catalog, reusable assets, report metadata."
 ---
 
 # PBI CLI — General Usage Guide
@@ -111,6 +111,7 @@ So `pbi page get "over"` works if "Overview" is the only page starting with "ove
 | Restyle a page | `pbi page export` → edit → `pbi apply` |
 | Redesign completely | Edit YAML → `pbi apply --overwrite` |
 | Tweak 1-2 properties | `pbi visual set` (imperative) |
+| Many imperative edits at once | `pbi batch edits.txt` (one sub-command per line) |
 | Bulk format all visuals | `pbi visual set-all` or `pbi catalog apply style/card-panel` |
 | Reuse a page layout | `pbi catalog apply page/dashboard-layout "Page"` |
 | Stamp repeated widgets | `pbi catalog apply component/kpi-strip "Page" --row 4` |
@@ -135,6 +136,24 @@ pbi validate                                  # 6. verify
 YAML supports: visuals, bindings, properties, filters, interactions, conditional formatting, sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, themes, and raw PBIR passthrough.
 
 For details on YAML syntax, use the **pbi-visuals** skill. For model YAML, use the **pbi-modeling** skill.
+
+## Batch — Many Imperative Edits in One Process
+
+`pbi batch` (alias `pbi run`) runs many `pbi` sub-commands in one process — one per line, from a file or stdin. It builds the command tree once and reuses it, so a long edit sequence is far faster than separate `pbi ...` invocations. Use it for heterogeneous imperative edits (targeted sets/renames/deletes across pages, model, and visuals); use `apply` for declarative YAML page state.
+
+```bash
+pbi batch edits.txt                 # one sub-command per line
+cat edits.txt | pbi batch -         # or from stdin
+pbi batch edits.txt --stop-on-error # halt at first failure (default: continue, report at end)
+pbi run edits.txt                   # 'run' is an alias for 'batch'
+```
+
+Each line is the text you'd type after `pbi`, e.g. `visual set "Overview" 1 title.show=true`. Behavior:
+
+- **Comments/blanks:** only a line whose first non-blank char is `#` is a comment (so colors like `#EDEBE9` survive); blank lines are skipped. Trailing inline comments are **not** supported.
+- **Errors:** continue-on-error by default with a per-line failure summary at the end; `--stop-on-error` halts at the first failure. Each line keeps its own schema validation. Ctrl-C stops the whole batch and still prints what ran.
+- **Project:** a batch-level `-p` applies to every line; a line's own `-p` overrides it. Nested `batch`/`run` lines are rejected.
+- **Quoting:** backslashes are literal, so Windows paths like `C:\Users\me\Report.pbip` need no doubling. Wrap a value containing a `"` in single quotes and a value containing a `'` in double quotes. A value containing **both** (common in DAX, e.g. `IF('Sales Table'[x]>0,"Yes","No")`) cannot be passed inline — supply it via `model … edit/create --from-file`/stdin.
 
 ## Report Metadata
 
