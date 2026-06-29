@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
+from rich.markup import escape
 
 # Sub-commands that would re-enter this runner; disallowed inside a script to
 # avoid surprising recursion / stdin re-reads.
@@ -94,7 +95,16 @@ def split_command_line(line: str) -> list[str]:
     lexer.whitespace_split = True
     lexer.commenters = ""  # '#' is a valid value char (e.g. colors), not a comment
     lexer.escape = ""  # backslash is literal so Windows paths are not mangled
-    return list(lexer)
+    try:
+        return list(lexer)
+    except ValueError as e:
+        # shlex's bare "No closing quotation" never points at the offending
+        # quote; spell out the symmetric rule so the failure is actionable.
+        raise ValueError(
+            f"{e} — unbalanced quote: wrap a value containing a single quote/"
+            'apostrophe in double quotes (e.g. displayName="Customer\'s Page"), '
+            "and a value containing a double quote in single quotes"
+        ) from e
 
 
 def parse_batch_lines(text: str) -> list[tuple[int, str]]:
@@ -196,7 +206,7 @@ def run_batch(
                 continue
 
             if echo:
-                console.print(f"[dim]{lineno}:[/dim] [cyan]{line}[/cyan]")
+                console.print(f"[dim]{lineno}:[/dim] [cyan]{escape(line)}[/cyan]")
 
             args = [*project_args, *tokens]
             error: str | None = None
@@ -209,7 +219,7 @@ def run_batch(
             except click.exceptions.UsageError as e:
                 code = e.exit_code or 2
                 error = e.format_message()
-                console.print(f"[red]Error:[/red] {error}")
+                console.print(f"[red]Error:[/red] {escape(error)}")
             except click.exceptions.Abort as e:
                 # Click converts a Ctrl-C raised *inside* a command into an Abort
                 # whose ``__cause__`` is the original KeyboardInterrupt; a Ctrl-C
@@ -228,7 +238,7 @@ def run_batch(
             except Exception as e:  # a command raised an unexpected error
                 code = 1
                 error = f"{type(e).__name__}: {e}"
-                console.print(f"[red]Error:[/red] {error}")
+                console.print(f"[red]Error:[/red] {escape(error)}")
 
             ok = code == 0
             summary.results.append(BatchLineResult(lineno, line, ok, code, error))
@@ -268,5 +278,5 @@ def _root_command_token(tokens: list[str]) -> str | None:
 def _record(
     summary: BatchSummary, lineno: int, line: str, code: int, error: str, console
 ) -> None:
-    console.print(f"[red]Error:[/red] line {lineno}: {error}")
+    console.print(f"[red]Error:[/red] line {lineno}: {escape(error)}")
     summary.results.append(BatchLineResult(lineno, line, False, code, error))

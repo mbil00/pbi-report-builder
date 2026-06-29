@@ -10,6 +10,7 @@ from typing import Annotated, Optional
 
 import typer
 from rich import box
+from rich.markup import escape
 from rich.table import Table
 from typer.core import TyperGroup
 
@@ -513,12 +514,12 @@ def _run_batch_command(
     failures = summary.failures
     if failures:
         console.print(
-            f"\n[yellow]Ran {summary.ran} command(s): "
+            f"\n[red]Ran {summary.ran} command(s): "
             f"{summary.ok_count} ok, {len(failures)} failed"
-            f"{' (interrupted)' if summary.interrupted else ''}.[/yellow]"
+            f"{' (interrupted)' if summary.interrupted else ''}.[/red]"
         )
         for r in failures:
-            console.print(f"  [red]line {r.lineno}[/red]: {r.command}")
+            console.print(f"  [red]line {r.lineno}[/red]: {escape(r.command)}")
         raise typer.Exit(130 if summary.interrupted else 1)
 
     if summary.interrupted:
@@ -558,7 +559,8 @@ def batch_cmd(
 
     Quoting: backslashes are literal (so Windows paths work), which means the
     shell idiom of escaping a quote with a backslash (\\") is not supported; wrap
-    a value containing a double quote in single quotes instead.
+    a value containing a double quote in single quotes, and a value containing a
+    single quote/apostrophe in double quotes (e.g. displayName="Customer's Page").
 
     By default every line runs and failures are reported at the end; use
     --stop-on-error to halt at the first failure. Ctrl-C stops the whole batch

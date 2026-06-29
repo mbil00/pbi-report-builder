@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import signal
 import tempfile
 import threading
@@ -10,10 +11,12 @@ from unittest import mock
 
 import click
 import typer
+from rich.console import Console
 from typer.testing import CliRunner
 
 from pbi import cli
 from pbi.batch_runner import (
+    BatchLineResult,
     BatchSummary,
     parse_batch_lines,
     resolve_batch_input,
@@ -36,6 +39,12 @@ def _fake_root(project=None):  # noqa: D401 - test fixture
 
 @_fake_root.command("ok")
 def _fake_ok():
+    pass
+
+
+@_fake_root.command("args")
+@click.argument("rest", nargs=-1)
+def _fake_args(rest):  # accepts any trailing tokens and succeeds
     pass
 
 
@@ -142,6 +151,19 @@ class SplitCommandLineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             split_command_line('visual set "unterminated')
 
+    def test_unquoted_apostrophe_error_explains_the_quoting_rule(self) -> None:
+        # A bare apostrophe is an opening quote in POSIX shlex; the error must
+        # point at the fix (wrap such values in double quotes), not just say
+        # "No closing quotation".
+        with self.assertRaises(ValueError) as ctx:
+            split_command_line("page set Demo displayName=Customer's")
+        self.assertIn("double quotes", str(ctx.exception))
+        # The documented escape actually works.
+        self.assertEqual(
+            split_command_line('page set Demo displayName="Customer\'s Page"'),
+            ["page", "set", "Demo", "displayName=Customer's Page"],
+        )
+
 
 class ResolveBatchInputTests(unittest.TestCase):
     def test_reads_file(self) -> None:
@@ -182,6 +204,22 @@ class ResolveBatchInputTests(unittest.TestCase):
         with mock.patch("sys.stdin", fake):
             with self.assertRaises(ValueError):
                 resolve_batch_input(None)
+
+    def test_reads_relative_file_against_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "script.txt").write_text(
+                "page set Demo displayName=Hi\n", encoding="utf-8"
+            )
+            prev = os.getcwd()
+            try:
+                os.chdir(root)
+                self.assertEqual(
+                    resolve_batch_input("script.txt"),
+                    "page set Demo displayName=Hi\n",
+                )
+            finally:
+                os.chdir(prev)
 
 
 class RunBatchTests(unittest.TestCase):
@@ -413,6 +451,51 @@ class RunBatchExceptionLadderTests(unittest.TestCase):
         self.assertEqual(summary.results[1].exit_code, 1)
 
 
+class RunBatchMarkupSafetyTests(unittest.TestCase):
+    """A line/error containing Rich markup must not crash or be silently garbled.
+
+    These use a real rich.Console (the _CapturingConsole stand-in bypasses Rich's
+    markup parser, which is exactly why the bug was invisible to the other tests).
+    """
+
+    def _console_to_buffer(self):
+        buf = io.StringIO()
+        return Console(file=buf, force_terminal=False, soft_wrap=True), buf
+
+    def test_markup_tokens_in_lines_are_echoed_literally_without_crashing(self) -> None:
+        console, buf = self._console_to_buffer()
+        # '[/done]' is a Rich closing tag — an unescaped echo raises MarkupError
+        # and the whole batch dies. '[default]' is a documented selector token —
+        # an unescaped echo silently consumes it as a style span.
+        lines = parse_batch_lines(
+            "\n".join(
+                [
+                    "args title.text=[/done]",
+                    "args chart:legend.position [default]=Top",
+                    "args plain",
+                ]
+            )
+        )
+        summary = run_batch(_fake_root, lines, console=console)
+        self.assertFalse(summary.interrupted)
+        self.assertEqual(summary.ran, 3)
+        self.assertEqual(summary.ok_count, 3)
+        out = buf.getvalue()
+        self.assertIn("[/done]", out)
+        self.assertIn("[default]", out)
+
+    def test_markup_in_command_error_does_not_crash_reporting(self) -> None:
+        # 'ok [/x]' carries a closing tag in BOTH the echo and the resulting
+        # UsageError ("Got unexpected extra argument ([/x])"); neither may crash.
+        console, buf = self._console_to_buffer()
+        lines = parse_batch_lines("ok [/x]")
+        summary = run_batch(_fake_root, lines, console=console)
+        self.assertEqual(summary.ran, 1)
+        self.assertFalse(summary.results[0].ok)
+        self.assertEqual(summary.results[0].exit_code, 2)
+        self.assertIn("[/x]", buf.getvalue())
+
+
 class BatchCommandCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.runner = CliRunner()
@@ -509,6 +592,59 @@ class BatchCommandCliTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertIn("No commands to run", result.output)
 
+    def test_stop_on_error_cli_halts_and_exits_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = _make_project_with_visuals(root)
+            script = root / "edits.txt"
+            script.write_text(
+                "\n".join(
+                    [
+                        'visual set Demo 99 title.text="X"',  # fails first
+                        'visual set Demo 1 title.text="ShouldNotApply"',  # must not run
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                app,
+                ["batch", str(script), "--stop-on-error", "-p", str(project.pbip_file)],
+            )
+            self.assertEqual(result.exit_code, 1, result.output)
+            project.clear_caches()
+            card1 = project.find_visual(project.find_page("Demo"), "card1")
+            self.assertNotIn(
+                "ShouldNotApply", card1.folder.joinpath("visual.json").read_text()
+            )
+
+    def test_interrupt_exits_130(self) -> None:
+        # No real command interrupts on demand, so drive an interrupted summary
+        # straight through batch_cmd to lock in the 130 exit code (cli.py).
+        summary = BatchSummary(
+            results=[BatchLineResult(1, "visual set Demo 1 title.show=true", True, 0)],
+            interrupted=True,
+        )
+        with mock.patch("pbi.batch_runner.run_batch", return_value=summary), mock.patch(
+            "pbi.batch_runner.resolve_batch_input",
+            return_value="visual set Demo 1 title.show=true\n",
+        ):
+            result = self.runner.invoke(app, ["batch", "ignored.txt"])
+        self.assertEqual(result.exit_code, 130, result.output)
+        self.assertIn("interrupted", result.output.lower())
+
+    def test_interrupt_with_failures_exits_130(self) -> None:
+        summary = BatchSummary(
+            results=[BatchLineResult(1, "visual set Demo 99 x=1", False, 1, "boom")],
+            interrupted=True,
+        )
+        with mock.patch("pbi.batch_runner.run_batch", return_value=summary), mock.patch(
+            "pbi.batch_runner.resolve_batch_input",
+            return_value="visual set Demo 99 x=1\n",
+        ):
+            result = self.runner.invoke(app, ["batch", "ignored.txt"])
+        self.assertEqual(result.exit_code, 130, result.output)
+
 
 class LazyGroupTests(unittest.TestCase):
     def test_root_is_lazy_group_and_lists_all_commands(self) -> None:
@@ -523,6 +659,26 @@ class LazyGroupTests(unittest.TestCase):
         # cli.py must no longer import these at module load; they load on demand.
         for attr in ("visual_app", "model_app", "theme_app", "bookmark_app"):
             self.assertFalse(hasattr(cli, attr), attr)
+
+    def test_heavy_group_is_built_once_and_reused(self) -> None:
+        # The headline perf win: a heavy group is imported/built once per process
+        # and cached, so repeated dispatch (e.g. across batch lines) does not
+        # rebuild the Click tree. A regression that rebuilt per call would fail.
+        cmd = typer.main.get_command(app)
+        real = cli._load_lazy_command
+        calls: list[str] = []
+
+        def spy(name):
+            calls.append(name)
+            return real(name)
+
+        with mock.patch.object(cli, "_load_lazy_command", side_effect=spy):
+            first = cmd.get_command(None, "visual")
+            second = cmd.get_command(None, "visual")
+            third = cmd.get_command(None, "visual")
+        self.assertEqual(calls, ["visual"])
+        self.assertIs(first, second)
+        self.assertIs(second, third)
 
     def test_lazy_subcommand_dispatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

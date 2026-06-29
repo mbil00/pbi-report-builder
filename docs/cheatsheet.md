@@ -210,7 +210,7 @@ cat edits.txt | pbi batch -            # read the script from stdin
 pbi run edits.txt                      # 'run' is an alias for 'batch'
 ```
 
-**Script format** — one sub-command per line (the text you'd type after `pbi`). Blank lines and full-line `#` comments are ignored (only a line whose first non-blank char is `#`, so color values like `#EDEBE9` survive). Trailing inline comments are **not** supported. Backslashes are literal, so Windows paths like `C:\Users\me\Report.pbip` need no doubling (the shell `\"` escape is therefore unsupported — wrap a value that contains a double quote in single quotes):
+**Script format** — one sub-command per line (the text you'd type after `pbi`). Blank lines and full-line `#` comments are ignored (only a line whose first non-blank char is `#`, so color values like `#EDEBE9` survive). Trailing inline comments are **not** supported. Backslashes are literal, so Windows paths like `C:\Users\me\Report.pbip` need no doubling (the shell `\"` escape is therefore unsupported — wrap a value that contains a double quote in single quotes, and a value that contains a single quote/apostrophe in double quotes — e.g. `displayName="Customer's Page"`):
 ```
 # Tidy up the Slicers page
 visual set "11 Slicers" 1 title.show=true
