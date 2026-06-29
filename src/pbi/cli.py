@@ -3,49 +3,78 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import re
 from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
 from rich import box
+from rich.markup import escape
 from rich.table import Table
-from rich.tree import Tree
+from typer.core import TyperGroup
 
-from pbi.commands.bookmarks import bookmark_app
-from pbi.commands.catalog import catalog_app
 from pbi.commands.common import (
     ProjectOpt,
     console,
     find_project,
+    get_global_project,
     get_project,
-    parse_property_assignments,
     resolve_yaml_input,
     resolve_output_path,
     set_global_project,
 )
-from pbi.commands.filters import filter_app
-from pbi.commands.images import image_app
-from pbi.commands.interactions import interaction_app
-from pbi.commands.model import model_app
-from pbi.commands.navigation import nav_app
-from pbi.commands.pages import page_app
-from pbi.commands.reports import report_app
-from pbi.commands.themes import theme_app
-from pbi.commands.visuals import (
-    visual_app,
-    visual_arrange_app,
-    visual_format_app,
-    visual_sort_app,
-)
-from pbi.properties import (
-    VISUAL_PROPERTIES,
-    canonical_object_property_name,
-    get_known_default,
-    get_visual_objects,
-    property_aliases_for,
-)
 from pbi.project_runtime import prepare_project_runtime
+
+
+# Heavy command groups are imported and built only when their subcommand is
+# actually invoked. Eagerly importing + introspecting every command on each
+# process (even a one-property edit) was the dominant CLI startup cost — Typer
+# rebuilds the entire Click command tree on every invocation. See LazyGroup.
+_LAZY_SUBAPPS: dict[str, tuple[str, str]] = {
+    "report": ("pbi.commands.reports", "report_app"),
+    "page": ("pbi.commands.pages", "page_app"),
+    "visual": ("pbi.commands.visuals", "visual_app"),
+    "model": ("pbi.commands.model", "model_app"),
+    "nav": ("pbi.commands.navigation", "nav_app"),
+    "filter": ("pbi.commands.filters", "filter_app"),
+    "theme": ("pbi.commands.themes", "theme_app"),
+    "bookmark": ("pbi.commands.bookmarks", "bookmark_app"),
+    "interaction": ("pbi.commands.interactions", "interaction_app"),
+    "image": ("pbi.commands.images", "image_app"),
+    "catalog": ("pbi.commands.catalog", "catalog_app"),
+}
+
+
+def _load_lazy_command(name: str):
+    """Import the named sub-app's module and build its Click command on demand."""
+    module_name, attr = _LAZY_SUBAPPS[name]
+    sub_app = getattr(importlib.import_module(module_name), attr)
+    command = typer.main.get_command(sub_app)
+    command.name = name
+    return command
+
+
+class LazyGroup(TyperGroup):
+    """Root command group that builds heavy sub-apps only when invoked.
+
+    ``list_commands`` advertises every group by name (so ``--help`` and shell
+    completion still work), but ``get_command`` imports and constructs a group's
+    Click command only when that group is actually dispatched, caching it for
+    reuse within the process (e.g. across ``pbi batch`` lines).
+    """
+
+    def list_commands(self, ctx):
+        return sorted({*super().list_commands(ctx), *_LAZY_SUBAPPS})
+
+    def get_command(self, ctx, name):
+        if name in _LAZY_SUBAPPS:
+            cache = self.__dict__.setdefault("_lazy_built", {})
+            if name not in cache:
+                cache[name] = _load_lazy_command(name)
+            return cache[name]
+        return super().get_command(ctx, name)
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -55,6 +84,7 @@ def _version_callback(value: bool) -> None:
 
 
 app = typer.Typer(
+    cls=LazyGroup,
     name="pbi",
     help="CLI tool for editing Power BI PBIP project files.",
     no_args_is_help=True,
@@ -73,17 +103,9 @@ def main(
     set_global_project(project)
 
 
-app.add_typer(report_app, name="report")
-app.add_typer(page_app, name="page")
-app.add_typer(visual_app, name="visual")
-app.add_typer(model_app, name="model")
-app.add_typer(nav_app, name="nav")
-app.add_typer(filter_app, name="filter")
-app.add_typer(theme_app, name="theme")
-app.add_typer(bookmark_app, name="bookmark")
-app.add_typer(interaction_app, name="interaction")
-app.add_typer(image_app, name="image")
-app.add_typer(catalog_app, name="catalog")
+# The report/page/visual/model/nav/filter/theme/bookmark/interaction/image/
+# catalog groups are registered lazily via LazyGroup (_LAZY_SUBAPPS above), so
+# they are imported and built only when their subcommand is actually run.
 
 
 def _safe_backup_path(project_root: Path, page_name: str) -> Path:
@@ -446,9 +468,132 @@ def diff_cmd(
         console.print("[dim]No differences found.[/dim]")
 
 
+# ── Batch runner ──────────────────────────────────────────────────
+
+_BATCH_SCRIPT_ARG = Annotated[
+    Optional[str],
+    typer.Argument(
+        help="Script of pbi sub-commands, one per line. Use '-' or omit to read from stdin.",
+    ),
+]
+_STOP_ON_ERROR_OPT = Annotated[
+    bool,
+    typer.Option("--stop-on-error", help="Stop at the first failing line instead of continuing."),
+]
+
+
+def _run_batch_command(
+    script: Optional[str], *, stop_on_error: bool, project: Path | None
+) -> None:
+    from pbi.batch_runner import parse_batch_lines, resolve_batch_input, run_batch
+
+    try:
+        text = resolve_batch_input(script)
+    except ValueError as e:
+        # The message embeds the user-supplied script path, which may contain
+        # Rich-markup characters (e.g. 'report-[v2].pbip'); escape it so a stray
+        # tag cannot crash reporting or silently drop part of the filename.
+        console.print(f"[red]Error:[/red] {escape(str(e))}")
+        raise typer.Exit(1)
+
+    lines = parse_batch_lines(text)
+    if not lines:
+        console.print("[yellow]No commands to run.[/yellow]")
+        raise typer.Exit(0)
+
+    # Build the Click command tree once and reuse it for every line. This is the
+    # whole point: the per-process startup cost is paid here a single time
+    # instead of once per `pbi ...` invocation.
+    cmd = typer.main.get_command(app)
+    effective_project = project if project is not None else get_global_project()
+    summary = run_batch(
+        cmd,
+        lines,
+        console=console,
+        project=effective_project,
+        stop_on_error=stop_on_error,
+    )
+
+    failures = summary.failures
+    if failures:
+        console.print(
+            f"\n[red]Ran {summary.ran} command(s): "
+            f"{summary.ok_count} ok, {len(failures)} failed"
+            f"{' (interrupted)' if summary.interrupted else ''}.[/red]"
+        )
+        for r in failures:
+            console.print(f"  [red]line {r.lineno}[/red]: {escape(r.command)}")
+        raise typer.Exit(130 if summary.interrupted else 1)
+
+    if summary.interrupted:
+        console.print(
+            f"[yellow]Stopped after {summary.ran} command(s) (interrupted).[/yellow]"
+        )
+        raise typer.Exit(130)
+
+    console.print(f"\n[green]Ran {summary.ran} command(s) successfully.[/green]")
+
+
+@app.command("batch")
+def batch_cmd(
+    script: _BATCH_SCRIPT_ARG = None,
+    stop_on_error: _STOP_ON_ERROR_OPT = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Run many pbi sub-commands in one process — one per line.
+
+    Each line is an ordinary pbi sub-command (the same text you would type after
+    'pbi'), e.g. 'visual set "Overview" 1 title.show=true'. Building the command
+    tree once and reusing it avoids paying per-process startup for every edit,
+    making long edit sequences far faster than separate 'pbi ...' invocations —
+    without a YAML round-trip.
+
+    Script format: only a line whose first non-blank character is '#' is a
+    comment (so values like the color '#EDEBE9' are preserved); blank lines are
+    skipped. Trailing inline comments are NOT supported — '# note' after a
+    command is parsed as arguments. Backslashes are literal, so Windows paths
+    like 'C:\\Users\\me\\Report.pbip' work without doubling.
+
+    Project selection (precedence: line -p > batch-level -p > cwd auto-detect):
+    a batch-level -p/--project applies to every line; a line's own -p overrides
+    it for that line only. A line with no -p uses the batch-level project if one
+    was given, otherwise auto-detects from the current directory — lines never
+    inherit a previous line's -p. nested 'batch'/'run' lines are rejected.
+
+    Quoting: backslashes are literal (so Windows paths work), which means the
+    shell idiom of escaping a quote with a backslash (\\") is not supported; wrap
+    a value containing a double quote in single quotes, and a value containing a
+    single quote/apostrophe in double quotes (e.g. displayName="Customer's Page").
+    A value that contains BOTH a single and a double quote has no reliable inline
+    form — common in DAX, e.g. IF('Sales Table'[x]>0,"Yes","No"). Pass such
+    values out-of-band instead: 'model ... edit/create --from-file <file>' (or
+    pipe them via stdin) rather than on a 'model ... set key=value' batch line.
+
+    By default every line runs and failures are reported at the end; use
+    --stop-on-error to halt at the first failure. Ctrl-C stops the whole batch
+    (including at a confirmation prompt) and still prints a summary of what ran.
+    Destructive commands still prompt unless the line passes --force/-f. When
+    the script itself is read from stdin ('pbi batch -'), stdin is consumed, so a
+    line cannot also read from stdin (e.g. 'apply -'); pass such inputs as files.
+    """
+    _run_batch_command(script, stop_on_error=stop_on_error, project=project)
+
+
+@app.command("run")
+def run_cmd(
+    script: _BATCH_SCRIPT_ARG = None,
+    stop_on_error: _STOP_ON_ERROR_OPT = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Alias for 'pbi batch': run many pbi sub-commands from a file or stdin."""
+    _run_batch_command(script, stop_on_error=stop_on_error, project=project)
+
+
 @app.command()
 def info(project: ProjectOpt = None) -> None:
     """Show project overview."""
+    from rich.tree import Tree
+
     proj = get_project(project)
     pages = proj.get_pages()
     meta = proj.get_pages_meta()

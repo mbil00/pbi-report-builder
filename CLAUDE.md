@@ -17,7 +17,7 @@ Do not assume `pytest` is installed globally.
 
 ## Command Grammar
 
-**Verbs:** `list`, `get`, `set`, `set-all`, `create`, `copy`, `delete`, `clear`, `export`, `apply`, `migrate`. Use `get` to view details (never `show`). Use `delete` to remove resources (never `remove`). Use `unhide` as the opposite of `hide`. Use `clear` to remove configuration (sort, formatting, interactions, drillthrough, tooltip).
+**Verbs:** `list`, `get`, `set`, `set-all`, `create`, `copy`, `delete`, `clear`, `export`, `apply`, `batch`, `migrate`. Use `get` to view details (never `show`). Use `delete` to remove resources (never `remove`). Use `unhide` as the opposite of `hide`. Use `clear` to remove configuration (sort, formatting, interactions, drillthrough, tooltip). Use `batch` (alias `run`) to execute many imperative sub-commands in one process — far faster than separate invocations for long edit sequences; reserve `apply` for declarative YAML state.
 
 **Arguments:** Targets are positional, options are named. Setters use `key=value` positional args. Field references use `Table.Field` format everywhere.
 
