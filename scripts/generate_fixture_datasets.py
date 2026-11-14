@@ -117,6 +117,7 @@ def main() -> None:
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     print(f"Wrote fixture datasets to {output_root}")
@@ -365,7 +366,7 @@ def generate_kitchen_sink(output_dir: Path) -> dict[str, int | str]:
         "Sales_rows": write_csv(output_dir / "Sales.csv", sales_rows),
         "Targets_rows": write_csv(output_dir / "Targets.csv", target_rows),
     }
-    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8", newline="\n")
     return manifest
 
 
@@ -672,7 +673,7 @@ def generate_model_heavy(output_dir: Path) -> dict[str, int | str]:
         "Forecast_rows": write_csv(output_dir / "Forecast.csv", forecast_rows),
         "ExchangeRate_rows": write_csv(output_dir / "ExchangeRate.csv", exchange_rates),
     }
-    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8", newline="\n")
     return manifest
 
 
@@ -1042,6 +1043,7 @@ def generate_desktop_shapes(output_dir: Path) -> dict[str, int | str]:
     (output_dir / DESKTOP_SHAPES_THEME_FILE).write_text(
         json.dumps(desktop_shapes_theme(), indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     (output_dir / DESKTOP_SHAPES_IMAGE_FILE).write_bytes(desktop_shapes_logo_png())
 
@@ -1063,7 +1065,7 @@ def generate_desktop_shapes(output_dir: Path) -> dict[str, int | str]:
             "Q/A Notes has exactly one row per project (one-to-one with Project).",
         ],
     }
-    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8", newline="\n")
     return manifest
 
 

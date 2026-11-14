@@ -53,7 +53,7 @@ def main() -> None:
         if not dataset_dir.exists():
             raise SystemExit(f"Missing dataset directory: {dataset_dir}")
         target = fixture_root / "BUILD-CHECKLIST.md"
-        target.write_text(build_checklist(fixture, dataset_dir), encoding="utf-8")
+        target.write_text(build_checklist(fixture, dataset_dir), encoding="utf-8", newline="\n")
         written.append(target)
 
     print(f"Wrote build checklists to {output_root}")
