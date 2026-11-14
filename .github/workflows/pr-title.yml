@@ -19,7 +19,7 @@ jobs:
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
-          pattern='^(feat|fix|perf|refactor|docs|test|chore)(\([a-z0-9._/-]+\))?!?: [^A-Z].*[^.]$'
+          pattern='^(feat|fix|perf|refactor|docs|test|chore)(\([a-z0-9._/-]+\))?!?: [^A-Z.](.*[^.])?$'
           if ! [[ "$TITLE" =~ $pattern ]]; then
             echo "::error::PR title must look like 'type(scope)!: summary' with type one of feat, fix, perf, refactor, docs, test, chore; a lowercase summary; no trailing period. Got: $TITLE"
             exit 1
