@@ -39,7 +39,7 @@ pbi validate                                      # Check structural integrity
 
 ## Installation
 
-Requires Python 3.11+.
+Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/). uv installs a matching Python automatically.
 
 ```bash
 # Clone the repo first
@@ -77,7 +77,8 @@ This tool edits PBIP/PBIR projects on disk. It is not a full Power BI Desktop re
 ## Development
 
 ```bash
-uv run --extra dev pytest -q
+uv sync          # create .venv from uv.lock (Python 3.14 per .python-version)
+uv run pytest -q
 ```
 
 ## Documentation
