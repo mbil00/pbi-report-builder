@@ -1,0 +1,4 @@
+# Generated build inputs are compared byte-for-byte by tests/test_desktop_shapes_fixture.py;
+# keep line endings exactly as generated on every platform.
+data/** -text
+BUILD-CHECKLIST.md -text

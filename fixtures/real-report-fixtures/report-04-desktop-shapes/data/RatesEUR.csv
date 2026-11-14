@@ -1,0 +1,7 @@
+Role,HourlyRate,OvertimeMultiplier
+Analyst,68.00,1.25
+Designer,72.50,1.25
+Developer,85.00,1.50
+Lead,98.00,1.50
+Manager,105.00,1.00
+Tester,61.50,1.25

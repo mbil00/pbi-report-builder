@@ -1,0 +1,22 @@
+{
+  "name": "Desktop Shapes Theme",
+  "dataColors": [
+    "#118DFF",
+    "#1F3A5F",
+    "#20A741",
+    "#F2A900",
+    "#D64550",
+    "#8E6CEF",
+    "#A0A0A0",
+    "#00B7C3"
+  ],
+  "foreground": "#252423",
+  "background": "#FFFFFF",
+  "tableAccent": "#118DFF",
+  "good": "#20A741",
+  "neutral": "#F2A900",
+  "bad": "#D64550",
+  "maximum": "#1F3A5F",
+  "center": "#F2A900",
+  "minimum": "#DEEFFF"
+}

@@ -5,6 +5,7 @@ Usage:
     python scripts/generate_fixture_datasets.py
     python scripts/generate_fixture_datasets.py --output fixtures/real-report-fixtures
     python scripts/generate_fixture_datasets.py --dataset kitchen-sink
+    python scripts/generate_fixture_datasets.py --dataset desktop-shapes
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import csv
 import hashlib
 import json
 import shutil
+import struct
+import zlib
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -80,7 +83,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--dataset",
-        choices=("all", "kitchen-sink", "model-heavy"),
+        choices=("all", "kitchen-sink", "model-heavy", "desktop-shapes"),
         default="all",
         help="Which fixture dataset to generate.",
     )
@@ -89,7 +92,12 @@ def main() -> None:
     output_root = args.output.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
+    # Merge into the existing manifest so generating a single dataset keeps
+    # the other datasets' entries.
+    manifest_path = output_root / "manifest.json"
     manifest: dict[str, dict[str, int | str]] = {}
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     if args.dataset in ("all", "kitchen-sink"):
         kitchen_dir = output_root / "report-01-kitchen-sink" / "data"
@@ -101,15 +109,22 @@ def main() -> None:
         reset_dir(model_dir)
         manifest["report-02-model-heavy"] = generate_model_heavy(model_dir)
 
-    (output_root / "manifest.json").write_text(
+    if args.dataset in ("all", "desktop-shapes"):
+        shapes_dir = output_root / "report-04-desktop-shapes" / "data"
+        reset_dir(shapes_dir)
+        manifest["report-04-desktop-shapes"] = generate_desktop_shapes(shapes_dir)
+
+    manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     print(f"Wrote fixture datasets to {output_root}")
     for name, info in sorted(manifest.items()):
         row_total = sum(value for key, value in info.items() if key.endswith("_rows"))
-        print(f"  {name}: {row_total} rows across {len(info) - 1} files")
+        csv_count = sum(1 for key in info if key.endswith("_rows"))
+        print(f"  {name}: {row_total} rows across {csv_count} files")
 
 
 def reset_dir(path: Path) -> None:
@@ -351,7 +366,7 @@ def generate_kitchen_sink(output_dir: Path) -> dict[str, int | str]:
         "Sales_rows": write_csv(output_dir / "Sales.csv", sales_rows),
         "Targets_rows": write_csv(output_dir / "Targets.csv", target_rows),
     }
-    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8", newline="\n")
     return manifest
 
 
@@ -658,7 +673,7 @@ def generate_model_heavy(output_dir: Path) -> dict[str, int | str]:
         "Forecast_rows": write_csv(output_dir / "Forecast.csv", forecast_rows),
         "ExchangeRate_rows": write_csv(output_dir / "ExchangeRate.csv", exchange_rates),
     }
-    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8", newline="\n")
     return manifest
 
 
@@ -739,6 +754,383 @@ def model_accounts() -> list[dict[str, object]]:
                 account_key += 1
                 sort_order += 10
     return rows
+
+
+
+# ---------------------------------------------------------------------------
+# report-04-desktop-shapes
+# ---------------------------------------------------------------------------
+
+# CSV file name -> table name the build checklist renames it to in Desktop.
+# File names stay filesystem-safe; the table names carry the special
+# characters that the fixture exists to capture (issue #52).
+DESKTOP_SHAPES_TABLES: list[tuple[str, str]] = [
+    ("Date.csv", "Date"),
+    ("Project.csv", "Project"),
+    ("Person.csv", "Person"),
+    ("RatesEUR.csv", "Rates (EUR)"),
+    ("Task.csv", "Task"),
+    ("Tag.csv", "Tag"),
+    ("TaskTag.csv", "TaskTag"),
+    ("TimeAndExpenses.csv", "Time & Expenses"),
+    ("QANotes.csv", "Q/A Notes"),
+    ("PortfolioTarget.csv", "Portfolio Target"),
+]
+
+DESKTOP_SHAPES_STATUSES: list[tuple[str, int]] = [
+    ("Not started", 1),
+    ("In progress", 2),
+    ("Blocked", 3),
+    ("Completed", 4),
+]
+
+DESKTOP_SHAPES_PRIORITIES: list[tuple[str, int]] = [
+    ("Low", 1),
+    ("Medium", 2),
+    ("High", 3),
+    ("Critical", 4),
+]
+
+DESKTOP_SHAPES_THEME_FILE = "Desktop Shapes Theme.json"
+DESKTOP_SHAPES_IMAGE_FILE = "Team Logo.png"
+
+
+def generate_desktop_shapes(output_dir: Path) -> dict[str, int | str]:
+    """Project-delivery dataset for the Desktop-built shapes fixture.
+
+    Small on purpose: the fixture exists to capture the JSON/TMDL shapes
+    Power BI Desktop writes, not to exercise volume.
+    """
+    start = date(2024, 1, 1)
+    end = date(2025, 12, 31)
+
+    date_rows = [
+        {
+            "Date": fmt_date(day),
+            "Year": day.year,
+            "Quarter": f"Q{((day.month - 1) // 3) + 1}",
+            "MonthNumber": day.month,
+            "MonthName": day.strftime("%B"),
+            "YearMonth": day.strftime("%Y-%m"),
+            "IsWeekend": day.weekday() >= 5,
+        }
+        for day in daterange(start, end)
+    ]
+
+    portfolios = ["Customer Experience", "Platform", "Operations", "Compliance"]
+    project_names = [
+        "Checkout Redesign",
+        "Self-Service Portal",
+        "Mobile Notifications",
+        "Data Platform Upgrade",
+        "API Gateway",
+        "Identity Service",
+        "Warehouse Scheduling",
+        "Fleet Tracking",
+        "Support Tooling",
+        "Audit Trail",
+        "Retention Policy",
+        "Access Review",
+    ]
+    project_priorities = ["High", "Medium", "Critical", "High", "Medium", "Low",
+                          "Medium", "Low", "High", "Critical", "Low", "Medium"]
+    priority_rank = dict(DESKTOP_SHAPES_PRIORITIES)
+    projects: list[dict[str, object]] = []
+    for index, name in enumerate(project_names):
+        key = index + 1
+        priority = project_priorities[index]
+        projects.append(
+            {
+                "ProjectKey": key,
+                "ProjectCode": f"P-{100 + key}",
+                "ProjectName": name,
+                "Portfolio": portfolios[index // 3],
+                "Priority": priority,
+                "PriorityRank": priority_rank[priority],
+                "StartDate": fmt_date(date(2023, 9, 1) + timedelta(days=bounded_int(0, 270, "project-start", key))),
+                "Budget": f"{bounded_float(25000.0, 250000.0, 500.0, 'project-budget', key):.2f}",
+                "IsActive": key <= 10,
+            }
+        )
+
+    rates = [
+        {"Role": "Analyst", "HourlyRate": "68.00", "OvertimeMultiplier": "1.25"},
+        {"Role": "Designer", "HourlyRate": "72.50", "OvertimeMultiplier": "1.25"},
+        {"Role": "Developer", "HourlyRate": "85.00", "OvertimeMultiplier": "1.50"},
+        {"Role": "Lead", "HourlyRate": "98.00", "OvertimeMultiplier": "1.50"},
+        {"Role": "Manager", "HourlyRate": "105.00", "OvertimeMultiplier": "1.00"},
+        {"Role": "Tester", "HourlyRate": "61.50", "OvertimeMultiplier": "1.25"},
+    ]
+    rate_by_role = {row["Role"]: float(row["HourlyRate"]) for row in rates}
+
+    first_names = ["Adam", "Beata", "Carlos", "Dana", "Erik", "Fatima", "Gustav", "Hana",
+                   "Ivan", "Julia", "Karel", "Lena", "Marek", "Nina", "Oskar", "Petra"]
+    last_names = ["Novak", "Schmidt", "de Vries", "Kowalska", "Horak", "Weber", "Jansen",
+                  "Nowak", "Dvorak", "Fischer", "Bakker", "Wojcik", "Svoboda", "Meyer",
+                  "Visser", "Zielinska"]
+    teams = ["Design", "Engineering", "QA", "Operations"]
+    team_role = {"Design": "Designer", "Engineering": "Developer", "QA": "Tester", "Operations": "Analyst"}
+    countries = ["Czechia", "Germany", "Netherlands", "Poland"]
+    people: list[dict[str, object]] = []
+    for index in range(16):
+        key = index + 1
+        team = teams[index % len(teams)]
+        if key == 16:
+            role = "Manager"
+        elif index < len(teams):
+            role = "Lead"
+        else:
+            role = team_role[team]
+        people.append(
+            {
+                "PersonKey": key,
+                "PersonName": f"{first_names[index]} {last_names[index]}",
+                "Team": team,
+                "Role": role,
+                "Country": countries[(index * 3) % len(countries)],
+                "StartDate": fmt_date(date(2019, 1, 1) + timedelta(days=bounded_int(0, 1800, "person-start", key))),
+            }
+        )
+    role_by_person = {row["PersonKey"]: row["Role"] for row in people}
+
+    status_rank = dict(DESKTOP_SHAPES_STATUSES)
+    categories = ["Design", "Build", "Test", "Docs"]
+    verbs = ["Draft", "Review", "Implement", "Test", "Document", "Refine", "Migrate", "Validate"]
+    objects = ["login flow", "invoice export", "search index", "audit log", "onboarding email",
+               "data model", "release notes", "API client", "dashboard", "access policy"]
+    story_points = [1, 2, 3, 5, 8, 13]
+    last_created = date(2025, 10, 31)
+    created_span = (last_created - start).days
+
+    tasks: list[dict[str, object]] = []
+    for key in range(1, 601):
+        roll = stable_int("task-status", key) % 100
+        if roll < 45:
+            status = "Completed"
+        elif roll < 70:
+            status = "In progress"
+        elif roll < 88:
+            status = "Not started"
+        else:
+            status = "Blocked"
+        created = start + timedelta(days=stable_int("task-created", key) % (created_span + 1))
+        due = min(created + timedelta(days=bounded_int(3, 60, "task-due", key)), end)
+        completed: str = ""
+        if status == "Completed":
+            completed_day = created + timedelta(days=bounded_int(1, (due - created).days + 10, "task-done", key))
+            completed = fmt_date(min(completed_day, end))
+        estimate = bounded_float(2.0, 40.0, 0.5, "task-estimate", key)
+        if status in ("Completed", "In progress", "Blocked"):
+            factor = bounded_float(0.6, 1.6, 0.05, "task-actual", key)
+            if status != "Completed":
+                factor = round(factor / 2, 2)
+            actual = round(estimate * factor * 2) / 2
+        else:
+            actual = 0.0
+        tasks.append(
+            {
+                "TaskKey": key,
+                "TaskCode": f"T-{key:04d}",
+                "TaskName": f"{choose(verbs, 'task-verb', key)} {choose(objects, 'task-object', key)}",
+                "ProjectKey": 1 + stable_int("task-project", key) % len(projects),
+                "PersonKey": 1 + stable_int("task-person", key) % len(people),
+                "Category": choose(categories, "task-category", key),
+                "Status": status,
+                "StatusRank": status_rank[status],
+                "CreatedDate": fmt_date(created),
+                "DueDate": fmt_date(due),
+                "CompletedDate": completed,
+                "EstimateHours": f"{estimate:.1f}",
+                "ActualHours": f"{actual:.1f}",
+                "StoryPoints": story_points[stable_int("task-points", key) % len(story_points)],
+            }
+        )
+
+    tag_specs = [
+        ("Frontend", "Technical"),
+        ("Backend", "Technical"),
+        ("Data", "Technical"),
+        ("Security", "Quality"),
+        ("Accessibility", "Quality"),
+        ("Performance", "Quality"),
+        ("Customer request", "Business"),
+        ("Regulatory", "Business"),
+    ]
+    tags = [
+        {"TagKey": index + 1, "TagName": name, "TagGroup": group}
+        for index, (name, group) in enumerate(tag_specs)
+    ]
+    task_tags: list[dict[str, object]] = []
+    for task in tasks:
+        task_key = task["TaskKey"]
+        count = stable_int("task-tag-count", task_key) % 4
+        ranked = sorted(tags, key=lambda tag: stable_int("task-tag", task_key, tag["TagKey"]))
+        for tag in sorted(ranked[:count], key=lambda tag: tag["TagKey"]):
+            task_tags.append({"TaskKey": task_key, "TagKey": tag["TagKey"]})
+
+    entries: list[dict[str, object]] = []
+    all_days = daterange(start, end)
+    for key in range(1, 1501):
+        person_key = 1 + stable_int("te-person", key) % len(people)
+        is_expense = stable_int("te-type", key) % 100 < 15
+        if is_expense:
+            hours = 0.0
+            amount = bounded_float(15.0, 900.0, 0.05, "te-expense", key)
+        else:
+            hours = bounded_float(0.5, 8.0, 0.25, "te-hours", key)
+            amount = round(hours * rate_by_role[role_by_person[person_key]], 2)
+        entries.append(
+            {
+                "EntryKey": key,
+                "EntryDate": fmt_date(all_days[stable_int("te-date", key) % len(all_days)]),
+                "ProjectKey": 1 + stable_int("te-project", key) % len(projects),
+                "PersonKey": person_key,
+                "EntryType": "Expense" if is_expense else "Time",
+                "Hours": f"{hours:.2f}",
+                "Amount": f"{amount:.2f}",
+                "IsBillable": stable_int("te-billable", key) % 10 < 7,
+            }
+        )
+
+    qa_notes_text = [
+        "Happy path verified",
+        "Needs load test before release",
+        "Accessibility review pending",
+        "Regression suite green",
+        "Open question on data retention",
+        "Security sign-off received",
+    ]
+    qa_notes = [
+        {
+            "ProjectKey": project["ProjectKey"],
+            "Reviewer": people[stable_int("qa-reviewer", project["ProjectKey"]) % len(people)]["PersonName"],
+            "ReviewDate": fmt_date(date(2025, 1, 1) + timedelta(days=bounded_int(0, 330, "qa-date", project["ProjectKey"]))),
+            "QAScore": bounded_int(1, 5, "qa-score", project["ProjectKey"]),
+            "Note": choose(qa_notes_text, "qa-note", project["ProjectKey"]),
+        }
+        for project in projects
+    ]
+
+    portfolio_targets = [
+        {
+            "Portfolio": portfolio,
+            "Year": year,
+            "TargetHours": bounded_int(16, 48, "pt-hours", portfolio, year) * 50,
+            "TargetBudget": f"{bounded_float(150000.0, 600000.0, 1000.0, 'pt-budget', portfolio, year):.2f}",
+        }
+        for portfolio in portfolios
+        for year in (2024, 2025)
+    ]
+
+    tables: dict[str, list[dict[str, object]]] = {
+        "Date.csv": date_rows,
+        "Project.csv": projects,
+        "Person.csv": people,
+        "RatesEUR.csv": rates,
+        "Task.csv": tasks,
+        "Tag.csv": tags,
+        "TaskTag.csv": task_tags,
+        "TimeAndExpenses.csv": entries,
+        "QANotes.csv": qa_notes,
+        "PortfolioTarget.csv": portfolio_targets,
+    }
+    assert [name for name, _ in DESKTOP_SHAPES_TABLES] == list(tables)
+
+    manifest: dict[str, int | str] = {"dataset": "report-04-desktop-shapes"}
+    for file_name, rows in tables.items():
+        manifest[f"{Path(file_name).stem}_rows"] = write_csv(output_dir / file_name, rows)
+
+    (output_dir / DESKTOP_SHAPES_THEME_FILE).write_text(
+        json.dumps(desktop_shapes_theme(), indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (output_dir / DESKTOP_SHAPES_IMAGE_FILE).write_bytes(desktop_shapes_logo_png())
+
+    notes = {
+        "fixture": "report-04-desktop-shapes",
+        "date_range": f"{start.isoformat()} to {end.isoformat()}",
+        "import_order": [file_name for file_name, _ in DESKTOP_SHAPES_TABLES],
+        "csv_to_table": {file_name: table for file_name, table in DESKTOP_SHAPES_TABLES},
+        "other_inputs": {
+            DESKTOP_SHAPES_THEME_FILE: "Custom theme imported in Desktop (file name contains a space, issue #29).",
+            DESKTOP_SHAPES_IMAGE_FILE: "Image inserted in Desktop (file name contains a space, issue #29).",
+        },
+        "manual_modeling_steps": [
+            "Follow BUILD-CHECKLIST.md step by step; everything is built by hand in Power BI Desktop.",
+            "Rename each imported table to the name in csv_to_table.",
+            "Task[CompletedDate] is blank for tasks that are not Completed.",
+            "Project[Priority] sorts by Project[PriorityRank]; Task[Status] sorts by Task[StatusRank].",
+            "Portfolio Target relates to Project on the non-unique Portfolio column (many-to-many).",
+            "Q/A Notes has exactly one row per project (one-to-one with Project).",
+        ],
+    }
+    (output_dir / "README.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return manifest
+
+
+def desktop_shapes_theme() -> dict[str, object]:
+    """Minimal custom theme. textClasses are left out on purpose: the build
+    checklist sets them through Desktop's Customize theme dialog (issue #49)."""
+    return {
+        "name": "Desktop Shapes Theme",
+        "dataColors": [
+            "#118DFF",
+            "#1F3A5F",
+            "#20A741",
+            "#F2A900",
+            "#D64550",
+            "#8E6CEF",
+            "#A0A0A0",
+            "#00B7C3",
+        ],
+        "foreground": "#252423",
+        "background": "#FFFFFF",
+        "tableAccent": "#118DFF",
+        "good": "#20A741",
+        "neutral": "#F2A900",
+        "bad": "#D64550",
+        "maximum": "#1F3A5F",
+        "center": "#F2A900",
+        "minimum": "#DEEFFF",
+    }
+
+
+def desktop_shapes_logo_png(width: int = 96, height: int = 32) -> bytes:
+    """Byte-stable PNG: three colour bands, deflate in stored (uncompressed)
+    blocks so the output doesn't depend on the zlib build."""
+    bands = [(0x1F, 0x3A, 0x5F), (0x11, 0x8D, 0xFF), (0x20, 0xA7, 0x41)]
+    raw = bytearray()
+    for _y in range(height):
+        raw.append(0)  # filter type: none
+        for x in range(width):
+            raw.extend(bands[min(x * len(bands) // width, len(bands) - 1)])
+    data = bytes(raw)
+
+    stream = bytearray(b"\x78\x01")
+    for offset in range(0, len(data), 65535):
+        chunk = data[offset:offset + 65535]
+        final = 1 if offset + 65535 >= len(data) else 0
+        stream.append(final)
+        stream.extend(struct.pack("<HH", len(chunk), len(chunk) ^ 0xFFFF))
+        stream.extend(chunk)
+    stream.extend(struct.pack(">I", zlib.adler32(data)))
+
+    def png_chunk(kind: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload))
+        )
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", header)
+        + png_chunk(b"IDAT", bytes(stream))
+        + png_chunk(b"IEND", b"")
+    )
 
 
 if __name__ == "__main__":
