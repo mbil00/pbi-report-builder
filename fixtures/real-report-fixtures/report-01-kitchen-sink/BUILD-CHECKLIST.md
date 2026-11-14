@@ -6,7 +6,7 @@ Create a PBIP report fixture that exercises the widest practical report-authorin
 
 Dataset location:
 
-- `/home/mbil/Projects/pbi-report-builder/fixtures/real-report-fixtures/report-01-kitchen-sink/data`
+- `fixtures/real-report-fixtures/report-01-kitchen-sink/data`
 
 CSV files to import:
 
@@ -28,7 +28,7 @@ CSV files to import:
 
 ## 2. Load Data
 
-Import these CSVs from `/home/mbil/Projects/pbi-report-builder/fixtures/real-report-fixtures/report-01-kitchen-sink/data`:
+Import these CSVs from `fixtures/real-report-fixtures/report-01-kitchen-sink/data`:
 
 - `Date.csv`
 - `Product.csv`

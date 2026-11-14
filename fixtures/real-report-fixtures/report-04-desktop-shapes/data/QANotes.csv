@@ -1,0 +1,13 @@
+ProjectKey,Reviewer,ReviewDate,QAScore,Note
+1,Nina Meyer,2025-10-27,2,Open question on data retention
+2,Carlos de Vries,2025-10-15,4,Regression suite green
+3,Fatima Weber,2025-03-02,2,Security sign-off received
+4,Lena Wojcik,2025-08-07,3,Regression suite green
+5,Ivan Dvorak,2025-11-22,3,Regression suite green
+6,Karel Bakker,2025-02-28,4,Needs load test before release
+7,Petra Zielinska,2025-05-11,3,Security sign-off received
+8,Karel Bakker,2025-02-12,4,Needs load test before release
+9,Gustav Jansen,2025-06-30,5,Happy path verified
+10,Marek Svoboda,2025-04-22,4,Happy path verified
+11,Lena Wojcik,2025-03-15,5,Happy path verified
+12,Nina Meyer,2025-10-30,1,Needs load test before release

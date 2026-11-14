@@ -1,0 +1,13 @@
+ProjectKey,ProjectCode,ProjectName,Portfolio,Priority,PriorityRank,StartDate,Budget,IsActive
+1,P-101,Checkout Redesign,Customer Experience,High,3,2024-02-19,80000.00,True
+2,P-102,Self-Service Portal,Customer Experience,Medium,2,2023-11-01,89000.00,True
+3,P-103,Mobile Notifications,Customer Experience,Critical,4,2024-02-24,153500.00,True
+4,P-104,Data Platform Upgrade,Platform,High,3,2024-01-01,116500.00,True
+5,P-105,API Gateway,Platform,Medium,2,2023-09-26,199000.00,True
+6,P-106,Identity Service,Platform,Low,1,2024-05-05,61000.00,True
+7,P-107,Warehouse Scheduling,Operations,Medium,2,2024-04-25,112500.00,True
+8,P-108,Fleet Tracking,Operations,Low,1,2024-02-29,105000.00,True
+9,P-109,Support Tooling,Operations,High,3,2024-02-19,172500.00,True
+10,P-110,Audit Trail,Compliance,Critical,4,2024-05-23,224000.00,True
+11,P-111,Retention Policy,Compliance,Low,1,2024-01-28,63500.00,False
+12,P-112,Access Review,Compliance,Medium,2,2023-11-16,241500.00,False

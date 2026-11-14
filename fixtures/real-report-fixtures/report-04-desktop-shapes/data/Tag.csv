@@ -1,0 +1,9 @@
+TagKey,TagName,TagGroup
+1,Frontend,Technical
+2,Backend,Technical
+3,Data,Technical
+4,Security,Quality
+5,Accessibility,Quality
+6,Performance,Quality
+7,Customer request,Business
+8,Regulatory,Business

@@ -1,0 +1,40 @@
+{
+  "fixture": "report-04-desktop-shapes",
+  "date_range": "2024-01-01 to 2025-12-31",
+  "import_order": [
+    "Date.csv",
+    "Project.csv",
+    "Person.csv",
+    "RatesEUR.csv",
+    "Task.csv",
+    "Tag.csv",
+    "TaskTag.csv",
+    "TimeAndExpenses.csv",
+    "QANotes.csv",
+    "PortfolioTarget.csv"
+  ],
+  "csv_to_table": {
+    "Date.csv": "Date",
+    "Project.csv": "Project",
+    "Person.csv": "Person",
+    "RatesEUR.csv": "Rates (EUR)",
+    "Task.csv": "Task",
+    "Tag.csv": "Tag",
+    "TaskTag.csv": "TaskTag",
+    "TimeAndExpenses.csv": "Time & Expenses",
+    "QANotes.csv": "Q/A Notes",
+    "PortfolioTarget.csv": "Portfolio Target"
+  },
+  "other_inputs": {
+    "Desktop Shapes Theme.json": "Custom theme imported in Desktop (file name contains a space, issue #29).",
+    "Team Logo.png": "Image inserted in Desktop (file name contains a space, issue #29)."
+  },
+  "manual_modeling_steps": [
+    "Follow BUILD-CHECKLIST.md step by step; everything is built by hand in Power BI Desktop.",
+    "Rename each imported table to the name in csv_to_table.",
+    "Task[CompletedDate] is blank for tasks that are not Completed.",
+    "Project[Priority] sorts by Project[PriorityRank]; Task[Status] sorts by Task[StatusRank].",
+    "Portfolio Target relates to Project on the non-unique Portfolio column (many-to-many).",
+    "Q/A Notes has exactly one row per project (one-to-one with Project)."
+  ]
+}

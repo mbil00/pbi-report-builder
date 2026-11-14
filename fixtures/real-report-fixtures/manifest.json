@@ -21,5 +21,18 @@
     "GL_Actuals_rows": 17280,
     "Scenario_rows": 3,
     "dataset": "report-02-model-heavy"
+  },
+  "report-04-desktop-shapes": {
+    "Date_rows": 731,
+    "Person_rows": 16,
+    "PortfolioTarget_rows": 8,
+    "Project_rows": 12,
+    "QANotes_rows": 12,
+    "RatesEUR_rows": 6,
+    "Tag_rows": 8,
+    "TaskTag_rows": 905,
+    "Task_rows": 600,
+    "TimeAndExpenses_rows": 1500,
+    "dataset": "report-04-desktop-shapes"
   }
 }

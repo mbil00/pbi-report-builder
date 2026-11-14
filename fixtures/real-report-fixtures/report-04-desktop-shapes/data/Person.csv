@@ -1,0 +1,17 @@
+PersonKey,PersonName,Team,Role,Country,StartDate
+1,Adam Novak,Design,Lead,Czechia,2019-05-22
+2,Beata Schmidt,Engineering,Lead,Poland,2022-07-23
+3,Carlos de Vries,QA,Lead,Netherlands,2021-01-20
+4,Dana Kowalska,Operations,Lead,Germany,2022-10-09
+5,Erik Horak,Design,Designer,Czechia,2020-08-14
+6,Fatima Weber,Engineering,Developer,Poland,2021-10-01
+7,Gustav Jansen,QA,Tester,Netherlands,2020-11-25
+8,Hana Nowak,Operations,Analyst,Germany,2022-09-26
+9,Ivan Dvorak,Design,Designer,Czechia,2021-01-06
+10,Julia Fischer,Engineering,Developer,Poland,2020-06-09
+11,Karel Bakker,QA,Tester,Netherlands,2023-09-10
+12,Lena Wojcik,Operations,Analyst,Germany,2023-05-20
+13,Marek Svoboda,Design,Designer,Czechia,2023-04-05
+14,Nina Meyer,Engineering,Developer,Poland,2021-11-20
+15,Oskar Visser,QA,Tester,Netherlands,2022-07-08
+16,Petra Zielinska,Operations,Manager,Germany,2021-05-03

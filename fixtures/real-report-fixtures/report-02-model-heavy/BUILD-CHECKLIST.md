@@ -6,7 +6,7 @@ Create a PBIP fixture optimized for semantic model editing, dependency analysis,
 
 Dataset location:
 
-- `/home/mbil/Projects/pbi-report-builder/fixtures/real-report-fixtures/report-02-model-heavy/data`
+- `fixtures/real-report-fixtures/report-02-model-heavy/data`
 
 CSV files to import:
 
@@ -29,7 +29,7 @@ CSV files to import:
 
 ## 2. Load Data
 
-Import these CSVs from `/home/mbil/Projects/pbi-report-builder/fixtures/real-report-fixtures/report-02-model-heavy/data`:
+Import these CSVs from `fixtures/real-report-fixtures/report-02-model-heavy/data`:
 
 - `Date.csv`
 - `Department.csv`

@@ -1,0 +1,601 @@
+TaskKey,TaskCode,TaskName,ProjectKey,PersonKey,Category,Status,StatusRank,CreatedDate,DueDate,CompletedDate,EstimateHours,ActualHours,StoryPoints
+1,T-0001,Validate audit log,3,13,Test,In progress,2,2025-09-11,2025-11-02,,8.0,2.5,8
+2,T-0002,Review login flow,8,3,Test,Not started,1,2025-01-14,2025-03-12,,19.5,0.0,2
+3,T-0003,Test invoice export,12,3,Design,Completed,4,2024-02-06,2024-02-23,2024-02-20,35.0,52.5,1
+4,T-0004,Refine audit log,2,12,Build,Completed,4,2025-02-09,2025-02-24,2025-02-26,9.5,13.0,2
+5,T-0005,Implement API client,8,12,Design,Not started,1,2024-01-01,2024-02-29,,31.5,0.0,5
+6,T-0006,Draft onboarding email,9,12,Design,Blocked,3,2024-02-05,2024-02-24,,23.0,7.0,13
+7,T-0007,Draft API client,2,5,Test,Completed,4,2025-04-12,2025-04-23,2025-04-25,6.0,7.0,5
+8,T-0008,Review login flow,10,13,Test,Not started,1,2024-04-27,2024-06-01,,40.0,0.0,1
+9,T-0009,Migrate dashboard,11,1,Build,Completed,4,2024-04-17,2024-05-17,2024-05-27,13.0,8.0,1
+10,T-0010,Document search index,9,1,Build,Not started,1,2024-10-23,2024-12-21,,16.0,0.0,8
+11,T-0011,Test dashboard,4,3,Test,Completed,4,2024-10-17,2024-11-29,2024-10-25,11.5,16.5,5
+12,T-0012,Refine dashboard,7,14,Test,Not started,1,2025-03-19,2025-04-01,,3.0,0.0,1
+13,T-0013,Draft API client,4,4,Test,Not started,1,2024-10-23,2024-11-02,,17.5,0.0,8
+14,T-0014,Document data model,1,1,Test,Completed,4,2025-01-29,2025-02-04,2025-02-10,18.0,22.5,5
+15,T-0015,Migrate onboarding email,7,2,Build,Completed,4,2025-01-21,2025-03-16,2025-01-27,12.0,15.0,3
+16,T-0016,Review invoice export,6,8,Docs,In progress,2,2024-08-07,2024-08-26,,12.5,7.0,13
+17,T-0017,Draft API client,11,12,Docs,Not started,1,2024-07-25,2024-08-05,,3.0,0.0,3
+18,T-0018,Validate data model,6,4,Design,Blocked,3,2024-10-25,2024-11-20,,28.0,19.5,5
+19,T-0019,Test onboarding email,7,1,Docs,Completed,4,2024-08-17,2024-09-02,2024-09-04,38.5,27.0,3
+20,T-0020,Review search index,11,4,Build,Completed,4,2024-06-21,2024-08-11,2024-06-29,2.5,2.5,3
+21,T-0021,Draft access policy,8,15,Design,Completed,4,2025-08-31,2025-09-25,2025-09-15,27.0,31.0,5
+22,T-0022,Migrate dashboard,4,11,Docs,Blocked,3,2024-03-20,2024-03-30,,9.0,3.0,3
+23,T-0023,Migrate search index,12,4,Docs,Completed,4,2025-03-26,2025-05-24,2025-03-28,24.0,26.5,1
+24,T-0024,Migrate access policy,4,16,Test,Completed,4,2025-04-10,2025-04-22,2025-04-20,36.5,33.0,3
+25,T-0025,Implement API client,12,14,Docs,In progress,2,2025-01-11,2025-01-17,,17.5,6.0,13
+26,T-0026,Validate invoice export,10,11,Build,Completed,4,2025-05-11,2025-06-11,2025-05-21,14.5,11.5,2
+27,T-0027,Review access policy,6,11,Build,Completed,4,2024-07-12,2024-08-11,2024-07-27,21.0,17.0,3
+28,T-0028,Draft dashboard,11,10,Design,Not started,1,2024-03-23,2024-05-09,,10.5,0.0,1
+29,T-0029,Migrate data model,9,4,Docs,In progress,2,2024-06-19,2024-08-15,,26.5,8.5,13
+30,T-0030,Refine data model,3,1,Design,Completed,4,2025-06-12,2025-08-05,2025-06-29,22.0,26.5,8
+31,T-0031,Implement release notes,12,4,Docs,Blocked,3,2024-06-26,2024-08-09,,7.5,2.5,13
+32,T-0032,Draft release notes,6,9,Test,Completed,4,2025-02-02,2025-02-15,2025-02-12,37.0,37.0,1
+33,T-0033,Review dashboard,6,14,Build,Blocked,3,2024-01-28,2024-03-19,,27.0,14.5,1
+34,T-0034,Draft dashboard,4,7,Design,In progress,2,2024-09-23,2024-10-09,,10.0,7.0,5
+35,T-0035,Validate onboarding email,2,7,Test,Completed,4,2025-07-04,2025-07-25,2025-07-21,12.5,19.0,13
+36,T-0036,Test data model,3,16,Design,In progress,2,2024-08-25,2024-10-04,,7.0,4.5,5
+37,T-0037,Implement release notes,6,6,Design,In progress,2,2024-09-07,2024-09-17,,5.5,3.0,8
+38,T-0038,Review search index,9,4,Docs,In progress,2,2024-02-08,2024-02-17,,10.5,4.0,2
+39,T-0039,Implement audit log,5,12,Design,Completed,4,2025-05-21,2025-05-27,2025-06-05,21.0,28.5,2
+40,T-0040,Migrate search index,3,4,Design,Not started,1,2024-08-22,2024-09-17,,27.5,0.0,13
+41,T-0041,Draft release notes,4,1,Docs,In progress,2,2025-05-19,2025-06-11,,12.0,5.5,8
+42,T-0042,Validate search index,9,2,Docs,Not started,1,2024-10-01,2024-10-15,,12.5,0.0,2
+43,T-0043,Document access policy,10,3,Docs,Blocked,3,2024-07-09,2024-08-28,,16.5,8.0,13
+44,T-0044,Test access policy,7,15,Docs,Blocked,3,2024-05-01,2024-05-09,,22.0,16.0,1
+45,T-0045,Refine search index,12,10,Design,Completed,4,2024-11-07,2024-11-26,2024-11-26,20.5,26.5,3
+46,T-0046,Implement login flow,6,14,Docs,Completed,4,2025-03-08,2025-04-23,2025-03-09,6.5,4.0,3
+47,T-0047,Draft onboarding email,8,7,Test,Blocked,3,2025-05-25,2025-06-29,,31.5,16.5,5
+48,T-0048,Review onboarding email,1,12,Design,Completed,4,2024-09-05,2024-09-29,2024-09-22,29.0,39.0,13
+49,T-0049,Refine release notes,9,10,Design,Completed,4,2024-01-30,2024-03-05,2024-03-09,21.5,22.5,1
+50,T-0050,Review data model,12,16,Build,Completed,4,2024-10-22,2024-12-19,2024-12-11,27.0,38.0,8
+51,T-0051,Validate dashboard,9,6,Docs,Completed,4,2025-08-10,2025-09-28,2025-09-01,35.5,32.0,13
+52,T-0052,Draft dashboard,12,3,Test,In progress,2,2024-12-29,2025-02-18,,40.0,32.0,5
+53,T-0053,Migrate invoice export,4,8,Design,Completed,4,2025-04-27,2025-05-20,2025-05-24,33.0,38.0,5
+54,T-0054,Draft access policy,11,15,Design,Not started,1,2025-04-23,2025-05-11,,20.5,0.0,2
+55,T-0055,Document release notes,5,16,Build,In progress,2,2025-10-16,2025-12-10,,37.5,14.0,8
+56,T-0056,Migrate dashboard,6,7,Test,In progress,2,2024-05-19,2024-05-22,,36.0,25.0,2
+57,T-0057,Validate audit log,5,10,Docs,Completed,4,2024-06-12,2024-07-23,2024-07-05,7.0,5.0,8
+58,T-0058,Validate invoice export,5,12,Build,Completed,4,2024-08-02,2024-08-19,2024-08-15,12.0,7.0,13
+59,T-0059,Migrate access policy,3,4,Build,Completed,4,2025-02-11,2025-03-29,2025-03-02,5.0,4.0,5
+60,T-0060,Document audit log,2,13,Build,Not started,1,2025-04-01,2025-05-30,,24.0,0.0,13
+61,T-0061,Implement data model,2,7,Test,Not started,1,2025-10-27,2025-11-28,,17.0,0.0,3
+62,T-0062,Document access policy,12,11,Docs,Blocked,3,2025-06-11,2025-07-01,,4.0,1.5,2
+63,T-0063,Migrate dashboard,2,12,Design,In progress,2,2024-03-31,2024-05-29,,34.0,13.5,3
+64,T-0064,Draft API client,2,11,Design,Completed,4,2025-04-01,2025-05-02,2025-05-02,12.0,18.0,5
+65,T-0065,Implement login flow,7,9,Docs,In progress,2,2025-03-14,2025-03-24,,5.0,3.5,3
+66,T-0066,Document invoice export,3,5,Test,In progress,2,2024-03-13,2024-04-05,,27.0,18.5,13
+67,T-0067,Migrate audit log,6,7,Test,Blocked,3,2025-01-21,2025-03-01,,3.5,1.5,13
+68,T-0068,Draft release notes,12,3,Build,Completed,4,2024-06-21,2024-07-24,2024-07-28,37.0,22.0,2
+69,T-0069,Test dashboard,5,13,Test,In progress,2,2025-07-27,2025-09-16,,17.5,12.0,8
+70,T-0070,Document API client,1,4,Docs,Completed,4,2025-01-27,2025-02-13,2025-02-14,17.5,19.0,2
+71,T-0071,Migrate release notes,1,2,Docs,In progress,2,2024-11-27,2024-12-07,,33.0,21.5,2
+72,T-0072,Migrate login flow,3,9,Design,Completed,4,2025-03-03,2025-03-14,2025-03-16,34.0,44.0,1
+73,T-0073,Validate onboarding email,3,4,Design,In progress,2,2025-03-24,2025-04-04,,11.0,7.5,3
+74,T-0074,Document invoice export,4,5,Design,Completed,4,2024-10-07,2024-11-09,2024-10-14,40.0,32.0,8
+75,T-0075,Test API client,7,3,Build,Completed,4,2025-01-25,2025-02-26,2025-01-26,25.0,30.0,5
+76,T-0076,Validate release notes,12,9,Design,Completed,4,2025-01-25,2025-02-14,2025-01-26,12.0,9.0,1
+77,T-0077,Refine audit log,7,8,Test,In progress,2,2024-03-01,2024-03-16,,2.5,1.5,13
+78,T-0078,Review access policy,9,11,Build,Completed,4,2025-09-01,2025-10-01,2025-09-30,14.0,9.0,3
+79,T-0079,Document search index,10,9,Design,Completed,4,2025-07-05,2025-08-09,2025-08-14,30.0,46.5,5
+80,T-0080,Document invoice export,2,1,Design,Completed,4,2025-09-01,2025-10-05,2025-10-04,34.0,29.0,2
+81,T-0081,Implement search index,4,11,Design,Completed,4,2024-11-29,2024-12-02,2024-11-30,12.5,9.0,3
+82,T-0082,Draft data model,11,8,Build,Not started,1,2025-01-08,2025-03-03,,7.5,0.0,1
+83,T-0083,Document dashboard,10,5,Design,Not started,1,2024-07-25,2024-09-02,,8.5,0.0,5
+84,T-0084,Migrate API client,7,10,Build,Completed,4,2025-10-06,2025-11-29,2025-11-08,14.0,19.0,2
+85,T-0085,Draft release notes,12,3,Test,Completed,4,2025-04-30,2025-06-15,2025-06-16,21.5,34.5,8
+86,T-0086,Draft onboarding email,5,6,Docs,In progress,2,2025-07-14,2025-09-12,,23.0,12.0,2
+87,T-0087,Refine access policy,7,12,Test,In progress,2,2025-03-14,2025-03-26,,30.0,16.5,5
+88,T-0088,Refine audit log,3,7,Build,Not started,1,2025-08-22,2025-10-05,,29.0,0.0,3
+89,T-0089,Migrate onboarding email,6,15,Design,In progress,2,2025-03-05,2025-04-01,,23.0,18.5,2
+90,T-0090,Refine release notes,1,1,Docs,Completed,4,2025-08-30,2025-10-15,2025-10-22,20.5,28.5,1
+91,T-0091,Implement release notes,2,9,Build,In progress,2,2024-11-27,2024-12-17,,23.5,12.0,13
+92,T-0092,Document login flow,7,15,Build,In progress,2,2025-08-22,2025-10-04,,6.0,2.5,1
+93,T-0093,Document search index,9,10,Docs,Blocked,3,2024-09-30,2024-10-23,,28.0,19.5,13
+94,T-0094,Validate login flow,6,6,Build,Blocked,3,2025-02-27,2025-04-04,,19.5,9.0,3
+95,T-0095,Document invoice export,11,14,Design,Not started,1,2025-01-23,2025-03-02,,19.0,0.0,1
+96,T-0096,Review login flow,5,3,Design,Completed,4,2024-01-25,2024-03-10,2024-01-26,6.0,8.5,8
+97,T-0097,Test audit log,12,16,Docs,Completed,4,2024-06-12,2024-07-28,2024-08-03,22.5,29.0,13
+98,T-0098,Validate API client,9,10,Test,In progress,2,2024-09-12,2024-11-01,,19.5,11.0,8
+99,T-0099,Refine onboarding email,4,11,Docs,Completed,4,2024-04-28,2024-06-14,2024-05-03,12.0,12.5,8
+100,T-0100,Test search index,7,16,Design,Completed,4,2025-08-12,2025-08-28,2025-09-03,37.5,58.0,8
+101,T-0101,Validate audit log,1,12,Docs,In progress,2,2025-07-10,2025-08-20,,18.5,10.0,2
+102,T-0102,Implement audit log,12,14,Docs,Completed,4,2024-12-30,2025-01-25,2025-01-19,2.0,2.0,2
+103,T-0103,Draft release notes,1,16,Docs,Completed,4,2024-06-24,2024-07-22,2024-07-30,12.5,19.5,13
+104,T-0104,Migrate invoice export,10,12,Docs,Not started,1,2025-10-17,2025-10-29,,4.0,0.0,1
+105,T-0105,Draft search index,1,13,Docs,In progress,2,2024-04-28,2024-05-06,,37.5,19.0,1
+106,T-0106,Refine login flow,1,9,Test,Completed,4,2024-11-25,2024-12-19,2024-12-02,18.5,28.0,13
+107,T-0107,Draft dashboard,10,7,Build,Completed,4,2024-08-21,2024-10-05,2024-09-30,19.0,19.0,13
+108,T-0108,Review search index,11,10,Docs,Completed,4,2024-07-17,2024-07-21,2024-07-29,27.0,43.0,8
+109,T-0109,Document onboarding email,5,5,Design,Blocked,3,2024-09-26,2024-11-19,,16.0,6.0,3
+110,T-0110,Test onboarding email,9,12,Build,In progress,2,2024-06-13,2024-07-03,,10.5,6.0,5
+111,T-0111,Document login flow,5,13,Test,Completed,4,2025-08-02,2025-08-15,2025-08-04,22.0,18.5,5
+112,T-0112,Test onboarding email,1,12,Docs,Completed,4,2024-04-08,2024-04-21,2024-04-15,34.5,38.0,3
+113,T-0113,Review onboarding email,3,16,Build,Not started,1,2025-07-28,2025-08-30,,35.5,0.0,2
+114,T-0114,Implement API client,12,9,Docs,Completed,4,2024-05-11,2024-06-15,2024-06-05,12.5,16.0,13
+115,T-0115,Draft data model,5,11,Test,Completed,4,2024-02-11,2024-03-31,2024-02-17,14.0,15.5,13
+116,T-0116,Implement release notes,6,6,Docs,Blocked,3,2024-11-10,2024-11-23,,19.5,6.0,13
+117,T-0117,Refine dashboard,11,6,Docs,Completed,4,2025-08-07,2025-09-27,2025-08-12,18.0,16.0,2
+118,T-0118,Implement API client,3,15,Docs,Not started,1,2025-08-21,2025-09-15,,10.0,0.0,13
+119,T-0119,Document release notes,12,12,Design,Completed,4,2025-09-10,2025-10-07,2025-09-11,19.5,18.5,3
+120,T-0120,Migrate invoice export,1,2,Design,Completed,4,2025-07-22,2025-08-19,2025-07-26,20.0,27.0,5
+121,T-0121,Review API client,10,3,Design,Completed,4,2025-07-10,2025-08-22,2025-07-15,28.0,19.5,2
+122,T-0122,Document access policy,12,3,Docs,Blocked,3,2025-02-27,2025-03-06,,25.0,12.0,3
+123,T-0123,Test audit log,2,7,Test,Not started,1,2024-03-11,2024-04-29,,34.5,0.0,8
+124,T-0124,Document dashboard,10,7,Docs,Blocked,3,2024-12-11,2025-01-02,,20.5,16.0,1
+125,T-0125,Document data model,6,5,Test,Blocked,3,2025-09-22,2025-11-16,,26.5,18.0,1
+126,T-0126,Review login flow,8,11,Build,Completed,4,2024-10-14,2024-10-18,2024-10-21,14.5,9.5,2
+127,T-0127,Draft invoice export,4,14,Build,Blocked,3,2025-09-02,2025-10-15,,14.5,6.0,3
+128,T-0128,Validate data model,1,12,Design,In progress,2,2025-08-09,2025-09-19,,33.0,15.5,2
+129,T-0129,Implement access policy,3,5,Test,In progress,2,2024-05-08,2024-05-24,,17.0,6.0,8
+130,T-0130,Document access policy,7,2,Build,Blocked,3,2024-04-14,2024-04-24,,18.5,8.5,2
+131,T-0131,Refine login flow,9,11,Docs,In progress,2,2024-04-27,2024-05-04,,31.5,12.0,13
+132,T-0132,Document search index,12,11,Test,Completed,4,2025-03-19,2025-05-14,2025-03-20,5.5,7.5,8
+133,T-0133,Validate audit log,11,13,Build,In progress,2,2025-06-19,2025-08-03,,26.0,17.5,2
+134,T-0134,Implement data model,11,8,Design,In progress,2,2025-03-18,2025-04-13,,27.0,18.5,1
+135,T-0135,Document data model,8,6,Design,In progress,2,2025-10-27,2025-11-11,,4.5,2.5,2
+136,T-0136,Implement login flow,1,1,Build,Blocked,3,2025-01-06,2025-01-31,,5.5,3.0,3
+137,T-0137,Draft API client,12,4,Design,Completed,4,2025-03-14,2025-04-03,2025-04-08,21.0,19.0,13
+138,T-0138,Draft release notes,9,6,Docs,Completed,4,2024-02-21,2024-02-27,2024-03-05,39.0,58.5,3
+139,T-0139,Migrate audit log,10,15,Build,Blocked,3,2024-09-04,2024-10-21,,8.0,6.0,1
+140,T-0140,Validate access policy,1,3,Build,Completed,4,2024-06-14,2024-06-21,2024-06-20,20.5,23.5,5
+141,T-0141,Refine API client,1,11,Test,Not started,1,2025-05-25,2025-06-26,,19.0,0.0,5
+142,T-0142,Refine onboarding email,11,10,Build,In progress,2,2025-06-04,2025-06-13,,31.0,25.0,5
+143,T-0143,Review release notes,11,6,Docs,Not started,1,2024-03-12,2024-05-04,,12.0,0.0,13
+144,T-0144,Test data model,2,12,Build,Completed,4,2025-10-13,2025-11-12,2025-10-31,3.5,2.5,5
+145,T-0145,Document search index,1,6,Build,Completed,4,2025-04-09,2025-05-21,2025-05-30,11.5,17.0,2
+146,T-0146,Review search index,9,5,Docs,Completed,4,2024-04-07,2024-04-26,2024-04-23,22.5,29.0,5
+147,T-0147,Refine invoice export,6,5,Docs,Completed,4,2025-01-22,2025-01-25,2025-02-02,13.0,19.5,8
+148,T-0148,Draft release notes,8,7,Design,Completed,4,2024-05-07,2024-06-17,2024-06-19,40.0,34.0,8
+149,T-0149,Test dashboard,8,12,Test,Completed,4,2025-09-19,2025-09-22,2025-09-27,13.5,15.5,13
+150,T-0150,Migrate API client,9,6,Design,Completed,4,2024-01-29,2024-03-10,2024-02-22,4.5,6.5,13
+151,T-0151,Validate invoice export,5,4,Test,In progress,2,2025-10-28,2025-11-02,,8.0,5.0,1
+152,T-0152,Document audit log,3,9,Test,Completed,4,2024-01-26,2024-02-15,2024-02-04,12.0,12.5,1
+153,T-0153,Refine invoice export,2,7,Docs,Completed,4,2025-09-20,2025-09-26,2025-09-23,25.0,21.0,13
+154,T-0154,Implement onboarding email,5,3,Test,Completed,4,2024-05-12,2024-06-26,2024-07-06,5.5,3.5,1
+155,T-0155,Validate data model,6,4,Docs,Completed,4,2025-05-01,2025-05-30,2025-05-07,28.5,43.0,2
+156,T-0156,Validate data model,4,12,Docs,Completed,4,2025-02-20,2025-03-15,2025-02-27,34.5,24.0,8
+157,T-0157,Review invoice export,8,6,Design,Completed,4,2024-07-04,2024-07-28,2024-07-06,36.0,23.5,8
+158,T-0158,Implement release notes,9,15,Build,In progress,2,2024-06-21,2024-07-06,,6.0,2.0,3
+159,T-0159,Validate dashboard,7,11,Design,Completed,4,2024-04-29,2024-06-27,2024-05-06,16.5,22.5,3
+160,T-0160,Review onboarding email,11,16,Design,In progress,2,2024-03-02,2024-04-08,,2.5,1.5,13
+161,T-0161,Validate login flow,12,9,Build,In progress,2,2024-11-14,2024-12-24,,34.0,26.5,2
+162,T-0162,Document dashboard,7,4,Design,Completed,4,2025-09-09,2025-10-04,2025-10-09,26.5,30.5,2
+163,T-0163,Implement search index,4,12,Test,Completed,4,2024-11-26,2024-12-07,2024-12-11,28.5,23.0,1
+164,T-0164,Migrate data model,8,6,Test,Not started,1,2025-06-09,2025-07-12,,31.0,0.0,13
+165,T-0165,Refine audit log,12,9,Build,Completed,4,2024-01-30,2024-03-27,2024-02-18,26.5,42.5,13
+166,T-0166,Review release notes,2,3,Test,In progress,2,2024-01-06,2024-02-07,,11.5,8.0,5
+167,T-0167,Test access policy,4,1,Test,Completed,4,2024-07-22,2024-08-21,2024-08-08,23.0,16.0,1
+168,T-0168,Implement API client,6,16,Docs,Completed,4,2024-04-27,2024-06-21,2024-06-09,4.0,4.5,5
+169,T-0169,Document audit log,8,4,Docs,Not started,1,2024-02-06,2024-03-29,,17.0,0.0,2
+170,T-0170,Document release notes,11,15,Test,Completed,4,2025-01-09,2025-03-09,2025-02-18,12.0,8.5,5
+171,T-0171,Test API client,11,13,Test,Blocked,3,2024-11-06,2024-12-12,,12.0,7.0,1
+172,T-0172,Draft access policy,3,6,Design,Completed,4,2024-08-13,2024-10-07,2024-10-10,3.0,4.0,8
+173,T-0173,Review API client,7,11,Build,Completed,4,2025-05-21,2025-06-13,2025-06-20,13.0,16.0,8
+174,T-0174,Validate login flow,2,16,Build,Completed,4,2024-03-10,2024-03-18,2024-03-27,38.5,61.5,5
+175,T-0175,Migrate release notes,7,6,Build,Not started,1,2024-11-07,2024-11-20,,5.0,0.0,13
+176,T-0176,Test release notes,6,3,Test,Completed,4,2024-10-07,2024-11-21,2024-10-30,17.5,27.0,8
+177,T-0177,Implement audit log,8,12,Design,In progress,2,2025-07-03,2025-07-08,,20.0,14.0,3
+178,T-0178,Review invoice export,9,6,Test,Completed,4,2025-08-13,2025-09-29,2025-09-22,4.5,3.5,1
+179,T-0179,Validate audit log,4,5,Build,In progress,2,2024-08-02,2024-08-22,,34.0,10.0,2
+180,T-0180,Draft access policy,12,3,Docs,In progress,2,2024-12-01,2025-01-18,,10.5,8.5,13
+181,T-0181,Review release notes,12,10,Design,In progress,2,2024-12-06,2025-01-08,,14.0,11.0,1
+182,T-0182,Migrate audit log,12,7,Test,In progress,2,2025-05-08,2025-06-21,,17.5,10.5,5
+183,T-0183,Document onboarding email,6,10,Test,In progress,2,2024-01-20,2024-03-16,,25.5,10.0,13
+184,T-0184,Implement dashboard,9,16,Test,Completed,4,2024-03-21,2024-05-20,2024-04-23,39.0,33.0,1
+185,T-0185,Migrate login flow,7,7,Build,Completed,4,2025-07-12,2025-08-05,2025-07-20,14.0,10.0,3
+186,T-0186,Refine access policy,7,5,Docs,In progress,2,2024-06-17,2024-07-15,,6.5,2.5,2
+187,T-0187,Test API client,6,7,Docs,Blocked,3,2025-02-24,2025-03-05,,6.0,2.5,13
+188,T-0188,Review release notes,1,16,Design,In progress,2,2024-04-17,2024-05-20,,3.0,2.0,13
+189,T-0189,Refine invoice export,6,3,Design,Blocked,3,2024-11-01,2024-11-12,,10.5,7.5,8
+190,T-0190,Test search index,8,5,Design,Completed,4,2024-08-25,2024-09-18,2024-09-08,36.5,55.0,3
+191,T-0191,Implement API client,2,9,Test,Completed,4,2024-11-19,2025-01-18,2024-12-14,15.5,9.5,13
+192,T-0192,Migrate invoice export,1,1,Docs,In progress,2,2024-10-16,2024-10-28,,36.5,25.5,2
+193,T-0193,Refine API client,1,13,Design,Not started,1,2024-09-09,2024-11-03,,21.5,0.0,5
+194,T-0194,Document search index,10,11,Docs,In progress,2,2025-07-18,2025-09-01,,24.0,13.5,1
+195,T-0195,Draft login flow,2,6,Test,Completed,4,2024-06-30,2024-08-28,2024-08-28,36.0,27.0,1
+196,T-0196,Implement release notes,3,9,Design,Blocked,3,2025-03-24,2025-04-17,,4.5,3.5,8
+197,T-0197,Implement audit log,9,3,Docs,Not started,1,2025-02-08,2025-03-25,,38.0,0.0,13
+198,T-0198,Document access policy,4,3,Test,Completed,4,2024-08-17,2024-09-09,2024-09-03,5.0,5.0,1
+199,T-0199,Validate onboarding email,10,1,Docs,Completed,4,2025-07-21,2025-09-16,2025-09-17,9.0,8.0,5
+200,T-0200,Refine onboarding email,9,15,Build,Not started,1,2024-10-26,2024-11-27,,29.0,0.0,5
+201,T-0201,Implement data model,2,9,Docs,Completed,4,2025-07-03,2025-08-10,2025-07-20,22.0,16.5,1
+202,T-0202,Test onboarding email,11,2,Build,Completed,4,2025-06-27,2025-08-09,2025-08-14,3.0,4.0,2
+203,T-0203,Document onboarding email,7,11,Build,Blocked,3,2025-06-20,2025-07-19,,10.5,8.0,8
+204,T-0204,Review release notes,4,13,Design,Completed,4,2025-08-10,2025-10-05,2025-09-15,8.5,13.0,13
+205,T-0205,Validate dashboard,7,16,Test,Completed,4,2024-05-21,2024-06-01,2024-05-22,24.0,21.5,13
+206,T-0206,Implement search index,11,12,Build,Completed,4,2024-03-15,2024-05-09,2024-05-12,8.5,6.0,2
+207,T-0207,Implement login flow,7,3,Test,In progress,2,2025-10-18,2025-11-29,,31.0,21.5,13
+208,T-0208,Draft release notes,3,3,Design,Blocked,3,2025-05-16,2025-07-09,,3.0,2.0,8
+209,T-0209,Implement login flow,7,1,Docs,Not started,1,2024-09-30,2024-11-21,,28.5,0.0,1
+210,T-0210,Test invoice export,5,1,Test,Blocked,3,2025-02-17,2025-03-08,,36.5,14.5,3
+211,T-0211,Refine access policy,8,10,Test,In progress,2,2024-09-08,2024-11-03,,29.0,15.5,3
+212,T-0212,Document invoice export,10,12,Docs,Blocked,3,2025-05-14,2025-06-23,,22.5,13.0,13
+213,T-0213,Validate search index,12,15,Design,In progress,2,2024-02-12,2024-03-16,,15.5,8.0,8
+214,T-0214,Refine invoice export,8,8,Build,Completed,4,2024-04-28,2024-05-05,2024-05-05,22.5,17.0,8
+215,T-0215,Validate release notes,3,7,Design,Completed,4,2025-02-19,2025-04-10,2025-04-10,15.5,17.0,5
+216,T-0216,Document API client,10,1,Docs,Not started,1,2024-04-30,2024-05-17,,33.5,0.0,13
+217,T-0217,Test API client,4,8,Design,In progress,2,2025-06-01,2025-06-23,,11.0,7.0,5
+218,T-0218,Refine search index,5,16,Docs,Completed,4,2024-09-22,2024-10-29,2024-10-10,35.0,33.0,1
+219,T-0219,Migrate login flow,8,2,Docs,In progress,2,2024-12-20,2025-01-31,,19.5,9.0,8
+220,T-0220,Validate audit log,7,11,Docs,Not started,1,2024-09-25,2024-11-23,,11.0,0.0,3
+221,T-0221,Implement API client,6,7,Design,Blocked,3,2024-04-18,2024-06-14,,22.5,10.5,1
+222,T-0222,Draft invoice export,9,6,Build,Completed,4,2025-08-16,2025-08-26,2025-09-05,29.5,29.5,8
+223,T-0223,Review release notes,12,12,Build,Not started,1,2024-05-26,2024-06-22,,35.5,0.0,1
+224,T-0224,Test onboarding email,9,16,Test,Not started,1,2024-11-25,2024-12-31,,26.0,0.0,5
+225,T-0225,Review invoice export,8,14,Design,Not started,1,2025-10-15,2025-11-08,,4.5,0.0,5
+226,T-0226,Implement access policy,9,1,Build,Not started,1,2025-06-02,2025-07-20,,11.0,0.0,5
+227,T-0227,Document invoice export,6,16,Build,Not started,1,2025-02-16,2025-03-22,,16.5,0.0,8
+228,T-0228,Implement onboarding email,5,13,Test,Completed,4,2025-08-24,2025-10-01,2025-09-16,4.0,5.5,13
+229,T-0229,Review data model,5,1,Build,Completed,4,2025-07-10,2025-08-31,2025-07-11,23.5,20.0,5
+230,T-0230,Migrate invoice export,10,16,Test,Not started,1,2024-07-01,2024-08-13,,38.5,0.0,3
+231,T-0231,Review API client,4,8,Design,Not started,1,2025-09-06,2025-09-26,,36.5,0.0,2
+232,T-0232,Review invoice export,10,6,Design,Not started,1,2025-07-17,2025-08-08,,32.0,0.0,5
+233,T-0233,Implement audit log,10,3,Build,In progress,2,2025-01-15,2025-02-03,,19.5,14.5,3
+234,T-0234,Implement onboarding email,5,11,Docs,In progress,2,2025-04-26,2025-06-01,,8.0,3.0,3
+235,T-0235,Validate access policy,2,5,Build,Not started,1,2025-06-23,2025-08-03,,36.0,0.0,13
+236,T-0236,Migrate invoice export,6,6,Design,Completed,4,2024-11-26,2024-12-12,2024-12-19,24.0,17.0,8
+237,T-0237,Draft API client,4,7,Test,Completed,4,2025-06-16,2025-07-17,2025-07-01,22.5,22.5,2
+238,T-0238,Draft audit log,11,16,Docs,Blocked,3,2024-10-18,2024-12-07,,15.5,4.5,1
+239,T-0239,Validate API client,10,3,Build,Not started,1,2025-05-20,2025-06-10,,10.5,0.0,8
+240,T-0240,Migrate access policy,1,1,Design,Completed,4,2025-09-16,2025-09-25,2025-09-27,6.5,9.0,8
+241,T-0241,Implement search index,9,3,Build,Completed,4,2025-02-01,2025-02-16,2025-02-04,40.0,40.0,5
+242,T-0242,Refine search index,3,12,Build,In progress,2,2024-02-25,2024-04-22,,28.5,20.5,1
+243,T-0243,Draft API client,6,11,Design,Completed,4,2025-06-25,2025-07-23,2025-07-12,3.0,4.0,3
+244,T-0244,Implement search index,4,16,Docs,Not started,1,2024-12-02,2025-01-30,,24.0,0.0,13
+245,T-0245,Document data model,7,2,Test,Not started,1,2025-10-10,2025-12-09,,9.0,0.0,8
+246,T-0246,Migrate access policy,10,5,Build,Blocked,3,2024-05-02,2024-05-16,,39.0,29.0,5
+247,T-0247,Draft access policy,12,16,Design,Completed,4,2024-03-12,2024-05-04,2024-03-20,3.5,3.0,8
+248,T-0248,Test data model,2,9,Test,Completed,4,2024-10-06,2024-10-23,2024-10-15,36.5,56.5,3
+249,T-0249,Review API client,7,3,Docs,In progress,2,2024-08-17,2024-09-16,,17.5,8.0,8
+250,T-0250,Review dashboard,3,11,Build,In progress,2,2025-04-20,2025-05-22,,35.5,28.5,13
+251,T-0251,Test onboarding email,2,5,Docs,Completed,4,2025-05-29,2025-06-16,2025-06-08,15.0,12.0,13
+252,T-0252,Document invoice export,7,11,Design,Blocked,3,2024-03-06,2024-03-15,,4.5,1.5,8
+253,T-0253,Implement audit log,12,2,Build,Not started,1,2025-03-07,2025-03-27,,27.5,0.0,8
+254,T-0254,Review login flow,6,13,Test,Not started,1,2024-01-01,2024-01-08,,7.5,0.0,5
+255,T-0255,Draft invoice export,3,9,Test,Not started,1,2025-08-25,2025-09-29,,21.5,0.0,5
+256,T-0256,Review access policy,2,7,Build,Blocked,3,2024-12-10,2025-02-08,,31.0,21.0,3
+257,T-0257,Document onboarding email,9,6,Build,Completed,4,2024-10-29,2024-11-14,2024-11-14,25.0,20.0,1
+258,T-0258,Draft dashboard,3,2,Design,Not started,1,2025-10-01,2025-11-30,,25.5,0.0,2
+259,T-0259,Draft access policy,5,4,Docs,Completed,4,2025-03-15,2025-04-22,2025-04-05,35.5,32.0,1
+260,T-0260,Document invoice export,5,3,Test,In progress,2,2024-07-07,2024-07-21,,35.5,10.5,8
+261,T-0261,Validate dashboard,12,5,Build,Completed,4,2025-07-02,2025-08-03,2025-07-26,36.0,30.5,1
+262,T-0262,Implement release notes,12,1,Design,Not started,1,2024-04-13,2024-06-10,,39.5,0.0,2
+263,T-0263,Validate onboarding email,2,11,Test,In progress,2,2025-02-05,2025-02-16,,33.0,24.0,1
+264,T-0264,Document search index,12,4,Build,Completed,4,2024-10-28,2024-12-14,2024-10-30,25.0,32.5,2
+265,T-0265,Implement login flow,8,4,Design,Blocked,3,2025-03-15,2025-04-03,,4.0,1.0,1
+266,T-0266,Migrate search index,1,8,Design,Completed,4,2024-08-20,2024-08-29,2024-08-31,12.0,11.0,3
+267,T-0267,Migrate API client,2,13,Build,Completed,4,2024-10-18,2024-10-24,2024-10-29,20.5,24.5,5
+268,T-0268,Implement API client,1,14,Test,Completed,4,2025-10-04,2025-12-01,2025-11-25,15.0,9.0,5
+269,T-0269,Implement data model,12,5,Docs,Completed,4,2024-12-31,2025-02-09,2025-02-18,19.0,25.5,3
+270,T-0270,Document onboarding email,1,11,Design,In progress,2,2025-07-14,2025-09-08,,22.5,12.5,13
+271,T-0271,Document invoice export,5,3,Build,In progress,2,2024-12-04,2025-01-28,,8.0,6.0,2
+272,T-0272,Migrate dashboard,3,4,Test,Completed,4,2024-08-14,2024-08-24,2024-08-16,20.5,12.5,13
+273,T-0273,Migrate access policy,1,3,Test,Completed,4,2025-04-15,2025-05-25,2025-06-04,39.0,58.5,8
+274,T-0274,Validate dashboard,3,2,Design,Blocked,3,2024-10-24,2024-11-26,,6.5,3.0,13
+275,T-0275,Migrate invoice export,2,16,Design,Completed,4,2025-09-03,2025-10-11,2025-09-22,31.0,28.0,1
+276,T-0276,Review access policy,3,15,Test,Completed,4,2025-09-13,2025-09-22,2025-10-02,9.5,14.0,3
+277,T-0277,Test release notes,3,16,Build,Completed,4,2024-06-19,2024-06-25,2024-07-01,34.0,24.0,1
+278,T-0278,Draft search index,1,5,Build,Completed,4,2024-06-16,2024-07-29,2024-06-24,15.5,24.0,2
+279,T-0279,Draft onboarding email,9,10,Design,Blocked,3,2024-10-14,2024-12-13,,29.0,11.5,1
+280,T-0280,Document onboarding email,5,6,Test,Completed,4,2025-09-16,2025-10-29,2025-09-19,12.5,9.0,8
+281,T-0281,Implement data model,9,1,Docs,Not started,1,2024-11-30,2025-01-26,,6.5,0.0,13
+282,T-0282,Review dashboard,8,3,Test,In progress,2,2024-03-17,2024-04-14,,6.0,2.5,3
+283,T-0283,Test audit log,3,2,Test,Not started,1,2024-08-07,2024-08-14,,22.5,0.0,2
+284,T-0284,Review API client,1,9,Design,Completed,4,2024-03-11,2024-03-15,2024-03-15,37.0,26.0,2
+285,T-0285,Document invoice export,1,3,Build,Completed,4,2025-01-06,2025-02-25,2025-01-23,20.5,23.5,8
+286,T-0286,Validate invoice export,7,13,Docs,Blocked,3,2024-02-10,2024-03-15,,3.0,2.0,8
+287,T-0287,Refine login flow,9,7,Test,Completed,4,2025-08-29,2025-10-07,2025-10-12,27.0,28.5,3
+288,T-0288,Migrate API client,11,5,Design,Completed,4,2025-08-23,2025-09-15,2025-09-19,18.5,13.0,1
+289,T-0289,Review dashboard,3,10,Test,Completed,4,2024-05-26,2024-06-13,2024-05-27,28.5,44.0,13
+290,T-0290,Implement release notes,1,6,Test,In progress,2,2025-05-26,2025-06-27,,37.0,15.5,2
+291,T-0291,Validate access policy,2,14,Build,In progress,2,2024-02-06,2024-03-30,,21.5,6.5,1
+292,T-0292,Draft onboarding email,9,9,Docs,Completed,4,2024-09-28,2024-11-13,2024-10-05,17.0,17.0,8
+293,T-0293,Validate data model,10,11,Test,Completed,4,2025-10-05,2025-12-03,2025-11-24,15.0,20.0,1
+294,T-0294,Review invoice export,7,1,Docs,Completed,4,2024-11-11,2024-12-29,2024-12-06,26.5,38.5,13
+295,T-0295,Refine data model,9,8,Design,In progress,2,2025-08-10,2025-08-15,,40.0,24.0,3
+296,T-0296,Validate API client,5,14,Test,Completed,4,2025-04-09,2025-04-25,2025-04-17,37.0,48.0,2
+297,T-0297,Validate API client,7,12,Test,Not started,1,2024-10-30,2024-12-03,,4.0,0.0,13
+298,T-0298,Document dashboard,9,1,Build,In progress,2,2025-05-07,2025-06-07,,27.0,15.0,3
+299,T-0299,Migrate search index,10,14,Test,Blocked,3,2025-07-02,2025-07-06,,31.5,22.5,13
+300,T-0300,Migrate onboarding email,2,7,Build,Blocked,3,2024-06-24,2024-08-04,,17.5,8.0,3
+301,T-0301,Draft access policy,6,16,Build,In progress,2,2025-10-07,2025-11-20,,22.5,9.0,5
+302,T-0302,Implement login flow,10,9,Test,Completed,4,2024-01-09,2024-01-30,2024-01-23,36.5,33.0,1
+303,T-0303,Review audit log,9,10,Build,Completed,4,2025-09-23,2025-11-14,2025-11-24,14.5,9.5,2
+304,T-0304,Implement dashboard,4,11,Docs,Not started,1,2024-02-28,2024-03-03,,7.0,0.0,2
+305,T-0305,Document release notes,6,15,Design,Blocked,3,2025-08-21,2025-08-24,,19.5,10.5,3
+306,T-0306,Refine dashboard,7,1,Docs,Completed,4,2025-06-18,2025-07-30,2025-07-02,22.5,35.0,1
+307,T-0307,Validate onboarding email,8,1,Design,Completed,4,2025-05-30,2025-07-13,2025-07-07,38.0,38.0,13
+308,T-0308,Migrate login flow,10,16,Design,Not started,1,2025-08-20,2025-09-09,,11.5,0.0,5
+309,T-0309,Test invoice export,2,4,Test,In progress,2,2025-08-23,2025-09-17,,4.0,2.5,8
+310,T-0310,Test search index,6,10,Build,Completed,4,2024-02-20,2024-04-05,2024-03-26,19.0,22.0,1
+311,T-0311,Draft data model,11,12,Build,Completed,4,2025-07-23,2025-08-19,2025-08-20,24.0,27.5,8
+312,T-0312,Validate search index,11,6,Design,In progress,2,2025-01-28,2025-03-20,,17.0,7.0,5
+313,T-0313,Test dashboard,8,10,Docs,Completed,4,2025-10-10,2025-11-19,2025-11-13,6.5,7.0,2
+314,T-0314,Validate release notes,1,12,Docs,Completed,4,2024-09-28,2024-10-24,2024-10-26,20.0,28.0,8
+315,T-0315,Validate search index,11,12,Test,Blocked,3,2024-06-12,2024-07-07,,17.0,7.5,3
+316,T-0316,Test audit log,11,2,Docs,Not started,1,2024-08-27,2024-10-01,,3.0,0.0,1
+317,T-0317,Migrate onboarding email,2,13,Design,Completed,4,2025-07-18,2025-07-22,2025-07-31,17.0,10.0,2
+318,T-0318,Document audit log,7,16,Build,Not started,1,2024-12-15,2025-01-14,,16.0,0.0,8
+319,T-0319,Review audit log,7,1,Design,In progress,2,2025-04-24,2025-05-02,,10.0,5.5,1
+320,T-0320,Refine dashboard,1,2,Build,Not started,1,2024-03-10,2024-04-30,,16.5,0.0,8
+321,T-0321,Draft data model,2,6,Docs,Completed,4,2024-12-20,2025-01-18,2025-01-18,20.5,16.5,5
+322,T-0322,Test invoice export,3,14,Test,Blocked,3,2024-08-03,2024-09-14,,3.0,1.0,3
+323,T-0323,Test dashboard,10,16,Docs,In progress,2,2025-02-18,2025-03-14,,31.5,20.5,13
+324,T-0324,Document search index,6,4,Design,Not started,1,2024-11-13,2024-11-22,,38.5,0.0,3
+325,T-0325,Refine search index,10,2,Design,Completed,4,2025-10-03,2025-10-24,2025-10-29,4.5,5.5,1
+326,T-0326,Validate onboarding email,8,8,Design,Completed,4,2024-07-25,2024-07-28,2024-07-27,23.0,19.5,8
+327,T-0327,Draft release notes,5,13,Design,Not started,1,2025-10-20,2025-11-01,,20.5,0.0,5
+328,T-0328,Implement release notes,2,14,Docs,In progress,2,2024-08-18,2024-08-29,,35.5,12.5,5
+329,T-0329,Refine onboarding email,11,2,Docs,Completed,4,2025-07-13,2025-08-18,2025-08-01,26.0,22.0,3
+330,T-0330,Review access policy,8,10,Docs,Completed,4,2024-12-31,2025-02-06,2025-02-01,16.0,15.0,1
+331,T-0331,Implement audit log,10,16,Docs,Completed,4,2025-10-11,2025-10-20,2025-10-29,29.0,32.0,8
+332,T-0332,Implement API client,12,3,Test,Not started,1,2024-08-23,2024-09-12,,27.0,0.0,2
+333,T-0333,Review onboarding email,2,6,Docs,Completed,4,2025-10-11,2025-10-20,2025-10-19,36.0,30.5,13
+334,T-0334,Validate onboarding email,5,4,Test,In progress,2,2024-04-03,2024-04-24,,22.0,16.0,1
+335,T-0335,Document search index,12,2,Build,In progress,2,2025-01-04,2025-01-20,,37.5,28.0,3
+336,T-0336,Implement invoice export,9,8,Build,Completed,4,2024-02-02,2024-03-15,2024-03-06,33.0,25.0,1
+337,T-0337,Document onboarding email,10,10,Test,In progress,2,2025-07-21,2025-09-12,,11.0,8.5,2
+338,T-0338,Migrate dashboard,2,8,Test,Blocked,3,2025-08-30,2025-10-23,,25.0,14.0,3
+339,T-0339,Migrate API client,8,8,Build,Not started,1,2025-08-27,2025-09-05,,4.5,0.0,1
+340,T-0340,Implement audit log,1,6,Design,Completed,4,2024-03-22,2024-04-07,2024-03-29,6.0,5.5,5
+341,T-0341,Review login flow,6,11,Build,In progress,2,2025-04-25,2025-06-01,,31.0,10.0,8
+342,T-0342,Review audit log,10,9,Docs,Completed,4,2024-11-25,2024-12-15,2024-12-24,2.5,1.5,13
+343,T-0343,Review audit log,6,7,Test,Completed,4,2024-05-09,2024-05-28,2024-05-20,34.0,39.0,5
+344,T-0344,Implement release notes,9,4,Test,Completed,4,2025-02-01,2025-03-17,2025-03-18,3.0,4.5,13
+345,T-0345,Test onboarding email,1,3,Design,Blocked,3,2024-02-21,2024-03-27,,34.5,13.0,5
+346,T-0346,Migrate login flow,6,13,Design,In progress,2,2025-01-10,2025-01-16,,4.0,3.0,2
+347,T-0347,Document audit log,10,8,Test,Completed,4,2025-05-01,2025-06-18,2025-06-05,37.0,29.5,2
+348,T-0348,Draft onboarding email,7,16,Docs,Not started,1,2024-06-19,2024-07-14,,20.0,0.0,3
+349,T-0349,Draft API client,5,14,Build,Completed,4,2025-08-29,2025-09-23,2025-09-05,16.0,20.0,8
+350,T-0350,Draft onboarding email,4,2,Design,In progress,2,2024-07-07,2024-08-11,,17.0,6.5,13
+351,T-0351,Draft API client,11,1,Design,Completed,4,2025-03-24,2025-05-12,2025-05-18,25.5,18.0,5
+352,T-0352,Implement API client,5,3,Test,Completed,4,2024-09-01,2024-10-28,2024-09-19,17.5,16.5,1
+353,T-0353,Test API client,7,5,Design,Completed,4,2025-10-06,2025-11-14,2025-10-26,28.5,40.0,1
+354,T-0354,Review search index,12,8,Test,Completed,4,2025-10-19,2025-11-20,2025-11-03,37.5,52.5,8
+355,T-0355,Document release notes,1,7,Design,Blocked,3,2025-08-22,2025-09-20,,31.0,21.0,1
+356,T-0356,Migrate invoice export,7,12,Design,Completed,4,2024-09-08,2024-11-02,2024-11-11,22.5,15.5,2
+357,T-0357,Document dashboard,1,15,Design,Completed,4,2025-09-28,2025-11-22,2025-11-15,4.0,3.0,5
+358,T-0358,Migrate access policy,2,12,Test,Completed,4,2025-06-14,2025-08-03,2025-06-15,5.5,6.5,3
+359,T-0359,Draft invoice export,6,12,Design,Not started,1,2025-01-07,2025-02-05,,3.5,0.0,3
+360,T-0360,Test audit log,5,11,Docs,In progress,2,2024-10-26,2024-12-25,,4.0,3.0,13
+361,T-0361,Validate invoice export,1,16,Build,Completed,4,2024-04-21,2024-05-06,2024-05-10,32.0,33.5,13
+362,T-0362,Implement release notes,9,4,Test,Completed,4,2025-03-24,2025-03-28,2025-03-28,36.0,29.0,8
+363,T-0363,Validate onboarding email,2,11,Docs,Completed,4,2025-01-30,2025-02-11,2025-02-13,13.0,8.0,2
+364,T-0364,Implement search index,2,3,Design,Completed,4,2024-10-10,2024-11-24,2024-10-14,18.0,12.5,2
+365,T-0365,Test search index,9,16,Test,Completed,4,2024-10-22,2024-10-27,2024-10-25,17.0,22.0,5
+366,T-0366,Migrate login flow,9,14,Design,In progress,2,2024-03-14,2024-03-26,,10.0,7.0,8
+367,T-0367,Draft data model,8,9,Test,In progress,2,2025-08-02,2025-08-06,,37.0,29.5,8
+368,T-0368,Document data model,8,7,Design,Blocked,3,2024-05-26,2024-07-22,,9.0,3.5,3
+369,T-0369,Review login flow,9,2,Docs,Blocked,3,2025-07-25,2025-08-04,,14.5,5.5,13
+370,T-0370,Refine data model,4,1,Test,In progress,2,2025-07-18,2025-08-27,,21.0,10.5,5
+371,T-0371,Document release notes,7,7,Test,Not started,1,2024-01-03,2024-01-20,,19.0,0.0,5
+372,T-0372,Review search index,5,11,Design,In progress,2,2025-02-23,2025-04-05,,10.5,4.0,1
+373,T-0373,Review login flow,5,7,Test,In progress,2,2025-04-05,2025-04-16,,17.0,13.5,13
+374,T-0374,Migrate access policy,12,16,Build,Blocked,3,2024-01-27,2024-03-26,,36.0,18.0,13
+375,T-0375,Refine access policy,3,2,Docs,Completed,4,2024-02-03,2024-04-01,2024-03-28,18.5,13.0,13
+376,T-0376,Validate release notes,2,6,Design,Not started,1,2025-03-10,2025-03-14,,20.0,0.0,3
+377,T-0377,Review dashboard,8,11,Design,Blocked,3,2025-01-14,2025-03-12,,23.5,10.5,1
+378,T-0378,Test release notes,9,8,Docs,Completed,4,2024-05-16,2024-05-26,2024-06-03,9.0,14.5,13
+379,T-0379,Test login flow,3,14,Test,Completed,4,2025-09-09,2025-10-12,2025-10-22,29.0,40.5,2
+380,T-0380,Document data model,3,7,Docs,In progress,2,2024-04-20,2024-05-14,,18.5,10.0,5
+381,T-0381,Validate login flow,7,5,Design,Completed,4,2024-10-31,2024-12-02,2024-11-09,12.5,14.5,5
+382,T-0382,Test invoice export,8,5,Docs,Completed,4,2025-09-01,2025-10-20,2025-10-10,38.0,49.5,8
+383,T-0383,Draft API client,1,2,Test,In progress,2,2025-08-24,2025-09-28,,26.5,12.5,13
+384,T-0384,Implement release notes,8,14,Design,Completed,4,2024-07-13,2024-08-11,2024-07-31,7.0,9.0,13
+385,T-0385,Document login flow,3,1,Docs,Blocked,3,2025-10-04,2025-12-01,,40.0,22.0,13
+386,T-0386,Document release notes,12,8,Test,Not started,1,2025-10-20,2025-12-06,,11.0,0.0,3
+387,T-0387,Migrate onboarding email,11,2,Docs,Completed,4,2025-06-29,2025-08-07,2025-08-08,21.0,22.0,8
+388,T-0388,Implement data model,8,13,Test,Not started,1,2025-10-29,2025-12-07,,11.0,0.0,1
+389,T-0389,Document dashboard,10,3,Design,Completed,4,2024-08-29,2024-09-16,2024-09-09,33.5,33.5,2
+390,T-0390,Migrate data model,10,10,Design,In progress,2,2025-08-25,2025-09-20,,10.5,5.5,3
+391,T-0391,Migrate search index,3,13,Design,Not started,1,2025-04-21,2025-05-23,,32.0,0.0,13
+392,T-0392,Test release notes,10,13,Test,Completed,4,2024-09-10,2024-10-04,2024-09-17,22.0,21.0,5
+393,T-0393,Document onboarding email,3,7,Build,Not started,1,2024-12-31,2025-01-14,,31.5,0.0,1
+394,T-0394,Test API client,12,3,Test,In progress,2,2025-09-09,2025-11-02,,18.0,10.0,2
+395,T-0395,Draft invoice export,11,1,Build,Completed,4,2025-10-12,2025-11-11,2025-11-11,31.5,30.0,13
+396,T-0396,Draft release notes,10,4,Docs,In progress,2,2025-09-20,2025-10-22,,13.0,6.0,8
+397,T-0397,Implement onboarding email,4,1,Design,Completed,4,2025-09-14,2025-10-05,2025-09-21,10.5,8.0,5
+398,T-0398,Refine release notes,10,3,Test,Completed,4,2024-09-12,2024-10-01,2024-09-24,37.5,22.5,1
+399,T-0399,Draft dashboard,5,1,Test,In progress,2,2025-05-05,2025-06-26,,28.5,15.0,2
+400,T-0400,Draft release notes,12,4,Design,In progress,2,2024-11-15,2024-12-11,,25.0,12.0,3
+401,T-0401,Document API client,11,12,Build,Not started,1,2024-09-01,2024-10-23,,25.5,0.0,2
+402,T-0402,Document onboarding email,2,7,Build,Blocked,3,2025-02-03,2025-02-28,,18.5,7.0,2
+403,T-0403,Refine invoice export,3,6,Docs,Blocked,3,2024-02-21,2024-03-15,,35.5,20.0,8
+404,T-0404,Test search index,3,15,Docs,Completed,4,2025-02-26,2025-03-26,2025-03-18,21.0,17.0,3
+405,T-0405,Review invoice export,9,1,Build,Blocked,3,2024-09-05,2024-11-04,,16.0,6.5,5
+406,T-0406,Review onboarding email,11,7,Build,Not started,1,2025-10-01,2025-11-04,,13.0,0.0,1
+407,T-0407,Implement dashboard,4,9,Build,Not started,1,2025-09-19,2025-11-17,,3.0,0.0,13
+408,T-0408,Migrate data model,3,11,Docs,Not started,1,2024-04-12,2024-05-09,,17.0,0.0,1
+409,T-0409,Validate invoice export,6,7,Test,Completed,4,2025-01-27,2025-03-27,2025-02-20,18.5,15.5,8
+410,T-0410,Draft invoice export,1,5,Build,Not started,1,2024-05-05,2024-06-24,,16.5,0.0,2
+411,T-0411,Validate search index,6,11,Docs,In progress,2,2024-01-19,2024-03-10,,12.0,4.0,1
+412,T-0412,Draft dashboard,11,9,Docs,Not started,1,2025-02-04,2025-02-18,,31.0,0.0,13
+413,T-0413,Test access policy,7,16,Design,Completed,4,2024-10-04,2024-11-13,2024-10-30,2.5,2.0,1
+414,T-0414,Refine data model,3,8,Test,Completed,4,2024-06-08,2024-07-13,2024-06-14,38.5,25.0,8
+415,T-0415,Migrate onboarding email,7,5,Test,Completed,4,2025-08-14,2025-09-26,2025-09-02,7.0,6.5,5
+416,T-0416,Implement onboarding email,8,16,Test,In progress,2,2025-02-05,2025-04-03,,29.5,14.0,3
+417,T-0417,Draft data model,11,9,Test,Completed,4,2025-09-18,2025-11-09,2025-11-15,12.0,16.0,13
+418,T-0418,Test API client,10,8,Test,Completed,4,2025-05-04,2025-06-30,2025-07-04,26.0,17.0,3
+419,T-0419,Implement invoice export,1,8,Docs,Completed,4,2025-07-22,2025-08-28,2025-08-09,37.5,49.0,1
+420,T-0420,Document release notes,11,8,Docs,In progress,2,2025-10-18,2025-11-02,,4.0,2.5,13
+421,T-0421,Refine dashboard,1,10,Design,In progress,2,2025-01-12,2025-02-20,,15.0,9.5,8
+422,T-0422,Validate dashboard,12,14,Test,Completed,4,2024-03-18,2024-03-30,2024-04-02,18.0,27.0,3
+423,T-0423,Migrate data model,10,1,Build,Completed,4,2024-11-23,2024-11-27,2024-12-03,19.5,22.5,2
+424,T-0424,Validate login flow,1,4,Design,Blocked,3,2025-07-07,2025-08-09,,34.5,10.5,13
+425,T-0425,Draft login flow,7,8,Design,Completed,4,2025-09-19,2025-11-09,2025-10-29,34.5,50.0,2
+426,T-0426,Validate login flow,8,4,Build,Completed,4,2025-06-13,2025-07-26,2025-07-06,8.0,7.0,8
+427,T-0427,Test access policy,5,6,Docs,Completed,4,2025-08-05,2025-09-19,2025-08-18,37.5,58.0,13
+428,T-0428,Test data model,9,15,Design,In progress,2,2024-04-29,2024-05-05,,14.5,4.5,13
+429,T-0429,Test login flow,6,7,Design,Blocked,3,2024-07-17,2024-07-26,,27.0,10.5,2
+430,T-0430,Migrate search index,3,13,Build,Completed,4,2024-07-13,2024-08-29,2024-07-14,25.5,24.0,1
+431,T-0431,Implement data model,12,6,Build,Completed,4,2024-09-26,2024-10-19,2024-10-23,30.5,41.0,2
+432,T-0432,Document invoice export,10,16,Test,Blocked,3,2025-02-22,2025-03-18,,7.5,6.0,3
+433,T-0433,Migrate access policy,4,9,Test,Completed,4,2024-03-15,2024-05-03,2024-03-31,20.0,15.0,1
+434,T-0434,Implement onboarding email,2,12,Docs,Not started,1,2025-01-31,2025-03-09,,17.0,0.0,13
+435,T-0435,Review API client,2,16,Design,Completed,4,2024-05-25,2024-07-09,2024-07-15,32.5,23.0,13
+436,T-0436,Draft release notes,9,16,Docs,Blocked,3,2025-01-30,2025-02-22,,8.0,6.0,13
+437,T-0437,Implement access policy,12,1,Build,In progress,2,2024-10-04,2024-11-04,,4.0,3.0,13
+438,T-0438,Draft dashboard,2,8,Design,Completed,4,2024-01-25,2024-01-31,2024-01-28,14.5,11.0,5
+439,T-0439,Review release notes,4,16,Docs,Completed,4,2025-08-02,2025-09-20,2025-09-01,14.5,11.0,3
+440,T-0440,Implement data model,6,16,Design,In progress,2,2025-06-14,2025-06-30,,20.5,6.0,13
+441,T-0441,Migrate invoice export,7,2,Build,Completed,4,2024-03-18,2024-05-04,2024-03-26,10.5,15.0,8
+442,T-0442,Migrate API client,7,4,Docs,Blocked,3,2025-01-21,2025-02-27,,32.5,18.5,13
+443,T-0443,Migrate audit log,9,13,Docs,In progress,2,2024-02-14,2024-03-28,,7.0,5.5,1
+444,T-0444,Draft search index,10,2,Test,Not started,1,2025-09-12,2025-09-21,,27.0,0.0,2
+445,T-0445,Migrate dashboard,2,15,Design,Completed,4,2024-03-31,2024-04-17,2024-04-23,11.5,15.5,3
+446,T-0446,Refine release notes,11,16,Build,In progress,2,2024-06-15,2024-08-11,,33.5,15.5,2
+447,T-0447,Migrate onboarding email,2,14,Docs,In progress,2,2024-01-23,2024-02-06,,14.0,10.5,2
+448,T-0448,Review onboarding email,7,3,Test,Completed,4,2024-12-17,2025-02-06,2025-01-30,26.0,21.0,2
+449,T-0449,Validate access policy,1,15,Docs,In progress,2,2024-07-08,2024-08-19,,2.5,2.0,13
+450,T-0450,Test access policy,2,12,Build,Blocked,3,2025-02-24,2025-03-19,,29.5,17.5,3
+451,T-0451,Validate onboarding email,6,7,Design,Completed,4,2025-05-05,2025-06-19,2025-05-22,3.0,3.5,8
+452,T-0452,Test access policy,9,15,Test,Completed,4,2024-05-31,2024-07-04,2024-07-05,20.0,19.0,13
+453,T-0453,Validate invoice export,11,5,Design,In progress,2,2024-03-02,2024-04-03,,27.5,14.0,5
+454,T-0454,Refine login flow,9,15,Test,In progress,2,2024-08-22,2024-10-07,,32.5,17.0,13
+455,T-0455,Document API client,1,12,Test,In progress,2,2025-06-18,2025-07-31,,33.0,16.5,5
+456,T-0456,Test search index,1,13,Design,In progress,2,2024-02-15,2024-04-03,,18.0,6.0,1
+457,T-0457,Document data model,10,12,Docs,Completed,4,2025-01-23,2025-02-16,2025-01-26,39.5,55.5,13
+458,T-0458,Test audit log,10,10,Test,Blocked,3,2025-04-11,2025-06-05,,26.5,17.0,13
+459,T-0459,Migrate onboarding email,2,14,Build,Completed,4,2024-08-25,2024-09-19,2024-09-29,8.0,5.0,3
+460,T-0460,Draft search index,12,12,Build,Completed,4,2024-04-16,2024-06-03,2024-06-03,26.0,39.0,1
+461,T-0461,Validate data model,6,9,Build,Completed,4,2025-07-23,2025-08-29,2025-08-08,23.0,23.0,3
+462,T-0462,Migrate release notes,2,1,Test,Completed,4,2024-09-24,2024-10-20,2024-10-09,3.0,4.0,13
+463,T-0463,Migrate onboarding email,12,11,Design,In progress,2,2024-04-10,2024-04-15,,29.5,15.5,1
+464,T-0464,Review release notes,12,14,Test,Blocked,3,2025-02-09,2025-03-12,,23.5,16.0,1
+465,T-0465,Implement invoice export,5,1,Design,Completed,4,2024-01-25,2024-03-14,2024-03-15,28.0,38.0,5
+466,T-0466,Document search index,9,10,Test,In progress,2,2024-03-04,2024-04-12,,10.0,7.5,8
+467,T-0467,Refine API client,1,4,Docs,In progress,2,2025-02-14,2025-04-11,,28.0,10.5,5
+468,T-0468,Review dashboard,2,9,Build,Blocked,3,2025-03-19,2025-05-10,,27.0,11.0,1
+469,T-0469,Document data model,3,14,Build,Not started,1,2024-09-14,2024-11-02,,6.5,0.0,8
+470,T-0470,Implement data model,6,1,Design,Completed,4,2024-12-28,2025-01-17,2024-12-29,26.0,15.5,3
+471,T-0471,Document onboarding email,8,9,Docs,Completed,4,2025-01-27,2025-03-14,2025-02-26,5.5,6.5,13
+472,T-0472,Document search index,11,14,Docs,Not started,1,2024-10-02,2024-11-08,,28.5,0.0,2
+473,T-0473,Draft data model,5,16,Test,Blocked,3,2024-07-25,2024-08-11,,4.0,1.5,5
+474,T-0474,Refine onboarding email,3,5,Docs,Blocked,3,2024-08-04,2024-09-25,,28.5,23.0,5
+475,T-0475,Document login flow,1,5,Docs,Completed,4,2025-01-16,2025-03-03,2025-02-27,28.0,28.0,8
+476,T-0476,Migrate dashboard,10,2,Design,Not started,1,2025-05-18,2025-06-04,,35.0,0.0,8
+477,T-0477,Refine audit log,1,15,Design,Completed,4,2025-10-31,2025-12-19,2025-11-29,28.0,39.0,5
+478,T-0478,Refine search index,3,9,Test,Completed,4,2024-12-15,2025-01-04,2025-01-01,23.5,36.5,1
+479,T-0479,Refine dashboard,11,5,Design,Completed,4,2025-05-24,2025-06-14,2025-06-14,30.5,33.5,8
+480,T-0480,Draft data model,2,10,Docs,Not started,1,2025-10-22,2025-11-08,,26.0,0.0,5
+481,T-0481,Implement login flow,5,3,Design,In progress,2,2024-06-17,2024-08-02,,12.5,7.0,1
+482,T-0482,Migrate search index,8,10,Design,Completed,4,2024-12-14,2025-01-04,2025-01-05,35.0,49.0,1
+483,T-0483,Draft invoice export,3,14,Docs,Completed,4,2024-01-17,2024-03-02,2024-01-25,3.0,3.0,3
+484,T-0484,Test search index,11,16,Test,Completed,4,2025-03-21,2025-03-25,2025-03-30,38.0,28.5,2
+485,T-0485,Validate data model,6,8,Test,Not started,1,2024-05-26,2024-07-09,,7.0,0.0,8
+486,T-0486,Migrate release notes,9,7,Test,In progress,2,2024-12-18,2025-02-07,,39.0,16.5,3
+487,T-0487,Implement dashboard,5,4,Test,In progress,2,2025-09-24,2025-10-24,,13.5,5.5,8
+488,T-0488,Refine release notes,1,7,Docs,In progress,2,2024-02-09,2024-03-10,,24.0,17.5,8
+489,T-0489,Draft onboarding email,7,13,Docs,In progress,2,2025-03-06,2025-03-14,,12.0,8.5,8
+490,T-0490,Draft release notes,4,2,Test,Not started,1,2025-02-18,2025-04-06,,3.5,0.0,1
+491,T-0491,Implement search index,2,4,Design,Not started,1,2025-05-16,2025-06-02,,26.0,0.0,2
+492,T-0492,Document access policy,12,15,Docs,Blocked,3,2024-02-19,2024-02-28,,6.5,2.5,13
+493,T-0493,Review audit log,10,10,Design,Completed,4,2025-07-05,2025-08-28,2025-08-02,28.5,41.5,5
+494,T-0494,Migrate release notes,2,11,Design,Completed,4,2024-06-15,2024-07-11,2024-07-07,40.0,50.0,5
+495,T-0495,Validate release notes,5,4,Test,Blocked,3,2025-01-27,2025-02-05,,13.5,7.5,2
+496,T-0496,Draft onboarding email,10,4,Build,Blocked,3,2024-01-22,2024-02-12,,12.0,5.0,3
+497,T-0497,Migrate login flow,12,14,Design,Not started,1,2024-10-28,2024-12-09,,35.5,0.0,8
+498,T-0498,Review audit log,4,9,Build,Completed,4,2024-06-23,2024-07-28,2024-07-18,8.5,10.0,2
+499,T-0499,Validate release notes,12,5,Build,Completed,4,2025-08-26,2025-09-08,2025-09-10,18.5,22.0,8
+500,T-0500,Migrate data model,4,15,Build,Blocked,3,2024-03-16,2024-04-06,,12.0,7.0,3
+501,T-0501,Draft dashboard,10,6,Test,In progress,2,2025-01-28,2025-02-06,,17.0,10.0,2
+502,T-0502,Migrate API client,2,3,Test,Completed,4,2024-11-21,2024-12-20,2024-12-07,17.5,24.5,1
+503,T-0503,Validate audit log,11,5,Build,Not started,1,2024-08-02,2024-08-25,,27.0,0.0,1
+504,T-0504,Draft onboarding email,7,5,Design,In progress,2,2025-08-14,2025-08-30,,40.0,23.0,13
+505,T-0505,Implement API client,4,13,Docs,Blocked,3,2025-01-03,2025-01-10,,33.0,14.0,8
+506,T-0506,Review access policy,1,2,Design,Completed,4,2025-08-07,2025-08-27,2025-08-31,20.5,20.5,5
+507,T-0507,Implement audit log,3,13,Docs,In progress,2,2025-03-09,2025-04-05,,8.5,3.0,8
+508,T-0508,Document access policy,5,16,Build,In progress,2,2024-03-24,2024-04-04,,14.5,4.5,1
+509,T-0509,Document access policy,5,1,Docs,Blocked,3,2025-04-14,2025-05-30,,26.0,17.0,2
+510,T-0510,Document audit log,8,8,Build,Not started,1,2025-05-14,2025-07-02,,14.5,0.0,13
+511,T-0511,Implement data model,12,16,Docs,Completed,4,2024-12-12,2024-12-29,2024-12-24,24.0,31.0,1
+512,T-0512,Draft onboarding email,10,5,Build,Completed,4,2025-01-23,2025-03-22,2025-04-01,40.0,54.0,13
+513,T-0513,Review data model,3,10,Docs,Blocked,3,2024-10-29,2024-12-05,,27.0,21.5,3
+514,T-0514,Review login flow,12,2,Build,Completed,4,2025-06-25,2025-08-23,2025-08-02,13.5,9.0,5
+515,T-0515,Draft dashboard,1,5,Design,Completed,4,2024-12-10,2025-01-25,2025-01-18,4.0,4.5,2
+516,T-0516,Draft release notes,5,2,Design,In progress,2,2025-07-24,2025-09-18,,20.0,9.0,2
+517,T-0517,Document data model,3,6,Docs,Not started,1,2025-05-10,2025-05-19,,36.0,0.0,2
+518,T-0518,Document access policy,8,15,Build,Completed,4,2025-10-24,2025-11-12,2025-11-15,38.0,28.5,8
+519,T-0519,Validate invoice export,6,14,Docs,Completed,4,2025-02-26,2025-04-15,2025-04-11,37.5,34.0,1
+520,T-0520,Refine release notes,10,11,Design,In progress,2,2025-10-31,2025-11-29,,39.0,26.5,5
+521,T-0521,Document dashboard,9,12,Build,Completed,4,2024-05-10,2024-06-18,2024-05-14,2.5,3.0,2
+522,T-0522,Test search index,7,6,Design,Blocked,3,2025-08-04,2025-09-28,,7.5,3.5,2
+523,T-0523,Test audit log,8,13,Design,In progress,2,2024-01-12,2024-02-27,,26.0,12.0,8
+524,T-0524,Draft access policy,8,13,Design,Completed,4,2025-07-26,2025-09-07,2025-09-05,11.0,6.5,1
+525,T-0525,Refine dashboard,10,5,Docs,Not started,1,2024-11-25,2025-01-01,,40.0,0.0,13
+526,T-0526,Migrate dashboard,4,5,Docs,In progress,2,2024-06-30,2024-07-05,,35.0,18.5,5
+527,T-0527,Document login flow,7,7,Docs,In progress,2,2024-05-12,2024-05-22,,7.5,6.0,8
+528,T-0528,Test data model,6,16,Docs,Not started,1,2025-04-23,2025-05-06,,21.5,0.0,5
+529,T-0529,Draft access policy,12,6,Build,Completed,4,2025-06-24,2025-07-01,2025-07-10,29.0,23.0,2
+530,T-0530,Test invoice export,12,15,Test,Blocked,3,2025-03-12,2025-03-26,,25.0,19.0,1
+531,T-0531,Test access policy,2,9,Test,In progress,2,2024-01-10,2024-02-25,,18.5,8.0,5
+532,T-0532,Migrate login flow,11,12,Design,Not started,1,2025-05-23,2025-06-02,,27.0,0.0,1
+533,T-0533,Test login flow,8,11,Test,Completed,4,2025-06-15,2025-07-29,2025-07-07,11.5,12.5,8
+534,T-0534,Document audit log,12,7,Docs,Completed,4,2024-03-29,2024-04-04,2024-03-31,4.0,5.5,8
+535,T-0535,Refine data model,10,4,Test,Completed,4,2024-05-01,2024-05-21,2024-05-23,12.0,9.0,1
+536,T-0536,Refine audit log,4,3,Test,Completed,4,2025-03-18,2025-05-16,2025-04-15,19.0,24.0,2
+537,T-0537,Migrate login flow,6,6,Design,Completed,4,2024-03-27,2024-05-14,2024-05-24,39.5,61.0,5
+538,T-0538,Test dashboard,2,16,Build,Blocked,3,2024-01-16,2024-03-06,,15.0,6.0,1
+539,T-0539,Document search index,10,8,Build,In progress,2,2025-02-12,2025-03-01,,17.0,12.0,5
+540,T-0540,Implement dashboard,12,5,Design,Not started,1,2025-01-27,2025-03-01,,14.0,0.0,3
+541,T-0541,Document invoice export,10,13,Test,Completed,4,2024-08-29,2024-09-08,2024-09-12,30.5,35.0,2
+542,T-0542,Test invoice export,1,12,Design,Not started,1,2025-10-06,2025-10-25,,36.0,0.0,3
+543,T-0543,Draft API client,6,8,Design,Completed,4,2024-04-27,2024-05-05,2024-05-13,20.0,25.0,1
+544,T-0544,Test release notes,7,7,Test,Completed,4,2024-09-08,2024-10-19,2024-10-09,25.0,30.0,2
+545,T-0545,Implement audit log,12,4,Test,In progress,2,2024-07-10,2024-09-08,,39.0,27.5,13
+546,T-0546,Implement data model,10,8,Docs,Not started,1,2025-08-12,2025-09-16,,34.0,0.0,13
+547,T-0547,Refine release notes,5,7,Test,Blocked,3,2025-08-10,2025-09-10,,30.0,16.0,5
+548,T-0548,Draft data model,4,11,Build,Completed,4,2025-06-23,2025-07-31,2025-07-19,8.5,13.0,5
+549,T-0549,Validate data model,8,5,Test,Completed,4,2024-05-08,2024-06-30,2024-06-06,34.0,35.5,8
+550,T-0550,Document search index,8,12,Docs,Completed,4,2024-09-08,2024-09-26,2024-09-11,14.5,10.0,8
+551,T-0551,Document search index,1,10,Docs,Blocked,3,2025-03-27,2025-04-06,,16.5,10.5,13
+552,T-0552,Document login flow,1,7,Build,Blocked,3,2024-07-01,2024-08-21,,5.0,2.0,1
+553,T-0553,Implement data model,12,2,Docs,Completed,4,2025-02-03,2025-03-06,2025-02-16,5.5,6.5,8
+554,T-0554,Review audit log,2,5,Build,Completed,4,2025-02-13,2025-03-25,2025-03-13,29.5,19.0,2
+555,T-0555,Refine invoice export,7,2,Test,Completed,4,2024-09-19,2024-10-30,2024-09-26,6.0,9.5,8
+556,T-0556,Test invoice export,10,16,Test,In progress,2,2024-08-17,2024-08-31,,16.0,11.0,5
+557,T-0557,Test audit log,4,10,Test,Completed,4,2024-07-09,2024-07-23,2024-07-28,21.0,16.0,13
+558,T-0558,Document invoice export,10,10,Docs,Blocked,3,2024-11-18,2024-12-20,,16.5,6.5,3
+559,T-0559,Migrate onboarding email,8,3,Build,Completed,4,2025-08-19,2025-09-30,2025-10-05,18.0,15.5,5
+560,T-0560,Draft API client,11,2,Design,In progress,2,2025-07-28,2025-08-25,,37.0,20.5,1
+561,T-0561,Validate access policy,6,7,Build,Blocked,3,2024-05-02,2024-06-19,,15.0,8.5,8
+562,T-0562,Document data model,5,15,Test,Completed,4,2024-03-19,2024-05-12,2024-05-16,30.5,26.0,8
+563,T-0563,Refine API client,5,14,Docs,Completed,4,2025-08-06,2025-09-05,2025-08-15,40.0,32.0,3
+564,T-0564,Validate invoice export,9,14,Design,Completed,4,2025-08-16,2025-09-03,2025-09-12,20.5,26.5,13
+565,T-0565,Review audit log,7,7,Test,Completed,4,2024-09-24,2024-10-03,2024-09-29,35.5,26.5,13
+566,T-0566,Draft audit log,8,7,Docs,Completed,4,2024-06-12,2024-06-16,2024-06-19,26.5,18.5,13
+567,T-0567,Document invoice export,8,3,Test,Blocked,3,2025-09-02,2025-10-24,,11.0,6.5,13
+568,T-0568,Implement API client,8,1,Test,In progress,2,2024-03-27,2024-05-24,,18.0,9.0,13
+569,T-0569,Test search index,2,5,Build,In progress,2,2024-05-25,2024-06-03,,26.0,15.5,1
+570,T-0570,Review search index,1,3,Docs,Not started,1,2025-02-10,2025-03-03,,12.0,0.0,2
+571,T-0571,Review onboarding email,8,5,Test,Completed,4,2024-10-22,2024-12-05,2024-12-11,6.0,4.5,1
+572,T-0572,Review access policy,2,15,Test,In progress,2,2025-06-17,2025-07-07,,37.5,20.5,13
+573,T-0573,Document access policy,5,7,Build,Completed,4,2024-08-13,2024-08-30,2024-08-19,17.0,15.5,8
+574,T-0574,Migrate search index,11,13,Test,In progress,2,2025-04-20,2025-06-05,,6.5,3.0,3
+575,T-0575,Validate invoice export,6,10,Build,In progress,2,2025-07-28,2025-09-12,,34.0,24.0,13
+576,T-0576,Validate data model,7,10,Test,Completed,4,2024-09-29,2024-11-19,2024-11-09,13.0,15.5,13
+577,T-0577,Implement dashboard,6,10,Design,Not started,1,2024-10-11,2024-11-20,,4.0,0.0,2
+578,T-0578,Review invoice export,1,7,Docs,Blocked,3,2024-12-06,2025-01-23,,7.5,5.0,1
+579,T-0579,Refine audit log,3,14,Test,Completed,4,2025-05-08,2025-06-28,2025-06-21,33.0,53.0,2
+580,T-0580,Validate invoice export,12,7,Test,In progress,2,2025-01-21,2025-02-27,,32.5,21.0,5
+581,T-0581,Refine audit log,1,5,Docs,Completed,4,2024-09-24,2024-11-03,2024-11-12,33.5,28.5,5
+582,T-0582,Document search index,10,1,Test,Not started,1,2024-09-25,2024-11-07,,17.0,0.0,2
+583,T-0583,Refine dashboard,11,10,Docs,Completed,4,2024-09-19,2024-10-25,2024-10-20,3.0,2.0,13
+584,T-0584,Document data model,4,5,Build,In progress,2,2024-08-19,2024-10-09,,39.0,24.0,13
+585,T-0585,Refine login flow,6,13,Docs,Not started,1,2025-01-10,2025-01-25,,39.0,0.0,13
+586,T-0586,Migrate login flow,1,5,Test,Not started,1,2025-03-09,2025-04-02,,6.0,0.0,13
+587,T-0587,Test search index,2,14,Build,In progress,2,2025-07-07,2025-08-18,,27.0,11.5,2
+588,T-0588,Draft audit log,7,16,Design,Not started,1,2024-12-10,2025-01-15,,15.5,0.0,13
+589,T-0589,Validate API client,2,6,Build,Completed,4,2024-01-18,2024-03-02,2024-01-23,33.5,30.0,1
+590,T-0590,Migrate audit log,4,8,Build,Not started,1,2024-07-17,2024-08-21,,14.5,0.0,1
+591,T-0591,Test login flow,3,3,Test,Not started,1,2024-05-19,2024-06-14,,14.0,0.0,8
+592,T-0592,Refine audit log,4,8,Build,Completed,4,2024-03-28,2024-05-03,2024-04-02,31.0,34.0,3
+593,T-0593,Validate access policy,12,13,Build,Completed,4,2025-09-22,2025-10-30,2025-10-08,31.5,23.5,3
+594,T-0594,Refine audit log,8,11,Test,In progress,2,2025-02-17,2025-04-02,,33.5,13.5,8
+595,T-0595,Document onboarding email,2,6,Design,Not started,1,2024-05-07,2024-06-16,,34.5,0.0,1
+596,T-0596,Draft onboarding email,1,13,Build,Completed,4,2024-06-10,2024-06-26,2024-06-30,13.5,21.0,5
+597,T-0597,Review release notes,1,6,Test,In progress,2,2025-04-11,2025-06-04,,38.5,20.5,3
+598,T-0598,Test API client,2,4,Test,In progress,2,2025-04-06,2025-04-26,,25.0,19.5,5
+599,T-0599,Document search index,9,6,Design,In progress,2,2025-05-31,2025-07-19,,26.0,17.5,3
+600,T-0600,Document audit log,6,4,Build,Completed,4,2024-12-09,2025-01-26,2025-01-17,36.5,23.5,8
