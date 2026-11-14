@@ -73,7 +73,6 @@ wheels = [
 
 [[package]]
 name = "pbi-report-builder"
-version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "pyyaml" },

@@ -1,6 +1,6 @@
 [project]
 name = "pbi-report-builder"
-version = "0.10.0"
+dynamic = ["version"]
 description = "CLI tool for editing Power BI PBIP project files"
 requires-python = ">=3.13"
 dependencies = [
@@ -18,8 +18,20 @@ dev = [
 pbi = "pbi.cli:app"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+# Used when building outside a git checkout (e.g. a source archive without tags).
+fallback_version = "0.0.0"
+
+[tool.uv]
+# Rebuild the editable install when the commit or tags change, so
+# `pbi --version` follows the checkout.
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pbi"]

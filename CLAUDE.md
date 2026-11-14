@@ -15,6 +15,14 @@ Use `uv` for all test runs so commands execute in the project environment rather
 
 Do not assume `pytest` is installed globally.
 
+## Versions and Releases
+
+- The version comes from git tags (`hatch-vcs`); there is no version string to edit in `pyproject.toml` or `src/pbi/__init__.py`. Untagged builds report a dev version such as `0.10.1.dev3+g1234abc`.
+- Cut releases with the `release` skill: it computes the next version from Conventional Commit subjects, pushes a `vX.Y.Z` tag and creates the GitHub Release. Skip its manifest-bump step; the tag is the version.
+- `.github/workflows/release.yml` runs on the tag: tests, `uv build`, checks the built version matches the tag, and attaches the wheel and sdist to the release. Nothing is published to PyPI yet.
+- PR titles must be Conventional Commits (`.github/workflows/pr-title.yml` enforces it), since the squash-merged title is the commit on master and drives release notes.
+- Each `skills/*/SKILL.md` states the minimum `pbi` version it needs. When a skill starts documenting a feature that isn't in a release yet, raise that line to the next version.
+
 ## Command Grammar
 
 **Verbs:** `list`, `get`, `set`, `set-all`, `create`, `copy`, `delete`, `clear`, `export`, `apply`, `batch`, `migrate`. Use `get` to view details (never `show`). Use `delete` to remove resources (never `remove`). Use `unhide` as the opposite of `hide`. Use `clear` to remove configuration (sort, formatting, interactions, drillthrough, tooltip). Use `batch` (alias `run`) to execute many imperative sub-commands in one process — far faster than separate invocations for long edit sequences; reserve `apply` for declarative YAML state.
