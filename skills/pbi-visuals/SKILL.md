@@ -5,6 +5,8 @@ description: "Power BI report visual design and styling with the `pbi` CLI — u
 
 # Power BI Visual Design & Styling
 
+> Requires `pbi` 0.10.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
+
 You are designing Power BI report pages using the `pbi` CLI. This skill covers the YAML-first declarative workflow for building, styling, and laying out professional report pages.
 
 ## Workflow: Always Start with YAML

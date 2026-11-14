@@ -5,6 +5,8 @@ description: "General-purpose guide for the `pbi` CLI tool that edits Power BI P
 
 # PBI CLI — General Usage Guide
 
+> Requires `pbi` 0.10.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
+
 The `pbi` CLI edits Power BI PBIP (PBIR format) project files directly — no Power BI Desktop needed. It targets AI agents that build and manage reports programmatically.
 
 ## Command Grammar

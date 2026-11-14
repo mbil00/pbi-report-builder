@@ -5,6 +5,8 @@ description: "Power BI semantic model development with the `pbi` CLI — use whe
 
 # Power BI Semantic Model Development
 
+> Requires `pbi` 0.10.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
+
 You are working with a Power BI PBIP project's semantic model using the `pbi` CLI. The model defines tables, columns, measures, relationships, and hierarchies that power the report visuals.
 
 ## Workflow Priority
