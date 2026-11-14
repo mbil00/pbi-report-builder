@@ -15,3 +15,9 @@ docs/superpowers/
 .codex/
 .mcp.json
 .specialist-workspace.json
+
+# Power BI Desktop machine-local files in Desktop-built fixtures (report-04 onward;
+# 01-03 predate this and keep theirs), and Windows zone markers created on WSL paths
+fixtures/real-report-fixtures/report-04-desktop-shapes/**/.pbi/cache.abf
+fixtures/real-report-fixtures/report-04-desktop-shapes/**/.pbi/localSettings.json
+*:Zone.Identifier
