@@ -69,6 +69,12 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
         "seriesColors",
     }
 
+    # Restore the raw payload first, as apply does: it replaces whole object
+    # lists, so anything written before it would be lost.
+    pbir = spec.get("pbir")
+    if isinstance(pbir, dict):
+        apply_raw_visual_payload(visual, pbir)
+
     for key, value in spec.items():
         if key in skip_keys:
             continue
@@ -123,11 +129,6 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
                 except (ValueError, KeyError):
                     pass
 
-    pbir = spec.get("pbir")
-    if isinstance(pbir, dict):
-        apply_raw_visual_payload(visual, pbir)
-
-    # After pbir, which would otherwise replace the dataPoint list.
     if "seriesColors" in spec:
         _apply_series_colors(project, visual, spec["seriesColors"])
 

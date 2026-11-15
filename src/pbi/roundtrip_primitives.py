@@ -462,7 +462,7 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
                     if not objects["general"]:
                         objects.pop("general", None)
             if "seriesColors" in exported_visual:
-                _prune_series_color_entries(objects)
+                _prune_series_color_entries(visual, raw_visual)
             _prune_exported_object_groups(
                 objects,
                 exported_visual,
@@ -559,19 +559,17 @@ def _has_data_selector(entry: Any) -> bool:
     return isinstance(selector, Mapping) and "data" in selector
 
 
-def _prune_series_color_entries(objects: dict[str, Any]) -> None:
+def _prune_series_color_entries(visual: dict[str, Any], raw_visual: Mapping[str, Any]) -> None:
     """Drop the dataPoint entries that the exported seriesColors represents."""
-    from pbi.data_colors import export_series_colors
+    from pbi.data_colors import export_series_colors, without_series_color_entries
 
-    _colors, taken = export_series_colors({"visual": {"objects": objects}})
-    if not taken:
-        return
-    taken_set = set(taken)
-    remaining = [entry for index, entry in enumerate(objects["dataPoint"]) if index not in taken_set]
-    if remaining:
-        objects["dataPoint"] = remaining
-    else:
-        objects.pop("dataPoint", None)
+    # Read from the unpruned visual: measure series need its queryState.
+    _colors, taken = export_series_colors(raw_visual)
+    if taken:
+        objects = visual["objects"]
+        remaining = without_series_color_entries(objects, taken)
+        objects.clear()
+        objects.update(remaining)
 
 
 def _bindings_have_widths(exported_visual: Mapping[str, Any]) -> bool:

@@ -342,7 +342,7 @@ Pin a colour to a category or legend value, or to a measure series, with `series
 
 - Values are typed by the column: text, `true`/`false` for boolean columns, whole numbers for integer columns. Other column types (decimal, date) are rejected; use `pbir:` for those.
 - Colours must be `#RRGGBB`. Unlisted values keep their theme colour; entries are merged, never wiped.
-- `pbi export` writes value colours back as `seriesColors`; measure-series colours export as `chart:dataPoint.fill [Table.Measure]`, which `apply` also accepts.
+- `pbi export` writes pinned colours back as `seriesColors` (a renamed measure under its current name). The older `chart:dataPoint.fill [Table.Measure]` form still applies.
 
 ## Interactions in YAML
 

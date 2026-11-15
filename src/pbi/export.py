@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 from pbi.bookmarks import export_bookmarks
-from pbi.data_colors import export_series_colors
+from pbi.data_colors import export_series_colors, without_series_color_entries
 from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
@@ -235,6 +235,10 @@ def _export_visual(
 
     # Chart formatting (legend, axes, labels, etc.)
     chart_objs = visual.data.get("visual", {}).get("objects", {})
+    # Fixed colours per category value or measure series (#41); the entries
+    # they cover are left out of the generic object export.
+    series_colors, series_color_entries = export_series_colors(visual.data)
+    chart_objs = without_series_color_entries(chart_objs, series_color_entries)
     if chart_objs:
         result.update(
             export_object_properties(
@@ -252,8 +256,6 @@ def _export_visual(
             )
         )
 
-    # Fixed colours per category value (#41)
-    series_colors, _taken = export_series_colors(visual.data)
     if series_colors:
         result["seriesColors"] = series_colors
 

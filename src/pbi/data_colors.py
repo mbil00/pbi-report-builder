@@ -109,19 +109,23 @@ def apply_series_colors(
 
 
 def export_series_colors(visual_data: Mapping[str, Any]) -> tuple[dict[str, Any], list[int]]:
-    """Read value-scoped ``dataPoint`` fills back into ``seriesColors`` form.
+    """Read pinned ``dataPoint`` fills back into ``seriesColors`` form.
 
     Returns the YAML mapping and the indexes of the ``dataPoint`` entries it
-    represents. Only entries holding nothing but a hex ``fill`` with a
-    Desktop-sampled selector are taken; everything else stays in ``pbir:``.
-    Measure-series entries are left to the generic ``chart:dataPoint.fill [..]``
-    export, which already round-trips them.
+    represents. Only entries holding nothing but a hex ``fill`` are taken, with
+    either a Desktop-sampled value selector or the metadata selector of a bound
+    measure (exported under the measure's current name, which apply maps back
+    to the queryRef). Everything else stays with the generic export or ``pbir:``.
     """
     entries = visual_data.get("visual", {}).get("objects", {}).get("dataPoint", [])
     result: dict[str, Any] = {}
     taken: list[int] = []
     if not isinstance(entries, list):
         return result, taken
+    measures_by_query_ref = {
+        query_ref: f"{entity}.{prop}"
+        for (entity, prop), query_ref in _bound_measure_query_refs(visual_data).items()
+    }
 
     for index, entry in enumerate(entries):
         if not isinstance(entry, Mapping):
@@ -130,17 +134,54 @@ def export_series_colors(visual_data: Mapping[str, Any]) -> tuple[dict[str, Any]
         if not isinstance(properties, Mapping) or set(properties) != {"fill"}:
             continue
         color = _decode_fill(properties["fill"])
-        scope = _decode_scope_selector(entry.get("selector"))
-        if color is None or scope is None:
+        if color is None:
+            continue
+        selector = entry.get("selector")
+        if isinstance(selector, Mapping) and set(selector) == {"metadata"}:
+            measure_ref = measures_by_query_ref.get(selector["metadata"])
+            if measure_ref is None or measure_ref in result:
+                continue
+            result[measure_ref] = color
+            taken.append(index)
+            continue
+        scope = _decode_scope_selector(selector)
+        if scope is None:
             continue
         field_ref, value = scope
         values = result.setdefault(field_ref, {})
-        if value in values:
+        if not isinstance(values, dict) or value in values:
             continue  # a duplicate selector can't be expressed in a mapping
         values[value] = color
         taken.append(index)
 
     return result, taken
+
+
+def without_series_color_entries(objects: Mapping[str, Any], taken: list[int]) -> dict[str, Any]:
+    """Return a shallow copy of ``objects`` without the taken ``dataPoint`` entries."""
+    result = dict(objects)
+    if not taken:
+        return result
+    taken_set = set(taken)
+    remaining = [entry for index, entry in enumerate(objects.get("dataPoint", [])) if index not in taken_set]
+    if remaining:
+        result["dataPoint"] = remaining
+    else:
+        result.pop("dataPoint", None)
+    return result
+
+
+def normalize_series_colors(spec: Any) -> Any:
+    """Uppercase the colours in a ``seriesColors`` spec, as apply writes them."""
+    def _color(value: Any) -> Any:
+        return value.strip().upper() if isinstance(value, str) and _HEX_COLOR.fullmatch(value.strip()) else value
+
+    if not isinstance(spec, Mapping):
+        return spec
+    return {
+        field: {key: _color(color) for key, color in value.items()} if isinstance(value, Mapping) else _color(value)
+        for field, value in spec.items()
+    }
 
 
 def _column_literal_type(data_type: str | None, values: Mapping, field_ref: str) -> str:

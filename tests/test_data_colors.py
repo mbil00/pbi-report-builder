@@ -38,6 +38,17 @@ DESKTOP_CASES = [
 ]
 
 
+THEME_SCOPED_ENTRY = {
+    "properties": {"fill": {"solid": {"color": {"expr": {"ThemeDataColor": {"ColorId": 2, "Percent": 0}}}}}},
+    "selector": {"data": [{"scopeId": {"Comparison": {
+        "ComparisonKind": 0,
+        "Left": {"Column": {"Expression": {"SourceRef": {"Entity": "T"}}, "Property": "C"}},
+        "Right": {"Literal": {"Value": "'a'"}},
+    }}}]},
+}
+DEFAULT_ENTRY = {"properties": {"defaultColor": {"solid": {"color": {"expr": {"Literal": {"Value": "'#222222'"}}}}}}}
+
+
 def _title_of(visual_data: dict) -> str | None:
     for entry in visual_data.get("visual", {}).get("visualContainerObjects", {}).get("title", []):
         raw = entry.get("properties", {}).get("text", {}).get("expr", {}).get("Literal", {}).get("Value")
@@ -125,16 +136,12 @@ class SeriesColorsDesktopTests(unittest.TestCase):
                 v for p in exported[page]["pages"] for v in p["visuals"] if v.get("id") == visual.folder.name
             )
             with self.subTest(visual=title):
-                if title == "Hours by Measure Series":
-                    # Measure series keep the generic selector key.
-                    self.assertNotIn("seriesColors", exported_visual)
-                    self.assertEqual(
-                        exported_visual["chart:dataPoint.fill [Measures Table.Estimate Hours]"], "#A0C4FF"
-                    )
-                    continue
-                expected = {field: {k: v.upper() for k, v in values.items()} for field, values in spec.items()}
+                expected = {
+                    field: values.upper() if isinstance(values, str) else {k: v.upper() for k, v in values.items()}
+                    for field, values in spec.items()
+                }
                 self.assertEqual(exported_visual["seriesColors"], expected)
-                self.assertNotIn("chart:dataPoint.fill", exported_visual)
+                self.assertFalse([key for key in exported_visual if key.startswith("chart:dataPoint")])
                 raw = exported_visual.get("pbir", {}).get("visual", {}).get("objects", {})
                 self.assertNotIn("dataPoint", raw)
 
@@ -168,6 +175,28 @@ class SeriesColorsDesktopTests(unittest.TestCase):
                     copy_visual.data["visual"]["objects"]["dataPoint"],
                     _objects(_visual(page, title), "dataPoint"),
                 )
+
+    def test_diff_after_apply_shows_no_changes(self) -> None:
+        self._strip_data_points()
+        authored = self._authored_yaml()
+        self._apply(authored)
+        path = self.root / "apply.yaml"
+        for page in ("Overview", "Chart Gallery"):
+            result = self.runner.invoke(app, ["diff", str(path), "--page", page, "--project", str(self.pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            self.assertIn("No differences found", result.stdout)
+
+    def test_stamping_keeps_global_default_beside_raw_scoped_entries(self) -> None:
+        from pbi.visual_stamping import create_visual_from_spec
+
+        project = Project.find(self.pbip)
+        spec = {
+            "type": "clusteredColumnChart",
+            "dataColors": {"default": "#222222"},
+            "pbir": {"visual": {"objects": {"dataPoint": [THEME_SCOPED_ENTRY]}}},
+        }
+        stamped = create_visual_from_spec(project, project.find_page("QA Hidden"), spec)
+        self.assertEqual(stamped.data["visual"]["objects"]["dataPoint"], [THEME_SCOPED_ENTRY, DEFAULT_ENTRY])
 
     @unittest.skipUnless(RENAMED_DIR.exists(), "rename snapshot not committed")
     def test_renamed_measure_uses_bound_query_ref(self) -> None:
@@ -337,6 +366,22 @@ class SeriesColorsUnitTests(unittest.TestCase):
         self.assertEqual(selectors, [{"metadata": "M.Old"}, {"metadata": "M.Unbound"}])
         self.assertEqual(len(warnings), 1)
         self.assertIn("M.Unbound", warnings[0])
+
+    def test_measure_series_export_uses_current_name(self) -> None:
+        data = {"visual": {"visualType": "clusteredColumnChart", "query": {"queryState": {"Y": {"projections": [
+            {"field": {"Measure": {"Expression": {"SourceRef": {"Entity": "M"}}, "Property": "New"}},
+             "queryRef": "M.Old"},
+        ]}}}, "objects": {"dataPoint": [
+            {"properties": {"fill": {"solid": {"color": {"expr": {"Literal": {"Value": "'#111111'"}}}}}},
+             "selector": {"metadata": "M.Old"}},
+            {"properties": {"fill": {"solid": {"color": {"expr": {"Literal": {"Value": "'#222222'"}}}}}},
+             "selector": {"metadata": "M.Unbound"}},
+        ]}}}
+        colors, taken = export_series_colors(data)
+        self.assertEqual((colors, taken), ({"M.New": "#111111"}, [0]))  # unbound stays generic
+
+        apply_series_colors(data, colors, resolve_field=_resolver({"M.New": ("measure", "numeric")}))
+        self.assertEqual(len(data["visual"]["objects"]["dataPoint"]), 2)  # same entry, not a new one
 
     def test_export_takes_only_representable_entries(self) -> None:
         def scoped(value: str, props: dict) -> dict:
