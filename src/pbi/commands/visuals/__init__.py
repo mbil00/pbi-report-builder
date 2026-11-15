@@ -11,6 +11,7 @@ from . import inspection as _inspection
 from . import layout as _layout
 from . import management as _management
 from . import mutation as _mutation
+from . import slicers as _slicers
 from . import sorting as _sorting
 
 __all__ = [

@@ -20,7 +20,7 @@ pbi <object> <verb> <target> [key=value...] [--flags]
 | `set-all` | Change properties in bulk | page (all pages), visual (all visuals) |
 | `create` | Add new item | page, visual, filter, bookmark, style, component, image, model measure, model column |
 | `delete` | Remove item (prompts unless `--force`) | page, visual, filter, style, component, model measure, model column |
-| `clear` | Remove configuration | visual sort, visual format, interaction, page drillthrough, page tooltip |
+| `clear` | Remove configuration | visual sort, visual format, visual slicer sync/selection, interaction, page drillthrough, page tooltip |
 | `apply` | Apply from YAML/preset | top-level, model, style, component, page template, theme |
 | `batch` | Run many sub-commands in one process (alias: `run`) | top-level |
 | `export` | Export to YAML/JSON | page (YAML), theme (JSON) |
@@ -143,6 +143,16 @@ pbi visual bindings "Overview" myChart            # list current bindings
 pbi visual sort set "Overview" myChart Products.Revenue --direction desc
 pbi visual sort clear "Overview" myChart
 
+# Slicer sync groups and saved (default) selections
+pbi visual slicer get "Overview" yearSlicer                         # field, sync group, saved selection
+pbi visual slicer sync set "Overview" yearSlicer YearSync           # same group name on each page = synced
+pbi visual slicer sync set "Overview" yearSlicer YearSync --no-fields
+pbi visual slicer sync clear "Overview" yearSlicer -f
+pbi visual slicer selection set "Overview" statusSlicer "In progress" Blocked
+pbi visual slicer selection set "Overview" teamSlicer Design --except     # all except Design
+pbi visual slicer selection set "Overview" dateSlicer --from 2024-03-01 --to 2025-06-30
+pbi visual slicer selection clear "Overview" statusSlicer -f
+
 # Column formatting (tables/matrices) — resize, rename, format individual columns
 pbi visual column "Overview" myTable                          # list columns
 pbi visual column "Overview" myTable "Revenue" --width 120    # resize column
@@ -195,7 +205,7 @@ pbi diff overview.yaml                        # 3. review
 pbi apply overview.yaml                       # 4. apply
 ```
 
-**YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, fixed data colours per value or series (`seriesColors`), sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
+**YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, fixed data colours per value or series (`seriesColors`), slicer sync groups and saved selections (`sync`, `selected`), sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
 
 ---
 

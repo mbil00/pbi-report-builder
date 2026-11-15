@@ -443,6 +443,9 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
         if "filters" in exported_visual:
             pruned.pop("filterConfig", None)
 
+        if "sync" in exported_visual:
+            visual.pop("syncGroup", None)
+
         objects = visual.get("objects")
         if isinstance(objects, dict):
             if _bindings_have_widths(exported_visual):
@@ -463,6 +466,12 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
                         objects.pop("general", None)
             if "seriesColors" in exported_visual:
                 _prune_series_color_entries(visual, raw_visual)
+            if "selected" in exported_visual:
+                from pbi.slicer_state import without_selection_props
+
+                remaining = without_selection_props(objects)
+                objects.clear()
+                objects.update(remaining)
             _prune_exported_object_groups(
                 objects,
                 exported_visual,

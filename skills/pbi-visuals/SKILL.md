@@ -171,6 +171,34 @@ A slicer has three independent label layers. Enabling all of them creates triple
   bindings: { Values: Sales.Region }
 ```
 
+### Slicer sync groups and saved selections
+
+Slicers with the same `sync` group name on several pages stay in step. A slicer that syncs to a page without showing there is an ordinary slicer in the same group with `isHidden: true`. `selected` saves the selection the report opens with:
+
+```yaml
+- name: portfolioSlicer
+  type: slicer
+  bindings: { Values: Project.Portfolio }
+  sync: PortfolioSync          # field and filter changes synced
+  # sync: { group: PortfolioSync, fields: true, filters: false }
+- name: statusSlicer
+  type: slicer
+  bindings: { Values: Task.Status }
+  selected: [In progress, Blocked]
+- name: teamSlicer
+  type: slicer
+  bindings: { Values: Person.Team }
+  selected: { except: [Design] }    # "Select all" minus Design
+- name: dateSlicer
+  type: slicer
+  bindings: { Values: Date.Date }
+  selected: { from: 2024-03-01, to: 2025-06-30 }   # sets data.mode Between
+```
+
+- `selected` needs the slicer's single bound column; values are typed by that column. `from`/`to` need a date column and are both inclusive. `null` or `[]` clears it; `sync: null` leaves the group.
+- Single select is a separate setting: `selection: { strictSingleSelect: true }`.
+- Only the classic `slicer` type is supported. `pbi export` writes both keys back; imperative form: `pbi visual slicer sync set|clear` and `pbi visual slicer selection set|clear`.
+
 ### KPI cards
 
 Use a single `cardVisual` with `kpis:` shorthand — NOT individual cards.

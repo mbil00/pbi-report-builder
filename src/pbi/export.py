@@ -15,6 +15,7 @@ import yaml
 
 from pbi.bookmarks import export_bookmarks
 from pbi.data_colors import export_series_colors, without_series_color_entries
+from pbi.slicer_state import export_slicer_selection, export_sync_group, without_selection_props
 from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
@@ -239,6 +240,11 @@ def _export_visual(
     # they cover are left out of the generic object export.
     series_colors, series_color_entries = export_series_colors(visual.data)
     chart_objs = without_series_color_entries(chart_objs, series_color_entries)
+    # A saved slicer selection (#42) owns the general filter and the data
+    # selection properties, so those leave the generic export too.
+    has_selection, selected = export_slicer_selection(visual.data)
+    if has_selection:
+        chart_objs = without_selection_props(chart_objs)
     if chart_objs:
         result.update(
             export_object_properties(
@@ -283,6 +289,13 @@ def _export_visual(
     vis_filters = _export_filters(visual.data)
     if vis_filters:
         result["filters"] = vis_filters
+
+    # Slicer sync group and saved selection (#42)
+    sync = export_sync_group(visual.data)
+    if sync is not None:
+        result["sync"] = sync
+    if has_selection:
+        result["selected"] = selected
 
     # Preserve the exact PBIR payload so exported YAML can round-trip
     # complex visuals, selector-based properties, and unsupported shapes.

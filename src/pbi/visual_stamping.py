@@ -67,6 +67,8 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
         "textStyle",
         "group",
         "seriesColors",
+        "sync",
+        "selected",
     }
 
     # Restore the raw payload first, as apply does: it replaces whole object
@@ -132,6 +134,9 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
     if "seriesColors" in spec:
         _apply_series_colors(project, visual, spec["seriesColors"])
 
+    if "sync" in spec or "selected" in spec:
+        _apply_slicer_state(project, visual, spec)
+
     if visual.visual_type == "textbox" and isinstance(spec.get("text"), str):
         style = spec.get("textStyle", {})
         set_textbox_content(
@@ -151,6 +156,32 @@ def _apply_series_colors(project: Project, visual: Visual, spec: Any) -> None:
         apply_series_colors(visual.data, spec, resolve_field=resolve)
     except ValueError:
         pass
+
+
+def _apply_slicer_state(project: Project, visual: Visual, spec: dict[str, Any]) -> None:
+    """Restore a slicer's sync group and saved selection; skip what doesn't apply."""
+    from pbi.fields import resolve_field_info
+    from pbi.slicer_state import SLICER_TYPES, apply_slicer_selection, apply_sync_group, slicer_field
+
+    if visual.visual_type not in SLICER_TYPES:
+        return
+    if "sync" in spec:
+        try:
+            apply_sync_group(visual.data, spec["sync"])
+        except ValueError:
+            pass
+    if "selected" in spec:
+        field = slicer_field(visual.data)
+        data_type = None
+        if field is not None:
+            try:
+                data_type = resolve_field_info(project, f"{field[0]}.{field[1]}", "column")[3]
+            except ValueError:
+                pass
+        try:
+            apply_slicer_selection(visual.data, spec["selected"], data_type=data_type)
+        except ValueError:
+            pass
 
 
 def validate_spec_bindings(project: Project, spec: dict[str, Any]) -> list[str]:
