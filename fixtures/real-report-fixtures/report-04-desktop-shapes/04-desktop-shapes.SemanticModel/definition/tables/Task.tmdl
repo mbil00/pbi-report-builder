@@ -1,0 +1,198 @@
+/// One row per task. Source: Task.csv.
+table Task
+	lineageTag: 334e111b-3b50-4852-934f-8244245ce786
+
+	measure 'Overdue Tasks' = CALCULATE ( COUNTROWS ( Task ), Task[Status] <> "Completed", Task[DueDate] < DATE ( 2025, 12, 31 ) )
+		formatString: #,0
+		lineageTag: 1d818062-539d-4b06-8569-7ef28fd34b44
+
+	column TaskKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 8b7be47e-ad07-4f2e-a98d-3daa48ce3d5a
+		summarizeBy: none
+		sourceColumn: TaskKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column TaskCode
+		dataType: string
+		lineageTag: 3afa3927-8f27-4c40-a5d1-c4228e1cf841
+		summarizeBy: none
+		sourceColumn: TaskCode
+
+		annotation SummarizationSetBy = Automatic
+
+	column TaskName
+		dataType: string
+		lineageTag: 8e6eb281-f57d-47b3-bb5b-3503a25a964d
+		summarizeBy: none
+		sourceColumn: TaskName
+
+		annotation SummarizationSetBy = Automatic
+
+	column ProjectKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: be9aaec8-426e-4404-88e1-0e28e3c0f056
+		summarizeBy: none
+		sourceColumn: ProjectKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column PersonKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 855e1ba7-f77a-444b-9a1e-f4a47df64e64
+		summarizeBy: none
+		sourceColumn: PersonKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Category
+		dataType: string
+		lineageTag: 5cfbf0e1-ad4d-4710-9236-2e708e112f4f
+		summarizeBy: none
+		sourceColumn: Category
+
+		annotation SummarizationSetBy = Automatic
+
+	/// Workflow status: Not started, In progress, Blocked or Completed.
+	column Status
+		dataType: string
+		lineageTag: 3928fca3-daaf-4579-88cd-0cc90dff268b
+		summarizeBy: none
+		sourceColumn: Status
+		sortByColumn: StatusRank
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	column StatusRank
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 64574f5d-63f7-4e49-b55d-b36f20522eba
+		summarizeBy: sum
+		sourceColumn: StatusRank
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column CreatedDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 5f0aba3d-a9c1-45c8-83b5-c659fbcfc3b6
+		summarizeBy: none
+		sourceColumn: CreatedDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation PBI_FormatHint = {"isDateTimeCustom":true}
+
+	column DueDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: cde39dbb-f9a2-4554-8910-d68e171ad7e9
+		summarizeBy: none
+		sourceColumn: DueDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column CompletedDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: b06ac393-1938-4d01-915e-5265ee161c1c
+		summarizeBy: none
+		sourceColumn: CompletedDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column EstimateHours
+		dataType: double
+		displayFolder: Effort
+		lineageTag: 6ee136f4-aaa6-4217-8c7e-da3c18f64473
+		summarizeBy: sum
+		sourceColumn: EstimateHours
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ActualHours
+		dataType: double
+		displayFolder: Effort
+		lineageTag: 9ee45b9c-e4f1-4223-9800-7562042ca35d
+		summarizeBy: sum
+		sourceColumn: ActualHours
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column StoryPoints
+		dataType: int64
+		formatString: 0
+		lineageTag: 0dc8267e-c584-4473-80b1-1f32705b31e9
+		summarizeBy: sum
+		sourceColumn: StoryPoints
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Duration Days' = DATEDIFF ( Task[CreatedDate], Task[DueDate], DAY )
+		formatString: 0
+		displayFolder: Duration
+		lineageTag: 30235c3b-d4d3-49aa-9004-3d73597d9819
+		summarizeBy: sum
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Duration Band' = SWITCH ( TRUE (), Task[Duration Days] <= 7, "Up to 1 week", Task[Duration Days] <= 14, "1-2 weeks", Task[Duration Days] <= 30, "2-4 weeks", "Over 4 weeks" )
+		displayFolder: Duration
+		lineageTag: 52dd3e93-6341-4bdc-b24d-f449848b9280
+		summarizeBy: none
+		sortByColumn: 'Duration Band Order'
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Duration Band Order' = SWITCH ( TRUE (), Task[Duration Days] <= 7, 1, Task[Duration Days] <= 14, 2, Task[Duration Days] <= 30, 3, 4 )
+		isHidden
+		formatString: 0
+		lineageTag: a4cb23e3-5fe2-4031-a8b5-b73d81ce4c64
+		summarizeBy: sum
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Task = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\Task.csv"),[Delimiter=",", Columns=14, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"TaskKey", Int64.Type}, {"TaskCode", type text}, {"TaskName", type text}, {"ProjectKey", Int64.Type}, {"PersonKey", Int64.Type}, {"Category", type text}, {"Status", type text}, {"StatusRank", Int64.Type}, {"CreatedDate", type date}, {"DueDate", type date}, {"CompletedDate", type date}, {"EstimateHours", type number}, {"ActualHours", type number}, {"StoryPoints", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+

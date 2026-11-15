@@ -1,0 +1,109 @@
+table 'Time & Expenses'
+	lineageTag: 67b69297-8fdc-43ca-92f9-04db4379c031
+
+	measure 'Billable Hours' = CALCULATE ( SUM ( 'Time & Expenses'[Hours] ), 'Time & Expenses'[IsBillable] = TRUE () )
+		formatString: #,0.0
+		lineageTag: db6a5707-9038-41b2-9d81-e87d8728fc19
+
+	measure 'Entry Count' = COUNTROWS ( 'Time & Expenses' )
+		formatString: #,0
+		lineageTag: d398a935-82f3-44dd-a2bf-9250c8aa9998
+
+	column EntryKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: c2b9125c-1c61-45cf-951f-9ba360cb2ecc
+		summarizeBy: count
+		sourceColumn: EntryKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column EntryDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: dbde0135-703f-44a3-8882-f1f2ead93ad0
+		summarizeBy: none
+		sourceColumn: EntryDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column ProjectKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 8e75d759-3440-479d-bc7d-63449b1aa3a5
+		summarizeBy: none
+		sourceColumn: ProjectKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column PersonKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 38c91ae8-c2ab-4705-a049-7ca1a905c189
+		summarizeBy: none
+		sourceColumn: PersonKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column EntryType
+		dataType: string
+		lineageTag: 052e828e-1471-4094-932c-9a144006fd7c
+		summarizeBy: none
+		sourceColumn: EntryType
+
+		annotation SummarizationSetBy = Automatic
+
+	column Hours
+		dataType: double
+		lineageTag: 5f92e650-0d8a-4b8b-93f4-408e4f7652d5
+		summarizeBy: sum
+		sourceColumn: Hours
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Amount
+		dataType: decimal
+		lineageTag: aee8d0af-2127-4ec7-8a8e-17eb1d7d0dc8
+		summarizeBy: sum
+		sourceColumn: Amount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column IsBillable
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: e0755d83-2364-459c-9472-cc88d4733c09
+		summarizeBy: none
+		sourceColumn: IsBillable
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Time & Expenses' = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\TimeAndExpenses.csv"),[Delimiter=",", Columns=8, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"EntryKey", Int64.Type}, {"EntryDate", type date}, {"ProjectKey", Int64.Type}, {"PersonKey", Int64.Type}, {"EntryType", type text}, {"Hours", type number}, {"Amount", Currency.Type}, {"IsBillable", type logical}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
+	annotation PBI_NavigationStepName = Navigation
+

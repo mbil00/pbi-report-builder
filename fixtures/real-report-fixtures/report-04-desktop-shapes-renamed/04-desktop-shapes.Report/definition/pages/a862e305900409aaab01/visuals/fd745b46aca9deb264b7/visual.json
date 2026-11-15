@@ -1,0 +1,245 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
+  "name": "fd745b46aca9deb264b7",
+  "position": {
+    "x": 0,
+    "y": 315.48277809147373,
+    "z": 2,
+    "height": 405.46583850931677,
+    "width": 926.93393562958784,
+    "tabOrder": 2
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Task"
+                    }
+                  },
+                  "Property": "TaskCode"
+                }
+              },
+              "queryRef": "Task.TaskCode",
+              "nativeQueryRef": "TaskCode"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Task"
+                    }
+                  },
+                  "Property": "TaskName"
+                }
+              },
+              "queryRef": "Task.TaskName",
+              "nativeQueryRef": "TaskName"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Task"
+                    }
+                  },
+                  "Property": "Status"
+                }
+              },
+              "queryRef": "Task.Status",
+              "nativeQueryRef": "Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Task"
+                    }
+                  },
+                  "Property": "Duration Band"
+                }
+              },
+              "queryRef": "Task.Duration Band",
+              "nativeQueryRef": "Duration Band"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Task"
+                    }
+                  },
+                  "Property": "DueDate"
+                }
+              },
+              "queryRef": "Task.DueDate",
+              "nativeQueryRef": "DueDate"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Task"
+                        }
+                      },
+                      "Property": "ActualHours"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(Task.ActualHours)",
+              "nativeQueryRef": "Sum of ActualHours"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Task"
+                  }
+                },
+                "Property": "DueDate"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Project Tasks'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "87dec382bd9dab262630",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Task"
+              }
+            },
+            "Property": "TaskCode"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "fb23dba86e70109866b6",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Task"
+              }
+            },
+            "Property": "TaskName"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "7d627d457c8508638693",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Task"
+              }
+            },
+            "Property": "Status"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "31023ecc5d0154ac018d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Task"
+              }
+            },
+            "Property": "Duration Band"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "51bdbc7f75930124eebd",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Task"
+              }
+            },
+            "Property": "DueDate"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2fec4c1e9700e9377d82",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Task"
+                  }
+                },
+                "Property": "ActualHours"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+table 'Q/A Notes'
+	lineageTag: 5b8ca040-e8d6-449b-90c1-e55be68548c0
+
+	column ProjectKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 14da2d06-7e3d-4986-bb66-bf43f757c703
+		summarizeBy: none
+		sourceColumn: ProjectKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Reviewer
+		dataType: string
+		lineageTag: 4e0c72ee-d1f7-4439-bbf2-f1f81dea4148
+		summarizeBy: none
+		sourceColumn: Reviewer
+
+		annotation SummarizationSetBy = Automatic
+
+	column ReviewDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 29f940bf-d66d-4b91-be3a-b65bf996ac2f
+		summarizeBy: none
+		sourceColumn: ReviewDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column QAScore
+		dataType: int64
+		formatString: 0
+		lineageTag: 9c90ce10-389c-4f69-be0d-ef40abde407d
+		summarizeBy: none
+		sourceColumn: QAScore
+
+		annotation SummarizationSetBy = User
+
+	column Note
+		dataType: string
+		lineageTag: 6b255991-961c-4e5a-b8e4-841066367ff3
+		summarizeBy: none
+		sourceColumn: Note
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Q/A Notes' = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\QANotes.csv"),[Delimiter=",", Columns=5, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ProjectKey", Int64.Type}, {"Reviewer", type text}, {"ReviewDate", type date}, {"QAScore", Int64.Type}, {"Note", type text}})
+				in
+				    #"Changed Type"
+
+	changedProperty = Name
+
+	annotation PBI_ResultType = Table
+

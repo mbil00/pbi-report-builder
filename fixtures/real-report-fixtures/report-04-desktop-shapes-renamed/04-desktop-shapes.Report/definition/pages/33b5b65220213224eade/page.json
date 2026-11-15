@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "33b5b65220213224eade",
+  "displayName": "Person Tooltip",
+  "displayOption": "ActualSize",
+  "height": 300,
+  "width": 400,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "461c263e0215e068a3b8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Person"
+              }
+            },
+            "Property": "PersonName"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "dd88e3af25dc08cd6e0e",
+    "type": "Tooltip",
+    "parameters": [
+      {
+        "name": "77cd440bb06b15cb7a2d",
+        "boundFilter": "461c263e0215e068a3b8",
+        "asAggregation": false,
+        "qnaSingleSelectRequired": false,
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Person"
+              }
+            },
+            "Property": "PersonName"
+          }
+        }
+      }
+    ]
+  },
+  "visibility": "HiddenInViewMode",
+  "type": "Tooltip"
+}

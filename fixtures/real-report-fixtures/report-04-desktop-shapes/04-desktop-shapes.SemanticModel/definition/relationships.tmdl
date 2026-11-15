@@ -1,0 +1,53 @@
+relationship de7ff1e9-e414-ffd6-13ac-f5136a1a08f0
+	fromColumn: Task.CreatedDate
+	toColumn: Date.Date
+
+relationship 07eba6c1-5f9d-5e60-3cff-5e46e4306463
+	isActive: false
+	fromColumn: Task.DueDate
+	toColumn: Date.Date
+
+relationship 1636be63-bbba-ccb0-0dcb-5640e46fcf09
+	fromColumn: 'Time & Expenses'.EntryDate
+	toColumn: Date.Date
+
+relationship 0baa9a51-6126-a765-bf84-d733a2121c03
+	fromColumn: Task.ProjectKey
+	toColumn: Project.ProjectKey
+
+relationship 847644cf-51f9-4aaa-1bae-bf937c02eba8
+	fromColumn: Task.PersonKey
+	toColumn: Person.PersonKey
+
+relationship cd940df1-2788-98ee-a3a7-ef6b58d3dd5e
+	fromColumn: 'Time & Expenses'.ProjectKey
+	toColumn: Project.ProjectKey
+
+relationship ae081fc5-9b06-9403-00fe-b104cffff5e7
+	fromColumn: 'Time & Expenses'.PersonKey
+	toColumn: Person.PersonKey
+
+relationship 3ce94aba-5f60-1af7-e698-d1f2bb594a30
+	fromColumn: Person.Role
+	toColumn: 'Rates (EUR)'.Role
+
+relationship afc2fd79-3e3f-7e3d-f14d-6014367b9f7f
+	crossFilteringBehavior: bothDirections
+	fromColumn: TaskTag.TaskKey
+	toColumn: Task.TaskKey
+
+relationship a7187f22-a4d7-272e-ee8c-14b8145cd2fa
+	fromColumn: TaskTag.TagKey
+	toColumn: Tag.TagKey
+
+relationship 3de2bf4c-4d45-2782-84ec-3506d3b93790
+	crossFilteringBehavior: bothDirections
+	fromCardinality: one
+	fromColumn: 'Q/A Notes'.ProjectKey
+	toColumn: Project.ProjectKey
+
+relationship c252b2ed-2f1e-14a2-46c5-0bb95121bc6e
+	toCardinality: many
+	fromColumn: 'Portfolio Target'.Portfolio
+	toColumn: Project.Portfolio
+

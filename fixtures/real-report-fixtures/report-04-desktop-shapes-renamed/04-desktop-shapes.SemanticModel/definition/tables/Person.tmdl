@@ -1,0 +1,79 @@
+table Person
+	lineageTag: 386a7bfe-d7c4-48e5-bac2-1e66282c6d70
+
+	column PersonKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 5aff88b4-a850-4883-935f-65a6a429488b
+		summarizeBy: none
+		sourceColumn: PersonKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column PersonName
+		dataType: string
+		lineageTag: 65a73f06-30c8-44eb-9893-851cf1c5fb18
+		summarizeBy: none
+		sourceColumn: PersonName
+
+		annotation SummarizationSetBy = Automatic
+
+	column Team
+		dataType: string
+		lineageTag: 55546504-ae17-459a-8d37-055f8b8a2f9f
+		summarizeBy: none
+		sourceColumn: Team
+
+		annotation SummarizationSetBy = Automatic
+
+	column Role
+		dataType: string
+		lineageTag: 921f6549-dfcd-4846-920e-e4a9f312c45a
+		summarizeBy: none
+		sourceColumn: Role
+
+		annotation SummarizationSetBy = Automatic
+
+	column Country
+		dataType: string
+		lineageTag: 71cc1ebc-a24d-4adf-9401-888592de9b17
+		dataCategory: Country
+		summarizeBy: none
+		sourceColumn: Country
+
+		annotation SummarizationSetBy = Automatic
+
+	column StartDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: e581cad0-5e87-4388-9ee1-1900b733753f
+		summarizeBy: none
+		sourceColumn: StartDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column 'Hourly Rate' = RELATED ( 'Rates (EUR)'[HourlyRate] )
+		lineageTag: a67f99ca-7088-49f5-a022-e8ebe57c3e43
+		summarizeBy: sum
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition Person = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\Person.csv"),[Delimiter=",", Columns=6, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"PersonKey", Int64.Type}, {"PersonName", type text}, {"Team", type text}, {"Role", type text}, {"Country", type text}, {"StartDate", type date}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+

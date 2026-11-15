@@ -1,0 +1,122 @@
+table Project
+	lineageTag: b7cadd26-2d29-430d-b20c-b0d4cd0da629
+
+	column ProjectKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: ccd939de-58d1-4e98-88c3-34f4385cb0ad
+		summarizeBy: none
+		sourceColumn: ProjectKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column ProjectCode
+		dataType: string
+		lineageTag: a4dc58d4-3b04-4fdf-971a-dda48e3d5b05
+		summarizeBy: none
+		sourceColumn: ProjectCode
+
+		annotation SummarizationSetBy = Automatic
+
+	column ProjectName
+		dataType: string
+		lineageTag: d02c4a17-2c5b-41d8-9d75-8879c90bf4db
+		summarizeBy: none
+		sourceColumn: ProjectName
+
+		annotation SummarizationSetBy = Automatic
+
+	column Portfolio
+		dataType: string
+		lineageTag: cc4c33b1-a460-4fc3-8cab-a50b03a94597
+		summarizeBy: none
+		sourceColumn: Portfolio
+
+		annotation SummarizationSetBy = Automatic
+
+	column Priority
+		dataType: string
+		lineageTag: 012f0c98-3b4d-43c4-bf57-31c0900a7f77
+		summarizeBy: none
+		sourceColumn: Priority
+		sortByColumn: PriorityRank
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	column PriorityRank
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: f011fd1f-f8ae-4dd2-9212-79b9d96dc0d3
+		summarizeBy: none
+		sourceColumn: PriorityRank
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = User
+
+	column StartDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 8e0e53d7-d6a9-4344-aace-b9e7c67fccd3
+		summarizeBy: none
+		sourceColumn: StartDate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Budget
+		dataType: double
+		formatString: "€"\ #,0;-"€"\ #,0;"€"\ #,0
+		lineageTag: 2fc9c47b-f266-4199-ace6-5a423e76f058
+		summarizeBy: sum
+		sourceColumn: Budget
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsActive
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 67edc121-f614-4f2a-9a74-94c1c16668ed
+		summarizeBy: none
+		sourceColumn: IsActive
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Project Label' = Project[ProjectCode] & " - " & Project[ProjectName]
+		lineageTag: 33f2030f-3d71-4b2c-86de-e36e505f38e4
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	hierarchy 'Portfolio Tree'
+		lineageTag: 550b976a-f553-4006-a091-4a59aee72178
+
+		level Portfolio
+			lineageTag: 10603fb2-3e4d-4b75-95f6-41b16bcf5e0c
+			column: Portfolio
+
+		level ProjectName
+			lineageTag: bcb5dee2-a8ff-4f43-9e63-37fc563b70ac
+			column: ProjectName
+
+	partition Project = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\Project.csv"),[Delimiter=",", Columns=9, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ProjectKey", Int64.Type}, {"ProjectCode", type text}, {"ProjectName", type text}, {"Portfolio", type text}, {"Priority", type text}, {"PriorityRank", Int64.Type}, {"StartDate", type date}, {"Budget", type number}, {"IsActive", type logical}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
+	annotation PBI_NavigationStepName = Navigation
+

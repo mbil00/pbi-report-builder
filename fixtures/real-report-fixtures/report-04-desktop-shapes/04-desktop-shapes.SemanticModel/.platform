@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "04-desktop-shapes"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "320969fc-1f4b-4b3a-936f-e3e854432d2b"
+  }
+}

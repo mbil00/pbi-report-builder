@@ -1,0 +1,44 @@
+table 'Rates (EUR)'
+	lineageTag: 5f9e61d6-3b26-4927-b0d0-2d2163e25262
+
+	column Role
+		dataType: string
+		lineageTag: 6685c673-f1c1-47c3-b8cd-02f2afc72ca4
+		summarizeBy: none
+		sourceColumn: Role
+
+		annotation SummarizationSetBy = Automatic
+
+	column HourlyRate
+		dataType: double
+		formatString: #,0.00
+		lineageTag: 592cdc94-0c60-4b05-bffe-8c890d3b4fa0
+		summarizeBy: none
+		sourceColumn: HourlyRate
+
+		annotation SummarizationSetBy = Automatic
+
+	column OvertimeMultiplier
+		dataType: double
+		lineageTag: e4703e02-397a-40c3-ac50-0f48a3cb9c7e
+		summarizeBy: none
+		sourceColumn: OvertimeMultiplier
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition 'Rates (EUR)' = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\RatesEUR.csv"),[Delimiter=",", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Role", type text}, {"HourlyRate", type number}, {"OvertimeMultiplier", type number}})
+				in
+				    #"Changed Type"
+
+	changedProperty = Name
+
+	annotation PBI_ResultType = Table
+

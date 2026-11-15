@@ -1,0 +1,25 @@
+table 'Portfolio Status'
+	lineageTag: 13e3bc05-b1e9-4cd4-83f9-aae20bf1b547
+
+	column Portfolio
+		lineageTag: 1a6f4328-2b1e-48de-a240-3a442bda9f3b
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: Project[Portfolio]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Status
+		lineageTag: 7c6214a4-4653-41e8-8992-1333a24eee1a
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: Task[Status]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Portfolio Status' = calculated
+		mode: import
+		source = SUMMARIZE ( Task, Project[Portfolio], Task[Status] )
+
+	annotation PBI_Id = 771454cb4bc34f3ca1c3490208685f22
+

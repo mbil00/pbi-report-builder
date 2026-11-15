@@ -1,0 +1,39 @@
+table TaskTag
+	lineageTag: a84986ba-f4f5-4701-8255-6f442a531d9f
+
+	column TaskKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 817ce17b-48e8-41ff-82d4-aa4859abfeb8
+		summarizeBy: none
+		sourceColumn: TaskKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column TagKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: fd62c199-04d6-4a10-a985-aa8c0c0d6243
+		summarizeBy: none
+		sourceColumn: TagKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition TaskTag = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\TaskTag.csv"),[Delimiter=",", Columns=2, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"TaskKey", Int64.Type}, {"TagKey", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+

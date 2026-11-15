@@ -1,0 +1,36 @@
+table 'Status Summary'
+	lineageTag: a65cae61-88e1-487e-b1ff-3d65c0770c44
+
+	column Status
+		lineageTag: 708745b4-a48b-4d73-ae97-0b22c67f1a4b
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: Task[Status]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Tasks
+		formatString: 0
+		lineageTag: 74312b48-929b-4e35-9879-b831eea48501
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Tasks]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Hours
+		lineageTag: 22d53b0f-377a-4cfb-93b1-5f50dfa051c7
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Hours]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition 'Status Summary' = calculated
+		mode: import
+		source = ADDCOLUMNS ( VALUES ( Task[Status] ), "Tasks", CALCULATE ( COUNTROWS ( Task ) ), "Hours", CALCULATE ( SUM ( Task[ActualHours] ) ) )
+
+	annotation PBI_Id = 78b48e8e2ee542969b5390897561ad0e
+

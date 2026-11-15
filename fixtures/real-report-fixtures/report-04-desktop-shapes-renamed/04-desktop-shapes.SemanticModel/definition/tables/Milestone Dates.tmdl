@@ -1,0 +1,26 @@
+table 'Milestone Dates'
+	lineageTag: aadda0e8-b632-4c20-94e9-1cb9143cd1ad
+
+	column Date
+		formatString: General Date
+		lineageTag: be261cf8-1193-4e7e-a5c0-e132cba2eda5
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Date]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Kind
+		lineageTag: 779655a1-310a-49b7-8b70-c4fb813887f5
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Kind]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Milestone Dates' = calculated
+		mode: import
+		source = UNION ( SELECTCOLUMNS ( Task, "Date", Task[CreatedDate], "Kind", "Created" ), SELECTCOLUMNS ( Task, "Date", Task[DueDate], "Kind", "Due" ) )
+
+	annotation PBI_Id = 9677ca22cb7047f5b0985df512704dd5
+

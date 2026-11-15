@@ -1,0 +1,27 @@
+table 'Portfolio Hours'
+	lineageTag: 9b000ef9-ffad-4451-b8db-88091ee9698a
+
+	column Portfolio
+		lineageTag: d0ef6ab2-df6f-4838-8547-b8ac46b777ee
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: Project[Portfolio]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Hours Sum'
+		lineageTag: e5e31754-8b91-4444-be88-bc164c3f51a5
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Hours Sum]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition 'Portfolio Hours' = calculated
+		mode: import
+		source = SUMMARIZECOLUMNS ( Project[Portfolio], "Hours Sum", SUM ( 'Time & Expenses'[Hours] ) )
+
+	annotation PBI_Id = 6d006b8897764309b4a1a1f9233733e4
+

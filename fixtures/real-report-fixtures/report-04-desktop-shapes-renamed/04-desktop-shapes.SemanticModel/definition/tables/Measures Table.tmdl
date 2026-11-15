@@ -1,0 +1,112 @@
+table 'Measures Table'
+	lineageTag: f26f848f-8b6f-454e-b686-ec6650d39254
+
+	/// Number of tasks in the current filter context.
+	/// Counts every Task row, including blocked tasks.
+	measure 'Task Count' = COUNTROWS ( Task )
+		formatString: #,0
+		displayFolder: Counts
+		lineageTag: dac3dde6-ad39-486c-8ccb-48fa0f7627e5
+
+	/// Tasks with Status = "Completed" & counted once.
+	measure 'Completed Tasks' = CALCULATE ( [Task Count], Task[Status] = "Completed" )
+		formatString: #,0
+		displayFolder: Counts\Status
+		lineageTag: 3af606f4-b58e-499a-a233-d0fc40268047
+
+	/// Task Count minus Completed Tasks.
+	measure 'Open Tasks' = [Task Count] - [Completed Tasks]
+		formatString: #,0
+		displayFolder: Counts\Status
+		lineageTag: 512599dd-13b7-4de1-8b36-86bb06118bcd
+
+	measure 'Completion %' = DIVIDE ( [Completed Tasks], [Task Count] )
+		formatString: 0.0%;-0.0%;0.0%
+		displayFolder: Ratios
+		lineageTag: c4cc14be-b29e-4308-ac2a-24f5b61a51ef
+
+	measure 'Story Points' = SUM ( Task[StoryPoints] )
+		formatString: 0
+		displayFolder: Counts
+		lineageTag: 135af4f2-ae1f-439d-ad67-50c3fc4dc9f9
+
+	measure 'Estimate Hours' = SUM ( Task[EstimateHours] )
+		formatString: #,0.0
+		displayFolder: Hours
+		lineageTag: 7aed479c-d0aa-4f3e-aa56-fd15a89c001b
+
+	measure 'Actual Hours' = SUM ( Task[ActualHours] )
+		formatString: #,0.0
+		displayFolder: Hours
+		lineageTag: b559f17d-9600-4832-b548-839984de6c82
+
+	measure 'Hours Ratio' = DIVIDE ( [Actual Hours], [Estimate Hours] )
+		displayFolder: Ratios
+		lineageTag: fc271153-2c88-4a6a-bcd0-72b65b94b55c
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Avg Hours per Task' = DIVIDE ( [Actual Hours], [Task Count] )
+		formatString: 0.00
+		displayFolder: Ratios
+		lineageTag: bf1f719b-1737-4b3c-ae77-58f68487acd0
+
+	measure 'Total Hours' = SUM ( 'Time & Expenses'[Hours] )
+		formatString: #,0.0
+		displayFolder: Hours
+		lineageTag: ac67545b-d4f3-4849-9f81-9ed748b6764d
+
+	measure 'Avg Hours per Person' = DIVIDE ( [Total Hours], DISTINCTCOUNT ( 'Time & Expenses'[PersonKey] ) )
+		formatString: 0.0
+		displayFolder: Hours
+		lineageTag: 6124c795-220b-4497-bbc7-15f1aeb4c314
+
+	measure 'Expense Amount' = CALCULATE ( SUM ( 'Time & Expenses'[Amount] ), 'Time & Expenses'[EntryType] = "Expense" )
+		formatString: "€"\ #,0.00;-"€"\ #,0.00;"€"\ #,0.00
+		displayFolder: Money
+		lineageTag: 4984a4b5-770c-41ad-b161-a829c188077b
+
+	measure 'Budget EUR' = SUM ( Project[Budget] )
+		formatString: "€"\ #,0;-"€"\ #,0;"€"\ #,0
+		displayFolder: Money
+		lineageTag: ba0c070c-16ae-440a-95c0-0ae8c90bd573
+
+	measure 'Portfolio Target Hours' = SUM ( 'Portfolio Target'[TargetHours] )
+		formatString: #,0
+		displayFolder: Hours
+		lineageTag: 034aa876-5548-4bd7-8a9c-2d98ec631cc8
+
+	measure 'Hours (Due Date)' = CALCULATE ( [Actual Hours], USERELATIONSHIP ( Task[DueDate], 'Date'[Date] ) )
+		formatString: 0.0
+		displayFolder: Hours
+		lineageTag: 39adb760-fef1-4126-a379-de618bd39756
+
+	measure 'Status Color' = SWITCH ( SELECTEDVALUE ( Task[Status] ), "Completed", "#20A741", "In progress", "#F2A900", "Blocked", "#D64550", "#A0A0A0" )
+		displayFolder: Formatting
+		lineageTag: fb78fb34-fa15-41af-8368-375ce4c7d3b1
+
+	measure 'Avg Hourly Rate' = AVERAGE ( Person[Hourly Rate] )
+		formatString: " ""€""#,0.00"" /h"""
+		displayFolder: Money
+		lineageTag: c972ca34-5182-407a-8d2f-2a133b1857d9
+
+		annotation PBI_FormatHint = {"isCustom":true}
+
+	column Column
+		isHidden
+		formatString: 0
+		lineageTag: c3199b6c-fc43-488c-930e-b58cdb5b07d2
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Column]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Measures Table' = calculated
+		mode: import
+		source = Row("Column", BLANK())
+
+	annotation PBI_Id = 657fcb142f59465da0d32503eac92768
+
+	annotation 436ba87b-9c83-4389-a31b-ebd06a36be98 = {"Expression":""}
+

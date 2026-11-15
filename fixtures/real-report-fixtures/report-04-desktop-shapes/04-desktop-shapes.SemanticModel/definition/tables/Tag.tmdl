@@ -1,0 +1,43 @@
+table Tag
+	lineageTag: 250e833c-b037-4cd2-adf5-48805d9ae0af
+
+	column TagKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 3bcc72cd-81c6-4be8-974c-b7a1c988585c
+		summarizeBy: none
+		sourceColumn: TagKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column TagName
+		dataType: string
+		lineageTag: 7128af9e-2d89-412b-94a1-20e067ea5ac3
+		summarizeBy: none
+		sourceColumn: TagName
+
+		annotation SummarizationSetBy = Automatic
+
+	column TagGroup
+		dataType: string
+		lineageTag: 496370c3-fc20-434c-b2c0-3f6b231d8f8e
+		summarizeBy: none
+		sourceColumn: TagGroup
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Tag = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\Tag.csv"),[Delimiter=",", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"TagKey", Int64.Type}, {"TagName", type text}, {"TagGroup", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+

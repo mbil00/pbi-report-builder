@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmarksMetadata/1.0.0/schema.json",
+  "items": [
+    {
+      "name": "607a0c6f2705404dac98",
+      "displayName": "Task Board Views",
+      "children": [
+        "8df969a2b441003c37ea",
+        "7eeb969d0757059a1b90"
+      ]
+    },
+    {
+      "name": "cebb79b2c49dc642be7d"
+    }
+  ]
+}

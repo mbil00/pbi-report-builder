@@ -1,0 +1,190 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
+  "name": "33d42011d156a955d46c",
+  "position": {
+    "x": 524.72049689441,
+    "y": 342.58610954263128,
+    "z": 4,
+    "height": 345.83850931677017,
+    "width": 680.83568605307732,
+    "tabOrder": 4
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Owner's Info"
+                    }
+                  },
+                  "Property": "Owner"
+                }
+              },
+              "queryRef": "Owner's Info.Owner",
+              "nativeQueryRef": "Owner"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Owner's Info"
+                    }
+                  },
+                  "Property": "Released"
+                }
+              },
+              "queryRef": "Owner's Info.Released",
+              "nativeQueryRef": "Released"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Owner's Info"
+                    }
+                  },
+                  "Property": "Is Synthetic"
+                }
+              },
+              "queryRef": "Owner's Info.Is Synthetic",
+              "nativeQueryRef": "Is Synthetic"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Owner's Info"
+                    }
+                  },
+                  "Property": "Coverage"
+                }
+              },
+              "queryRef": "Sum(Owner's Info.Coverage)",
+              "nativeQueryRef": "Coverage"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Owner's Info"
+                    }
+                  },
+                  "Property": "Version"
+                }
+              },
+              "queryRef": "Sum(Owner's Info.Version)",
+              "nativeQueryRef": "Version"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Owner Info Table'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "43ee9bd64119b01edbb7",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Owner's Info"
+              }
+            },
+            "Property": "Owner"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "388af8d3a5c5365449a4",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Owner's Info"
+              }
+            },
+            "Property": "Version"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "05cf34dcc258519bd400",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Owner's Info"
+              }
+            },
+            "Property": "Coverage"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "dc078de0a97e8a44c1a8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Owner's Info"
+              }
+            },
+            "Property": "Is Synthetic"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "19e9ea5029010bc85e45",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Owner's Info"
+              }
+            },
+            "Property": "Released"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

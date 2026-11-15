@@ -1,0 +1,39 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+annotation PBI_ProTooling = ["DevMode"]
+
+annotation PBI_QueryOrder = ["Date","Project","Person","Rates (EUR)","Task","Tag","TaskTag","Time & Expenses","Q/A Notes","Portfolio Target"]
+
+ref table Date
+ref table Project
+ref table Person
+ref table 'Rates (EUR)'
+ref table Task
+ref table Tag
+ref table TaskTag
+ref table 'Time & Expenses'
+ref table 'Q/A Notes'
+ref table 'Portfolio Target'
+ref table 'Measures Table'
+ref table 'Project List'
+ref table 'Owner''s Info'
+ref table 'Status Summary'
+ref table 'Portfolio Status'
+ref table 'Portfolio Hours'
+ref table 'Hours Band'
+ref table 'Priority Levels'
+ref table 'Milestone Dates'
+ref table 'Status Colors'
+ref table 'Metric Selector'
+
+ref cultureInfo en-US
+

@@ -1,0 +1,54 @@
+table 'Owner''s Info'
+	lineageTag: 4800c8c5-239e-4582-8db4-2503b04e2545
+
+	column Owner
+		lineageTag: 76742ca7-6e02-4f08-81e1-04fc409e2820
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Owner]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Version
+		formatString: 0
+		lineageTag: a558d9ae-e144-46f8-b759-73e3b17caef3
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Version]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Released
+		formatString: General Date
+		lineageTag: e51474e4-269f-49da-934d-ce47accf66cf
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Released]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Coverage
+		lineageTag: c8221373-9080-47eb-9931-b514819cf361
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Coverage]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'Is Synthetic'
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 82138550-eef5-47f2-b0cd-e75829b5b6f4
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Is Synthetic]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Owner''s Info' = calculated
+		mode: import
+		source = ROW ( "Owner", "Fixture Team", "Version", 4, "Released", DATE ( 2026, 1, 15 ), "Coverage", 0.85, "Is Synthetic", TRUE () )
+
+	annotation PBI_Id = 3fcc505287ab452dbe2bc314712244c6
+

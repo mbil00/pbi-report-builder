@@ -1,0 +1,49 @@
+table 'Metric Selector'
+	lineageTag: 7b74ad1e-5040-4047-a161-70f0f2042432
+
+	column 'Metric Selector'
+		lineageTag: 2df1a644-5443-4278-b0b2-87ece8d42bc0
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'Metric Selector Order'
+
+		relatedColumnDetails
+			groupByColumn: 'Metric Selector Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Metric Selector Fields'
+		isHidden
+		lineageTag: b04c3bdb-0ce6-4df8-bd51-3b631ac5733a
+		summarizeBy: none
+		sourceColumn: [Value2]
+		sortByColumn: 'Metric Selector Order'
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Metric Selector Order'
+		isHidden
+		formatString: 0
+		lineageTag: a29d4c08-0e6d-4ec0-9302-290d3ec657eb
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Metric Selector' = calculated
+		mode: import
+		source =
+				{
+				    ("Total Hours", NAMEOF('Measures Table'[Total Hours]), 0),
+				    ("Task Count", NAMEOF('Measures Table'[Task Count]), 1),
+				    ("Expense Amount", NAMEOF('Measures Table'[Expense Amount]), 2)
+				}
+
+	annotation PBI_Id = 2c989c7410a04e7e9f16fb37897079ed
+

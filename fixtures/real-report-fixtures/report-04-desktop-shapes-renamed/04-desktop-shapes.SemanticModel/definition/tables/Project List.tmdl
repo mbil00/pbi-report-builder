@@ -1,0 +1,44 @@
+table 'Project List'
+	lineageTag: 5aea8e69-c0f4-4bb1-89d1-5999c4090de3
+
+	column Code
+		lineageTag: 2eced618-39d4-4055-839f-b5f581adf8b6
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Code]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Name
+		lineageTag: 2713cb59-2227-4073-9c7c-5205ff9300a3
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Name]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Budget EUR'
+		lineageTag: 019e8d56-f31a-4bf7-bbfc-aa41f73ff907
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Budget EUR]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Start
+		formatString: General Date
+		lineageTag: 222b5645-711b-4946-9f34-790d0311e1c4
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Start]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Project List' = calculated
+		mode: import
+		source = SELECTCOLUMNS ( Project, "Code", Project[ProjectCode], "Name", Project[ProjectName], "Budget EUR", Project[Budget], "Start", Project[StartDate] )
+
+	annotation PBI_Id = 5112e4c924fa431c8589ac2855d6fc0c
+

@@ -1,0 +1,18 @@
+table 'Hours Band'
+	lineageTag: d8c962a7-f219-4180-8420-7f53088e3f6b
+
+	column Value
+		formatString: 0
+		lineageTag: fc8b2822-c30e-4048-b03b-8c23d73128f7
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Value]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Hours Band' = calculated
+		mode: import
+		source = GENERATESERIES ( 0, 40, 8 )
+
+	annotation PBI_Id = ae27fd3403b749a09820573e2049aba9
+

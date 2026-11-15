@@ -1,0 +1,106 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
+  "name": "4ebf7e1319d7e650a3b3",
+  "position": {
+    "x": 1216,
+    "y": 2,
+    "z": 5,
+    "height": 340,
+    "width": 681,
+    "tabOrder": 5
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Rates (EUR)"
+                    }
+                  },
+                  "Property": "Role"
+                }
+              },
+              "queryRef": "Rates (EUR).Role",
+              "nativeQueryRef": "Role"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Rates (EUR)"
+                    }
+                  },
+                  "Property": "HourlyRate"
+                }
+              },
+              "queryRef": "Rates (EUR).HourlyRate",
+              "nativeQueryRef": "HourlyRate"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Rates Table'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "7d8a88ae6960d0e062d9",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Rates (EUR)"
+              }
+            },
+            "Property": "Role"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "fbce7686049094d6365e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Rates (EUR)"
+              }
+            },
+            "Property": "HourlyRate"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

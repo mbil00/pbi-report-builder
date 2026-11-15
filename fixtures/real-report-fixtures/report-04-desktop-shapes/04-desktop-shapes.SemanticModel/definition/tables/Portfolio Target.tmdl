@@ -1,0 +1,52 @@
+table 'Portfolio Target'
+	lineageTag: 1608d104-c4f2-40a6-9ad6-4aaa10286c4c
+
+	column Portfolio
+		dataType: string
+		lineageTag: 06ccabd5-b6c3-4a7b-b25f-6805055527d9
+		summarizeBy: none
+		sourceColumn: Portfolio
+
+		annotation SummarizationSetBy = Automatic
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 1c913e7f-f873-47d8-a80a-ef50e42cee1c
+		summarizeBy: sum
+		sourceColumn: Year
+
+		annotation SummarizationSetBy = Automatic
+
+	column TargetHours
+		dataType: int64
+		formatString: 0
+		lineageTag: 5e41e341-5d67-4ba4-8657-f2a227f5fe4c
+		summarizeBy: sum
+		sourceColumn: TargetHours
+
+		annotation SummarizationSetBy = Automatic
+
+	column TargetBudget
+		dataType: double
+		formatString: 0
+		lineageTag: 4f5bb185-9aef-4324-8f13-1b826d1d0e70
+		summarizeBy: sum
+		sourceColumn: TargetBudget
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Portfolio Target' = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\PortfolioTarget.csv"),[Delimiter=",", Columns=4, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Portfolio", type text}, {"Year", Int64.Type}, {"TargetHours", Int64.Type}, {"TargetBudget", type number}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
+	annotation PBI_NavigationStepName = Navigation
+

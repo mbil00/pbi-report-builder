@@ -1,0 +1,162 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
+  "name": "a7caba173e06542d0936",
+  "position": {
+    "x": 936.69113495200452,
+    "y": 56.374929418407682,
+    "z": 4,
+    "height": 363.18464144551103,
+    "width": 926.93393562958784,
+    "tabOrder": 4
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Q/A Notes"
+                    }
+                  },
+                  "Property": "Reviewer"
+                }
+              },
+              "queryRef": "Q/A Notes.Reviewer",
+              "nativeQueryRef": "Reviewer"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Q/A Notes"
+                    }
+                  },
+                  "Property": "ReviewDate"
+                }
+              },
+              "queryRef": "Q/A Notes.ReviewDate",
+              "nativeQueryRef": "ReviewDate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Q/A Notes"
+                    }
+                  },
+                  "Property": "QAScore"
+                }
+              },
+              "queryRef": "Q/A Notes.QAScore",
+              "nativeQueryRef": "QAScore"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Q/A Notes"
+                    }
+                  },
+                  "Property": "Note"
+                }
+              },
+              "queryRef": "Q/A Notes.Note",
+              "nativeQueryRef": "Note"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Q/A Review'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "c59e212999ad441114c1",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Q/A Notes"
+              }
+            },
+            "Property": "Reviewer"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0893482a6a13c130198c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Q/A Notes"
+              }
+            },
+            "Property": "ReviewDate"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "bb8ca776506083e2a8db",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Q/A Notes"
+              }
+            },
+            "Property": "QAScore"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "421824cc169472d998a4",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Q/A Notes"
+              }
+            },
+            "Property": "Note"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

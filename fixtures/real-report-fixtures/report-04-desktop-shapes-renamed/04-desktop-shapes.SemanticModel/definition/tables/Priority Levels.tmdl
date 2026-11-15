@@ -1,0 +1,26 @@
+table 'Priority Levels'
+	lineageTag: 475bff4b-cce3-4622-8a65-dcabed1799cf
+
+	column Value1
+		lineageTag: e65ac8eb-ba1a-4918-a00e-112d3fed130a
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Value1]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Value2
+		formatString: 0
+		lineageTag: 00235dc4-83ed-4a4b-a055-08b6da265f8b
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Value2]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Priority Levels' = calculated
+		mode: import
+		source = { ( "Low", 1 ), ( "Medium", 2 ), ( "High", 3 ), ( "Critical", 4 ) }
+
+	annotation PBI_Id = 142a6ca149e04b3a9fe614f8ff4c9c57
+

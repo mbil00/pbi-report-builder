@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "04-desktop-shapes"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "43f3e9fc-80c1-40a0-ada2-8707dc5e135f"
+  }
+}

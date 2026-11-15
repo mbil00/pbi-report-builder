@@ -1,0 +1,134 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
+  "name": "40ad761fdcb1b41c02e5",
+  "position": {
+    "x": 524.72049689441,
+    "y": 2.1682665160926029,
+    "z": 3,
+    "height": 340.41784302653866,
+    "width": 680.83568605307732,
+    "tabOrder": 3
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Status Colors"
+                    }
+                  },
+                  "Property": "Status"
+                }
+              },
+              "queryRef": "Status Colors.Status",
+              "nativeQueryRef": "Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Status Colors"
+                    }
+                  },
+                  "Property": "Hex"
+                }
+              },
+              "queryRef": "Status Colors.Hex",
+              "nativeQueryRef": "Hex"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Status Colors"
+                    }
+                  },
+                  "Property": "Sort"
+                }
+              },
+              "queryRef": "Sum(Status Colors.Sort)",
+              "nativeQueryRef": "Sort"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Status Colors Table'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "13c3e7b3eb936c2202a9",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Status Colors"
+              }
+            },
+            "Property": "Status"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "32d31bc53e27a540c1b5",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Status Colors"
+              }
+            },
+            "Property": "Hex"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "bab9144f7490395dc895",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Status Colors"
+              }
+            },
+            "Property": "Sort"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

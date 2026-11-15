@@ -1,0 +1,108 @@
+table Date
+	lineageTag: 16bfa3d3-95b1-4860-a2a7-675fa3e70041
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 6834e20a-983e-4209-878f-cbe888d3fd96
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 0e447496-8f22-47a1-abb8-e65ce0e215d7
+		summarizeBy: sum
+		sourceColumn: Year
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quarter
+		dataType: string
+		lineageTag: 50234c0f-3641-4634-8a73-70a28fb156e3
+		summarizeBy: none
+		sourceColumn: Quarter
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthNumber
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 098b0c83-a1db-432c-a35a-d62cef2c3348
+		summarizeBy: sum
+		sourceColumn: MonthNumber
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthName
+		dataType: string
+		lineageTag: e420b343-659e-40d0-b24d-59e95327a870
+		summarizeBy: none
+		sourceColumn: MonthName
+		sortByColumn: MonthNumber
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	column YearMonth
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: eebd2069-7fed-4412-8080-5f940394cafa
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column IsWeekend
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 8a009871-f03e-4549-8d7b-d300df840568
+		summarizeBy: none
+		sourceColumn: IsWeekend
+
+		annotation SummarizationSetBy = Automatic
+
+	/// Year > Quarter > Month > Date drill path.
+	hierarchy Calendar
+		lineageTag: 7c177391-bd7d-46fe-8cfd-4b51a987f348
+
+		level Year
+			lineageTag: b9ae94c1-d2f3-4e33-8f4d-9ff511b935de
+			column: Year
+
+		level Quarter
+			lineageTag: f6ccfda4-8b04-45f7-8b01-81c9c8fe81a2
+			column: Quarter
+
+		level MonthName
+			lineageTag: 04e2c094-d841-41dd-b450-1a90e13b844b
+			column: MonthName
+
+		level Date
+			lineageTag: 84bbb1f8-caff-4e95-8db3-2581372f2ba2
+			column: Date
+
+	partition Date = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\Date.csv"),[Delimiter=",", Columns=7, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Year", Int64.Type}, {"Quarter", type text}, {"MonthNumber", Int64.Type}, {"MonthName", type text}, {"YearMonth", type date}, {"IsWeekend", type logical}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
