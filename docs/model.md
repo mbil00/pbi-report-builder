@@ -93,7 +93,7 @@ pbi model path Product Customers
 #   Sales.CustomerID → Customers.CustomerID
 ```
 
-Use this to verify cross-table references before building visuals. `pbi validate` will also warn about visuals referencing tables with no relationship path.
+Use this to verify cross-table references before building visuals. `pbi validate` will also warn about visuals that group by columns from tables with no relationship path (measures are exempt).
 
 ## Format fields
 

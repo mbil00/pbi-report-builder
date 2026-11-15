@@ -939,173 +939,84 @@ table Sales
             self.assertEqual(result.exit_code, 1, result.stdout)
             self.assertIn("source columns are not created", result.stdout)
 
+def _field(kind: str, entity: str, prop: str) -> dict:
+    return {kind: {"Expression": {"SourceRef": {"Entity": entity}}, "Property": prop}}
+
+
 class TestValidateMeasuresOnlyTable(unittest.TestCase):
-    """Validate should not warn about missing relationships for measures-only tables."""
+    """The relationship-path check only applies to tables a visual groups by."""
 
-    def test_no_warning_for_measures_only_table(self):
-        from pbi.modeling.schema import Column, Measure, SemanticModel, SemanticTable
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = make_project(root, with_model=True)
-            page = ReportAuthoring(project).create_page("Test")
-
-            # Create a visual referencing both a data table and a measures table
-            visual = ReportAuthoring(project).create_visual(page, "card")
-            visual.data["visual"]["query"] = {
-                "queryState": {
-                    "Values": {
-                        "projections": [
-                            {"queryRef": "Sales.Amount"},
-                            {"queryRef": "Measures Table.Total Revenue"},
-                        ]
-                    }
-                }
-            }
-            visual.save()
-
-            # Build a model with a data table and a measures-only table (no columns)
-            model = SemanticModel(
-                folder=root / "Sample.SemanticModel",
-                tables=[
-                    SemanticTable(
-                        name="Sales",
-                        columns=[Column(name="Amount", table="Sales", data_type="int64")],
-                    ),
-                    SemanticTable(
-                        name="Measures Table",
-                        columns=[],
-                        measures=[Measure(name="Total Revenue", table="Measures Table", expression="SUM(Sales[Amount])")],
-                    ),
-                ],
-                relationships=[],
-            )
-
-            # Monkey-patch model loading to return our test model
-            import pbi.validate as validate_mod
-
-            original_fn = validate_mod._validate_visual_relationships
-
-            def patched(proj):
-                # Inline the logic with our model instead of loading from disk
-                from pbi.validate import ValidationIssue as VI
-
-                issues = []
-                table_names = {t.name.lower() for t in model.tables}
-                for pg in proj.get_pages():
-                    for vis in proj.get_visuals(pg):
-                        query_state = vis.data.get("visual", {}).get("query", {}).get("queryState", {})
-                        if not query_state:
-                            continue
-                        tables_used: set[str] = set()
-                        for _role, config in query_state.items():
-                            for pr in config.get("projections", []):
-                                ref = pr.get("queryRef", "")
-                                dot = ref.find(".")
-                                if dot > 0:
-                                    table = ref[:dot]
-                                    if table.lower() in table_names:
-                                        tables_used.add(table)
-                        if len(tables_used) < 2:
-                            continue
-                        table_list = sorted(tables_used)
-                        for i in range(len(table_list)):
-                            for j in range(i + 1, len(table_list)):
-                                path = model.find_path(table_list[i], table_list[j])
-                                if path is None:
-                                    try:
-                                        t1 = model.find_table(table_list[i])
-                                        t2 = model.find_table(table_list[j])
-                                        if not t1.columns or not t2.columns:
-                                            continue
-                                    except ValueError:
-                                        pass
-                                    rel = f"pages/{pg.folder.name}/visuals/{vis.folder.name}/visual.json"
-                                    issues.append(VI(
-                                        rel, "warning",
-                                        f'Visual "{vis.name}" references tables '
-                                        f'"{table_list[i]}" and "{table_list[j]}" '
-                                        f'which have no relationship path',
-                                    ))
-                return issues
-
-            issues = patched(project)
-            warnings = [i for i in issues if i.level == "warning" and "relationship" in i.message]
-            self.assertEqual(warnings, [], f"Got unexpected relationship warnings: {warnings}")
-
-    def test_warning_for_data_tables_without_relationship(self):
-        """Two data tables (both with columns) and no relationship should still warn."""
-        from pbi.modeling.schema import Column, SemanticModel, SemanticTable
+    def _relationship_warnings(self, projections: list[dict]) -> list:
+        from pbi.modeling.schema import Column, Measure, Relationship, SemanticModel, SemanticTable
+        from pbi.validate import _validate_visual_relationships
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = make_project(root, with_model=True)
             page = ReportAuthoring(project).create_page("Test")
-
-            visual = ReportAuthoring(project).create_visual(page, "card")
-            visual.data["visual"]["query"] = {
-                "queryState": {
-                    "Values": {
-                        "projections": [
-                            {"queryRef": "Sales.Amount"},
-                            {"queryRef": "Products.Name"},
-                        ]
-                    }
-                }
-            }
+            visual = ReportAuthoring(project).create_visual(page, "tableEx")
+            visual.data["visual"]["query"] = {"queryState": {"Values": {"projections": projections}}}
             visual.save()
 
+            def table(name: str, columns: list[str], measures: tuple[str, ...] = ()) -> SemanticTable:
+                return SemanticTable(
+                    name=name,
+                    columns=[Column(name=c, table=name, data_type="string") for c in columns],
+                    measures=[Measure(name=m, table=name, expression="1") for m in measures],
+                )
+
+            # Sales -> Products is related; Tag and the measures table are not.
             model = SemanticModel(
                 folder=root / "Sample.SemanticModel",
                 tables=[
-                    SemanticTable(name="Sales", columns=[Column(name="Amount", table="Sales", data_type="int64")]),
-                    SemanticTable(name="Products", columns=[Column(name="Name", table="Products", data_type="string")]),
+                    table("Sales", ["ProductKey", "Amount"], ("Revenue",)),
+                    table("Products", ["ProductKey", "Name"]),
+                    table("Tag", ["Name"]),
+                    # Desktop's "Enter data" measures table keeps a hidden placeholder column.
+                    table("Measures Table", ["Column1"], ("Total Revenue",)),
                 ],
-                relationships=[],
+                relationships=[Relationship("r1", "Sales", "ProductKey", "Products", "ProductKey")],
             )
+            with mock.patch("pbi.modeling.schema.SemanticModel.load", return_value=model):
+                issues = _validate_visual_relationships(project)
+        return [i for i in issues if "relationship path" in i.message]
 
-            from pbi.validate import ValidationIssue as VI
+    def test_no_warning_for_measures_table_with_placeholder_column(self):
+        warnings = self._relationship_warnings([
+            {"field": _field("Column", "Products", "Name"), "queryRef": "Products.Name"},
+            {"field": _field("Measure", "Measures Table", "Total Revenue"), "queryRef": "Measures Table.Total Revenue"},
+        ])
+        self.assertEqual(warnings, [])
 
-            issues = []
-            table_names = {t.name.lower() for t in model.tables}
-            for pg in project.get_pages():
-                for vis in project.get_visuals(pg):
-                    query_state = vis.data.get("visual", {}).get("query", {}).get("queryState", {})
-                    if not query_state:
-                        continue
-                    tables_used: set[str] = set()
-                    for _role, config in query_state.items():
-                        for pr in config.get("projections", []):
-                            ref = pr.get("queryRef", "")
-                            dot = ref.find(".")
-                            if dot > 0:
-                                table = ref[:dot]
-                                if table.lower() in table_names:
-                                    tables_used.add(table)
-                    if len(tables_used) < 2:
-                        continue
-                    table_list = sorted(tables_used)
-                    for i in range(len(table_list)):
-                        for j in range(i + 1, len(table_list)):
-                            path = model.find_path(table_list[i], table_list[j])
-                            if path is None:
-                                try:
-                                    t1 = model.find_table(table_list[i])
-                                    t2 = model.find_table(table_list[j])
-                                    if not t1.columns or not t2.columns:
-                                        continue
-                                except ValueError:
-                                    pass
-                                rel = f"pages/{pg.folder.name}/visuals/{vis.folder.name}/visual.json"
-                                issues.append(VI(
-                                    rel, "warning",
-                                    f'Visual "{vis.name}" references tables '
-                                    f'"{table_list[i]}" and "{table_list[j]}" '
-                                    f'which have no relationship path',
-                                ))
+    def test_no_warning_for_measure_from_unrelated_fact_table(self):
+        warnings = self._relationship_warnings([
+            {"field": _field("Column", "Tag", "Name"), "queryRef": "Tag.Name"},
+            {"field": _field("Measure", "Sales", "Revenue"), "queryRef": "Sales.Revenue"},
+        ])
+        self.assertEqual(warnings, [])
 
-            warnings = [i for i in issues if i.level == "warning" and "relationship" in i.message]
-            self.assertEqual(len(warnings), 1, f"Expected 1 warning, got: {warnings}")
+    def test_warning_for_columns_from_unrelated_tables(self):
+        warnings = self._relationship_warnings([
+            {"field": _field("Column", "Products", "Name"), "queryRef": "Products.Name"},
+            {"field": _field("Column", "Tag", "Name"), "queryRef": "Tag.Name"},
+        ])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('"Products" and "Tag"', warnings[0].message)
+
+    def test_aggregated_column_counts_as_column(self):
+        aggregated = {"Aggregation": {"Expression": _field("Column", "Tag", "Name"), "Function": 2}}
+        warnings = self._relationship_warnings([
+            {"field": _field("Column", "Products", "Name"), "queryRef": "Products.Name"},
+            {"field": aggregated, "queryRef": "Count(Tag.Name)"},
+        ])
+        self.assertEqual(len(warnings), 1)
+
+    def test_falls_back_to_query_ref_without_field(self):
+        warnings = self._relationship_warnings([
+            {"queryRef": "Products.Name"},
+            {"queryRef": "Tag.Name"},
+        ])
+        self.assertEqual(len(warnings), 1)
 
 class TestModelSearch(unittest.TestCase):
     """pbi model search command."""

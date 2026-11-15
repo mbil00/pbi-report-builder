@@ -178,13 +178,11 @@ def validate_relationship_properties(properties: dict[str, str] | None) -> None:
         if value and value not in _VALID_CARDINALITY_VALUES:
             raise ValueError(f'Invalid {key} "{value}". Valid values: one, many.')
 
-    if from_cardinality and not to_cardinality:
-        raise ValueError("Set both fromCardinality and toCardinality together.")
-    if to_cardinality and not from_cardinality:
-        raise ValueError("Set both fromCardinality and toCardinality together.")
-
-    if from_cardinality and to_cardinality:
-        pair = (from_cardinality, to_cardinality)
+    # TMDL defaults are fromCardinality=many and toCardinality=one, and Desktop
+    # writes only the side that differs: one-to-one as `fromCardinality: one`,
+    # many-to-many as `toCardinality: many`.
+    if from_cardinality or to_cardinality:
+        pair = (from_cardinality or "many", to_cardinality or "one")
         if pair not in {("many", "one"), ("many", "many"), ("one", "one")}:
             raise ValueError(
                 "Invalid cardinality orientation. Use fromCardinality=many and toCardinality=one "

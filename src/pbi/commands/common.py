@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Annotated, Optional
@@ -12,7 +13,26 @@ from rich.console import Console
 from pbi.fields import normalize_field_type, resolve_field_info, resolve_field_type
 from pbi.project import Project
 from pbi.project_runtime import register_project_schemas
-console = Console()
+
+# Wide enough that piped output never wraps; tables still size to their content.
+_PIPED_WIDTH = 10_000
+
+
+def make_console() -> Console:
+    """Create the CLI console.
+
+    On a terminal Rich wraps to the terminal width. When stdout is piped Rich
+    falls back to 80 columns and splits long messages across lines, which breaks
+    grep and agent parsing, so piped output keeps each message on one line.
+    An explicit ``COLUMNS`` still wins; Rich already honours ``NO_COLOR`` and
+    ``TERM=dumb`` and drops styling when stdout isn't a terminal.
+    """
+    if os.environ.get("COLUMNS") or sys.stdout.isatty():
+        return Console()
+    return Console(width=_PIPED_WIDTH)
+
+
+console = make_console()
 
 _GLOBAL_PROJECT: Path | None = None
 

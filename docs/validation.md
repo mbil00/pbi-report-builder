@@ -57,7 +57,7 @@ or image internals when you only care about structural issues.
 - Overlapping visuals (bounding box intersection > 10px in both axes)
 
 **Model relationships:**
-- Visuals referencing fields from multiple tables that have no relationship path in the semantic model
+- Visuals that group by columns from multiple tables with no relationship path in the semantic model (measures are skipped: they carry their own filter context, so a measures-only table needs no relationship)
 - Only warns if the model has a `relationships.tmdl` file (skipped otherwise)
 
 ### Output

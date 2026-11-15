@@ -758,6 +758,38 @@ def _validate_layout(
     return issues
 
 
+def _find_entity(node: object) -> str | None:
+    """Return the first ``SourceRef.Entity`` inside a field expression."""
+    if isinstance(node, dict):
+        source_ref = node.get("SourceRef")
+        if isinstance(source_ref, dict) and isinstance(source_ref.get("Entity"), str):
+            return source_ref["Entity"]
+        for value in node.values():
+            entity = _find_entity(value)
+            if entity:
+                return entity
+    elif isinstance(node, list):
+        for value in node:
+            entity = _find_entity(value)
+            if entity:
+                return entity
+    return None
+
+
+def _projection_column_table(projection: dict) -> str | None:
+    """Return the table of a column-like projection, or None for a measure."""
+    field = projection.get("field")
+    if isinstance(field, dict) and field:
+        if "Measure" in field:
+            return None
+        entity = _find_entity(field)
+        if entity:
+            return entity
+    ref = projection.get("queryRef", "")
+    dot = ref.find(".")
+    return ref[:dot] if dot > 0 else None
+
+
 def _validate_visual_relationships(
     project: Project,
     *,
@@ -798,16 +830,14 @@ def _validate_visual_relationships(
             if not query_state:
                 continue
 
-            # Collect all tables referenced by this visual
+            # Collect the tables whose columns this visual groups by. A measure
+            # carries its own filter context, so it needs no relationship path.
             tables_used: set[str] = set()
             for _role, config in query_state.items():
                 for proj in config.get("projections", []):
-                    ref = proj.get("queryRef", "")
-                    dot = ref.find(".")
-                    if dot > 0:
-                        table = ref[:dot]
-                        if table.lower() in table_names:
-                            tables_used.add(table)
+                    table = _projection_column_table(proj)
+                    if table and table.lower() in table_names:
+                        tables_used.add(table)
 
             if len(tables_used) < 2:
                 continue
