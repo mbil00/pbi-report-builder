@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 from rich import box
 from rich.table import Table
+from rich.markup import escape
 
 from .base import (
     ProjectOpt,
@@ -37,6 +38,7 @@ def model_tables(
             "measures": len(table.measures),
             "dataCategory": table.data_category,
             "dateTable": table.date_table_column,
+            "description": table.description,
         } for table in model.tables]
         console.print_json(json.dumps(rows, indent=2))
         return
@@ -79,6 +81,7 @@ def model_table_get(
     console.print(f"[dim]Data Category:[/dim] {sem_table.data_category or '(none)'}")
     console.print(f"[dim]Date Table:[/dim] {'yes' if sem_table.date_table_column else 'no'}")
     console.print(f"[dim]Date Column:[/dim] {sem_table.date_table_column or '(none)'}")
+    console.print(f"[dim]Description:[/dim] {escape(sem_table.description) or '(none)'}")
 
 
 @model_table_app.command("set")
@@ -88,7 +91,7 @@ def model_table_set(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set table metadata such as dataCategory or dateTable=<column>."""
+    """Set table metadata such as dataCategory, description or dateTable=<column>."""
     from pbi.model import mark_as_date_table, set_table_property
 
     proj = get_project(project)
@@ -131,11 +134,11 @@ def model_table_set(
 
         if changed:
             console.print(
-                f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table}[/cyan] [dim]->[/dim] "{prop_value}"'
+                f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table}[/cyan] [dim]->[/dim] "{escape(prop_value)}"'
             )
         else:
             console.print(
-                f'{prefix}[dim]No change:[/dim] [cyan]{table}[/cyan] {prop_name} is already "{prop_value}"'
+                f'{prefix}[dim]No change:[/dim] [cyan]{table}[/cyan] {prop_name} is already "{escape(prop_value)}"'
             )
 
 

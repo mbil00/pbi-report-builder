@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 from rich import box
 from rich.table import Table
+from rich.markup import escape
 
 from .base import (
     ProjectOpt,
@@ -47,6 +48,7 @@ def model_measures(
                     "expression": measure.expression,
                     "format": measure.format_string,
                     "displayFolder": measure.display_folder,
+                    "description": measure.description,
                 }
             )
 
@@ -170,7 +172,7 @@ def model_measure_get(
 
     console.print(f"[bold]{sem_table.name}.{measure.name}[/bold]")
     console.print(f"[dim]Format:[/dim] {measure.format_string or '(none)'}")
-    console.print(f"[dim]Description:[/dim] {measure.description or '(none)'}")
+    console.print(f"[dim]Description:[/dim] {escape(measure.description) or '(none)'}")
     console.print(f"[dim]Display Folder:[/dim] {measure.display_folder or '(none)'}")
     console.print(f"[dim]Lineage:[/dim] {measure.lineage_tag or '(none)'}")
     console.print("[dim]Expression:[/dim]")
@@ -216,7 +218,7 @@ def model_measure_set(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set metadata properties on a measure (displayFolder, formatString, etc.)."""
+    """Set metadata properties on a measure (description, displayFolder, formatString)."""
     from pbi.model import set_member_property
 
     proj = get_project(project)
@@ -243,12 +245,12 @@ def model_measure_set(
         if changed:
             console.print(
                 f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table_name}.{field_name}[/cyan] '
-                f'[dim]->[/dim] "{prop_value}"'
+                f'[dim]->[/dim] "{escape(prop_value)}"'
             )
         else:
             console.print(
                 f'{prefix}[dim]No change:[/dim] [cyan]{table_name}.{field_name}[/cyan] '
-                f'{prop_name} is already "{prop_value}"'
+                f'{prop_name} is already "{escape(prop_value)}"'
             )
 
 

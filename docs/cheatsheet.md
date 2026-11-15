@@ -258,6 +258,7 @@ pbi model format "Sales.OrderDate" "dd/mm/yyyy"
 
 # Time intelligence / date table
 pbi model table set Date dateTable=Date       # mark Date[Date] as the date table
+pbi model table set Task description="One row per task"   # TMDL /// description; also on measure/column set
 pbi model set timeIntelligence=off            # disable auto date/time and remove local date tables
 
 # Perspectives

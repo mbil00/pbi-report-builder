@@ -165,7 +165,9 @@ The `model apply` engine supports these top-level sections:
 - **measures:** table-keyed list with `name`, `expression`, `format`, `description`, `displayFolder`
 - **columns:** table-keyed mapping with `format`, `hidden`, `type`, `expression`, `dataType`, `description`, `displayFolder`, `sortByColumn`, `summarizeBy`, `dataCategory`
 - **relationships:** list of `{from, to, crossFilteringBehavior, isActive, ...}` — creates or updates
-- **hierarchies:** table-keyed list of `{name, levels: [col1, col2]}` — creates or delete-and-recreates if levels differ
+- **hierarchies:** table-keyed list of `{name, levels: [col1, col2], description}` — creates or delete-and-recreates if levels differ (the description carries over)
+- **tables:** name-keyed mapping with `dataCategory`, `dateTable`, `description`
+- **description** on any of these is written as TMDL `///` lines above the object (one per line), the form Desktop saves
 - **fieldParameters:** name-keyed mapping with `fields` list of `{field: Table.Field, label: DisplayName}` — creates field parameter tables
 
 ## YAML Apply Features

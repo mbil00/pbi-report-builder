@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 from rich import box
 from rich.table import Table
+from rich.markup import escape
 
 from .base import (
     ProjectOpt,
@@ -57,6 +58,7 @@ def model_columns(
                 "format": column.format_string,
                 "hidden": column.is_hidden,
                 "sourceColumn": column.source_column,
+                "description": column.description,
             }
             for column in columns
         ]
@@ -281,7 +283,7 @@ def model_column_get(
     console.print(f"[dim]Format:[/dim] {column.format_string or '(none)'}")
     console.print(f"[dim]Summarize By:[/dim] {column.summarize_by or '(none)'}")
     console.print(f"[dim]Hidden:[/dim] {'true' if column.is_hidden else 'false'}")
-    console.print(f"[dim]Description:[/dim] {column.description or '(none)'}")
+    console.print(f"[dim]Description:[/dim] {escape(column.description) or '(none)'}")
     console.print(f"[dim]Display Folder:[/dim] {column.display_folder or '(none)'}")
     console.print(f"[dim]Sort By Column:[/dim] {column.sort_by_column or '(none)'}")
     console.print(f"[dim]Data Category:[/dim] {column.data_category or '(none)'}")
@@ -299,7 +301,7 @@ def model_column_set(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set metadata properties on a column (displayFolder, sortByColumn, etc.)."""
+    """Set metadata properties on a column (description, displayFolder, sortByColumn, etc.)."""
     from pbi.model import set_member_property
 
     proj = get_project(project)
@@ -326,12 +328,12 @@ def model_column_set(
         if changed:
             console.print(
                 f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table_name}.{field_name}[/cyan] '
-                f'[dim]->[/dim] "{prop_value}"'
+                f'[dim]->[/dim] "{escape(prop_value)}"'
             )
         else:
             console.print(
                 f'{prefix}[dim]No change:[/dim] [cyan]{table_name}.{field_name}[/cyan] '
-                f'{prop_name} is already "{prop_value}"'
+                f'{prop_name} is already "{escape(prop_value)}"'
             )
 
 

@@ -87,6 +87,16 @@ def _parse_tmdl_field_ref(text: str) -> tuple[str, str]:
     return table, column
 
 
+def _parse_description_line(stripped: str) -> str:
+    """Return the text of one ``///`` description line.
+
+    Desktop writes ``/// text``; only the single separating space is dropped so
+    any further indentation inside the description survives.
+    """
+    text = stripped[3:]
+    return text[1:] if text.startswith(" ") else text
+
+
 def _parse_member_property_value(key: str, value: str) -> str:
     """Normalize parsed member property values that use TMDL identifier syntax."""
     if key == "sortByColumn":
@@ -108,6 +118,9 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
 
     table_name = None
     table_props: dict[str, str] = {}
+    table_description = ""
+    # ``///`` lines collected for the object declared directly below them.
+    pending_description: list[str] = []
     columns: list[Column] = []
     measures: list[Measure] = []
     hierarchies: list[Hierarchy] = []
@@ -187,6 +200,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     levels=list(current_levels),
                     lineage_tag=current_props.get("lineageTag", ""),
                     definition_path=path,
+                    description=current_props.get("description", ""),
                 )
             )
             current_levels = []
@@ -215,7 +229,8 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
 
     for line in lines:
         stripped = line.strip()
-        if not stripped or stripped.startswith("///"):
+        if not stripped:
+            pending_description = []
             continue
 
         indent = 0
@@ -228,8 +243,20 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 break
         indent = int(indent)
 
+        if stripped.startswith("///"):
+            # A description sits directly above a table (indent 0) or a table
+            # member (indent 1). Deeper ``///`` lines are not descriptions this
+            # parser tracks, and stay skipped as before.
+            if indent <= 1:
+                pending_description.append(_parse_description_line(stripped))
+            continue
+
+        description = "\n".join(pending_description)
+        pending_description = []
+
         if indent == 0 and stripped.startswith("table "):
             table_name = _parse_tmdl_name(stripped[6:])
+            table_description = description
             continue
 
         if indent == 1:
@@ -251,12 +278,16 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_name = _parse_tmdl_name(rest)
                 eq_pos = rest.find("=")
                 current_props["__kind"] = "calculatedColumn" if (is_calculated or eq_pos >= 0) else "column"
+                if description:
+                    current_props["description"] = description
                 if eq_pos >= 0:
                     current_expr = rest[eq_pos + 1 :].strip()
                 continue
             if stripped.startswith("measure "):
                 _flush()
                 current_type = "measure"
+                if description:
+                    current_props["description"] = description
                 rest = stripped[8:]
                 current_name = _parse_tmdl_name(rest)
                 eq_pos = rest.find("=")
@@ -267,6 +298,8 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 _flush()
                 current_type = "hierarchy"
                 current_name = _parse_tmdl_name(stripped[10:])
+                if description:
+                    current_props["description"] = description
                 current_levels = []
                 continue
             if stripped.startswith("partition "):
@@ -326,8 +359,11 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
             elif ":" in stripped and not stripped.startswith("```"):
                 key = stripped.partition(":")[0].strip()
                 if key in _TMDL_PROPERTY_NAMES:
-                    _, _, val = stripped.partition(":")
-                    current_props[key] = _parse_member_property_value(key, val)
+                    # The legacy ``description:`` property form is invalid TMDL;
+                    # a ``///`` description always wins over it.
+                    if not (key == "description" and "description" in current_props):
+                        _, _, val = stripped.partition(":")
+                        current_props[key] = _parse_member_property_value(key, val)
                 elif current_type == "measure" or (
                     current_type == "column" and current_props.get("__kind") == "calculatedColumn"
                 ):
@@ -347,6 +383,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         hierarchies=hierarchies, partitions=partitions, definition_path=path,
         data_category=table_props.get("dataCategory", ""),
         is_parameter_type="isParameterType" in table_props,
+        description=table_description,
     )
 
 
