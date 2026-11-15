@@ -435,8 +435,8 @@ class YamlRoundTripTests(unittest.TestCase):
             subtitle_text = (
                 target_visuals["header-subtitle"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
             )
-            self.assertEqual(title_text, "'Department Breakdown'")
-            self.assertEqual(subtitle_text, "'Operations'")
+            self.assertEqual(title_text, "Department Breakdown")
+            self.assertEqual(subtitle_text, "Operations")
 
     def test_component_apply_preserves_nested_image_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

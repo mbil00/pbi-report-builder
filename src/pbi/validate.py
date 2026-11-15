@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pbi.project import Project, _read_json
+from pbi.textbox import is_legacy_quoted_run
 
 
 @dataclass
@@ -461,6 +462,7 @@ def _validate_visual_data(data: dict, rel: str) -> list[ValidationIssue]:
     if has_visual:
         issues.extend(_validate_gradient_null_strategy(data["visual"], rel))
         issues.extend(_validate_orphaned_column_metadata(data["visual"], rel))
+        issues.extend(_validate_textbox_runs(data["visual"], rel))
 
     return issues
 
@@ -476,6 +478,31 @@ def _validate_visual_name(data: dict, rel: str) -> list[ValidationIssue]:
             "(spaces, colons, etc.). Power BI will refuse to load the report.",
             path="name",
         ))
+    return issues
+
+
+def _validate_textbox_runs(visual: dict, rel: str) -> list[ValidationIssue]:
+    """Flag textbox runs written with quoted literals instead of Desktop's plain strings."""
+    if visual.get("visualType") != "textbox":
+        return []
+    general = visual.get("objects", {}).get("general")
+    if not isinstance(general, list) or not general or not isinstance(general[0], dict):
+        return []
+    paragraphs = general[0].get("properties", {}).get("paragraphs")
+    if not isinstance(paragraphs, list):
+        return []
+    issues: list[ValidationIssue] = []
+    for p_index, paragraph in enumerate(paragraphs):
+        runs = paragraph.get("textRuns", []) if isinstance(paragraph, dict) else []
+        for r_index, run in enumerate(runs if isinstance(runs, list) else []):
+            if is_legacy_quoted_run(run):
+                issues.append(ValidationIssue(
+                    rel, "warning",
+                    f"Textbox run paragraphs[{p_index}].textRuns[{r_index}] uses quoted literals "
+                    "instead of the plain strings Power BI Desktop writes. "
+                    "Setting the text again with `pbi visual set` rewrites it.",
+                    path=f"objects.general[0].properties.paragraphs[{p_index}].textRuns[{r_index}]",
+                ))
     return issues
 
 

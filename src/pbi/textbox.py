@@ -51,10 +51,14 @@ def set_textbox_content(
         run = {}
 
     if text is not None:
-        run["value"] = _encode_text_literal(text)
+        run["value"] = str(text)
+    elif _is_quoted(run.get("value")):
+        run["value"] = _decode_text_literal(run["value"])
 
+    style = run.get("textStyle")
+    if isinstance(style, dict):
+        _repair_legacy_style(style)
     if style_updates:
-        style = run.get("textStyle", {})
         if not isinstance(style, dict):
             style = {}
         _apply_style_updates(style, style_updates)
@@ -91,7 +95,7 @@ def textbox_text_style_value(visual_data: dict, key: str) -> Any:
 def parse_textbox_style_value(key: str, value: str) -> Any:
     """Parse CLI textbox style assignments."""
     if key == "fontSize":
-        return int(value)
+        return normalize_font_size(value)
     if key in {"bold", "italic"}:
         lowered = value.strip().lower()
         if lowered in {"true", "1", "yes", "on"}:
@@ -100,6 +104,39 @@ def parse_textbox_style_value(key: str, value: str) -> Any:
             return False
         raise ValueError(f"{key} must be true or false.")
     return value
+
+
+def normalize_font_size(value: Any) -> int | float:
+    """Parse a font size in points from ``22``, ``22.5`` or ``"22pt"``."""
+    if isinstance(value, bool):
+        raise ValueError(f"fontSize must be a number of points, got {value!r}.")
+    if isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        text = str(value).strip().strip("'").strip()
+        if text.lower().endswith("pt"):
+            text = text[:-2].strip()
+        try:
+            number = float(text)
+        except ValueError:
+            raise ValueError(f"fontSize must be a number of points such as 22 or 22pt, got {value!r}.") from None
+    if number <= 0:
+        raise ValueError(f"fontSize must be positive, got {value!r}.")
+    return int(number) if number.is_integer() else number
+
+
+def is_legacy_quoted_run(run: Any) -> bool:
+    """True when a text run carries the old CLI encoding (quoted literals, colour expr)."""
+    if not isinstance(run, dict):
+        return False
+    if _is_quoted(run.get("value")):
+        return True
+    style = run.get("textStyle")
+    if not isinstance(style, dict):
+        return False
+    if isinstance(style.get("color"), dict):
+        return True
+    return any(_is_quoted(style.get(key)) for key in _STYLE_STRING_KEYS)
 
 
 def _first_text_run(visual_data: dict) -> dict[str, Any] | None:
@@ -123,13 +160,15 @@ def _first_text_run(visual_data: dict) -> dict[str, Any] | None:
     return run if isinstance(run, dict) else None
 
 
-def _encode_text_literal(text: str) -> str:
-    escaped = str(text).replace("'", "''")
-    return f"'{escaped}'"
+_STYLE_STRING_KEYS = ("fontFamily", "fontSize", "fontWeight", "fontStyle", "color")
 
 
-def _decode_text_literal(raw_text: str) -> str:
-    if isinstance(raw_text, str) and raw_text.startswith("'") and raw_text.endswith("'"):
+def _is_quoted(value: Any) -> bool:
+    return isinstance(value, str) and len(value) >= 2 and value.startswith("'") and value.endswith("'")
+
+
+def _decode_text_literal(raw_text: Any) -> str:
+    if _is_quoted(raw_text):
         return raw_text[1:-1].replace("''", "'")
     return str(raw_text)
 
@@ -139,43 +178,69 @@ def _decode_text_style(raw_style: Any) -> dict[str, Any]:
         return {}
 
     text_style: dict[str, Any] = {}
-    font_family = raw_style.get("fontFamily", "")
-    if isinstance(font_family, str) and font_family.strip("'"):
-        text_style["fontFamily"] = font_family.strip("'")
+    font_family = raw_style.get("fontFamily")
+    if isinstance(font_family, str) and _decode_text_literal(font_family):
+        text_style["fontFamily"] = _decode_text_literal(font_family)
 
-    font_size = raw_style.get("fontSize", "")
-    if isinstance(font_size, str):
-        stripped = font_size.strip("'").rstrip("pt")
-        if stripped:
-            text_style["fontSize"] = int(stripped)
+    font_size = raw_style.get("fontSize")
+    if isinstance(font_size, (str, int, float)) and font_size != "":
+        try:
+            text_style["fontSize"] = normalize_font_size(font_size)
+        except ValueError:
+            pass
 
     color = raw_style.get("color")
     if isinstance(color, dict):
         decoded = decode_pbi_value(color)
         if decoded:
             text_style["fontColor"] = decoded
-    elif isinstance(color, str):
-        text_style["fontColor"] = color.strip("'")
+    elif isinstance(color, str) and color:
+        text_style["fontColor"] = _decode_text_literal(color)
 
-    font_weight = raw_style.get("fontWeight", "")
+    font_weight = raw_style.get("fontWeight")
     if isinstance(font_weight, str) and "bold" in font_weight.lower():
         text_style["bold"] = True
 
-    font_style = raw_style.get("fontStyle", "")
+    font_style = raw_style.get("fontStyle")
     if isinstance(font_style, str) and "italic" in font_style.lower():
         text_style["italic"] = True
 
     return text_style
 
 
+def _repair_legacy_style(style: dict[str, Any]) -> None:
+    """Rewrite old quoted textStyle values in place as Desktop's plain strings."""
+    for key in _STYLE_STRING_KEYS:
+        value = style.get(key)
+        if key == "color" and isinstance(value, dict):
+            decoded = decode_pbi_value(value)
+            if isinstance(decoded, str) and decoded:
+                style[key] = decoded.lower() if decoded.startswith("#") else decoded
+            continue
+        if _is_quoted(value):
+            style[key] = _decode_text_literal(value)
+
+
 def _apply_style_updates(style: dict[str, Any], updates: dict[str, Any]) -> None:
+    """Write textStyle values as Desktop does: plain strings, ``"24pt"``, lowercase hex."""
     if "fontFamily" in updates:
-        style["fontFamily"] = _encode_text_literal(str(updates["fontFamily"]))
+        family = str(updates["fontFamily"]).strip()
+        if family:
+            style["fontFamily"] = family
+        else:
+            style.pop("fontFamily", None)
     if "fontSize" in updates:
-        style["fontSize"] = _encode_text_literal(f"{int(updates['fontSize'])}pt")
+        style["fontSize"] = f"{normalize_font_size(updates['fontSize'])}pt"
     if "fontColor" in updates:
-        style["color"] = {"expr": {"Literal": {"Value": _encode_text_literal(str(updates["fontColor"]))}}}
+        color = str(updates["fontColor"]).strip()
+        style["color"] = color.lower() if color.startswith("#") else color
     if "bold" in updates:
-        style["fontWeight"] = _encode_text_literal("bold" if updates["bold"] else "normal")
+        if updates["bold"]:
+            style["fontWeight"] = "bold"
+        else:
+            style.pop("fontWeight", None)
     if "italic" in updates:
-        style["fontStyle"] = _encode_text_literal("italic" if updates["italic"] else "normal")
+        if updates["italic"]:
+            style["fontStyle"] = "italic"
+        else:
+            style.pop("fontStyle", None)

@@ -337,7 +337,8 @@ table 'Measures Table'
             literal = (
                 report["filterConfig"]["filters"][0]["filter"]["Where"][0]["Condition"]["Comparison"]["Right"]["Literal"]["Value"]
             )
-            self.assertEqual(literal, "0.0D")
+            # The constant expression doesn't settle the type; a currency format falls back to a double literal.
+            self.assertEqual(literal, "0D")
 
     def test_visual_create_stacked_bar_uses_clustered_bar_internal_type(self) -> None:
         runner = CliRunner()
