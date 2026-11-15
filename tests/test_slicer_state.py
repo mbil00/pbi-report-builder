@@ -186,9 +186,24 @@ class SlicerStateDesktopTests(unittest.TestCase):
         out = diff([{"id": portfolio.folder.name, "type": "slicer", "sync": None}])
         self.assertNotIn("No differences found", out)
         self.assertIn("sync", out)
+        # A group literally named "(none)" is still a change.
+        out = diff([{"id": status.folder.name, "type": "slicer", "sync": "(none)"}])
+        self.assertNotIn("No differences found", out)
         # Clearing what isn't there changes nothing.
         out = diff([{"id": team.folder.name, "type": "slicer", "selected": [], "sync": None}])
         self.assertIn("No differences found", out)
+
+    def test_diff_folds_model_typed_values(self) -> None:
+        self._run("visual", "create", "Task Board", "slicer", "--name", "pointsSlicer", "--bind", "Values=Task.StoryPoints")
+        path = self.root / "points.yaml"
+        path.write_text(yaml.safe_dump({"pages": [{"name": "Task Board", "visuals": [
+            {"name": "pointsSlicer", "type": "slicer", "selected": ["13", "5"]},
+        ]}]}), encoding="utf-8")
+        self._run("apply", str(path))
+        project = Project.find(self.pbip)
+        visual = project.find_visual(project.find_page("Task Board"), "pointsSlicer")
+        self.assertEqual(export_slicer_selection(visual.data), (True, [13, 5]))
+        self.assertIn("No differences found", self._run("diff", str(path)))
 
     def test_null_clears_and_type_mismatch_is_an_error(self) -> None:
         _project, team = self._find("Task Board", "Team Slicer")
@@ -377,6 +392,19 @@ class SelectionUnitTests(unittest.TestCase):
         apply_slicer_selection(visual, ["12345678901234.5678"], data_type="decimal")
         self.assertEqual(_values(visual), ["12345678901234.5678M"])
         self.assertEqual(export_slicer_selection(visual), (False, None))
+
+    def test_range_on_a_non_between_slicer_stays_in_pbir(self) -> None:
+        visual = _slicer(column="Date", entity="Date")
+        apply_slicer_selection(visual, {"from": "2024-01-01", "to": "2024-01-31"}, data_type="dateTime")
+        self.assertTrue(export_slicer_selection(visual)[0])
+        visual["visual"]["objects"]["data"][0]["properties"]["mode"] = _literal("'Dropdown'")
+        # Exporting it would make apply switch the slicer back to Between.
+        self.assertEqual(export_slicer_selection(visual), (False, None))
+
+    def test_diff_normalization_folds_number_and_boolean_text(self) -> None:
+        self.assertEqual(normalize_selection_spec(["13", "1.50", "True"]), normalize_selection_spec([13, 1.5, True]))
+        self.assertEqual(normalize_selection_spec({"except": ["2.0"]}), {"except": [2]})
+        self.assertEqual(normalize_selection_spec(["Up to 1 week"]), ["Up to 1 week"])
 
     def test_other_slicer_types_stay_in_pbir(self) -> None:
         for visual_type in ("listSlicer", "advancedSlicerVisual"):

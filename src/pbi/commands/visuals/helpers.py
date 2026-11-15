@@ -210,8 +210,7 @@ def diff_whole_value(value: object) -> str:
 
     if value is None:
         return DIFF_NONE
-    if isinstance(value, str):
-        return value
+    # JSON keeps a group or value literally named "(none)" distinct from DIFF_NONE.
     return json.dumps(value, ensure_ascii=False, default=str)
 
 

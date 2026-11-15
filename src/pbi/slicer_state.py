@@ -286,7 +286,9 @@ def export_slicer_selection(visual_data: Mapping[str, Any]) -> tuple[bool, Any]:
 
     if set(condition) == {"And"}:
         bounds = _decode_range(condition["And"], column)
-        if bounds is None or inverted:
+        # Apply sets mode Between with a range, so only a Between slicer's range
+        # is representable; any other mode keeps its filter in pbir.
+        if bounds is None or inverted or _literal_value(data_props.get("mode")) != "'Between'":
             return False, None
         start, end = bounds
         for name, expected in (("startDate", start), ("endDate", end)):
@@ -330,7 +332,13 @@ def without_selection_props(objects: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def normalize_selection_spec(spec: Any) -> Any:
-    """Canonical ``selected`` value for comparison (``pbi diff``)."""
+    """Canonical ``selected`` value for comparison (``pbi diff``).
+
+    Diff has no column types, so number and boolean text is folded to its value
+    (``'13'`` and ``13`` compare equal, as apply writes both as ``13L`` on a
+    whole-number column). On a text column that folding is diff-only; apply is
+    unaffected.
+    """
     try:
         kind, payload = _parse_selection_spec(spec)
     except ValueError:
@@ -339,8 +347,24 @@ def normalize_selection_spec(spec: Any) -> Any:
         return None
     if kind == "range":
         return {"from": payload[0].isoformat(), "to": payload[1].isoformat()}
-    values = [value.isoformat() if isinstance(value, dt.date) else value for value in payload]
+    values = [_diff_value(value) for value in payload]
     return {"except": values} if kind == "except" else values
+
+
+def _diff_value(value: Any) -> Any:
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if text.lower() in {"true", "false"}:
+        return text.lower() == "true"
+    if _NUMBER_TEXT.fullmatch(text):
+        number = Decimal(text)
+        return int(number) if number == number.to_integral_value() else float(number)
+    return value
 
 
 # --- helpers ------------------------------------------------------------------
