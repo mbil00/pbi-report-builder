@@ -53,6 +53,7 @@ class Hierarchy:
     levels: list[HierarchyLevel] = field(default_factory=list)
     lineage_tag: str = ""
     definition_path: Path | None = None
+    description: str = ""
 
 
 @dataclass
@@ -75,6 +76,7 @@ class SemanticTable:
     definition_path: Path | None = None
     data_category: str = ""
     is_parameter_type: bool = False
+    description: str = ""
 
     @property
     def date_table_column(self) -> str | None:

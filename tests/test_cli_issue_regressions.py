@@ -485,6 +485,7 @@ table Finance
                         "expression": "1",
                         "format": "",
                         "displayFolder": "Ratios",
+                        "description": "",
                     },
                     {
                         "table": "Sales",
@@ -492,6 +493,7 @@ table Finance
                         "expression": "SUM(Sales[Amount])",
                         "format": "",
                         "displayFolder": "KPIs",
+                        "description": "",
                     },
                 ],
             )

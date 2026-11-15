@@ -57,6 +57,7 @@ def model_columns(
                 "format": column.format_string,
                 "hidden": column.is_hidden,
                 "sourceColumn": column.source_column,
+                "description": column.description,
             }
             for column in columns
         ]
@@ -299,7 +300,7 @@ def model_column_set(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set metadata properties on a column (displayFolder, sortByColumn, etc.)."""
+    """Set metadata properties on a column (description, displayFolder, sortByColumn, etc.)."""
     from pbi.model import set_member_property
 
     proj = get_project(project)

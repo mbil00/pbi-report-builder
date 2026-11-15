@@ -47,6 +47,7 @@ def model_measures(
                     "expression": measure.expression,
                     "format": measure.format_string,
                     "displayFolder": measure.display_folder,
+                    "description": measure.description,
                 }
             )
 
@@ -216,7 +217,7 @@ def model_measure_set(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Preview changes without writing TMDL files.")] = False,
     project: ProjectOpt = None,
 ) -> None:
-    """Set metadata properties on a measure (displayFolder, formatString, etc.)."""
+    """Set metadata properties on a measure (description, displayFolder, formatString)."""
     from pbi.model import set_member_property
 
     proj = get_project(project)

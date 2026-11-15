@@ -78,19 +78,22 @@ def _write_model(root: Path, content: str) -> Path:
 
 
 class MetadataWriteTests(unittest.TestCase):
-    def test_set_member_property_rejects_description(self):
+    def test_set_member_property_writes_description_comment(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_project(root)
-            _write_table(root, "Sales.tmdl", """
+            path = _write_table(root, "Sales.tmdl", """
 table Sales
 \tmeasure Revenue = SUM(Sales[Amount])
 \t\tlineageTag: m-1
 """)
-            with self.assertRaisesRegex(ValueError, "not supported by Power BI TMDL"):
-                set_member_property(
-                    root, "Sales.Revenue", "description", "Total revenue from sales",
-                )
+            _, _, _, changed = set_member_property(
+                root, "Sales.Revenue", "description", "Total revenue from sales",
+            )
+            self.assertTrue(changed)
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("\t/// Total revenue from sales\n\tmeasure Revenue = SUM(Sales[Amount])", text)
+            self.assertNotIn("description:", text)
 
     def test_set_member_property_display_folder_on_column(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -751,8 +754,9 @@ table Sales
                 "description=Order placement date",
                 "--project", str(root / "Sample.pbip"),
             ])
-            self.assertEqual(result.exit_code, 1, result.stdout)
-            self.assertIn("not supported by Power BI TMDL", result.stdout)
+            self.assertEqual(result.exit_code, 0, result.stdout)
+            text = (root / "Sample.SemanticModel" / "definition" / "tables" / "Sales.tmdl").read_text(encoding="utf-8")
+            self.assertIn("\t/// Order placement date\n\tcolumn OrderDate", text)
 
     def test_measure_set_cli(self):
         runner = CliRunner()
@@ -1859,7 +1863,7 @@ table Sales
             m = spec["measures"]["Sales"][0]
             self.assertEqual(m["name"], "Revenue")
             self.assertEqual(m["format"], "0")
-            self.assertNotIn("description", m)
+            self.assertEqual(m["description"], "Total revenue")
             self.assertEqual(m["displayFolder"], "KPIs")
 
     def test_export_columns_with_metadata(self):
@@ -2083,7 +2087,7 @@ table Sales
             m = model.find_table("Sales").find_measure("Revenue")
             self.assertEqual(m.display_folder, "KPIs")
 
-    def test_apply_measure_description_reports_clear_error(self):
+    def test_apply_measure_description_writes_doc_comment(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_project(root)
@@ -2103,14 +2107,12 @@ table Sales
             }, sort_keys=False)
             result = apply_model_yaml(root, yaml_content)
             self.assertIn("Sales.Revenue", result.measures_updated)
-            self.assertEqual(
-                result.errors,
-                ['measures.Sales.Revenue.description: Property "description" is not supported by Power BI TMDL for columns or measures.'],
-            )
+            self.assertEqual(result.errors, [])
 
             model = SemanticModel.load(root)
             m = model.find_table("Sales").find_measure("Revenue")
             self.assertEqual(m.display_folder, "KPIs")
+            self.assertEqual(m.description, "Total revenue")
 
     def test_apply_column_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2362,9 +2364,9 @@ table Date
             _make_project(root)
             _write_table(root, "Sales.tmdl", """
 table Sales
+\t/// Total revenue
 \tmeasure Revenue = SUM(Sales[Amount])
 \t\tformatString: 0
-\t\tdescription: Total revenue
 \t\tlineageTag: m-1
 
 \tcolumn Amount

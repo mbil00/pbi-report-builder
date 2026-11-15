@@ -15,7 +15,9 @@ from .writes import (
     _get_tmdl_lines,
     _indent_level,
     _prepare_inserted_block,
+    _build_description_lines,
     _delete_block,
+    _replace_description,
     _starts_new_table_block,
     _find_member_block,
 )
@@ -104,6 +106,7 @@ def create_hierarchy(
     hierarchy_name: str,
     level_columns: list[str],
     *,
+    description: str | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
     edit_session: TmdlEditSession | None = None,
@@ -126,6 +129,8 @@ def create_hierarchy(
     lines = _get_tmdl_lines(table.definition_path, edit_session)
     insert_at = _hierarchy_insert_index(lines)
     block = _build_hierarchy_block(hierarchy_name, level_columns)
+    if description:
+        block[0:0] = _build_description_lines(description, indent=1)
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
 
@@ -159,3 +164,30 @@ def delete_hierarchy(
 
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, hierarchy_name, True
+
+
+def set_hierarchy_description(
+    project_root: Path,
+    table_name: str,
+    hierarchy_name: str,
+    description: str,
+    *,
+    dry_run: bool = False,
+    model: SemanticModel | None = None,
+    edit_session: TmdlEditSession | None = None,
+) -> tuple[str, str, bool]:
+    """Set, replace or (with an empty value) remove a hierarchy's ``///`` description."""
+    loaded_model = model or SemanticModel.load(project_root)
+    table = loaded_model.find_table(table_name)
+    if table.definition_path is None:
+        raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
+
+    lines = _get_tmdl_lines(table.definition_path, edit_session)
+    result = _find_hierarchy_block(lines, hierarchy_name)
+    if result is None:
+        raise ValueError(f'Hierarchy "{hierarchy_name}" not found in TMDL.')
+    name = _parse_tmdl_name(lines[result[0]].strip()[10:])
+    if not _replace_description(lines, result[0], description):
+        return table.name, name, False
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
+    return table.name, name, True

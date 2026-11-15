@@ -5,7 +5,7 @@ description: "Power BI semantic model development with the `pbi` CLI — use whe
 
 # Power BI Semantic Model Development
 
-> Requires `pbi` 0.10.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
+> Requires `pbi` 0.11.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
 
 You are working with a Power BI PBIP project's semantic model using the `pbi` CLI. The model defines tables, columns, measures, relationships, and hierarchies that power the report visuals.
 
@@ -47,9 +47,12 @@ pbi model measure create Sales "YoY Growth" \
 
 ### Edit and manage measures
 
+Descriptions are written as TMDL `///` lines directly above the object, the way Desktop saves them; a value with line breaks becomes one `///` line per line. Tables take one too: `pbi model table set Sales description="One row per order line"`. In YAML, `description:` works on `tables`, `measures`, `columns` and `hierarchies` entries.
+
 ```bash
 pbi model measure edit Sales "Total Revenue" "SUMX(Sales, Sales[Qty] * Sales[Price])"
 pbi model measure set Sales.TotalRevenue description="Sum of all revenue" displayFolder="KPIs"
+pbi model measure set Sales.TotalRevenue description=   # empty value removes the description
 pbi model measure get Sales.TotalRevenue         # full definition
 pbi model measure list Sales                     # list measures (--full for complete DAX)
 pbi model measure delete Sales "Total Revenue" --force
@@ -237,6 +240,7 @@ tables:
   Date:
     dataCategory: Time
     dateTable: Date
+    description: One row per calendar day
 
 # Measures — grouped by table
 measures:
@@ -282,6 +286,7 @@ hierarchies:
   Date:
   - name: Calendar
     levels: [Year, Quarter, Month]
+    description: Year > Quarter > Month drill path
 
 # Field parameters — name-keyed
 fieldParameters:

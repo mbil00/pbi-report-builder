@@ -34,6 +34,7 @@ from pbi.model import (
     set_time_intelligence_enabled,
     set_column_hidden,
     set_field_format,
+    set_hierarchy_description,
     set_member_property,
     set_partition,
     set_perspective,
@@ -350,6 +351,25 @@ def _apply_tables(
                 result.errors.append(f"tables.{table_name}.dataCategory: {e}")
                 continue
 
+        description = entry.get("description")
+        if isinstance(description, str):
+            try:
+                _, desc_changed = set_table_property(
+                    project_root,
+                    table.name,
+                    "description",
+                    description,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                changed = changed or desc_changed
+                if desc_changed and not dry_run:
+                    table.description = description
+            except (FileNotFoundError, ValueError) as e:
+                result.errors.append(f"tables.{table_name}.description: {e}")
+                continue
+
         date_table = entry.get("dateTable")
         if isinstance(date_table, str):
             try:
@@ -410,6 +430,8 @@ def _apply_measures(
                         continue
                     display_folder = entry.get("displayFolder")
                     display_folder = display_folder if isinstance(display_folder, str) else None
+                    description = entry.get("description")
+                    description = description if isinstance(description, str) else None
                     create_measure(
                         project_root,
                         table.name,
@@ -417,6 +439,7 @@ def _apply_measures(
                         expression,
                         format_string=fmt if isinstance(fmt, str) else None,
                         display_folder=display_folder,
+                        description=description,
                         dry_run=dry_run,
                         model=model,
                         edit_session=edit_session,
@@ -429,6 +452,7 @@ def _apply_measures(
                                 expression=expression,
                                 format_string=fmt if isinstance(fmt, str) else "",
                                 display_folder=display_folder or "",
+                                description=description or "",
                                 definition_path=table.definition_path,
                             )
                         )
@@ -463,20 +487,16 @@ def _apply_measures(
                     if fmt_changed and not dry_run:
                         existing.format_string = fmt
                 ref = f"{table_name_resolved}.{measure_name}"
-                for meta_key, tmdl_key in (("displayFolder", "displayFolder"),):
+                for meta_key, attr in (("displayFolder", "display_folder"), ("description", "description")):
                     meta_val = entry.get(meta_key)
                     if isinstance(meta_val, str):
                         _, _, _, meta_changed = set_member_property(
-                            project_root, ref, tmdl_key, meta_val,
+                            project_root, ref, meta_key, meta_val,
                             dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         changed = changed or meta_changed
                         if meta_changed and not dry_run:
-                            existing.display_folder = meta_val
-                if isinstance(entry.get("description"), str):
-                    result.errors.append(
-                        f'measures.{table_name}.{name}.description: Property "description" is not supported by Power BI TMDL for columns or measures.'
-                    )
+                            setattr(existing, attr, meta_val)
                 if changed:
                     result.measures_updated.append(ref)
             except (FileNotFoundError, ValueError) as e:
@@ -540,6 +560,7 @@ def _apply_column_entry(
     data_type = entry.get("dataType")
     fmt = entry.get("format")
     hidden = entry.get("hidden")
+    description = entry.get("description")
 
     is_calculated_request = (
         requested_type == "calculated"
@@ -561,6 +582,7 @@ def _apply_column_entry(
                 expression,
                 data_type=data_type,
                 format_string=fmt if isinstance(fmt, str) else None,
+                description=description if isinstance(description, str) else None,
                 dry_run=dry_run,
                 model=model,
                 edit_session=edit_session,
@@ -575,6 +597,7 @@ def _apply_column_entry(
                     format_string=fmt if isinstance(fmt, str) else "",
                     definition_path=table.definition_path,
                     kind="calculatedColumn",
+                    description=description if isinstance(description, str) else "",
                 )
                 table.columns.append(existing)
             result.columns_created.append(f"{table.name}.{column_name}")
@@ -646,6 +669,7 @@ def _apply_column_entry(
         ("sortByColumn", "sortByColumn"),
         ("summarizeBy", "summarizeBy"),
         ("dataCategory", "dataCategory"),
+        ("description", "description"),
     ):
         meta_val = entry.get(meta_key)
         if isinstance(meta_val, str):
@@ -663,10 +687,8 @@ def _apply_column_entry(
                     existing.summarize_by = meta_val
                 elif meta_key == "dataCategory":
                     existing.data_category = meta_val
-    if isinstance(entry.get("description"), str):
-        result.errors.append(
-            f'columns.{table_name}.{column_name}.description: Property "description" is not supported by Power BI TMDL for columns or measures.'
-        )
+                elif meta_key == "description":
+                    existing.description = meta_val
     if changed:
         result.columns_updated.append(ref)
 
@@ -780,6 +802,8 @@ def _apply_hierarchies(
                 continue
             name = entry.get("name")
             levels = entry.get("levels")
+            description = entry.get("description")
+            description = description if isinstance(description, str) else None
             if not isinstance(name, str) or not name.strip():
                 result.errors.append(f"hierarchies.{table_name}: entry missing non-empty 'name'.")
                 continue
@@ -802,6 +826,7 @@ def _apply_hierarchies(
                 if existing is None:
                     create_hierarchy(
                         project_root, table.name, name, level_cols,
+                        description=description,
                         dry_run=dry_run, model=model, edit_session=edit_session,
                     )
                     result.hierarchies_created.append(label)
@@ -814,11 +839,23 @@ def _apply_hierarchies(
                         )
                         # Remove from in-memory model so create doesn't see duplicate
                         table.hierarchies = [h for h in table.hierarchies if h.name.lower() != name.lower()]
+                        # Recreating drops the old block with its description, so
+                        # carry the description over unless the spec sets one.
                         create_hierarchy(
                             project_root, table.name, name, level_cols,
+                            description=description if description is not None else existing.description,
                             dry_run=dry_run, model=model, edit_session=edit_session,
                         )
                         result.hierarchies_updated.append(label)
+                    elif description is not None:
+                        _, _, desc_changed = set_hierarchy_description(
+                            project_root, table.name, existing.name, description,
+                            dry_run=dry_run, model=model, edit_session=edit_session,
+                        )
+                        if desc_changed:
+                            if not dry_run:
+                                existing.description = description
+                            result.hierarchies_updated.append(label)
             except (FileNotFoundError, ValueError) as e:
                 result.errors.append(f"hierarchies.{table_name}.{name}: {e}")
 

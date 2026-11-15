@@ -40,6 +40,8 @@ def export_model_yaml(
     tables_section: dict = {}
     for table in loaded_model.tables:
         entry: dict = {}
+        if table.description:
+            entry["description"] = table.description
         if table.data_category:
             entry["dataCategory"] = _export_table_data_category(table.data_category)
         if table.date_table_column:
@@ -73,6 +75,8 @@ def export_model_yaml(
                 entry["format"] = m.format_string
             if m.display_folder:
                 entry["displayFolder"] = m.display_folder
+            if m.description:
+                entry["description"] = m.description
             table_measures.append(entry)
         if table_measures:
             measures_section[table.name] = table_measures
@@ -105,6 +109,8 @@ def export_model_yaml(
                 entry["sortByColumn"] = c.sort_by_column
             if c.data_category:
                 entry["dataCategory"] = _export_data_category(c.data_category)
+            if c.description:
+                entry["description"] = c.description
             if entry:
                 table_columns[c.name] = entry
         if table_columns:
@@ -136,6 +142,8 @@ def export_model_yaml(
                 "name": h.name,
                 "levels": [lv.column for lv in h.levels],
             }
+            if h.description:
+                hier_entry["description"] = h.description
             table_hierarchies.append(hier_entry)
         if table_hierarchies:
             hierarchies_section[table.name] = table_hierarchies

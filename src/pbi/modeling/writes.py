@@ -21,21 +21,24 @@ from .schema import SemanticModel
 
 
 _MEMBER_PROPERTY_WHITELIST = frozenset({
-    "displayFolder", "sortByColumn",
+    "description", "displayFolder", "sortByColumn",
     "summarizeBy", "dataCategory", "formatString",
 })
 
 _TABLE_PROPERTY_WHITELIST = frozenset({
     "dataCategory",
+    "description",
 })
 _COLUMN_PROPERTY_WHITELIST = frozenset({
     "dataCategory",
+    "description",
     "displayFolder",
     "formatString",
     "sortByColumn",
     "summarizeBy",
 })
 _MEASURE_PROPERTY_WHITELIST = frozenset({
+    "description",
     "displayFolder",
     "formatString",
 })
@@ -254,10 +257,6 @@ def set_member_property(
 
     Returns (table_name, field_name, field_type, changed).
     """
-    if property_name == "description":
-        raise ValueError(
-            'Property "description" is not supported by Power BI TMDL for columns or measures.'
-        )
     if property_name not in _MEMBER_PROPERTY_WHITELIST:
         raise ValueError(
             f'Property "{property_name}" is not writable. '
@@ -278,6 +277,16 @@ def set_member_property(
     )
 
     member_kind = "measure" if field_type == "measure" else "column"
+    if property_name == "description":
+        updated = _update_member_description(
+            table.definition_path,
+            member_kind=member_kind,
+            member_name=field_name,
+            description=normalized_value,
+            dry_run=dry_run,
+            edit_session=edit_session,
+        )
+        return table.name, field_name, field_type, updated
     updated = _update_member_property(
         table.definition_path,
         member_kind=member_kind,
@@ -312,6 +321,14 @@ def set_table_property(
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
     normalized_value = _normalize_table_property_value(property_name, property_value)
 
+    if property_name == "description":
+        updated = _update_table_description(
+            table.definition_path,
+            description=normalized_value,
+            dry_run=dry_run,
+            edit_session=edit_session,
+        )
+        return table.name, updated
     updated = _update_table_property(
         table.definition_path,
         property_name=property_name,
@@ -539,6 +556,7 @@ def create_measure(
     *,
     format_string: str | None = None,
     display_folder: str | None = None,
+    description: str | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
     edit_session: TmdlEditSession | None = None,
@@ -561,6 +579,8 @@ def create_measure(
         display_folder=display_folder,
         lineage_tag=str(uuid.uuid4()),
     )
+    if description:
+        block[0:0] = _build_description_lines(description, indent=1)
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, measure_name, True
@@ -625,6 +645,7 @@ def create_calculated_column(
     *,
     data_type: str,
     format_string: str | None = None,
+    description: str | None = None,
     dry_run: bool = False,
     model: SemanticModel | None = None,
     edit_session: TmdlEditSession | None = None,
@@ -650,6 +671,8 @@ def create_calculated_column(
         format_string=format_string,
         lineage_tag=str(uuid.uuid4()),
     )
+    if description:
+        block[0:0] = _build_description_lines(description, indent=1)
     lines[insert_at:insert_at] = _prepare_inserted_block(lines, insert_at, block)
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, column_name, True
@@ -781,6 +804,53 @@ def _update_member_property(
 
     insert_at = _block_property_insert_index(lines, start, end)
     lines.insert(insert_at, replacement)
+    _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _update_member_description(
+    path: Path,
+    *,
+    member_kind: Literal["column", "measure"],
+    member_name: str,
+    description: str,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Set, replace or (with an empty value) remove a member's ``///`` description.
+
+    Also drops a legacy ``description:`` property line from the block: that form
+    is not valid TMDL, and the ``///`` lines replace it.
+    """
+    lines = _get_tmdl_lines(path, edit_session)
+    start, end = _find_member_block(lines, member_kind=member_kind, member_name=member_name)
+    changed = False
+    for idx in range(end - 1, start, -1):
+        if _indent_level(lines[idx]) == 2 and lines[idx].strip().startswith("description:"):
+            del lines[idx]
+            changed = True
+    changed = _replace_description(lines, start, description) or changed
+    if changed:
+        _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
+    return changed
+
+
+def _update_table_description(
+    path: Path,
+    *,
+    description: str,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Set, replace or (with an empty value) remove the table's ``///`` description."""
+    lines = _get_tmdl_lines(path, edit_session)
+    for idx, line in enumerate(lines):
+        if _indent_level(line) == 0 and line.strip().startswith("table "):
+            break
+    else:
+        raise ValueError(f"No table declaration found in {path.name}.")
+    if not _replace_description(lines, idx, description):
+        return False
     _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
     return True
 
@@ -930,6 +1000,32 @@ def _description_start(lines: list[str], start: int) -> int:
     while start > 0 and lines[start - 1].strip().startswith("///") and _indent_level(lines[start - 1]) == indent:
         start -= 1
     return start
+
+
+def _build_description_lines(description: str, *, indent: int) -> list[str]:
+    """Render a description as ``///`` lines, one per description line.
+
+    Matches Desktop: ``/// text`` directly above the declaration, with quotes and
+    ``&`` written as-is. Blank lines at either end are dropped.
+    """
+    text = description.replace("\r\n", "\n").replace("\r", "\n")
+    body = [line.rstrip() for line in text.split("\n")]
+    while body and not body[0].strip():
+        body.pop(0)
+    while body and not body[-1].strip():
+        body.pop()
+    prefix = "\t" * indent
+    return [f"{prefix}/// {line}" if line else f"{prefix}///" for line in body]
+
+
+def _replace_description(lines: list[str], decl_index: int, description: str) -> bool:
+    """Replace the ``///`` block above ``decl_index``; return True when it changed."""
+    start = _description_start(lines, decl_index)
+    replacement = _build_description_lines(description, indent=_indent_level(lines[decl_index]))
+    if lines[start:decl_index] == replacement:
+        return False
+    lines[start:decl_index] = replacement
+    return True
 
 
 def _delete_block(lines: list[str], start: int, end: int) -> None:
@@ -1328,7 +1424,7 @@ def _format_tmdl_property_value(property_name: str, property_value: str) -> str:
     return property_value
 
 
-from .writes_hierarchies import create_hierarchy, delete_hierarchy
+from .writes_hierarchies import create_hierarchy, delete_hierarchy, set_hierarchy_description
 from .writes_refs import find_field_dependents, find_field_references, rename_column, rename_measure, rename_table
 from .writes_relationships import (
     _get_relationships_path,

@@ -63,6 +63,7 @@ def model_hierarchy_list(
                     "table": sem_table.name,
                     "name": hierarchy.name,
                     "levels": [{"name": level.name, "column": level.column} for level in hierarchy.levels],
+                    "description": hierarchy.description,
                 }
             )
 
