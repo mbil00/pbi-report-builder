@@ -190,14 +190,26 @@ def without_series_color_entries(objects: Mapping[str, Any], taken: list[int]) -
 
 
 def normalize_series_colors(spec: Any) -> Any:
-    """Uppercase the colours in a ``seriesColors`` spec, as apply writes them."""
+    """Canonical form of a ``seriesColors`` spec for comparison (``pbi diff``).
+
+    Colours are uppercased, as apply writes them, and boolean keys (``true``,
+    ``'true'``, ``'True'``) become ``"true"``/``"false"``. Diff has no column
+    types, so a text column's ``'True'`` is also folded; apply is unaffected.
+    """
     def _color(value: Any) -> Any:
         return value.strip().upper() if isinstance(value, str) and _HEX_COLOR.fullmatch(value.strip()) else value
+
+    def _key(key: Any) -> Any:
+        if isinstance(key, bool):
+            return "true" if key else "false"
+        if isinstance(key, str) and key.strip().lower() in {"true", "false"}:
+            return key.strip().lower()
+        return key
 
     if not isinstance(spec, Mapping):
         return spec
     return {
-        field: {key: _color(color) for key, color in value.items()} if isinstance(value, Mapping) else _color(value)
+        field: {_key(key): _color(color) for key, color in value.items()} if isinstance(value, Mapping) else _color(value)
         for field, value in spec.items()
     }
 

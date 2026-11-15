@@ -186,6 +186,19 @@ class SeriesColorsDesktopTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No differences found", result.stdout)
 
+    def test_diff_after_quoted_boolean_keys_shows_no_changes(self) -> None:
+        _project, visual = self._find("Chart Gallery", "Billable Split")
+        path = self.root / "quoted.yaml"
+        path.write_text(
+            f"pages:\n- name: Chart Gallery\n  visuals:\n  - id: {visual.folder.name}\n    type: donutChart\n"
+            "    seriesColors:\n      Time & Expenses.IsBillable:\n        'true': '#20A741'\n        'False': '#A0A0A0'\n",
+            encoding="utf-8",
+        )
+        for command in ("apply", "diff"):
+            result = self.runner.invoke(app, [command, str(path), "--project", str(self.pbip)])
+            self.assertEqual(result.exit_code, 0, result.stdout)
+        self.assertIn("No differences found", result.stdout)
+
     def test_diff_after_null_removal_shows_no_changes(self) -> None:
         _project, visual = self._find("Overview", "Tasks by Status")
         spec = {"pages": [{"name": "Overview", "visuals": [{
