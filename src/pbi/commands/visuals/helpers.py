@@ -167,6 +167,10 @@ def flatten_visual_diff_spec(
     filtered = copy.deepcopy(visual_spec)
     filtered.pop("id", None)
     filtered.pop("name", None)
+    if "seriesColors" in filtered:
+        from pbi.data_colors import normalize_series_colors
+
+        filtered["seriesColors"] = normalize_series_colors(filtered["seriesColors"])
     if not include_core:
         for key in ("position", "size", "isHidden"):
             filtered.pop(key, None)

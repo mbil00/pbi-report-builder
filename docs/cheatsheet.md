@@ -195,7 +195,7 @@ pbi diff overview.yaml                        # 3. review
 pbi apply overview.yaml                       # 4. apply
 ```
 
-**YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
+**YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, fixed data colours per value or series (`seriesColors`), sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
 
 ---
 

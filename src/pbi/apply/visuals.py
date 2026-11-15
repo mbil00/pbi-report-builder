@@ -206,6 +206,7 @@ def apply_visual(
         "pbir",
         "style",
         "kpis",
+        "seriesColors",
         "layout",
         "accentBar",
         "referenceLabelLayout",
@@ -285,6 +286,9 @@ def apply_visual(
             model=session.get_model(project),
         )
 
+    if "seriesColors" in vis_spec:
+        _apply_series_colors(project, visual, vis_spec["seriesColors"], result, context=context, session=session)
+
     if "kpis" in vis_spec:
         kpis_list = vis_spec["kpis"]
         if not isinstance(kpis_list, list):
@@ -310,6 +314,34 @@ def apply_visual(
     if visual_baseline is not None:
         _save_visual_if_changed(project, visual, original_data=visual_baseline, session=session)
     page_state.refresh()
+
+
+def _apply_series_colors(
+    project: Project,
+    visual: Visual,
+    spec: object,
+    result: ApplyResult,
+    *,
+    context: str,
+    session: _PbirApplySession,
+) -> None:
+    """Write fixed colours per category value or measure series (#41)."""
+    from pbi.data_colors import apply_series_colors, project_field_resolver
+    from pbi.visual_schema import validate_object
+
+    problem = validate_object(visual.visual_type, "dataPoint")
+    if problem is not None:
+        result.errors.append(f"{context}: seriesColors: {problem.message}")
+        return
+
+    resolve = project_field_resolver(project, session.get_model(project))
+    try:
+        count, warnings = apply_series_colors(visual.data, spec, resolve_field=resolve)
+    except ValueError as e:
+        result.errors.append(f"{context}: {e}")
+        return
+    result.properties_set += count
+    result.warnings.extend(f"{context}: {warning}" for warning in warnings)
 
 
 def visual_page_refs_present(pages_spec: list[dict]) -> bool:

@@ -321,6 +321,7 @@ def extract_style_properties(visual_spec: Mapping[str, Any]) -> dict[str, Any]:
             "isHidden",
             "pbir",
             "style",
+            "seriesColors",  # data-specific, not formatting
         },
     ):
         if value is None:
@@ -428,6 +429,7 @@ def _strip_style_properties(
             "filters",
             "isHidden",
             "pbir",
+            "seriesColors",
         }:
             result[key] = child
             continue

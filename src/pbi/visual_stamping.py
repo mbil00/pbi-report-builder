@@ -66,7 +66,14 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
         "text",
         "textStyle",
         "group",
+        "seriesColors",
     }
+
+    # Restore the raw payload first, as apply does: it replaces whole object
+    # lists, so anything written before it would be lost.
+    pbir = spec.get("pbir")
+    if isinstance(pbir, dict):
+        apply_raw_visual_payload(visual, pbir)
 
     for key, value in spec.items():
         if key in skip_keys:
@@ -122,9 +129,8 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
                 except (ValueError, KeyError):
                     pass
 
-    pbir = spec.get("pbir")
-    if isinstance(pbir, dict):
-        apply_raw_visual_payload(visual, pbir)
+    if "seriesColors" in spec:
+        _apply_series_colors(project, visual, spec["seriesColors"])
 
     if visual.visual_type == "textbox" and isinstance(spec.get("text"), str):
         style = spec.get("textStyle", {})
@@ -133,6 +139,18 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
             text=spec["text"],
             style_updates=style if isinstance(style, dict) else None,
         )
+
+
+def _apply_series_colors(project: Project, visual: Visual, spec: Any) -> None:
+    """Restore fixed data colours; like the rest of stamping, skip what doesn't resolve."""
+    from pbi.data_colors import apply_series_colors, project_field_resolver
+    from pbi.fields import _load_model_from_project
+
+    resolve = project_field_resolver(project, _load_model_from_project(project))
+    try:
+        apply_series_colors(visual.data, spec, resolve_field=resolve)
+    except ValueError:
+        pass
 
 
 def validate_spec_bindings(project: Project, spec: dict[str, Any]) -> list[str]:
