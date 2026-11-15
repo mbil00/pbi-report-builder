@@ -195,6 +195,19 @@ class DesktopDescriptionWriteTests(unittest.TestCase):
         self.assertFalse(result.has_changes)
         self.assertEqual({t: self._path(t).read_bytes() for t in before}, before)
 
+    def test_cli_prints_bracketed_descriptions_literally(self) -> None:
+        text = "Paths use [/] as the separator; [bold] is literal."
+        for kind, target, get_args in (
+            ("table", "Task", ["Task"]),
+            ("column", "Task.Status", ["Task.Status"]),
+            ("measure", "Measures Table.Task Count", ["Measures Table", "Task Count"]),
+        ):
+            with self.subTest(kind=kind):
+                out = self._invoke("model", kind, "set", target, f"description={text}")
+                self.assertIn(text, out)
+                out = self._invoke("model", kind, "get", *get_args)
+                self.assertIn(text, out)
+
     def test_hierarchy_recreate_keeps_description(self) -> None:
         spec = {"hierarchies": {"Date": [{"name": "Calendar", "levels": ["Year", "MonthName", "Date"]}]}}
         result = apply_model_yaml(self.root, yaml.safe_dump(spec))

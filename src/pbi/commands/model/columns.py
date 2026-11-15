@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 from rich import box
 from rich.table import Table
+from rich.markup import escape
 
 from .base import (
     ProjectOpt,
@@ -282,7 +283,7 @@ def model_column_get(
     console.print(f"[dim]Format:[/dim] {column.format_string or '(none)'}")
     console.print(f"[dim]Summarize By:[/dim] {column.summarize_by or '(none)'}")
     console.print(f"[dim]Hidden:[/dim] {'true' if column.is_hidden else 'false'}")
-    console.print(f"[dim]Description:[/dim] {column.description or '(none)'}")
+    console.print(f"[dim]Description:[/dim] {escape(column.description) or '(none)'}")
     console.print(f"[dim]Display Folder:[/dim] {column.display_folder or '(none)'}")
     console.print(f"[dim]Sort By Column:[/dim] {column.sort_by_column or '(none)'}")
     console.print(f"[dim]Data Category:[/dim] {column.data_category or '(none)'}")
@@ -327,12 +328,12 @@ def model_column_set(
         if changed:
             console.print(
                 f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table_name}.{field_name}[/cyan] '
-                f'[dim]->[/dim] "{prop_value}"'
+                f'[dim]->[/dim] "{escape(prop_value)}"'
             )
         else:
             console.print(
                 f'{prefix}[dim]No change:[/dim] [cyan]{table_name}.{field_name}[/cyan] '
-                f'{prop_name} is already "{prop_value}"'
+                f'{prop_name} is already "{escape(prop_value)}"'
             )
 
 

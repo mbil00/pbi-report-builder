@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 from rich import box
 from rich.table import Table
+from rich.markup import escape
 
 from .base import (
     ProjectOpt,
@@ -80,7 +81,7 @@ def model_table_get(
     console.print(f"[dim]Data Category:[/dim] {sem_table.data_category or '(none)'}")
     console.print(f"[dim]Date Table:[/dim] {'yes' if sem_table.date_table_column else 'no'}")
     console.print(f"[dim]Date Column:[/dim] {sem_table.date_table_column or '(none)'}")
-    console.print(f"[dim]Description:[/dim] {sem_table.description or '(none)'}")
+    console.print(f"[dim]Description:[/dim] {escape(sem_table.description) or '(none)'}")
 
 
 @model_table_app.command("set")
@@ -133,11 +134,11 @@ def model_table_set(
 
         if changed:
             console.print(
-                f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table}[/cyan] [dim]->[/dim] "{prop_value}"'
+                f'{prefix}[dim]{prop_name}:[/dim] [cyan]{table}[/cyan] [dim]->[/dim] "{escape(prop_value)}"'
             )
         else:
             console.print(
-                f'{prefix}[dim]No change:[/dim] [cyan]{table}[/cyan] {prop_name} is already "{prop_value}"'
+                f'{prefix}[dim]No change:[/dim] [cyan]{table}[/cyan] {prop_name} is already "{escape(prop_value)}"'
             )
 
 
