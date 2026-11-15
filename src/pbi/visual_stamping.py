@@ -143,13 +143,12 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
 
 def _apply_series_colors(project: Project, visual: Visual, spec: Any) -> None:
     """Restore fixed data colours; like the rest of stamping, skip what doesn't resolve."""
-    from pbi.data_colors import apply_series_colors
+    from pbi.data_colors import apply_series_colors, project_field_resolver
+    from pbi.fields import _load_model_from_project
 
-    def _resolve(field_ref: str) -> tuple[str, str, str, str | None]:
-        return resolve_field_info(project, field_ref, "auto")
-
+    resolve = project_field_resolver(project, _load_model_from_project(project))
     try:
-        apply_series_colors(visual.data, spec, resolve_field=_resolve)
+        apply_series_colors(visual.data, spec, resolve_field=resolve)
     except ValueError:
         pass
 

@@ -326,8 +326,7 @@ def _apply_series_colors(
     session: _PbirApplySession,
 ) -> None:
     """Write fixed colours per category value or measure series (#41)."""
-    from pbi.data_colors import apply_series_colors
-    from pbi.fields import resolve_field_info
+    from pbi.data_colors import apply_series_colors, project_field_resolver
     from pbi.visual_schema import validate_object
 
     problem = validate_object(visual.visual_type, "dataPoint")
@@ -335,13 +334,9 @@ def _apply_series_colors(
         result.errors.append(f"{context}: seriesColors: {problem.message}")
         return
 
-    model = session.get_model(project)
-
-    def _resolve(field_ref: str) -> tuple[str, str, str, str | None]:
-        return resolve_field_info(project, field_ref, "auto", model=model, strict=model is not None)
-
+    resolve = project_field_resolver(project, session.get_model(project))
     try:
-        count, warnings = apply_series_colors(visual.data, spec, resolve_field=_resolve)
+        count, warnings = apply_series_colors(visual.data, spec, resolve_field=resolve)
     except ValueError as e:
         result.errors.append(f"{context}: {e}")
         return

@@ -35,8 +35,25 @@ _HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 _INTEGER = re.compile(r"-?\d+")
 _INTEGER_LITERAL = re.compile(r"-?\d+L")
 
-FieldResolver = Callable[[str], tuple[str, str, str, str | None]]
-"""Resolve ``Table.Field`` to ``(entity, prop, "column" | "measure", data_type)``."""
+FieldResolver = Callable[[str, str], tuple[str, str, str, str | None]]
+"""Resolve ``(Table.Field, expected_type)`` to ``(entity, prop, "column" | "measure", data_type)``.
+
+``expected_type`` is what the spec's shape implies (one colour: ``"measure"``,
+a mapping of values: ``"column"``); resolvers use it only when no model says
+otherwise.
+"""
+
+
+def project_field_resolver(project: Any, model: Any) -> FieldResolver:
+    """Resolve against the model when there is one, else trust the spec's shape."""
+    from pbi.fields import resolve_field_info
+
+    def resolve(field_ref: str, expected_type: str) -> tuple[str, str, str, str | None]:
+        if model is None:
+            return resolve_field_info(project, field_ref, expected_type)
+        return resolve_field_info(project, field_ref, "auto", model=model, strict=True)
+
+    return resolve
 
 
 def apply_series_colors(
@@ -58,7 +75,8 @@ def apply_series_colors(
     for field_ref, value in spec.items():
         if not isinstance(field_ref, str) or "." not in field_ref:
             raise ValueError(f"seriesColors key {field_ref!r} must be a Table.Field reference.")
-        entity, prop, field_type, data_type = resolve_field(field_ref)
+        expected_type = "column" if isinstance(value, Mapping) else "measure"
+        entity, prop, field_type, data_type = resolve_field(field_ref, expected_type)
         resolved_refs[field_ref] = f"{entity}.{prop}"
         if field_type == "measure":
             if isinstance(value, Mapping):

@@ -186,6 +186,46 @@ class SeriesColorsDesktopTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No differences found", result.stdout)
 
+    def test_diff_after_null_removal_shows_no_changes(self) -> None:
+        _project, visual = self._find("Overview", "Tasks by Status")
+        spec = {"pages": [{"name": "Overview", "visuals": [{
+            "id": visual.folder.name, "type": visual.visual_type,
+            "seriesColors": {"Task.Status": {"Completed": None}},
+        }]}]}
+        self._apply(spec)
+        self.assertEqual(len(self._find("Overview", "Tasks by Status")[1].data["visual"]["objects"]["dataPoint"]), 3)
+        result = self.runner.invoke(app, ["diff", str(self.root / "apply.yaml"), "--project", str(self.pbip)])
+        self.assertEqual(result.exit_code, 0, result.stdout)
+        self.assertIn("No differences found", result.stdout)
+
+    def test_measure_colours_round_trip_without_a_model(self) -> None:
+        from pbi.export import export_visual_spec
+        from pbi.visual_stamping import create_visual_from_spec
+
+        shutil.rmtree(self.root / "04-desktop-shapes.SemanticModel")
+        page, title = "Chart Gallery", "Hours by Measure Series"
+        desktop = _objects(_visual(page, title), "dataPoint")
+        project, visual = self._find(page, title)
+        exported = export_visual_spec(project, visual)
+        self.assertEqual(exported["seriesColors"], {"Measures Table.Estimate Hours": "#A0C4FF"})
+
+        # Stamping (no model to say it's a measure) restores the series colour ...
+        stamped_spec = dict(exported)
+        stamped_spec.pop("id")
+        stamped = create_visual_from_spec(project, project.find_page("QA Hidden"), stamped_spec)
+        self.assertEqual(stamped.data["visual"]["objects"]["dataPoint"], desktop)
+
+        # ... and so does apply of the export, explicit (measure) marker or not.
+        for key in ("Measures Table.Estimate Hours", "Measures Table.Estimate Hours (measure)"):
+            with self.subTest(key=key):
+                project, visual = self._find(page, title)
+                visual.data["visual"]["objects"].pop("dataPoint")
+                visual.save()
+                self._apply({"pages": [{"name": page, "visuals": [{
+                    "id": visual.folder.name, "type": visual.visual_type, "seriesColors": {key: "#A0C4FF"},
+                }]}]})
+                self.assertEqual(self._find(page, title)[1].data["visual"]["objects"]["dataPoint"], desktop)
+
     def test_stamping_keeps_global_default_beside_raw_scoped_entries(self) -> None:
         from pbi.visual_stamping import create_visual_from_spec
 
@@ -238,7 +278,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
 
 
 def _resolver(types: dict[str, tuple[str, str | None]]):
-    def resolve(field_ref: str) -> tuple[str, str, str, str | None]:
+    def resolve(field_ref: str, _expected_type: str) -> tuple[str, str, str, str | None]:
         entity, prop = field_ref.split(".", 1)
         field_type, data_type = types[field_ref]
         return entity, prop, field_type, data_type

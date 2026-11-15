@@ -426,8 +426,10 @@ def diff_cmd(
             for key in yaml_flat:
                 if key in {"id", "pbir"}:
                     continue
-                curr = str(current_spec.get(key, ""))
                 proposed = str(yaml_flat[key])
+                if proposed == "null" and key not in current_spec:
+                    continue  # removing something already absent changes nothing
+                curr = str(current_spec.get(key, ""))
                 if curr != proposed:
                     diffs.append((key, curr, proposed))
 
