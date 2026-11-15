@@ -43,7 +43,7 @@ class VisualBuilderCommandTests(unittest.TestCase):
             paragraphs = (
                 visual.data["visual"]["objects"]["general"][0]["properties"]["paragraphs"]
             )
-            self.assertEqual(paragraphs[0]["textRuns"][0]["value"], "'Hello world'")
+            self.assertEqual(paragraphs[0]["textRuns"][0]["value"], "Hello world")
 
     def test_visual_set_supports_textbox_text_and_style(self) -> None:
         runner = CliRunner()
@@ -92,13 +92,9 @@ class VisualBuilderCommandTests(unittest.TestCase):
             objects = updated.data["visual"]["objects"]
             self.assertNotIn("paragraph", objects)
             run = objects["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]
-            self.assertEqual(run["value"], "'Alias text'")
-            self.assertEqual(run["textStyle"]["fontSize"], "'14pt'")
-            self.assertEqual(
-                run["textStyle"]["color"]["expr"]["Literal"]["Value"],
-                "'#112233'",
-            )
-            self.assertEqual(run["textStyle"]["fontWeight"], "'bold'")
+            # Desktop writes plain strings (report-04 `Overview Header`).
+            self.assertEqual(run["value"], "Alias text")
+            self.assertEqual(run["textStyle"], {"fontSize": "14pt", "color": "#112233", "fontWeight": "bold"})
 
     def test_visual_create_can_bind_roles_and_sort_in_one_command(self) -> None:
         runner = CliRunner()

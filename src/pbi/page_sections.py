@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pbi.project import Page, Project
 from pbi.properties import VISUAL_PROPERTIES, set_property as set_visual_property
 from pbi.report_authoring import ReportAuthoring
+from pbi.textbox import set_textbox_content
 
 
 @dataclass(frozen=True)
@@ -67,28 +68,12 @@ def create_page_section(
         height=title_height,
     )
     title_visual.data["name"] = f"section-title-{title.lower().replace(' ', '-')[:20]}"
-    title_visual.data.setdefault("visual", {})["objects"] = {
-        "general": [
-            {
-                "properties": {
-                    "paragraphs": [
-                        {
-                            "textRuns": [
-                                {
-                                    "value": f"'{title}'",
-                                    "textStyle": {
-                                        "fontFamily": f"'{title_font}'",
-                                        "fontSize": f"'{title_size}pt'",
-                                        "color": {"expr": {"Literal": {"Value": f"'{title_color}'"}}},
-                                    },
-                                }
-                            ],
-                        }
-                    ],
-                },
-            }
-        ],
-    }
+    title_visual.data.setdefault("visual", {})["objects"] = {}
+    set_textbox_content(
+        title_visual.data,
+        text=title,
+        style_updates={"fontFamily": title_font, "fontSize": title_size, "fontColor": title_color},
+    )
     set_visual_property(title_visual.data, "background.show", "false", VISUAL_PROPERTIES)
     set_visual_property(title_visual.data, "border.show", "false", VISUAL_PROPERTIES)
     title_visual.save()

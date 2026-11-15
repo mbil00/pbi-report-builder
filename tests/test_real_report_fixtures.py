@@ -95,7 +95,12 @@ class RealReportFixtureTests(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0, result.stdout)
         # Background shapes behind content no longer trigger overlap warnings
-        self.assertIn("No issues found.", result.stdout)
+        self.assertNotIn("overlap", result.stdout.lower())
+        # The only findings are the CLI-made textboxes that still carry quoted literals (#34).
+        warnings = [line for line in result.stdout.splitlines() if line.strip().startswith("WARN")]
+        self.assertTrue(warnings)
+        self.assertTrue(all("uses quoted literals" in line for line in warnings), result.stdout)
+        self.assertNotIn("ERROR", result.stdout)
 
     def test_real_fixtures_diff_no_changes_for_exported_yaml(self) -> None:
         runner = CliRunner()

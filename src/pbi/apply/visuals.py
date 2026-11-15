@@ -186,7 +186,11 @@ def apply_visual(
             result.properties_set += 1
 
     if "text" in vis_spec and visual_type == "textbox":
-        apply_textbox_content(visual, vis_spec, result)
+        try:
+            apply_textbox_content(visual, vis_spec, result)
+        except ValueError as e:
+            result.errors.append(f"{context}: textStyle: {e}")
+            return
 
     exclude_keys = {
         "id",

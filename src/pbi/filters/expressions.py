@@ -88,6 +88,11 @@ def _literal_expr(value: str, data_type: str | None = None) -> dict:
     return {"Literal": {"Value": _format_literal(value, data_type=data_type)}}
 
 
+_INTEGER_TYPES = frozenset({"int64", "int32", "integer", "whole", "whole number"})
+_DOUBLE_TYPES = frozenset({"double", "number"})
+_FIXED_DECIMAL_TYPES = frozenset({"decimal", "currency"})
+
+
 def _format_literal(value: str, data_type: str | None = None) -> str:
     """Format a CLI literal for semanticQuery."""
     raw = value.strip()
@@ -105,17 +110,15 @@ def _format_literal(value: str, data_type: str | None = None) -> str:
             return f"datetime'{raw}'"
         return f"datetime'{raw}T00:00:00'"
 
-    if normalized_type in {"int64", "int32", "integer", "whole", "whole number"}:
-        if re.fullmatch(r"-?\d+", raw):
-            return f"{raw}L"
-
-    if normalized_type in {"decimal", "currency"}:
-        if re.fullmatch(r"-?\d+(?:\.\d+)?", raw):
-            return _format_double_literal(raw, force_fraction=True)
-
-    if normalized_type in {"double", "number"}:
-        if re.fullmatch(r"-?\d+(?:\.\d+)?", raw):
-            return _format_double_literal(raw)
+    if _looks_like_number(raw):
+        # Desktop's suffixes: L whole number, D decimal (double), M fixed decimal.
+        is_integer = "." not in raw
+        if normalized_type in _INTEGER_TYPES or normalized_type == "numeric":
+            return f"{raw}L" if is_integer else f"{raw}D"
+        if normalized_type in _FIXED_DECIMAL_TYPES:
+            return f"{raw}M"
+        if normalized_type in _DOUBLE_TYPES:
+            return f"{raw}D"
 
     escaped = raw.replace("'", "''")
     return f"'{escaped}'"
@@ -144,9 +147,3 @@ def _looks_like_date(value: str) -> bool:
 
 def _looks_like_number(value: str) -> bool:
     return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", value))
-
-
-def _format_double_literal(raw: str, *, force_fraction: bool = False) -> str:
-    if force_fraction and "." not in raw:
-        raw = f"{raw}.0"
-    return f"{raw}D"
