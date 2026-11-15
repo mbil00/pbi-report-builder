@@ -49,7 +49,7 @@ CSV file names are plain; the special-character table names are applied in Deskt
 
 ### Other tables
 
-- `Measures Table`: created with **Enter data**; one hidden placeholder column `Column1`; holds most measures.
+- `Measures Table`: created with **Enter data**; one hidden placeholder column (Desktop named it `Column`); holds most measures.
 - Nine calculated tables, one per DAX table form (see the coverage table, #40).
 - `Metric Selector`: a field parameter created through **Modeling > New parameter > Fields**.
 
@@ -114,7 +114,7 @@ Each row says what the fixture holds for the issue, where to find it, and what t
 | Field parameter | `Metric Selector` with three measures, its auto-created slicer and a chart bound to it. |
 | Hierarchies | `Date[Calendar]` (with description), `Project[Portfolio Tree]` (used in the matrix). |
 | Date table | `Date` marked as date table; auto date/time off. |
-| Format strings | Whole number with separator, 1 and 2 decimals, percent, currency (EUR), custom (`"€"#,0.00" /h"`), date column format, and three measures with no format string. |
+| Format strings | Whole number with separator, 1 and 2 decimals, percent, currency (EUR), custom (`"€"#,0.00" /h"`), date column format, and three measures left without a chosen format (Desktop inferred `0` for `Story Points`, so two have no format string). |
 | Display folders | Measures in `Counts`, `Counts\Status` (nested), `Hours`, `Money`, `Ratios`, `Formatting`; columns in `Effort`, `Duration`. |
 | Column metadata | Summarize-by (none, average), data category, hidden keys. |
 | Chart types | Stacked column, clustered column, clustered bar, line, donut, line and clustered column, matrix, table, slicers, cards, text boxes, image, buttons; optional scatter, treemap, shape. |
@@ -140,7 +140,7 @@ About 45 visuals in total. Saved slicer state on `Task Board`: Priority `High`; 
 - **Find visuals by title text**, never by visual name: Desktop assigns random 20-character IDs. Every visual has a unique title text per page; on text boxes, images, buttons and slicers the title is switched off but the text is still saved.
 - Don't assert on positions, z-order, IDs, lineage tags or the Desktop version strings; they're incidental.
 - Assert on shapes: the property structure, literal encodings and which keys are present or absent. That is what the fixture is for.
-- Tests should skip cleanly while the Desktop output is absent; `tests/test_real_report_fixtures.py` has a placeholder that activates when `04-desktop-shapes.pbip` exists.
+- `tests/test_desktop_shapes_fixture.py` holds the shape tests; they skip cleanly if the Desktop output is absent.
 - When Desktop's output disagrees with an issue's description, the fixture wins: record that on the issue.
 
 ## Rename Snapshot (#55)
@@ -162,12 +162,31 @@ About 45 visuals in total. Saved slicer state on `Task Board`: Priority `High`; 
 - `BUILD-NOTES.md` filled in.
 - Optional: `report-04-desktop-shapes-renamed/` committed alongside.
 
-## Known Uncertainties
+## What The Build Showed
 
-These depend on the Desktop build. The checklist tells the builder to record what happened rather than work around it:
+Built with Power BI Desktop 2.159.1231.0 (October 2026); see `BUILD-NOTES.md`. These are the shapes Desktop wrote. Where an issue's description disagrees, the fixture wins.
 
-- Whether Desktop accepts `/` (in `Q/A Notes`) and `'` (in `Owner's Info`) in table names. Fallbacks: `QA Notes`, `Owners Info`.
-- Whether the Properties pane description box accepts a line break; the fallback is Desktop's TMDL view, which still has Desktop serialize the result.
-- The new card's exact Format pane labels (reference labels well vs Format pane, whether a "Callout area" setting exists).
-- Whether the PBIP/TMDL/PBIR options are still preview toggles or standard in the build used.
-- Whether `PBI_QueryOrder` follows load order.
+| Issue | What Desktop wrote |
+|---|---|
+| #34 Textbox | Run `value` is a plain string. `textStyle` holds plain strings: `fontSize: "24pt"`, `color: "#1f3a5f"` (lowercase hex), `fontWeight: "bold"`, `fontStyle: "italic"`, `fontFamily` only when it isn't the default. A hyperlink run has `url` and an empty `textStyle: {}`; an unformatted run has only `value`. |
+| #38 Descriptions | One `///` line per description line, directly above the object (`table`, `column`, `measure`, `hierarchy`), quotes and `&` unescaped. The Properties pane accepted a pasted two-line description. |
+| #46 Cardinality | Only non-defaults are written: `isActive: false`, `crossFilteringBehavior: bothDirections`, 1:1 as `fromCardinality: one`, \*:\* as `toCardinality: many`. |
+| #41 Data colours | `dataPoint` with `selector.data[].scopeId` = `Comparison` (`ComparisonKind: 0`) against a literal: text `'Completed'`, boolean `true`/`false`, integer `13L`. A measure series uses `selector.metadata: "Measures Table.Estimate Hours"`. Colours are quoted uppercase hex (`'#20A741'`). No entry is written when the colour equals the theme default for that slot, and "Show all" isn't persisted. |
+| #42 Slicers | Each synced slicer carries `syncGroup: {groupName, fieldChanges, filterChanges}`; the hidden copy is an ordinary slicer with `isHidden: true`. Saved selections live in `objects.general[0].properties.filter.filter` (a Version 2 query): `In` for single and multi; `Not(In)` plus `data.isInvertedSelectionMode: true` for "all except"; a date range is `>= start` `And` `< end + 1 day`, with `data.startDate`/`endDate`/`mode: 'Between'`. Single select is `selection.strictSingleSelect: true`. |
+| #35 Filter literals | Measure filters are `Advanced` with a `Comparison`: integer-format `1L`, decimal-format `1.5D`, no-format integer `10L`, no-format decimal `0.95D`, currency (Fixed decimal) `500M`, percent `0.5D`; numeric column `3L`. Top N is `In` over a `subquery` source; relative date is `Between` over `DateSpan`/`DateAdd` of `Now`. |
+| #40 Calculated tables | `GENERATESERIES` gives `Value`; a `{ }` constructor gives `Value1`, `Value2`; `VALUES`/`SUMMARIZE` columns keep the source name with `sourceColumn: Task[Status]`; named columns use `sourceColumn: [Name]`. Enter data is now a calculated partition: `Row("Column", BLANK())`. |
+| #52 TMDL naming | `Q/A Notes` is stored as `Q%2FA Notes.tmdl`; `Owner's Info.tmdl` keeps the apostrophe in the file name and is `'Owner''s Info'` inside. CRLF line endings. `PBI_QueryOrder` follows load order; `ref table` lists imported tables, then created ones, in creation order. |
+| #29 Resources | Spaces become `_` and a numeric suffix is appended: `Team_Logo9246818840412365.png`. Customizing the theme replaced the file with a new suffix. The image visual keeps the original name in `image.name` (`'Team Logo.png'`) and `fit: 'Fit'`. |
+| #33 / #54 Card | Per-series formatting uses `selector.metadata`, visual-wide uses `selector.id: "default"`; `value.fontSize` is `28D`. The reference label is a `referenceLabel` entry whose selector combines a `dataViewWildcard`, the series `metadata`, an `id` and an `order`, plus `referenceLabelLayout`. The card background ended up in `cardCalloutArea` with the default selector. |
+| #49 Theme | `textClasses` keys `label`, `title`, `callout`, `header`; `fontFace` only where the font changed (as a full font stack). |
+| #55 Rename | Desktop rewrites every field expression's `Property`, the DAX references, the field parameter's `NAMEOF` (its label stays `"Total Hours"`), the linguistic metadata and one `nativeQueryRef`. It leaves `queryRef`, the other `nativeQueryRef`s, `displayName` and the card's `selector.metadata` with the old name. Renaming a column adds a `Table.RenameColumns` step to the M query and changes `sourceColumn`. |
+
+Other observations:
+
+- New pages default to 1920 × 1080.
+- Desktop writes `options.preserveNewVisualVisibility` into bookmarks and then warns on reopen that its own schema doesn't allow it.
+- Renaming a slicer sync group after pages are synced moves only the selected slicer and adds new copies to the other pages (the checklist now warns about it).
+
+## Known Uncertainties (Resolved)
+
+All resolved by this build: `/` and `'` were accepted in table names; the Properties pane accepted a two-line description; the new card has a callout area; PBIP, TMDL and PBIR are standard (no preview toggles); `PBI_QueryOrder` follows load order.

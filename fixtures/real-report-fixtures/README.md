@@ -19,7 +19,8 @@ Structure:
   - `BUILD-CHECKLIST.md`
   - `data/`: CSVs plus `Desktop Shapes Theme.json` and `Team Logo.png`
   - `BUILD-NOTES.md`: written by the builder (Desktop version, deviations)
-  - The Desktop output (`04-desktop-shapes.*`) and the rename snapshot `../report-04-desktop-shapes-renamed/` are added once built.
+  - `04-desktop-shapes.*`: the Desktop output, committed as saved
+- `report-04-desktop-shapes-renamed/`: the same project after two renames in Desktop (`Total Hours` to `Hours Logged`, `Person[PersonName]` to `Person Name`); diff it against report-04 to see what Desktop rewrites
 - `manifest.json`: row counts for generated CSV inputs
 
 Regenerate deterministic data and checklists:

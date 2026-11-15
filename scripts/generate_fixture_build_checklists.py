@@ -722,9 +722,9 @@ All other columns stay Text. `Task[CompletedDate]` is blank for unfinished tasks
 ## 4. Measures Table (Enter Data)
 
 1. **Home > Enter data**.
-2. Leave the grid as it is (one column called `Column1`, no values typed).
+2. Leave the grid as it is (one column, no values typed). Current builds name it `Column`; older ones `Column1`.
 3. Name: `Measures Table`. Click **Load**.
-4. In the Data pane, right-click `Measures Table[Column1]` > **Hide in report view**. Keep the column; don't delete it.
+4. In the Data pane, right-click that placeholder column > **Hide in report view**. Keep the column; don't delete it.
 
 ## 5. Relationships
 
@@ -808,7 +808,7 @@ Right-click > **Hide in report view** for:
 - `TaskTag[TaskKey]`, `TaskTag[TagKey]`
 - `Time & Expenses[EntryKey]`, `Time & Expenses[ProjectKey]`, `Time & Expenses[PersonKey]`
 - `Q/A Notes[ProjectKey]`
-- (`Measures Table[Column1]` is already hidden from step 4.)
+- (The `Measures Table` placeholder column is already hidden from step 4.)
 
 ### 7c. Formats, summarization, data category, display folders
 
@@ -875,7 +875,7 @@ Status Colors = DATATABLE ( "Status", STRING, "Hex", STRING, "Sort", INTEGER, { 
 
 Select the home table in the Data pane, **Home > New measure**, paste, press Enter. Then set the format in the **Measure tools** ribbon and the display folder in Model view > Properties (a `\` in a folder name makes a subfolder).
 
-"Untouched" means: don't open the format dropdown for that measure at all. Those measures exist to capture what Desktop writes when no format string is chosen.
+"Untouched" means: don't open the format dropdown for that measure at all. Those measures exist to capture what Desktop writes when no format string is chosen. Desktop still infers one for a plain `SUM` over a whole-number column (`Story Points` gets `0`); that's expected.
 
 ### Home table `Measures Table`
 
@@ -982,7 +982,7 @@ Layout isn't under test: place visuals anywhere without overlaps, except where a
 |---|---|---|
 | `Overview Header` (hidden title) | Text box | See below. Size and position: X 24, Y 16, Width 640, Height 96. |
 | `Overview Link` (hidden title) | Text box | See below. |
-| `Team Logo Image` (hidden title) | Image | **Insert > Image**, pick `Team Logo.png` from the data folder. Size and position: X 1160, Y 16, Width 96, Height 32. Format > Image > Scaling: Fit. |
+| `Team Logo Image` (hidden title) | Image | **Insert > Image**, pick `Team Logo.png` from the data folder. Size and position: X 1160, Y 16, Width 96, Height 32. Format > Image > **Image fit**: Fit (the default in current builds, written as `fit`; older builds call it Scaling). |
 | `Delivery KPIs` | Card (the **new** card, `cardVisual`) | See below. |
 | `Tasks by Status` | Stacked column chart | X-axis `Project[Portfolio]`, Y-axis `Task Count`, Legend `Task[Status]`. Colours below. |
 | `Portfolio Slicer` (hidden title) | Slicer | Field `Project[Portfolio]`. Format > Slicer settings > Options > Style: Vertical list. No selection. Sync in step 13b. |
@@ -993,7 +993,7 @@ Layout isn't under test: place visuals anywhere without overlaps, except where a
 - Paragraph 1, one run: `Delivery Overview`: font **Georgia**, size **24**, **bold**, colour `#1F3A5F`.
 - Press **Enter** for a new paragraph.
 - Paragraph 2, run A: `Portfolio status for ` (ends with a space): Segoe UI, 12, not bold, colour `#605E5C`.
-- Paragraph 2, run B: `2024-2025`: Segoe UI, 12, **bold** and *italic*, colour `#D64550`.
+- Paragraph 2, run B: `2024-2025`: Segoe UI, 12, **bold** and *italic*, colour `#D64550`. Type it straight after run A, **without** pressing Enter: runs A and B must share one paragraph.
 
 **Overview Link** text box: type `Open the project handbook`. Select only `project handbook` and click the link button in the text box toolbar; URL `https://example.com/handbook`. Leave `Open the ` unformatted.
 
@@ -1023,11 +1023,13 @@ Layout isn't under test: place visuals anywhere without overlaps, except where a
 | Not started | `#A0A0A0` |
 | Blocked | `#D64550` |
 
+Desktop writes no colour entry when the colour picked equals the theme's default for that series or category (for example `Actual Hours` `#1F3A5F` and `Engineering` `#118DFF` in step 13d). That's expected; don't pick a different colour.
+
 ### 13b. Page `Task Board`
 
 | Title | Visual | Build |
 |---|---|---|
-| `Portfolio Slicer` (hidden title) | Slicer | Copy the Overview `Portfolio Slicer` (Ctrl+C), go to Task Board, paste (Ctrl+V). When Desktop asks whether to sync, click **Sync**. |
+| `Portfolio Slicer` (hidden title) | Slicer | Set the sync group name on the Overview slicer first (step 1 below), then copy it (Ctrl+C), go to Task Board, paste (Ctrl+V). When Desktop asks whether to sync, click **Sync**. |
 | `Priority Slicer` (hidden title) | Slicer | Field `Project[Priority]`. Vertical list. Format > Slicer settings > Selection: **Single select** on. Selection is set in step 14. |
 | `Status Slicer` (hidden title) | Slicer | Field `Task[Status]`. Vertical list. Selection: Single select off, Multi-select with Ctrl on. Selection is set in step 14. |
 | `Team Slicer` (hidden title) | Slicer | Field `Person[Team]`. Vertical list. Selection: Single select off, **Show "Select all" option** on. Selection is set in step 14. |
@@ -1036,11 +1038,11 @@ Layout isn't under test: place visuals anywhere without overlaps, except where a
 | `People Hours` | Table | Columns: `Person[PersonName]`, `Person[Team]`, `Total Hours`, `Task Count`. Click the `Total Hours` header until it sorts **descending**. Conditional formatting: `Total Hours` > **Data bars**, positive bar colour `#118DFF`. |
 | `Task Board Views Navigator` (hidden title) | Bookmark navigator | Created in step 13h. |
 
-**Sync group** (after pasting the slicer):
+**Sync group**:
 
-1. **View > Sync slicers**. Select the `Portfolio Slicer` on Task Board.
-2. In the pane: `Overview` sync ✓ visible ✓, `Task Board` sync ✓ visible ✓, `Chart Gallery` sync ✓ visible **✗** (Desktop adds a hidden synced slicer there). Leave other pages unticked.
-3. Expand **Advanced options**: group name `PortfolioSync`; tick **Sync field changes to other slicers** and **Sync filter changes to other slicers**.
+1. Before copying: on `Overview`, select `Portfolio Slicer`, open **View > Sync slicers**, expand **Advanced options**: group name `PortfolioSync`; tick **Sync field changes to other slicers** and **Sync filter changes to other slicers**. Then copy and paste it to Task Board as above.
+2. Select the `Portfolio Slicer` on Task Board. In the pane: `Overview` sync ✓ visible ✓, `Task Board` sync ✓ visible ✓, `Chart Gallery` sync ✓ visible **✗** (Desktop adds a hidden synced slicer there). Leave other pages unticked.
+3. Don't rename the group once pages are synced: Desktop moves only the selected slicer to the new group and adds new copies to the other pages, leaving the old ones in the old group. If that happens, delete the old copies (the hidden one through **View > Selection**) so each page has one `Portfolio Slicer`.
 
 **Portfolio Matrix** conditional formatting (Values well > field dropdown > **Conditional formatting**):
 
@@ -1197,7 +1199,7 @@ uv run pbi map -p "$F/04-desktop-shapes.pbip"
 
 ## 16. Rename Snapshot (issue #55)
 
-Do this after step 15, from the saved state.
+Do this after step 15, from the saved state. If the original changes later, delete this folder and make the snapshot again from the new state, so the two folders differ only by the renames.
 
 1. Create `fixtures\real-report-fixtures\report-04-desktop-shapes-renamed\`.
 2. Copy into it: `04-desktop-shapes.pbip`, the `04-desktop-shapes.Report` folder, the `04-desktop-shapes.SemanticModel` folder and `.gitignore`. Don't copy `data`, `SPEC.md`, `BUILD-CHECKLIST.md` or `BUILD-NOTES.md`.
@@ -1206,6 +1208,7 @@ Do this after step 15, from the saved state.
 5. Right-click column `Person[PersonName]` > **Rename** > `Person Name`.
 6. Change nothing else. Save, close.
 7. Run the Zone.Identifier `find` from step 15 on the new folder too.
+8. Check the renames were saved: `grep -rl "Hours Logged" fixtures/real-report-fixtures/report-04-desktop-shapes-renamed` must list files, and `diff -rq` against the original must show differences.
 
 Where the renamed objects are used (no action needed; this is what the snapshot captures):
 
