@@ -324,8 +324,8 @@ def apply_interactions_spec(
             continue
 
         try:
-            source_visual = page_state.find_visual(source)
-            target_visual = page_state.find_visual(target)
+            source_visual = page_state.find_visual_exact(source)
+            target_visual = page_state.find_visual_exact(target)
             set_interaction(page, source_visual.name, target_visual.name, interaction_type)
             result.properties_set += 1
             result.interactions_set.append((page.display_name, source_visual.name, target_visual.name, interaction_type))

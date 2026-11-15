@@ -308,6 +308,8 @@ def diff_cmd(
     from pbi.bookmarks import export_bookmarks
     from pbi.commands.visuals.helpers import flatten_diff_spec, flatten_visual_diff_spec
     from pbi.export import export_visual_spec, export_yaml
+    from pbi.lookup import find_visual_exact
+    from pbi.project import Visual, sanitize_visual_name
 
     proj = get_project(project)
     try:
@@ -387,14 +389,30 @@ def diff_cmd(
             continue
 
         visuals = proj.get_visuals(pg)
-        vis_by_name = {v.name: v for v in visuals}
-        vis_by_id = {v.folder.name: v for v in visuals}
+        vis_by_folder = {v.folder.name: v for v in visuals}
+
+        def _match(identifier: object) -> Visual | None:
+            if not isinstance(identifier, str) or not identifier:
+                return None
+            try:
+                return find_visual_exact(
+                    visuals,
+                    identifier,
+                    page_display_name=pg.display_name,
+                    folder_name=lambda v: v.folder.name,
+                    visual_name=lambda v: v.name,
+                    normalize_name=sanitize_visual_name,
+                )
+            except ValueError:
+                return None
 
         for vis_spec in page_spec.get("visuals", []):
             vis_name = vis_spec.get("name", "")
             vis_id = vis_spec.get("id", "")
 
-            existing = vis_by_id.get(vis_id) or vis_by_name.get(vis_name)
+            # Same matching as apply: `id` matches folder IDs only, `name` matches
+            # a folder ID or the exact name, so a new name shows as new.
+            existing = (vis_by_folder.get(vis_id) if isinstance(vis_id, str) else None) or _match(vis_name)
             if not existing:
                 console.print(f'\n[green]+ New visual:[/green] [cyan]{vis_name}[/cyan] on "{page_name}"')
                 has_diffs = True

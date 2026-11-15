@@ -76,7 +76,7 @@ def apply_visual(
         visual = page_state._by_folder.get(vis_id)
     if vis_name:
         try:
-            visual = visual or page_state.find_visual(vis_name)
+            visual = visual or page_state.find_visual_exact(vis_name)
         except ValueError:
             pass
 
@@ -233,7 +233,7 @@ def apply_visual(
         group_ref = vis_spec.get("group")
         if isinstance(group_ref, str) and group_ref:
             try:
-                group_visual = page_state.find_visual(group_ref)
+                group_visual = page_state.find_visual_exact(group_ref)
             except ValueError as e:
                 result.errors.append(f"{context}: group {e}")
                 return
@@ -444,7 +444,7 @@ def _apply_group_visual(
         visual = page_state._by_folder.get(group_id)
     if visual is None and isinstance(group_name, str) and group_name:
         try:
-            visual = page_state.find_visual(group_name)
+            visual = page_state.find_visual_exact(group_name)
         except ValueError:
             visual = None
 
@@ -504,7 +504,7 @@ def _apply_group_visual(
         group_ref = vis_spec.get("group")
         if isinstance(group_ref, str) and group_ref:
             try:
-                parent = page_state.find_visual(group_ref)
+                parent = page_state.find_visual_exact(group_ref)
             except ValueError as e:
                 result.errors.append(f'Page {page_name}/{visual.name}: group {e}')
                 return

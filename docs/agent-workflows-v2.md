@@ -14,6 +14,8 @@ Two output formats exist:
 
 Name every visual you create (`name:` in YAML or `--name` on create). Unnamed visuals get hex UUIDs which make YAML unreadable and apply non-idempotent. Use short, descriptive names: `revenueChart`, `regionSlicer`, `kpiStrip`.
 
+`apply` and `diff` match a YAML visual to an existing one by `id` (folder name) or exact `name` only, never by partial name, index or type. A name that isn't on the page creates a new visual. Names are stored sanitized (`Sales Chart` becomes `Sales-Chart`), and either spelling matches.
+
 ## Choose Your Approach
 
 | Task | Approach |

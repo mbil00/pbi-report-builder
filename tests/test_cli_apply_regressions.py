@@ -755,3 +755,98 @@ class TestApplyPerformance(unittest.TestCase):
             column_formatting = updated.data["visual"]["objects"]["columnFormatting"]
             self.assertEqual(len(column_formatting), 1)
             self.assertEqual(column_formatting[0]["selector"]["metadata"], "Customers.Region")
+
+
+class ApplyExactVisualMatchTests(unittest.TestCase):
+    """apply and diff match visuals by ID or exact name only (#32)."""
+
+    def _project_with_slicer(self, root: Path) -> Project:
+        project = make_project(root)
+        result = apply_yaml(project, self._yaml([
+            {"name": "slicerRegion", "type": "slicer"},
+            {"name": "Revenue Card", "type": "card"},
+        ]))
+        self.assertEqual(result.errors, [])
+        return project
+
+    def _visuals(self, project: Project) -> dict[str, str]:
+        page = project.find_page("Demo")
+        return {visual.name: visual.visual_type for visual in project.get_visuals(page)}
+
+    def _yaml(self, visuals: list[dict], **page: object) -> str:
+        return yaml.safe_dump(
+            {"version": 1, "pages": [{"name": "Demo", **page, "visuals": visuals}]}, sort_keys=False
+        )
+
+    def test_name_contained_in_existing_name_creates_new_visual(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._project_with_slicer(Path(tmp))
+            result = apply_yaml(project, self._yaml([{"name": "region", "type": "donutChart"}]))
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(result.visuals_created, [("Demo", "region")])
+            visuals = self._visuals(project)
+            self.assertEqual(visuals["slicerRegion"], "slicer")
+            self.assertEqual(visuals["region"], "donutChart")
+
+    def test_index_and_type_names_do_not_match_existing_visuals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._project_with_slicer(Path(tmp))
+            result = apply_yaml(project, self._yaml([
+                {"name": "1", "type": "textbox"},
+                {"name": "card", "type": "card"},
+            ]))
+
+            self.assertEqual(result.errors, [])
+            visuals = self._visuals(project)
+            self.assertEqual(visuals["slicerRegion"], "slicer")
+            self.assertEqual(len(visuals), 4)
+
+    def test_reapplying_a_spaced_name_updates_the_sanitized_visual(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._project_with_slicer(Path(tmp))
+            spec = self._yaml([{"name": "Sales Chart", "type": "clusteredColumnChart"}])
+            apply_yaml(project, spec)
+            result = apply_yaml(project, spec)
+
+            self.assertEqual(result.errors, [])
+            self.assertEqual(result.visuals_created, [])
+            self.assertEqual(sorted(self._visuals(project)), ["Revenue-Card", "Sales-Chart", "slicerRegion"])
+
+    def test_interaction_with_partial_name_is_an_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._project_with_slicer(Path(tmp))
+            result = apply_yaml(project, self._yaml(
+                [], interactions=[{"source": "Region", "target": "Revenue-Card", "type": "NoFilter"}],
+            ))
+
+            self.assertEqual(len(result.errors), 1)
+            self.assertIn('Visual "Region" not found', result.errors[0])
+            self.assertIn('"slicerRegion"', result.errors[0])
+
+    def test_diff_shows_contained_name_as_new_visual(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project_with_slicer(root)
+            spec = root / "spec.yaml"
+            spec.write_text(self._yaml([{"name": "region", "type": "donutChart"}]), encoding="utf-8")
+
+            result = CliRunner().invoke(app, ["diff", str(spec), "-p", str(root)])
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("New visual: region", result.output)
+
+    def test_diff_matches_id_against_folder_ids_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project_with_slicer(root)
+            spec_yaml = self._yaml([{"id": "Revenue-Card", "name": "profitCard", "type": "card"}])
+            spec = root / "spec.yaml"
+            spec.write_text(spec_yaml, encoding="utf-8")
+
+            result = CliRunner().invoke(app, ["diff", str(spec), "-p", str(root)])
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("New visual: profitCard", result.output)
+            # apply agrees: the id is not a folder, so profitCard is created.
+            self.assertEqual(apply_yaml(project, spec_yaml).visuals_created, [("Demo", "profitCard")])

@@ -121,3 +121,41 @@ def find_visual_by_identifier(
         f'Visual "{raw_identifier}" not found on "{page_display_name}". '
         f"Available: {available}"
     )
+
+
+def find_visual_exact(
+    visuals: Sequence[T],
+    identifier: str,
+    *,
+    page_display_name: str,
+    folder_name: Callable[[T], str],
+    visual_name: Callable[[T], str],
+    normalize_name: Callable[[str], str] | None = None,
+) -> T:
+    """Resolve a visual by folder ID or exact name, never by partial name, index or type.
+
+    Declarative apply and diff use this: a name that isn't found means "create",
+    so ``region`` must never resolve to an existing ``slicerRegion``.
+    ``normalize_name`` maps a spec name to the stored form (apply sanitizes names
+    when it creates visuals), so re-applying "Sales Chart" finds "Sales-Chart".
+    """
+    for visual in visuals:
+        if folder_name(visual) == identifier:
+            return visual
+    candidates = [identifier]
+    if normalize_name is not None:
+        normalized = normalize_name(identifier)
+        if normalized != identifier:
+            candidates.append(normalized)
+    for candidate in candidates:
+        for visual in visuals:
+            if visual_name(visual) == candidate:
+                return visual
+
+    names = [visual_name(visual) for visual in visuals]
+    close = difflib.get_close_matches(identifier, names, n=3, cutoff=0.5)
+    message = f'Visual "{identifier}" not found on "{page_display_name}".'
+    if close:
+        suggestion = ", ".join(f'"{name}"' for name in close)
+        message += f" Did you mean: {suggestion}?"
+    raise ValueError(message)

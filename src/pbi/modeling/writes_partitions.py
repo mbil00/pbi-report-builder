@@ -14,6 +14,7 @@ from .writes import (
     _get_tmdl_lines,
     _indent_level,
     _prepare_inserted_block,
+    _description_start,
     _starts_new_table_block,
 )
 
@@ -108,7 +109,7 @@ def delete_partition(
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
     lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_partition_block(lines, partition.name)
-    del lines[start:end]
+    del lines[_description_start(lines, start):end]
     _commit_tmdl_lines(table.definition_path, _collapse_blank_lines(lines), dry_run=dry_run, session=edit_session)
     return table.name, partition.name, True
 
