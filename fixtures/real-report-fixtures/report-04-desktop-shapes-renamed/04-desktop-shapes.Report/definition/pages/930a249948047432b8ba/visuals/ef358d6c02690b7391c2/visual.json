@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
-  "name": "3533a1a239c897002677",
+  "name": "ef358d6c02690b7391c2",
   "position": {
-    "x": 24,
-    "y": 677,
-    "z": 4,
-    "height": 236,
-    "width": 731,
-    "tabOrder": 4
+    "x": 0,
+    "y": 744.75336322869953,
+    "z": 7,
+    "height": 285.56053811659194,
+    "width": 644.304932735426,
+    "tabOrder": 6
   },
   "visual": {
     "visualType": "slicer",
@@ -90,10 +90,28 @@
       ]
     },
     "syncGroup": {
-      "groupName": "Portfolio",
+      "groupName": "PortfolioSync",
       "fieldChanges": true,
       "filterChanges": true
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "ee20d5e2ab37793b5c0a",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Project"
+              }
+            },
+            "Property": "Portfolio"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }

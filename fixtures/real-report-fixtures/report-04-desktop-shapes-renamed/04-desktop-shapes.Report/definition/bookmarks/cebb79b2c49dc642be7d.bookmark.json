@@ -119,61 +119,6 @@
               ]
             }
           },
-          "3533a1a239c897002677": {
-            "filters": {
-              "byExpr": [
-                {
-                  "name": "66d7bab827ed549b49c2",
-                  "type": "Categorical",
-                  "expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "Project"
-                        }
-                      },
-                      "Property": "Portfolio"
-                    }
-                  },
-                  "howCreated": 0
-                }
-              ]
-            },
-            "singleVisual": {
-              "visualType": "slicer",
-              "objects": {
-                "merge": {
-                  "data": [
-                    {
-                      "properties": {
-                        "mode": {
-                          "expr": {
-                            "Literal": {
-                              "Value": "'Basic'"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              },
-              "activeProjections": {
-                "Values": [
-                  {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "Project"
-                        }
-                      },
-                      "Property": "Portfolio"
-                    }
-                  }
-                ]
-              }
-            }
-          },
           "b72e37d81eb265e4c065": {
             "filters": {
               "byExpr": [

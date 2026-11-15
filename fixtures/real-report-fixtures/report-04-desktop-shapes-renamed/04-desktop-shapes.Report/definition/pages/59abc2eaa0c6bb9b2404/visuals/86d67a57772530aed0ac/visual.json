@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.14.0/schema.json",
-  "name": "f6405ee34371a57055d6",
+  "name": "86d67a57772530aed0ac",
   "position": {
     "x": 9.5681063122923575,
     "y": 15.946843853820598,
-    "z": 0,
+    "z": 8,
     "height": 188.17275747508305,
     "width": 213.687707641196,
-    "tabOrder": 0
+    "tabOrder": 8
   },
   "visual": {
     "visualType": "slicer",
@@ -90,7 +90,7 @@
       ]
     },
     "syncGroup": {
-      "groupName": "Portfolio",
+      "groupName": "PortfolioSync",
       "fieldChanges": true,
       "filterChanges": true
     },
