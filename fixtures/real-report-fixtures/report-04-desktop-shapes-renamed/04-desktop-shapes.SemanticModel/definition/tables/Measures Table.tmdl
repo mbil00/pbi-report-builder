@@ -86,7 +86,7 @@ table 'Measures Table'
 		lineageTag: fb78fb34-fa15-41af-8368-375ce4c7d3b1
 
 	measure 'Avg Hourly Rate' = AVERAGE ( Person[Hourly Rate] )
-		formatString: " ""€""#,0.00"" /h"""
+		formatString: """€""#,0.00"" /h"""
 		displayFolder: Money
 		lineageTag: c972ca34-5182-407a-8d2f-2a133b1857d9
 

@@ -90,7 +90,7 @@
       ]
     },
     "syncGroup": {
-      "groupName": "Portfolio",
+      "groupName": "PortfolioSync",
       "fieldChanges": true,
       "filterChanges": true
     },

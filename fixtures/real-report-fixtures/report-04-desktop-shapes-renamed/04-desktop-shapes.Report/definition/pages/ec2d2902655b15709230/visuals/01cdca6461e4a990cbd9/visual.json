@@ -6,7 +6,8 @@
     "y": 901.99887069452291,
     "z": 7,
     "height": 50,
-    "width": 600
+    "width": 600,
+    "tabOrder": 7000
   },
   "visual": {
     "visualType": "bookmarkNavigator",

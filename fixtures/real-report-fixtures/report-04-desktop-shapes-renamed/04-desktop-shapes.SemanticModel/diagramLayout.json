@@ -4,7 +4,7 @@
     {
       "ordinal": 0,
       "scrollPosition": {
-        "x": 0,
+        "x": 60.233073999999846,
         "y": 0
       },
       "nodes": [
@@ -250,6 +250,19 @@
           "nodeIndex": "Status Colors",
           "size": {
             "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 5680,
+            "y": 74
+          },
+          "nodeIndex": "Metric Selector",
+          "nodeLineageTag": "7b74ad1e-5040-4047-a161-70f0f2042432",
+          "size": {
+            "height": 152,
             "width": 234
           },
           "zIndex": 0
