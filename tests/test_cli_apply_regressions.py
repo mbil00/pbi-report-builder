@@ -835,3 +835,18 @@ class ApplyExactVisualMatchTests(unittest.TestCase):
 
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertIn("New visual: region", result.output)
+
+    def test_diff_matches_id_against_folder_ids_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project_with_slicer(root)
+            spec_yaml = self._yaml([{"id": "Revenue-Card", "name": "profitCard", "type": "card"}])
+            spec = root / "spec.yaml"
+            spec.write_text(spec_yaml, encoding="utf-8")
+
+            result = CliRunner().invoke(app, ["diff", str(spec), "-p", str(root)])
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("New visual: profitCard", result.output)
+            # apply agrees: the id is not a folder, so profitCard is created.
+            self.assertEqual(apply_yaml(project, spec_yaml).visuals_created, [("Demo", "profitCard")])

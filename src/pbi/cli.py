@@ -389,6 +389,7 @@ def diff_cmd(
             continue
 
         visuals = proj.get_visuals(pg)
+        vis_by_folder = {v.folder.name: v for v in visuals}
 
         def _match(identifier: object) -> Visual | None:
             if not isinstance(identifier, str) or not identifier:
@@ -409,8 +410,9 @@ def diff_cmd(
             vis_name = vis_spec.get("name", "")
             vis_id = vis_spec.get("id", "")
 
-            # Same matching as apply: folder ID or exact name, so a new name shows as new.
-            existing = _match(vis_id) or _match(vis_name)
+            # Same matching as apply: `id` matches folder IDs only, `name` matches
+            # a folder ID or the exact name, so a new name shows as new.
+            existing = (vis_by_folder.get(vis_id) if isinstance(vis_id, str) else None) or _match(vis_name)
             if not existing:
                 console.print(f'\n[green]+ New visual:[/green] [cyan]{vis_name}[/cyan] on "{page_name}"')
                 has_diffs = True
