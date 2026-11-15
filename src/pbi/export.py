@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from pbi.bookmarks import export_bookmarks
+from pbi.data_colors import export_series_colors
 from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
@@ -250,6 +251,11 @@ def _export_visual(
                 },
             )
         )
+
+    # Fixed colours per category value (#41)
+    series_colors, _taken = export_series_colors(visual.data)
+    if series_colors:
+        result["seriesColors"] = series_colors
 
     _normalize_exported_visual_page_refs(result, page_lookup)
 

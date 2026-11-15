@@ -349,6 +349,10 @@ def export_object_properties(
         object_result: dict[str, Any] = {}
         for entry in entries:
             selector = entry.get("selector", {})
+            if _has_data_selector(entry):
+                # Value-scoped entries have no scalar key; dataPoint fills go to
+                # seriesColors and the rest stay in the pbir passthrough.
+                continue
             selector_name = selector.get("id") or selector.get("metadata")
             selector_id = selector.get("id")
             for prop_name, raw_value in entry.get("properties", {}).items():
@@ -457,6 +461,8 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
                     objects["general"] = [e for e in general_entries if e]
                     if not objects["general"]:
                         objects.pop("general", None)
+            if "seriesColors" in exported_visual:
+                _prune_series_color_entries(objects)
             _prune_exported_object_groups(
                 objects,
                 exported_visual,
@@ -522,10 +528,15 @@ def _prune_exported_object_groups(
     objects_path: str,
     root_aliases: Mapping[str, str],
 ) -> None:
-    """Drop raw object groups that are fully represented by scalar YAML."""
+    """Drop raw object entries that are fully represented by scalar YAML.
+
+    Entries with a data (value-scoped) selector have no scalar form, so they are
+    kept even when the rest of their group is represented.
+    """
     for obj_key in list(objects.keys()):
+        entries = objects[obj_key]
         encoded = export_object_properties(
-            {obj_key: objects[obj_key]},
+            {obj_key: entries},
             VISUAL_PROPERTIES,
             objects_path=objects_path,
             root_aliases=root_aliases,
@@ -533,7 +544,34 @@ def _prune_exported_object_groups(
         if not encoded:
             continue
         if _exported_entries_are_scalar(encoded) and _encoded_entries_present(exported_visual, encoded):
-            objects.pop(obj_key, None)
+            scoped = [entry for entry in entries if _has_data_selector(entry)] if isinstance(entries, list) else []
+            if scoped:
+                objects[obj_key] = scoped
+            else:
+                objects.pop(obj_key, None)
+
+
+def _has_data_selector(entry: Any) -> bool:
+    """Return True for an object entry scoped to data values (``selector.data``)."""
+    if not isinstance(entry, Mapping):
+        return False
+    selector = entry.get("selector")
+    return isinstance(selector, Mapping) and "data" in selector
+
+
+def _prune_series_color_entries(objects: dict[str, Any]) -> None:
+    """Drop the dataPoint entries that the exported seriesColors represents."""
+    from pbi.data_colors import export_series_colors
+
+    _colors, taken = export_series_colors({"visual": {"objects": objects}})
+    if not taken:
+        return
+    taken_set = set(taken)
+    remaining = [entry for index, entry in enumerate(objects["dataPoint"]) if index not in taken_set]
+    if remaining:
+        objects["dataPoint"] = remaining
+    else:
+        objects.pop("dataPoint", None)
 
 
 def _bindings_have_widths(exported_visual: Mapping[str, Any]) -> bool:

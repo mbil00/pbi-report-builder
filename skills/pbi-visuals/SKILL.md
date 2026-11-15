@@ -5,7 +5,7 @@ description: "Power BI report visual design and styling with the `pbi` CLI — u
 
 # Power BI Visual Design & Styling
 
-> Requires `pbi` 0.10.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
+> Requires `pbi` 0.11.0 or newer. Check with `pbi --version`; if it is older, commands described here may be missing, so update the CLI first.
 
 You are designing Power BI report pages using the `pbi` CLI. This skill covers the YAML-first declarative workflow for building, styling, and laying out professional report pages.
 
@@ -320,6 +320,29 @@ conditionalFormatting:
       color: "#FFEBEE"
     else: "#FFFFFF"
 ```
+
+## Fixed Data Colours in YAML
+
+Pin a colour to a category or legend value, or to a measure series, with `seriesColors` (keyed by field):
+
+```yaml
+- name: statusChart
+  type: columnChart
+  bindings:
+    Category: Project.Portfolio
+    Series: Task.Status
+    Y: Measures Table.Task Count (measure)
+  seriesColors:
+    Task.Status:                      # column: value -> colour
+      Completed: "#20A741"
+      In progress: "#F2A900"
+      Not started: null               # null removes a pinned colour
+    Measures Table.Estimate Hours: "#A0C4FF"   # measure series: one colour
+```
+
+- Values are typed by the column: text, `true`/`false` for boolean columns, whole numbers for integer columns. Other column types (decimal, date) are rejected; use `pbir:` for those.
+- Colours must be `#RRGGBB`. Unlisted values keep their theme colour; entries are merged, never wiped.
+- `pbi export` writes value colours back as `seriesColors`; measure-series colours export as `chart:dataPoint.fill [Table.Measure]`, which `apply` also accepts.
 
 ## Interactions in YAML
 

@@ -181,6 +181,7 @@ The apply engine supports these property syntaxes in YAML:
 - **interactions:** page-level `interactions:` list with source/target/type
 - **bookmarks:** top-level `bookmarks:` list with name/page/hide
 - **conditionalFormatting:** `mode: measure`, `mode: gradient` with min/mid/max stops, or `mode: rules` with `rules:` list of `{if, color}` and optional `else:`
+- **seriesColors:** fixed data colours keyed by field — a column maps value → `#RRGGBB` (text, boolean and whole-number columns; `null` removes), a measure takes one colour. Written as `dataPoint` entries with Desktop's `scopeId` / `metadata` selectors; `export` reads value colours back
 - **filters:** `type: topN` (count/by/direction), `type: range` (min/max), categorical/include/exclude, `type: advanced` with `operator:` (contains, starts-with, is, is-not, greater-than, less-than, is-blank, is-not-blank, is-empty, is-not-empty, and negated variants). Compound: `operator2:`/`value2:`/`logic: and|or`. `type: relative` with `operator` (InLast/InThis/InNext), `count`, `unit` (Days/Weeks/Months/Years/Minutes/Hours/etc.), and optional `includeToday`
 - **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
 - **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
