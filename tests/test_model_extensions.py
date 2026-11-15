@@ -16,8 +16,11 @@ from pbi.model import (
     create_calculated_column,
     create_source_column,
     create_hierarchy,
+    create_measure,
     create_relationship,
+    delete_calculated_column,
     delete_hierarchy,
+    delete_measure,
     delete_relationship,
     mark_as_date_table,
     set_member_property,
@@ -1706,6 +1709,110 @@ table Date
 
 
 # ── Phase 4: Model Export ───────────────────────────────────────
+
+
+class DescriptionPreservationTests(unittest.TestCase):
+    """`///` descriptions stay with their own object on every block edit (#56)."""
+
+    SALES = """
+/// Sales facts
+table Sales
+\tcolumn Amount
+\t\tdataType: int64
+\t\tlineageTag: c-1
+\t\tsummarizeBy: sum
+\t\tsourceColumn: Amount
+
+\t/// Doubled amount
+\tcolumn Margin = Sales[Amount] * 2
+\t\tdataType: int64
+\t\tlineageTag: c-2
+\t\tsummarizeBy: sum
+
+\t/// Units sold
+\tmeasure 'Total Quantity' = SUM(Sales[Amount])
+\t\tlineageTag: m-1
+
+\t/// Number of orders
+\t/// counted "once" per order & line
+\tmeasure 'Order Count' = COUNTROWS(Sales)
+\t\tlineageTag: m-2
+
+\t/// Drill path
+\thierarchy Path
+\t\tlineageTag: h-1
+
+\t\tlevel Amount
+\t\t\tlineageTag: l-1
+\t\t\tcolumn: Amount
+"""
+
+    def _project(self, tmp: str) -> Path:
+        root = Path(tmp)
+        _make_project(root)
+        _write_table(root, "Sales.tmdl", self.SALES)
+        return root
+
+    def _text(self, root: Path) -> str:
+        return (root / "Sample.SemanticModel" / "definition" / "tables" / "Sales.tmdl").read_text(encoding="utf-8")
+
+    def test_delete_measure_takes_its_own_description_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._project(tmp)
+            delete_measure(root, "Sales", "Total Quantity")
+            text = self._text(root)
+            self.assertNotIn("Units sold", text)
+            self.assertIn(
+                "\tsummarizeBy: sum\n\n\t/// Number of orders\n\t/// counted \"once\" per order & line\n"
+                "\tmeasure 'Order Count'",
+                text,
+            )
+
+    def test_delete_measure_keeps_next_objects_description(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._project(tmp)
+            delete_measure(root, "Sales", "Order Count")
+            text = self._text(root)
+            self.assertNotIn("Number of orders", text)
+            self.assertIn("\t/// Units sold\n\tmeasure 'Total Quantity'", text)
+            self.assertIn("\t\tlineageTag: m-1\n\n\t/// Drill path\n\thierarchy Path", text)
+
+    def test_delete_calculated_column_keeps_next_description(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._project(tmp)
+            delete_calculated_column(root, "Sales", "Margin")
+            text = self._text(root)
+            self.assertNotIn("Doubled amount", text)
+            self.assertIn("\t\tsourceColumn: Amount\n\n\t/// Units sold\n\tmeasure 'Total Quantity'", text)
+
+    def test_delete_hierarchy_takes_its_description(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._project(tmp)
+            delete_hierarchy(root, "Sales", "Path")
+            text = self._text(root)
+            self.assertNotIn("Drill path", text)
+            self.assertTrue(text.endswith("\t\tlineageTag: m-2\n"), repr(text[-60:]))
+
+    def test_set_property_inserts_inside_own_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._project(tmp)
+            set_member_property(root, "Sales.Total Quantity", "displayFolder", "Counts")
+            text = self._text(root)
+            self.assertIn(
+                "\tmeasure 'Total Quantity' = SUM(Sales[Amount])\n\t\tlineageTag: m-1\n\t\tdisplayFolder: Counts\n"
+                "\n\t/// Number of orders\n",
+                text,
+            )
+
+    def test_create_measure_lands_before_next_description(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._project(tmp)
+            create_measure(root, "Sales", "Avg Amount", "AVERAGE(Sales[Amount])")
+            text = self._text(root)
+            new_at = text.index("measure 'Avg Amount'")
+            self.assertLess(text.index("\tmeasure 'Order Count'"), new_at)
+            self.assertLess(new_at, text.index("/// Drill path"))
+            self.assertIn("\t/// Drill path\n\thierarchy Path", text)
 
 
 class ModelExportTests(unittest.TestCase):

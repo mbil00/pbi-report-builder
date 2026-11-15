@@ -15,6 +15,7 @@ from .writes import (
     _get_tmdl_lines,
     _indent_level,
     _prepare_inserted_block,
+    _delete_block,
     _starts_new_table_block,
     _find_member_block,
 )
@@ -154,11 +155,7 @@ def delete_hierarchy(
         raise ValueError(f'Hierarchy "{hierarchy_name}" not found in TMDL.')
 
     start, end = result
-    del lines[start:end]
-    while start < len(lines) and not lines[start].strip():
-        del lines[start]
-    if start > 0 and start < len(lines) and lines[start - 1].strip():
-        lines.insert(start, "")
+    _delete_block(lines, start, end)
 
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, hierarchy_name, True

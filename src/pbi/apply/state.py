@@ -8,8 +8,8 @@ from typing import Any
 
 from pbi.apply.rollback import RollbackJournal
 from pbi.apply.session import PbirWriteSession
-from pbi.lookup import find_visual_by_identifier
-from pbi.project import Page, Project, Visual, reset_json_pretty, set_json_pretty
+from pbi.lookup import find_visual_by_identifier, find_visual_exact
+from pbi.project import Page, Project, Visual, reset_json_pretty, sanitize_visual_name, set_json_pretty
 
 
 @dataclass
@@ -429,6 +429,17 @@ class PageVisualState:
     def refresh(self) -> None:
         sort_visuals(self.visuals)
         self._reindex()
+
+    def find_visual_exact(self, identifier: str) -> Visual:
+        """Match by folder ID or exact (or sanitized) name only; apply treats a miss as "create"."""
+        return find_visual_exact(
+            self.visuals,
+            identifier,
+            page_display_name=self.page.display_name,
+            folder_name=lambda visual: visual.folder.name,
+            visual_name=lambda visual: visual.name,
+            normalize_name=sanitize_visual_name,
+        )
 
     def find_visual(self, identifier: str) -> Visual:
         return find_visual_by_identifier(

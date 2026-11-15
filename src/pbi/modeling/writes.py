@@ -612,11 +612,7 @@ def delete_measure(
 
     lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_member_block(lines, member_kind="measure", member_name=measure.name)
-    del lines[start:end]
-    while start < len(lines) and not lines[start].strip():
-        del lines[start]
-    if start > 0 and start < len(lines) and lines[start - 1].strip():
-        lines.insert(start, "")
+    _delete_block(lines, start, end)
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, measure.name, True
 
@@ -755,11 +751,7 @@ def delete_calculated_column(
 
     lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_member_block(lines, member_kind="column", member_name=column.name)
-    del lines[start:end]
-    while start < len(lines) and not lines[start].strip():
-        del lines[start]
-    if start > 0 and start < len(lines) and lines[start - 1].strip():
-        lines.insert(start, "")
+    _delete_block(lines, start, end)
     _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
     return table.name, column.name, True
 
@@ -922,8 +914,35 @@ def _matches_member_line(
 
 
 def _starts_new_table_block(stripped: str) -> bool:
-    """Return True when a stripped line starts a new table-level block."""
-    return stripped.startswith(("column ", "calculatedColumn ", "measure ", "partition ", "hierarchy ", "annotation "))
+    """Return True when a stripped line starts a new table-level block.
+
+    A ``///`` description belongs to the object declared below it, so at table
+    level it starts that object's block rather than ending the previous one.
+    """
+    return stripped.startswith(
+        ("///", "column ", "calculatedColumn ", "measure ", "partition ", "hierarchy ", "annotation ")
+    )
+
+
+def _description_start(lines: list[str], start: int) -> int:
+    """Return the first line of the ``///`` description directly above ``start``."""
+    indent = _indent_level(lines[start])
+    while start > 0 and lines[start - 1].strip().startswith("///") and _indent_level(lines[start - 1]) == indent:
+        start -= 1
+    return start
+
+
+def _delete_block(lines: list[str], start: int, end: int) -> None:
+    """Delete a table-level block with its description and tidy the blank lines around it."""
+    start = _description_start(lines, start)
+    del lines[start:end]
+    while start < len(lines) and not lines[start].strip():
+        del lines[start]
+    if start == len(lines):
+        while lines and not lines[-1].strip():
+            lines.pop()
+    elif start > 0 and lines[start - 1].strip():
+        lines.insert(start, "")
 
 
 def _block_property_insert_index(lines: list[str], start: int, end: int) -> int:
