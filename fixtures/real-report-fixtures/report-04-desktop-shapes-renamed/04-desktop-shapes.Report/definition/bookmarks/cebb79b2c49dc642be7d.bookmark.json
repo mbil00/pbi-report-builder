@@ -77,7 +77,7 @@
                           "Entity": "Measures Table"
                         }
                       },
-                      "Property": "Total Hours"
+                      "Property": "Hours Logged"
                     }
                   },
                   "howCreated": 0

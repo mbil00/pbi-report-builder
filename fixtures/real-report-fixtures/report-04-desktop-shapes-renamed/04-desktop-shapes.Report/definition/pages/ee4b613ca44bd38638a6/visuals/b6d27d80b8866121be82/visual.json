@@ -23,7 +23,7 @@
                       "Entity": "Person"
                     }
                   },
-                  "Property": "PersonName"
+                  "Property": "Person Name"
                 }
               },
               "queryRef": "Person.PersonName",
@@ -42,7 +42,7 @@
                       "Entity": "Measures Table"
                     }
                   },
-                  "Property": "Total Hours"
+                  "Property": "Hours Logged"
                 }
               },
               "queryRef": "Measures Table.Total Hours",
@@ -61,7 +61,7 @@
                     "Entity": "Person"
                   }
                 },
-                "Property": "PersonName"
+                "Property": "Person Name"
               }
             },
             "direction": "Ascending"
@@ -110,7 +110,7 @@
                 "Entity": "Person"
               }
             },
-            "Property": "PersonName"
+            "Property": "Person Name"
           }
         },
         "type": "TopN",
@@ -143,7 +143,7 @@
                               "Source": "p"
                             }
                           },
-                          "Property": "PersonName"
+                          "Property": "Person Name"
                         },
                         "Name": "field"
                       }
@@ -158,7 +158,7 @@
                                 "Source": "m"
                               }
                             },
-                            "Property": "Total Hours"
+                            "Property": "Hours Logged"
                           }
                         }
                       }
@@ -187,7 +187,7 @@
                             "Source": "p"
                           }
                         },
-                        "Property": "PersonName"
+                        "Property": "Person Name"
                       }
                     }
                   ],
@@ -211,7 +211,7 @@
                 "Entity": "Measures Table"
               }
             },
-            "Property": "Total Hours"
+            "Property": "Hours Logged"
           }
         },
         "type": "Advanced"

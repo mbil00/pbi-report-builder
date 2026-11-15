@@ -23,7 +23,7 @@
                       "Entity": "Person"
                     }
                   },
-                  "Property": "PersonName"
+                  "Property": "Person Name"
                 }
               },
               "queryRef": "Person.PersonName",
@@ -51,7 +51,7 @@
                       "Entity": "Measures Table"
                     }
                   },
-                  "Property": "Total Hours"
+                  "Property": "Hours Logged"
                 }
               },
               "queryRef": "Measures Table.Total Hours",
@@ -84,7 +84,7 @@
                     "Entity": "Measures Table"
                   }
                 },
-                "Property": "Total Hours"
+                "Property": "Hours Logged"
               }
             },
             "direction": "Descending"
@@ -194,7 +194,7 @@
                 "Entity": "Person"
               }
             },
-            "Property": "PersonName"
+            "Property": "Person Name"
           }
         },
         "type": "Categorical"
@@ -222,7 +222,7 @@
                 "Entity": "Measures Table"
               }
             },
-            "Property": "Total Hours"
+            "Property": "Hours Logged"
           }
         },
         "type": "Advanced"

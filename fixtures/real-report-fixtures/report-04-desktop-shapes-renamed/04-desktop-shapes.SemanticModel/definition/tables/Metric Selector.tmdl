@@ -40,7 +40,7 @@ table 'Metric Selector'
 		mode: import
 		source =
 				{
-				    ("Total Hours", NAMEOF('Measures Table'[Total Hours]), 0),
+				    ("Total Hours", NAMEOF('Measures Table'[Hours Logged]), 0),
 				    ("Task Count", NAMEOF('Measures Table'[Task Count]), 1),
 				    ("Expense Amount", NAMEOF('Measures Table'[Expense Amount]), 2)
 				}

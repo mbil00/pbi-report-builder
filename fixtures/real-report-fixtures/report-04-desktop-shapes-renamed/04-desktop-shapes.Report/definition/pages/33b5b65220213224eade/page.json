@@ -16,7 +16,7 @@
                 "Entity": "Person"
               }
             },
-            "Property": "PersonName"
+            "Property": "Person Name"
           }
         },
         "type": "Categorical",
@@ -40,7 +40,7 @@
                 "Entity": "Person"
               }
             },
-            "Property": "PersonName"
+            "Property": "Person Name"
           }
         }
       }

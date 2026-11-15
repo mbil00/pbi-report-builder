@@ -590,7 +590,7 @@
                           "Entity": "Person"
                         }
                       },
-                      "Property": "PersonName"
+                      "Property": "Person Name"
                     }
                   },
                   "howCreated": 0
@@ -620,7 +620,7 @@
                           "Entity": "Measures Table"
                         }
                       },
-                      "Property": "Total Hours"
+                      "Property": "Hours Logged"
                     }
                   },
                   "howCreated": 0
@@ -655,7 +655,7 @@
                           "Entity": "Measures Table"
                         }
                       },
-                      "Property": "Total Hours"
+                      "Property": "Hours Logged"
                     }
                   }
                 }

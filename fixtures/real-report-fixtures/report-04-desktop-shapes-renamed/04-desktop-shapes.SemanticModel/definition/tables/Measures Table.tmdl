@@ -51,12 +51,12 @@ table 'Measures Table'
 		displayFolder: Ratios
 		lineageTag: bf1f719b-1737-4b3c-ae77-58f68487acd0
 
-	measure 'Total Hours' = SUM ( 'Time & Expenses'[Hours] )
+	measure 'Hours Logged' = SUM ( 'Time & Expenses'[Hours] )
 		formatString: #,0.0
 		displayFolder: Hours
 		lineageTag: ac67545b-d4f3-4849-9f81-9ed748b6764d
 
-	measure 'Avg Hours per Person' = DIVIDE ( [Total Hours], DISTINCTCOUNT ( 'Time & Expenses'[PersonKey] ) )
+	measure 'Avg Hours per Person' = DIVIDE ( [Hours Logged], DISTINCTCOUNT ( 'Time & Expenses'[PersonKey] ) )
 		formatString: 0.0
 		displayFolder: Hours
 		lineageTag: 6124c795-220b-4497-bbc7-15f1aeb4c314

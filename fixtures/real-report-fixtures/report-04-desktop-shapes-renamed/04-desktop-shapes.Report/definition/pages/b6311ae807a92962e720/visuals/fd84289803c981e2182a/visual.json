@@ -42,7 +42,7 @@
                       "Entity": "Measures Table"
                     }
                   },
-                  "Property": "Total Hours"
+                  "Property": "Hours Logged"
                 }
               },
               "queryRef": "Measures Table.Total Hours",
@@ -108,7 +108,7 @@
                     "Entity": "Measures Table"
                   }
                 },
-                "Property": "Total Hours"
+                "Property": "Hours Logged"
               }
             },
             "direction": "Descending"
@@ -159,7 +159,7 @@
                 "Entity": "Measures Table"
               }
             },
-            "Property": "Total Hours"
+            "Property": "Hours Logged"
           }
         },
         "type": "Advanced"

@@ -45,17 +45,22 @@
             },
             {
               "field": {
-                "Column": {
+                "Aggregation": {
                   "Expression": {
-                    "SourceRef": {
-                      "Entity": "Q/A Notes"
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Q/A Notes"
+                        }
+                      },
+                      "Property": "QAScore"
                     }
                   },
-                  "Property": "QAScore"
+                  "Function": 1
                 }
               },
               "queryRef": "Q/A Notes.QAScore",
-              "nativeQueryRef": "QAScore"
+              "nativeQueryRef": "Average of QAScore"
             },
             {
               "field": {
@@ -130,20 +135,6 @@
         "type": "Categorical"
       },
       {
-        "name": "bb8ca776506083e2a8db",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "Q/A Notes"
-              }
-            },
-            "Property": "QAScore"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
         "name": "421824cc169472d998a4",
         "field": {
           "Column": {
@@ -156,6 +147,25 @@
           }
         },
         "type": "Categorical"
+      },
+      {
+        "name": "f54b0c2667b755009c03",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Q/A Notes"
+                  }
+                },
+                "Property": "QAScore"
+              }
+            },
+            "Function": 1
+          }
+        },
+        "type": "Advanced"
       }
     ]
   }

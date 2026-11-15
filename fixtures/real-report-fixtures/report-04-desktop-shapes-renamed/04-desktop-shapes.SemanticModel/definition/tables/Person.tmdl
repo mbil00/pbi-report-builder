@@ -13,11 +13,11 @@ table Person
 
 		annotation SummarizationSetBy = Automatic
 
-	column PersonName
+	column 'Person Name'
 		dataType: string
 		lineageTag: 65a73f06-30c8-44eb-9893-851cf1c5fb18
 		summarizeBy: none
-		sourceColumn: PersonName
+		sourceColumn: Person Name
 
 		annotation SummarizationSetBy = Automatic
 
@@ -71,9 +71,10 @@ table Person
 				let
 				    Source = Csv.Document(File.Contents("C:\WSL\report-04-desktop-shapes\data\Person.csv"),[Delimiter=",", Columns=6, Encoding=1252, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"PersonKey", Int64.Type}, {"PersonName", type text}, {"Team", type text}, {"Role", type text}, {"Country", type text}, {"StartDate", type date}})
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"PersonKey", Int64.Type}, {"PersonName", type text}, {"Team", type text}, {"Role", type text}, {"Country", type text}, {"StartDate", type date}}),
+				    #"Renamed Columns" = Table.RenameColumns(#"Changed Type",{{"PersonName", "Person Name"}})
 				in
-				    #"Changed Type"
+				    #"Renamed Columns"
 
 	annotation PBI_ResultType = Table
 

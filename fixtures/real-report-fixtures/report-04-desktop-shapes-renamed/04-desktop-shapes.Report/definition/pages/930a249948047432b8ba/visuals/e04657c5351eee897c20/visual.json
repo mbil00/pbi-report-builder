@@ -51,11 +51,11 @@
                       "Entity": "Measures Table"
                     }
                   },
-                  "Property": "Total Hours"
+                  "Property": "Hours Logged"
                 }
               },
               "queryRef": "Measures Table.Total Hours",
-              "nativeQueryRef": "Total Hours"
+              "nativeQueryRef": "Hours Logged"
             },
             {
               "field": {
@@ -490,7 +490,7 @@
                 "Entity": "Measures Table"
               }
             },
-            "Property": "Total Hours"
+            "Property": "Hours Logged"
           }
         },
         "type": "Advanced"

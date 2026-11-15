@@ -24,7 +24,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Pare Navigator'"
+                  "Value": "'Page Navigator'"
                 }
               }
             }

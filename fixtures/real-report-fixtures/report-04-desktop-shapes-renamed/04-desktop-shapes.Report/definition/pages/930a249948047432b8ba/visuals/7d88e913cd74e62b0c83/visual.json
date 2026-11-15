@@ -19,7 +19,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Delivery Overview:",
+                    "value": "Delivery Overview",
                     "textStyle": {
                       "fontWeight": "bold",
                       "fontFamily": "Georgia",
@@ -37,11 +37,7 @@
                       "fontSize": "12pt",
                       "color": "#605e5c"
                     }
-                  }
-                ]
-              },
-              {
-                "textRuns": [
+                  },
                   {
                     "value": "2024-2025",
                     "textStyle": {
