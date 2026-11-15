@@ -207,6 +207,8 @@ def apply_visual(
         "style",
         "kpis",
         "seriesColors",
+        "sync",
+        "selected",
         "layout",
         "accentBar",
         "referenceLabelLayout",
@@ -289,6 +291,9 @@ def apply_visual(
     if "seriesColors" in vis_spec:
         _apply_series_colors(project, visual, vis_spec["seriesColors"], result, context=context, session=session)
 
+    if "sync" in vis_spec or "selected" in vis_spec:
+        _apply_slicer_state(project, visual, vis_spec, result, context=context, session=session)
+
     if "kpis" in vis_spec:
         kpis_list = vis_spec["kpis"]
         if not isinstance(kpis_list, list):
@@ -342,6 +347,52 @@ def _apply_series_colors(
         return
     result.properties_set += count
     result.warnings.extend(f"{context}: {warning}" for warning in warnings)
+
+
+def _apply_slicer_state(
+    project: Project,
+    visual: Visual,
+    vis_spec: dict,
+    result: ApplyResult,
+    *,
+    context: str,
+    session: _PbirApplySession,
+) -> None:
+    """Write a slicer's sync group and saved selection (#42)."""
+    from pbi.slicer_state import SLICER_TYPES, apply_slicer_selection, apply_sync_group
+
+    keys = [key for key in ("sync", "selected") if key in vis_spec]
+    if visual.visual_type not in SLICER_TYPES:
+        result.errors.append(
+            f"{context}: {' and '.join(keys)} only apply to slicers (supported: {', '.join(SLICER_TYPES)})."
+        )
+        return
+    try:
+        if "sync" in vis_spec and apply_sync_group(visual.data, vis_spec["sync"]):
+            result.properties_set += 1
+        if "selected" in vis_spec:
+            selected = vis_spec["selected"]
+            data_type = None if selected is None or selected == [] else _slicer_data_type(project, visual, session)
+            changed, warnings = apply_slicer_selection(visual.data, selected, data_type=data_type)
+            result.properties_set += int(changed)
+            result.warnings.extend(f"{context}: {warning}" for warning in warnings)
+    except ValueError as e:
+        result.errors.append(f"{context}: {e}")
+
+
+def _slicer_data_type(project: Project, visual: Visual, session: _PbirApplySession) -> str | None:
+    """Return the model data type of the slicer's bound column, if known."""
+    from pbi.fields import resolve_field_info
+    from pbi.slicer_state import slicer_field
+
+    field = slicer_field(visual.data)
+    model = session.get_model(project)
+    if field is None or model is None:
+        return None
+    try:
+        return resolve_field_info(project, f"{field[0]}.{field[1]}", "column", model=model)[3]
+    except ValueError:
+        return None
 
 
 def visual_page_refs_present(pages_spec: list[dict]) -> bool:

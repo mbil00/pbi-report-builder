@@ -171,6 +171,13 @@ def flatten_visual_diff_spec(
         from pbi.data_colors import normalize_series_colors
 
         filtered["seriesColors"] = normalize_series_colors(filtered["seriesColors"])
+    if "sync" in filtered or "selected" in filtered:
+        from pbi.slicer_state import normalize_selection_spec, normalize_sync_spec
+
+        if "sync" in filtered:
+            filtered["sync"] = normalize_sync_spec(filtered["sync"])
+        if "selected" in filtered:
+            filtered["selected"] = normalize_selection_spec(filtered["selected"])
     if not include_core:
         for key in ("position", "size", "isHidden"):
             filtered.pop(key, None)
