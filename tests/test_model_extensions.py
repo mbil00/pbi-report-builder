@@ -1009,7 +1009,7 @@ table Customers
             rel = model.relationships[0]
             self.assertEqual(rel.properties.get("crossFilteringBehavior"), "bothDirections")
 
-    def test_set_relationship_property_rejects_invalid_cardinality_orientation(self):
+    def test_set_relationship_property_accepts_one_sided_cardinality(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_project(root)
@@ -1030,14 +1030,67 @@ table Customers
 \t\tsourceColumn: CustomerID
 """)
             create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
-            with self.assertRaisesRegex(ValueError, "Set both fromCardinality and toCardinality together"):
+            # Desktop writes one-to-one as `fromCardinality: one` alone (toCardinality defaults to one).
+            _, _, changed = set_relationship_property(
+                root, "Sales.CustomerID", "Customers.CustomerID", "fromCardinality", "one",
+            )
+            self.assertTrue(changed)
+            rel = SemanticModel.load(root).relationships[0]
+            self.assertEqual(rel.properties.get("fromCardinality"), "one")
+            self.assertNotIn("toCardinality", rel.properties)
+
+            # one -> many is the wrong way round, even when only one side is written.
+            with self.assertRaisesRegex(ValueError, "Invalid cardinality orientation"):
                 set_relationship_property(
-                    root,
-                    "Sales.CustomerID",
-                    "Customers.CustomerID",
-                    "fromCardinality",
-                    "one",
+                    root, "Sales.CustomerID", "Customers.CustomerID", "toCardinality", "many",
                 )
+
+    def test_validate_relationship_properties_accepts_desktop_one_sided_forms(self):
+        from pbi.modeling.writes_relationships import validate_relationship_properties
+
+        validate_relationship_properties({"fromCardinality": "one"})  # one-to-one
+        validate_relationship_properties({"toCardinality": "many"})  # many-to-many
+        validate_relationship_properties({"toCardinality": "many", "crossFilteringBehavior": "bothDirections"})
+        validate_relationship_properties({"fromCardinality": "many", "toCardinality": "one"})
+        with self.assertRaisesRegex(ValueError, "Invalid cardinality orientation"):
+            validate_relationship_properties({"fromCardinality": "one", "toCardinality": "many"})
+        with self.assertRaisesRegex(ValueError, "cannot use crossFilteringBehavior=oneDirection"):
+            validate_relationship_properties({"fromCardinality": "one", "crossFilteringBehavior": "oneDirection"})
+
+    def test_model_check_accepts_desktop_one_sided_cardinality(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_project(root)
+            for name in ("Sales", "Customers", "Profiles", "Tags"):
+                _write_table(root, f"{name}.tmdl", f"""
+table {name}
+\tcolumn CustomerID
+\t\tdataType: string
+\t\tlineageTag: {name}-1
+\t\tsummarizeBy: none
+\t\tsourceColumn: CustomerID
+""")
+            # Exactly as Desktop saves them (report-04 relationships.tmdl).
+            _write_relationships(root, """
+relationship r-one-one
+\tfromCardinality: one
+\tcrossFilteringBehavior: bothDirections
+\tfromColumn: Profiles.CustomerID
+\ttoColumn: Customers.CustomerID
+
+relationship r-many-many
+\ttoCardinality: many
+\tfromColumn: Tags.CustomerID
+\ttoColumn: Customers.CustomerID
+
+relationship r-default
+\tfromColumn: Sales.CustomerID
+\ttoColumn: Customers.CustomerID
+""")
+            from pbi.model import validate_relationships
+
+            errors = [f for f in validate_relationships(root) if f["severity"] == "error"]
+            self.assertEqual(errors, [])
 
     def test_create_relationship_rejects_invalid_cross_filter_value(self):
         with tempfile.TemporaryDirectory() as tmp:

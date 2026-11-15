@@ -267,6 +267,19 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         plain = rels[("Task.CreatedDate", "Date.Date")]
         self.assertEqual(set(plain), {"fromColumn", "toColumn"})
 
+    # --- #45 / #46 validate ---------------------------------------------------
+
+    def test_validate_accepts_desktop_output(self) -> None:
+        from pbi.validate import validate_project
+
+        issues = validate_project(Project.find(SHAPES_PBIP))
+        errors = [f"{i.file}: {i.message}" for i in issues if i.level == "error"]
+        self.assertEqual(errors, [])
+        # Measures from `Measures Table` (which keeps Desktop's hidden placeholder
+        # column) and from fact tables need no relationship path.
+        path_warnings = [i.message for i in issues if "relationship path" in i.message]
+        self.assertEqual(path_warnings, [])
+
     # --- column and measure metadata ------------------------------------------
 
     def test_format_strings_and_column_metadata(self) -> None:
