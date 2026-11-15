@@ -374,8 +374,7 @@ def normalize_selection_spec(spec: Any) -> Any:
 def _diff_value(value: Any) -> Any:
     if isinstance(value, dt.date):
         return value.isoformat()
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
+    # Numbers keep their own type: on a text column 13.0 writes '13.0', not '13'.
     if not isinstance(value, str):
         return value
     if value in {"true", "false"}:

@@ -416,13 +416,22 @@ class SelectionUnitTests(unittest.TestCase):
 
     def test_diff_normalization_folds_number_and_boolean_text(self) -> None:
         self.assertEqual(normalize_selection_spec(["13", "1.5", "true"]), normalize_selection_spec([13, 1.5, True]))
-        self.assertEqual(normalize_selection_spec({"except": ["2.0"]}), {"except": [2]})
+        self.assertEqual(normalize_selection_spec({"except": ["2.0"]}), {"except": [2.0]})
         self.assertEqual(normalize_selection_spec(["Up to 1 week"]), ["Up to 1 week"])
         # Non-canonical text stays text, so distinct text values never compare equal.
         for text in ("01", "1.50", "-0", "True"):
             with self.subTest(text=text):
                 self.assertEqual(normalize_selection_spec([text]), [text])
         self.assertNotEqual(normalize_selection_spec(["01"]), normalize_selection_spec(["1"]))
+        # Each side compares as what apply writes on a text column: 13.0 -> '13.0', '13' -> '13'.
+        from pbi.commands.visuals.helpers import diff_whole_value
+
+        def row(spec):
+            return diff_whole_value(normalize_selection_spec(spec))
+
+        self.assertNotEqual(row([13.0]), row(["13"]))
+        self.assertEqual(row([13.0]), row(["13.0"]))
+        self.assertEqual(row(["13"]), row([13]))
 
     def test_other_slicer_types_stay_in_pbir(self) -> None:
         for visual_type in ("listSlicer", "advancedSlicerVisual"):
