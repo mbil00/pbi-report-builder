@@ -331,13 +331,33 @@ def without_selection_props(objects: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def has_slicer_state(visual_data: Mapping[str, Any], key: str) -> bool:
+    """Return whether a visual holds what ``sync`` or ``selected`` would clear.
+
+    Unlike the export functions this also sees state left in ``pbir`` (a range
+    on a non-Between slicer, an unrecognised filter shape).
+    """
+    visual = visual_data.get("visual", {})
+    if key == "sync":
+        return "syncGroup" in visual
+    objects = visual.get("objects", {})
+    general = _plain_entry(objects, "general", create=False) if isinstance(objects, Mapping) else None
+    data = _plain_entry(objects, "data", create=False) if isinstance(objects, Mapping) else None
+    data_props = data.get("properties", {}) if data else {}
+    return bool(
+        (general and "filter" in general.get("properties", {}))
+        or any(name in data_props for name in SELECTION_DATA_PROPS)
+    )
+
+
 def normalize_selection_spec(spec: Any) -> Any:
     """Canonical ``selected`` value for comparison (``pbi diff``).
 
-    Diff has no column types, so number and boolean text is folded to its value
-    (``'13'`` and ``13`` compare equal, as apply writes both as ``13L`` on a
-    whole-number column). On a text column that folding is diff-only; apply is
-    unaffected.
+    Diff has no column types, so number and boolean text in its canonical form is
+    folded to its value (``'13'`` and ``13`` compare equal, as apply writes both
+    as ``13L`` on a whole-number column). Non-canonical text such as ``'01'`` or
+    ``'1.50'`` stays text, so distinct strings on a text column never compare
+    equal.
     """
     try:
         kind, payload = _parse_selection_spec(spec)
@@ -358,12 +378,13 @@ def _diff_value(value: Any) -> Any:
         return int(value)
     if not isinstance(value, str):
         return value
-    text = value.strip()
-    if text.lower() in {"true", "false"}:
-        return text.lower() == "true"
-    if _NUMBER_TEXT.fullmatch(text):
-        number = Decimal(text)
-        return int(number) if number == number.to_integral_value() else float(number)
+    if value in {"true", "false"}:
+        return value == "true"
+    if _NUMBER_TEXT.fullmatch(value):
+        if "." not in value:
+            return int(value) if str(int(value)) == value else value
+        number = float(value)
+        return number if repr(number) == value else value
     return value
 
 

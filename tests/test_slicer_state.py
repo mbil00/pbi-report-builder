@@ -193,6 +193,19 @@ class SlicerStateDesktopTests(unittest.TestCase):
         out = diff([{"id": team.folder.name, "type": "slicer", "selected": [], "sync": None}])
         self.assertIn("No differences found", out)
 
+    def test_diff_shows_clearing_a_filter_kept_in_pbir(self) -> None:
+        _project, dates = self._find("Task Board", "Date Range Slicer")
+        self._run("visual", "set", "Task Board", dates.folder.name, "chart:data.mode=Dropdown")
+        _project, dates = self._find("Task Board", "Date Range Slicer")
+        self.assertEqual(export_slicer_selection(dates.data), (False, None))  # range now kept in pbir
+        path = self.root / "clear.yaml"
+        path.write_text(yaml.safe_dump({"pages": [{"name": "Task Board", "visuals": [
+            {"id": dates.folder.name, "type": "slicer", "selected": None},
+        ]}]}), encoding="utf-8")
+        out = self._run("diff", str(path))
+        self.assertNotIn("No differences found", out)
+        self.assertIn("kept in pbir", out)
+
     def test_diff_folds_model_typed_values(self) -> None:
         self._run("visual", "create", "Task Board", "slicer", "--name", "pointsSlicer", "--bind", "Values=Task.StoryPoints")
         path = self.root / "points.yaml"
@@ -402,9 +415,14 @@ class SelectionUnitTests(unittest.TestCase):
         self.assertEqual(export_slicer_selection(visual), (False, None))
 
     def test_diff_normalization_folds_number_and_boolean_text(self) -> None:
-        self.assertEqual(normalize_selection_spec(["13", "1.50", "True"]), normalize_selection_spec([13, 1.5, True]))
+        self.assertEqual(normalize_selection_spec(["13", "1.5", "true"]), normalize_selection_spec([13, 1.5, True]))
         self.assertEqual(normalize_selection_spec({"except": ["2.0"]}), {"except": [2]})
         self.assertEqual(normalize_selection_spec(["Up to 1 week"]), ["Up to 1 week"])
+        # Non-canonical text stays text, so distinct text values never compare equal.
+        for text in ("01", "1.50", "-0", "True"):
+            with self.subTest(text=text):
+                self.assertEqual(normalize_selection_spec([text]), [text])
+        self.assertNotEqual(normalize_selection_spec(["01"]), normalize_selection_spec(["1"]))
 
     def test_other_slicer_types_stay_in_pbir(self) -> None:
         for visual_type in ("listSlicer", "advancedSlicerVisual"):
