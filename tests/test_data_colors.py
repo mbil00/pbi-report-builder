@@ -198,6 +198,14 @@ class SeriesColorsDesktopTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.stdout)
         self.assertIn("No differences found", result.stdout)
 
+        # The text "null" is a real value, not a removal.
+        spec["pages"][0]["visuals"][0]["subtitle"] = {"text": "null"}
+        path = self.root / "text-null.yaml"
+        path.write_text(yaml.safe_dump(spec), encoding="utf-8")
+        result = self.runner.invoke(app, ["diff", str(path), "--project", str(self.pbip)])
+        self.assertIn("subtitle.text: (none) -> null", result.stdout)
+        self.assertNotIn("seriesColors", result.stdout)
+
     def test_measure_colours_round_trip_without_a_model(self) -> None:
         from pbi.export import export_visual_spec
         from pbi.visual_stamping import create_visual_from_spec

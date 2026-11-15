@@ -298,6 +298,20 @@ def apply_cmd(
         console.print("[dim]No changes applied.[/dim]")
 
 
+_NULL_MARK = "\x00null"
+
+
+def _mark_nulls(value: object) -> object:
+    """Copy a YAML value with every None replaced by a marker string."""
+    if value is None:
+        return _NULL_MARK
+    if isinstance(value, dict):
+        return {key: _mark_nulls(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_mark_nulls(child) for child in value]
+    return value
+
+
 @app.command("diff")
 def diff_cmd(
     yaml_file: Annotated[Optional[str], typer.Argument(help="YAML file to compare against current state. Use '-' or omit to read from stdin.")] = None,
@@ -421,13 +435,21 @@ def diff_cmd(
             # Compare current vs YAML spec
             current_spec = flatten_visual_diff_spec(export_visual_spec(proj, existing), include_core=True)
             yaml_flat = flatten_visual_diff_spec(vis_spec, include_core=True)
+            # Paths whose YAML value is a real null (not the text "null").
+            null_keys = {
+                key
+                for key, value in flatten_visual_diff_spec(
+                    _mark_nulls(vis_spec), include_core=True
+                ).items()
+                if value == _NULL_MARK
+            }
 
             diffs = []
             for key in yaml_flat:
                 if key in {"id", "pbir"}:
                     continue
                 proposed = str(yaml_flat[key])
-                if proposed == "null" and key not in current_spec:
+                if key in null_keys and key not in current_spec:
                     continue  # removing something already absent changes nothing
                 curr = str(current_spec.get(key, ""))
                 if curr != proposed:
