@@ -171,13 +171,15 @@ def flatten_visual_diff_spec(
         from pbi.data_colors import normalize_series_colors
 
         filtered["seriesColors"] = normalize_series_colors(filtered["seriesColors"])
+    # Apply replaces a slicer's sync group and saved selection as a whole, so
+    # each is compared as one value: a leaf-by-leaf diff would miss removals.
+    whole_values: dict[str, str] = {}
     if "sync" in filtered or "selected" in filtered:
         from pbi.slicer_state import normalize_selection_spec, normalize_sync_spec
 
-        if "sync" in filtered:
-            filtered["sync"] = normalize_sync_spec(filtered["sync"])
-        if "selected" in filtered:
-            filtered["selected"] = normalize_selection_spec(filtered["selected"])
+        for key, normalize in (("sync", normalize_sync_spec), ("selected", normalize_selection_spec)):
+            if key in filtered:
+                whole_values[key] = diff_whole_value(normalize(filtered.pop(key)))
     if not include_core:
         for key in ("position", "size", "isHidden"):
             filtered.pop(key, None)
@@ -193,7 +195,24 @@ def flatten_visual_diff_spec(
             if len(parts) == 2:
                 filtered["size"] = {"width": parts[0], "height": parts[1]}
 
-    return flatten_diff_spec(filtered)
+    rows = flatten_diff_spec(filtered)
+    rows.update(whole_values)
+    return rows
+
+
+DIFF_NONE = "(none)"
+"""Diff value of a whole-value key (``sync``, ``selected``) that is cleared."""
+
+
+def diff_whole_value(value: object) -> str:
+    """Render a normalized whole value as one comparable diff string."""
+    import json
+
+    if value is None:
+        return DIFF_NONE
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, default=str)
 
 
 def flatten_diff_spec(

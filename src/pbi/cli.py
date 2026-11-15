@@ -320,7 +320,7 @@ def diff_cmd(
 ) -> None:
     """Show what 'pbi apply' would change, property by property."""
     from pbi.bookmarks import export_bookmarks
-    from pbi.commands.visuals.helpers import flatten_diff_spec, flatten_visual_diff_spec
+    from pbi.commands.visuals.helpers import DIFF_NONE, flatten_diff_spec, flatten_visual_diff_spec
     from pbi.export import export_visual_spec, export_yaml
     from pbi.lookup import find_visual_exact
     from pbi.project import Visual, sanitize_visual_name
@@ -451,6 +451,8 @@ def diff_cmd(
                 proposed = str(yaml_flat[key])
                 if key in null_keys and key not in current_spec:
                     continue  # removing something already absent changes nothing
+                if proposed == DIFF_NONE and key in {"sync", "selected"} and key not in current_spec:
+                    continue  # clearing a slicer state that isn't there changes nothing
                 curr = str(current_spec.get(key, ""))
                 if curr != proposed:
                     diffs.append((key, curr, proposed))

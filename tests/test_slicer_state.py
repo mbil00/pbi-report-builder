@@ -168,6 +168,28 @@ class SlicerStateDesktopTests(unittest.TestCase):
         )
         self.assertIn("No differences found", self._run("diff", str(path)))
 
+    def test_diff_reports_removals_and_ignores_clearing_nothing(self) -> None:
+        _project, status = self._find("Task Board", "Status Slicer")
+        _project, portfolio = self._find("Task Board", "Portfolio Slicer")
+        _project, team = self._find("Task Board", "Team Slicer")
+        self._run("visual", "slicer", "sync", "set", "Task Board", portfolio.folder.name, "PortfolioSync", "--no-fields")
+        self._run("visual", "slicer", "selection", "clear", "Task Board", team.folder.name, "-f")
+
+        def diff(visuals: list[dict]) -> str:
+            path = self.root / "diff.yaml"
+            path.write_text(yaml.safe_dump({"pages": [{"name": "Task Board", "visuals": visuals}]}), encoding="utf-8")
+            return self._run("diff", str(path))
+
+        out = diff([{"id": status.folder.name, "type": "slicer", "selected": ["Blocked"]}])
+        self.assertNotIn("No differences found", out)
+        self.assertIn("selected", out)
+        out = diff([{"id": portfolio.folder.name, "type": "slicer", "sync": None}])
+        self.assertNotIn("No differences found", out)
+        self.assertIn("sync", out)
+        # Clearing what isn't there changes nothing.
+        out = diff([{"id": team.folder.name, "type": "slicer", "selected": [], "sync": None}])
+        self.assertIn("No differences found", out)
+
     def test_null_clears_and_type_mismatch_is_an_error(self) -> None:
         _project, team = self._find("Task Board", "Team Slicer")
         _project, portfolio = self._find("Task Board", "Portfolio Slicer")
@@ -330,6 +352,41 @@ class SelectionUnitTests(unittest.TestCase):
                 visual = _slicer()
                 apply_slicer_selection(visual, values, data_type=data_type)
                 self.assertEqual(_values(visual), expected)
+
+    def test_untyped_calculated_column_uses_the_value_type(self) -> None:
+        # Desktop saves many calculated columns without a dataType; the model reports "unknown".
+        visual = _slicer(column="Duration Band")
+        apply_slicer_selection(visual, ["Up to 1 week"], data_type="unknown")
+        self.assertEqual(_values(visual), ["'Up to 1 week'"])
+        visual = _slicer(column="Day", entity="Date")
+        apply_slicer_selection(visual, {"from": "2024-01-01", "to": "2024-01-02"}, data_type="unknown")
+        self.assertEqual(export_slicer_selection(visual)[1], {"from": dt.date(2024, 1, 1), "to": dt.date(2024, 1, 2)})
+
+    def test_numbers_round_trip_without_exponents_or_rounding(self) -> None:
+        visual = _slicer(column="Rate")
+        apply_slicer_selection(visual, [0.00001, "0.5"], data_type="double")
+        self.assertEqual(_values(visual), ["0.00001D", "0.5D"])
+        found, exported = export_slicer_selection(visual)
+        apply_slicer_selection(visual, exported, data_type="double")
+        self.assertEqual(_values(visual), ["0.00001D", "0.5D"])
+
+        apply_slicer_selection(visual, ["500", 1.25], data_type="decimal")
+        self.assertEqual(_values(visual), ["500M", "1.25M"])
+        self.assertEqual(export_slicer_selection(visual), (True, [500, 1.25]))
+        # A fixed decimal a float can't hold exactly stays in pbir rather than change.
+        apply_slicer_selection(visual, ["12345678901234.5678"], data_type="decimal")
+        self.assertEqual(_values(visual), ["12345678901234.5678M"])
+        self.assertEqual(export_slicer_selection(visual), (False, None))
+
+    def test_other_slicer_types_stay_in_pbir(self) -> None:
+        for visual_type in ("listSlicer", "advancedSlicerVisual"):
+            with self.subTest(visual_type=visual_type):
+                visual = _slicer()
+                apply_slicer_selection(visual, ["a"], data_type="string")
+                apply_sync_group(visual, "G")
+                visual["visual"]["visualType"] = visual_type
+                self.assertEqual(export_slicer_selection(visual), (False, None))
+                self.assertIsNone(export_sync_group(visual))
 
     def test_export_decodes_values(self) -> None:
         visual = _slicer()

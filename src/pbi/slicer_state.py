@@ -32,6 +32,7 @@ import copy
 import datetime as dt
 import re
 from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 # Visual types Desktop has shown sync groups and saved selections for.
@@ -45,6 +46,10 @@ _DATETIME_LITERAL = re.compile(r"datetime'(\d{4}-\d{2}-\d{2})T00:00:00'")
 _INTEGER_LITERAL = re.compile(r"-?\d+L")
 _DECIMAL_LITERAL = re.compile(r"-?\d+(?:\.\d+)?[DM]")
 _DATE_TYPES = frozenset({"date", "datetime", "datetimeoffset"})
+# Model data types a selection literal is typed by. Anything else (a calculated
+# column Desktop saved without a dataType is "unknown") is typed by the value.
+_KNOWN_TYPES = frozenset({"string", "boolean", "int64", "double", "decimal", "currency"}) | _DATE_TYPES
+_NUMBER_TEXT = re.compile(r"-?\d+(?:\.\d+)?")
 _COMPARISON_GE = 2
 _COMPARISON_LT = 3
 
@@ -98,7 +103,13 @@ def export_sync_group(visual_data: Mapping[str, Any]) -> Any:
     ``None`` also covers a ``syncGroup`` this module can't express (extra keys,
     non-boolean flags); that one stays in the ``pbir`` passthrough.
     """
-    group = visual_data.get("visual", {}).get("syncGroup")
+    if visual_data.get("visual", {}).get("visualType") not in SLICER_TYPES:
+        return None  # apply would reject `sync` here, so keep it in pbir
+    return _sync_yaml(visual_data.get("visual", {}).get("syncGroup"))
+
+
+def _sync_yaml(group: Any) -> Any:
+    """``sync`` YAML for a ``syncGroup`` dict, or ``None`` if it can't be expressed."""
     if not isinstance(group, Mapping) or set(group) != {"groupName", "fieldChanges", "filterChanges"}:
         return None
     name = group["groupName"]
@@ -119,7 +130,7 @@ def normalize_sync_spec(spec: Any) -> Any:
         return spec
     if group is None:
         return None
-    return export_sync_group({"visual": {"syncGroup": group}})
+    return _sync_yaml(group)
 
 
 # --- saved selections ---------------------------------------------------------
@@ -156,6 +167,8 @@ def apply_slicer_selection(
     changing anything.
     """
     kind, payload = _parse_selection_spec(spec)
+    if data_type is not None and data_type.lower() not in _KNOWN_TYPES:
+        data_type = None
     field = slicer_field(visual_data)
     if field is None and kind != "clear":
         raise ValueError("selected: the slicer needs exactly one bound column (Values) to save a selection.")
@@ -240,6 +253,8 @@ def export_slicer_selection(visual_data: Mapping[str, Any]) -> tuple[bool, Any]:
     selection or when its shape isn't one Desktop was seen to write (that one
     stays in the ``pbir`` passthrough).
     """
+    if visual_data.get("visual", {}).get("visualType") not in SLICER_TYPES:
+        return False, None  # apply would reject `selected` here, so keep it in pbir
     field = slicer_field(visual_data)
     objects = visual_data.get("visual", {}).get("objects", {})
     if field is None or not isinstance(objects, Mapping):
@@ -415,11 +430,27 @@ def _value_literal(value: Any, data_type: str | None, entity: str, prop: str) ->
         return text
     if column_type in _DATE_TYPES:
         return _date_literal(_parse_date(value, where))
-    if isinstance(value, bool) or not re.fullmatch(r"-?\d+(?:\.\d+)?", str(value).strip()):
+    text = _number_text(value)
+    if text is None:
         raise ValueError(f"{where}: {value!r} is not a number.")
-    if column_type == "int64" and "." in str(value):
+    if column_type == "int64" and "." in text:
         raise ValueError(f"{where}: {value!r} is not a whole number.")
-    return _format_literal(str(value).strip(), data_type=column_type)
+    return _format_literal(text, data_type=column_type)
+
+
+def _number_text(value: Any) -> str | None:
+    """Plain decimal text for a number (never exponent form), or None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        text = format(Decimal(repr(value)), "f")
+    else:
+        text = str(value).strip()
+    return text if _NUMBER_TEXT.fullmatch(text) else None
 
 
 def _infer_type(value: Any) -> str:
@@ -444,8 +475,17 @@ def _decode_value(raw: Any) -> Any:
     if _INTEGER_LITERAL.fullmatch(raw):
         return int(raw[:-1])
     if _DECIMAL_LITERAL.fullmatch(raw):
-        number = float(raw[:-1])
-        return int(number) if number.is_integer() and "." not in raw else number
+        digits = raw[:-1]
+        if "." not in digits:
+            return int(digits)
+        number = float(digits)
+        try:
+            exact = Decimal(repr(number)) == Decimal(digits)
+        except InvalidOperation:
+            exact = False
+        # A value a float can't hold exactly (a long fixed decimal) would change
+        # on the way back, so it isn't representable and stays in pbir.
+        return number if exact else None
     match = _DATETIME_LITERAL.fullmatch(raw)
     if match:
         return dt.date.fromisoformat(match.group(1))
