@@ -334,8 +334,13 @@ def _find_entry(entries: list[dict], selector: str | None) -> dict | None:
     for entry in entries:
         if "selector" not in entry:
             return entry
-    # Fallback to first entry
-    return entries[0] if entries else None
+    # Fallback to the first entry that isn't scoped to a value or a series:
+    # a visual-wide property must never land on (or be read from) those.
+    for entry in entries:
+        selector = entry.get("selector")
+        if not isinstance(selector, dict) or not ({"data", "metadata"} & selector.keys()):
+            return entry
+    return None
 
 
 def _get_container_prop(

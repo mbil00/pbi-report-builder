@@ -65,7 +65,10 @@ def apply_series_colors(
                 raise ValueError(
                     f"seriesColors.{field_ref} is a measure; give it one colour, not a mapping of values."
                 )
-            planned.append(({"metadata": f"{entity}.{prop}"}, _normalize_color(value, field_ref)))
+            # Desktop keys a series by its projection's queryRef, which keeps the
+            # old name after a rename, so prefer the bound one.
+            query_ref = _bound_measure_query_refs(visual_data).get((entity, prop), f"{entity}.{prop}")
+            planned.append(({"metadata": query_ref}, _normalize_color(value, field_ref)))
             continue
 
         if not isinstance(value, Mapping):
@@ -258,6 +261,26 @@ def _decode_scope_literal(raw: str) -> Any:
     if _INTEGER_LITERAL.fullmatch(raw):
         return int(raw[:-1])
     return None
+
+
+def _bound_measure_query_refs(visual_data: Mapping[str, Any]) -> dict[tuple[str, str], str]:
+    """Map each bound measure's (entity, property) to its projection queryRef."""
+    result: dict[tuple[str, str], str] = {}
+    query_state = visual_data.get("visual", {}).get("query", {}).get("queryState", {})
+    if not isinstance(query_state, Mapping):
+        return result
+    for role in query_state.values():
+        for projection in role.get("projections", []) if isinstance(role, Mapping) else []:
+            if not isinstance(projection, Mapping):
+                continue
+            node = projection.get("field", {}).get("Measure")
+            query_ref = projection.get("queryRef")
+            if isinstance(node, Mapping) and isinstance(query_ref, str) and query_ref:
+                entity = node.get("Expression", {}).get("SourceRef", {}).get("Entity")
+                prop = node.get("Property")
+                if isinstance(entity, str) and isinstance(prop, str):
+                    result.setdefault((entity, prop), query_ref)
+    return result
 
 
 def _unbound_field_warnings(visual_data: Mapping[str, Any], resolved_refs: Mapping[str, str]) -> list[str]:

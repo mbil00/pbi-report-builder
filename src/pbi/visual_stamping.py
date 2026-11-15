@@ -66,6 +66,7 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
         "text",
         "textStyle",
         "group",
+        "seriesColors",
     }
 
     for key, value in spec.items():
@@ -126,6 +127,10 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
     if isinstance(pbir, dict):
         apply_raw_visual_payload(visual, pbir)
 
+    # After pbir, which would otherwise replace the dataPoint list.
+    if "seriesColors" in spec:
+        _apply_series_colors(project, visual, spec["seriesColors"])
+
     if visual.visual_type == "textbox" and isinstance(spec.get("text"), str):
         style = spec.get("textStyle", {})
         set_textbox_content(
@@ -133,6 +138,19 @@ def apply_visual_spec(project: Project, visual: Visual, spec: dict[str, Any]) ->
             text=spec["text"],
             style_updates=style if isinstance(style, dict) else None,
         )
+
+
+def _apply_series_colors(project: Project, visual: Visual, spec: Any) -> None:
+    """Restore fixed data colours; like the rest of stamping, skip what doesn't resolve."""
+    from pbi.data_colors import apply_series_colors
+
+    def _resolve(field_ref: str) -> tuple[str, str, str, str | None]:
+        return resolve_field_info(project, field_ref, "auto")
+
+    try:
+        apply_series_colors(visual.data, spec, resolve_field=_resolve)
+    except ValueError:
+        pass
 
 
 def validate_spec_bindings(project: Project, spec: dict[str, Any]) -> list[str]:
