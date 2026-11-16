@@ -15,7 +15,9 @@ from .writes import (
     _format_tmdl_field_ref,
     _format_tmdl_name,
     _get_tmdl_lines,
+    _rename_model_table_ref,
     _update_member_property,
+    tmdl_file_name,
     validate_column_name,
     validate_measure_name,
     validate_table_name,
@@ -366,7 +368,10 @@ def rename_table(
 
     updated_refs.extend(_rename_table_in_report_json(project_root, table.name, new_name, dry_run=dry_run))
 
-    new_path = table.definition_path.with_name(f"{_safe_table_filename(new_name)}.tmdl")
+    if _rename_model_table_ref(loaded_model, table.name, new_name, dry_run=dry_run):
+        updated_refs.append("model.tmdl (ref table)")
+
+    new_path = table.definition_path.with_name(tmdl_file_name(new_name))
     if not dry_run and new_path != table.definition_path:
         table.definition_path.rename(new_path)
 
@@ -395,10 +400,6 @@ def _dax_table_token(name: str) -> str:
     if re.fullmatch(r"[A-Za-z_]\w*", name):
         return name
     return "'" + name.replace("'", "''") + "'"
-
-
-def _safe_table_filename(name: str) -> str:
-    return name.replace(" ", "_").replace("'", "")
 
 
 def _rename_table_in_report_json(

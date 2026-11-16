@@ -8,7 +8,9 @@ from pathlib import Path
 from .schema import SemanticModel
 from .writes import (
     TmdlEditSession,
+    _add_model_table_ref,
     _format_tmdl_name,
+    _new_table_tmdl_path,
     _write_tmdl_lines,
     validate_table_name,
 )
@@ -157,15 +159,14 @@ def create_field_parameter(
     lines.append("")
 
     # Write file
-    tables_dir = loaded_model.folder / "definition" / "tables"
-    tables_dir.mkdir(parents=True, exist_ok=True)
-    safe_filename = parameter_name.replace(" ", "_").replace("'", "")
-    tmdl_path = tables_dir / f"{safe_filename}.tmdl"
+    tmdl_path = _new_table_tmdl_path(loaded_model, parameter_name)
 
     if not dry_run:
+        tmdl_path.parent.mkdir(parents=True, exist_ok=True)
         if edit_session is not None:
             edit_session.replace_file(tmdl_path, lines)
         else:
             _write_tmdl_lines(tmdl_path, lines)
+    _add_model_table_ref(loaded_model, parameter_name, dry_run=dry_run, edit_session=edit_session)
 
     return parameter_name, tmdl_path, True

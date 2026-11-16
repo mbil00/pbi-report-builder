@@ -1095,9 +1095,102 @@ def _indent_level(line: str) -> int:
     return int(indent)
 
 
+def _tmdl_newline(path: Path) -> str:
+    """Return the line ending to write ``path`` with.
+
+    Desktop writes TMDL with CRLF, so new files get CRLF. An existing file
+    keeps the ending it already uses, so an edit doesn't rewrite every line.
+    """
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return "\r\n"
+    if b"\n" in data and b"\r\n" not in data:
+        return "\n"
+    return "\r\n"
+
+
 def _write_tmdl_lines(path: Path, lines: list[str]) -> None:
     """Write TMDL lines back to disk with a trailing newline."""
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    newline = _tmdl_newline(path)
+    with open(path, "w", encoding="utf-8", newline=newline) as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+# Characters Windows doesn't allow in file names. Desktop stores a table
+# named "Q/A Notes" as "Q%2FA Notes.tmdl" and keeps spaces, apostrophes,
+# "&" and parentheses as they are.
+_TMDL_FILE_NAME_ESCAPES = set('/\\:*?"<>|')
+
+
+def tmdl_file_name(name: str) -> str:
+    """Return the ``.tmdl`` file name Desktop uses for a named object."""
+    stem = "".join(
+        f"%{ord(ch):02X}" if ch in _TMDL_FILE_NAME_ESCAPES or ord(ch) < 32 else ch
+        for ch in name
+    )
+    return f"{stem}.tmdl"
+
+
+def _new_table_tmdl_path(model: SemanticModel, table_name: str) -> Path:
+    """Return the file path for a new table, refusing to overwrite a file."""
+    path = model.folder / "definition" / "tables" / tmdl_file_name(table_name)
+    if path.exists():
+        raise ValueError(f'Cannot create table "{table_name}": "{path.name}" already exists.')
+    return path
+
+
+def _add_model_table_ref(
+    model: SemanticModel,
+    table_name: str,
+    *,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Append ``ref table`` for a new table to model.tmdl, after the last one.
+
+    Desktop lists imported tables first and created tables after them, in
+    creation order. A model.tmdl without a ``ref table`` list is left alone.
+    """
+    model_path = model.model_path or (model.folder / "definition" / "model.tmdl")
+    if not model_path.exists():
+        return False
+    lines = _get_tmdl_lines(model_path, edit_session)
+    last_ref = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("ref table "):
+            continue
+        if _parse_tmdl_name(stripped[len("ref table "):]).lower() == table_name.lower():
+            return False
+        last_ref = index
+    if last_ref is None:
+        return False
+    updated = [*lines[: last_ref + 1], f"ref table {_format_tmdl_name(table_name)}", *lines[last_ref + 1 :]]
+    _commit_tmdl_lines(model_path, updated, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _rename_model_table_ref(
+    model: SemanticModel,
+    old_name: str,
+    new_name: str,
+    *,
+    dry_run: bool,
+) -> bool:
+    """Rewrite the ``ref table`` line for a renamed table in place."""
+    model_path = model.model_path or (model.folder / "definition" / "model.tmdl")
+    if not model_path.exists():
+        return False
+    lines = _get_tmdl_lines(model_path, None)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("ref table ") and _parse_tmdl_name(stripped[len("ref table "):]).lower() == old_name.lower():
+            indent = line[: len(line) - len(line.lstrip())]
+            lines[index] = f"{indent}ref table {_format_tmdl_name(new_name)}"
+            _commit_tmdl_lines(model_path, lines, dry_run=dry_run, session=None)
+            return True
+    return False
 
 
 def _split_top_level_args(text: str) -> list[str]:
@@ -1686,11 +1779,11 @@ def create_calculated_table(
 
     tmdl_lines.append("")
 
-    safe_filename = table_name.replace(" ", "_").replace("'", "")
-    tmdl_path = tables_dir / f"{safe_filename}.tmdl"
+    tmdl_path = _new_table_tmdl_path(loaded_model, table_name)
 
     if not dry_run:
         _write_tmdl_lines(tmdl_path, tmdl_lines)
+    _add_model_table_ref(loaded_model, table_name, dry_run=dry_run)
 
     return table_name, tmdl_path, True
 

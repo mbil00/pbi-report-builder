@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .schema import ModelRole, RoleMember, RoleTablePermission, SemanticModel
-from .writes import TmdlEditSession, _commit_tmdl_lines, validate_model_object_name
+from .writes import TmdlEditSession, _commit_tmdl_lines, tmdl_file_name, validate_model_object_name
 
 _MODEL_PERMISSION_VALUES = frozenset({"none", "read", "readRefresh", "refresh", "administrator"})
 _ROLE_MEMBER_TYPES = frozenset({"user", "group", "auto", "activeDirectory"})
@@ -333,7 +333,7 @@ def _render_role_lines(role: ModelRole) -> list[str]:
 
 
 def _role_path(model: SemanticModel, role_name: str) -> Path:
-    return model.folder / "definition" / "roles" / f"{role_name}.tmdl"
+    return model.folder / "definition" / "roles" / tmdl_file_name(role_name)
 
 
 def _format_tmdl_name(name: str) -> str:

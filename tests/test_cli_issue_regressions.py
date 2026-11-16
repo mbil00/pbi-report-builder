@@ -281,7 +281,7 @@ table Metrics
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)
-            renamed_path = root / "Sample.SemanticModel" / "definition" / "tables" / "Revenue_Sales.tmdl"
+            renamed_path = root / "Sample.SemanticModel" / "definition" / "tables" / "Revenue Sales.tmdl"
             self.assertTrue(renamed_path.exists())
             self.assertFalse((root / "Sample.SemanticModel" / "definition" / "tables" / "Sales.tmdl").exists())
             renamed_content = renamed_path.read_text(encoding="utf-8-sig")
