@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+import hashlib
 import re
 import textwrap
 import uuid
@@ -92,6 +93,10 @@ class TmdlEditSession:
                 lines = []
             self._lines_by_path[path] = lines
         return lines
+
+    def is_staged(self, path: Path) -> bool:
+        """Return True if ``path`` has a pending write in this session."""
+        return path in self._dirty_paths
 
     def mark_dirty(self, path: Path) -> None:
         """Mark a buffered file as needing a final write."""
@@ -1095,9 +1100,142 @@ def _indent_level(line: str) -> int:
     return int(indent)
 
 
+def _tmdl_newline(path: Path) -> str:
+    """Return the line ending to write ``path`` with.
+
+    Desktop writes TMDL with CRLF, so new files get CRLF. An existing file
+    keeps the ending it already uses, so an edit doesn't rewrite every line.
+    """
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return "\r\n"
+    if b"\n" in data and b"\r\n" not in data:
+        return "\n"
+    return "\r\n"
+
+
 def _write_tmdl_lines(path: Path, lines: list[str]) -> None:
     """Write TMDL lines back to disk with a trailing newline."""
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    newline = _tmdl_newline(path)
+    with open(path, "w", encoding="utf-8", newline=newline) as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+# Characters Windows doesn't allow in file names. Desktop stores a table
+# named "Q/A Notes" as "Q%2FA Notes.tmdl" and keeps spaces, apostrophes,
+# "&" and parentheses as they are. "%" is escaped too, so two names never
+# share a file ("A/B" -> "A%2FB", "A%2FB" -> "A%252FB").
+# Most file systems cap one path component at 255 bytes.
+_MAX_FILE_NAME_BYTES = 255
+_TMDL_FILE_NAME_ESCAPES = set('%/\\:*?"<>|')
+
+
+def tmdl_file_name(name: str) -> str:
+    """Return the ``.tmdl`` file name Desktop uses for a named object.
+
+    A name whose escaped form passes the 255-byte limit is cut short and gets
+    ``~`` plus a hash of the full name, so it still has a file of its own.
+    Power BI reads the object's name from inside the file, not from its name.
+    """
+    stem = "".join(
+        f"%{ord(ch):02X}" if ch in _TMDL_FILE_NAME_ESCAPES or ord(ch) < 32 else ch
+        for ch in name
+    )
+    file_name = f"{stem}.tmdl"
+    if len(file_name.encode("utf-8")) <= _MAX_FILE_NAME_BYTES:
+        return file_name
+    suffix = f"~{hashlib.sha1(name.encode('utf-8')).hexdigest()[:12]}.tmdl"
+    budget = _MAX_FILE_NAME_BYTES - len(suffix)
+    kept: list[str] = []
+    used = 0
+    # Cut between characters, and never inside a %XX escape.
+    for match in re.finditer(r"%[0-9A-F]{2}|.", stem, flags=re.DOTALL):
+        size = len(match.group().encode("utf-8"))
+        if used + size > budget:
+            break
+        kept.append(match.group())
+        used += size
+    return "".join(kept) + suffix
+
+
+def _ensure_new_tmdl_path(
+    path: Path,
+    kind: str,
+    name: str,
+    session: TmdlEditSession | None = None,
+) -> Path:
+    """Refuse a path that is on disk or already staged in ``session``.
+
+    Files named the pre-#52 way (``Revenue_Sales.tmdl`` for "Revenue Sales")
+    can still match the name of a different object.
+    """
+    if path.exists() or (session is not None and session.is_staged(path)):
+        raise ValueError(f'Cannot create {kind} "{name}": "{path.name}" already exists.')
+    return path
+
+
+def _new_table_tmdl_path(
+    model: SemanticModel,
+    table_name: str,
+    session: TmdlEditSession | None = None,
+) -> Path:
+    """Return the file path for a new table, refusing to overwrite a file."""
+    path = model.folder / "definition" / "tables" / tmdl_file_name(table_name)
+    return _ensure_new_tmdl_path(path, "table", table_name, session)
+
+
+def _add_model_table_ref(
+    model: SemanticModel,
+    table_name: str,
+    *,
+    dry_run: bool,
+    edit_session: TmdlEditSession | None = None,
+) -> bool:
+    """Append ``ref table`` for a new table to model.tmdl, after the last one.
+
+    Desktop lists imported tables first and created tables after them, in
+    creation order. A model.tmdl without a ``ref table`` list is left alone.
+    """
+    model_path = model.model_path or (model.folder / "definition" / "model.tmdl")
+    if not model_path.exists():
+        return False
+    lines = _get_tmdl_lines(model_path, edit_session)
+    last_ref = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("ref table "):
+            continue
+        if _parse_tmdl_name(stripped[len("ref table "):]).lower() == table_name.lower():
+            return False
+        last_ref = index
+    if last_ref is None:
+        return False
+    updated = [*lines[: last_ref + 1], f"ref table {_format_tmdl_name(table_name)}", *lines[last_ref + 1 :]]
+    _commit_tmdl_lines(model_path, updated, dry_run=dry_run, session=edit_session)
+    return True
+
+
+def _rename_model_table_ref(
+    model: SemanticModel,
+    old_name: str,
+    new_name: str,
+    *,
+    dry_run: bool,
+) -> bool:
+    """Rewrite the ``ref table`` line for a renamed table in place."""
+    model_path = model.model_path or (model.folder / "definition" / "model.tmdl")
+    if not model_path.exists():
+        return False
+    lines = _get_tmdl_lines(model_path, None)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("ref table ") and _parse_tmdl_name(stripped[len("ref table "):]).lower() == old_name.lower():
+            indent = line[: len(line) - len(line.lstrip())]
+            lines[index] = f"{indent}ref table {_format_tmdl_name(new_name)}"
+            _commit_tmdl_lines(model_path, lines, dry_run=dry_run, session=None)
+            return True
+    return False
 
 
 def _split_top_level_args(text: str) -> list[str]:
@@ -1686,11 +1824,11 @@ def create_calculated_table(
 
     tmdl_lines.append("")
 
-    safe_filename = table_name.replace(" ", "_").replace("'", "")
-    tmdl_path = tables_dir / f"{safe_filename}.tmdl"
+    tmdl_path = _new_table_tmdl_path(loaded_model, table_name)
 
     if not dry_run:
         _write_tmdl_lines(tmdl_path, tmdl_lines)
+    _add_model_table_ref(loaded_model, table_name, dry_run=dry_run)
 
     return table_name, tmdl_path, True
 

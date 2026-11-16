@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .schema import Perspective, PerspectiveTable, SemanticModel
-from .writes import TmdlEditSession, _commit_tmdl_lines, validate_model_object_name
+from .writes import TmdlEditSession, _commit_tmdl_lines, _ensure_new_tmdl_path, tmdl_file_name, validate_model_object_name
 
 
 @dataclass
@@ -41,7 +41,7 @@ def create_perspective(
     perspective = _build_perspective(loaded_model, perspective_name, spec)
     lines = _render_perspective_lines(perspective)
     _commit_tmdl_lines(
-        _perspective_path(loaded_model, perspective_name),
+        _ensure_new_tmdl_path(_perspective_path(loaded_model, perspective_name), "perspective", perspective_name, edit_session),
         lines,
         dry_run=dry_run,
         session=edit_session,
@@ -171,7 +171,7 @@ def _render_perspective_lines(perspective: Perspective) -> list[str]:
 
 
 def _perspective_path(model: SemanticModel, perspective_name: str) -> Path:
-    return model.folder / "definition" / "perspectives" / f"{perspective_name}.tmdl"
+    return model.folder / "definition" / "perspectives" / tmdl_file_name(perspective_name)
 
 
 def _parse_table_member_ref(ref: str) -> tuple[str, str]:

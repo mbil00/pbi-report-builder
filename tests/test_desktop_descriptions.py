@@ -2,9 +2,8 @@
 
 The write tests copy the Desktop-built report-04 project, strip its ``///``
 lines, put each description back through the CLI and compare the TMDL with
-what Desktop saved. CLI writes still turn Desktop's CRLF into LF (#52), so the
-comparison normalizes line endings. They skip if `04-desktop-shapes.pbip` is
-absent.
+what Desktop saved, byte for byte (CRLF line endings included). They skip if
+`04-desktop-shapes.pbip` is absent.
 """
 
 from __future__ import annotations
@@ -31,10 +30,6 @@ OPEN = "Task Count minus Completed Tasks."
 TASK = "One row per task. Source: Task.csv."
 STATUS = "Workflow status: Not started, In progress, Blocked or Completed."
 CALENDAR = "Year > Quarter > Month > Date drill path."
-
-
-def _lf(text: str) -> str:
-    return text.replace("\r\n", "\n")
 
 
 @unittest.skipUnless(SHAPES_PBIP.exists(), "report-04 Desktop output not built yet (see BUILD-CHECKLIST.md)")
@@ -97,16 +92,18 @@ class DesktopDescriptionWriteTests(unittest.TestCase):
     def _path(self, table: str) -> Path:
         return self.root / TABLES / f"{table}.tmdl"
 
-    def _desktop(self, table: str) -> str:
-        return _lf((SHAPES_DIR / TABLES / f"{table}.tmdl").read_text(encoding="utf-8-sig"))
+    def _desktop_bytes(self, table: str) -> bytes:
+        return (SHAPES_DIR / TABLES / f"{table}.tmdl").read_bytes()
 
     def _written(self, table: str) -> str:
-        return _lf(self._path(table).read_text(encoding="utf-8-sig"))
+        """The written file as text with line endings folded to ``\\n``."""
+        return self._path(table).read_text(encoding="utf-8-sig")
 
     def _strip_descriptions(self, table: str) -> None:
         path = self._path(table)
         lines = path.read_text(encoding="utf-8-sig").splitlines()
-        path.write_text("\n".join(l for l in lines if not l.lstrip().startswith("///")) + "\n", encoding="utf-8")
+        kept = [line for line in lines if not line.lstrip().startswith("///")]
+        path.write_bytes(("\r\n".join(kept) + "\r\n").encode("utf-8"))
 
     def test_cli_writes_match_desktop(self) -> None:
         for table in ("Task", "Measures Table", "Date"):
@@ -129,7 +126,7 @@ class DesktopDescriptionWriteTests(unittest.TestCase):
 
         for table in ("Task", "Measures Table", "Date"):
             with self.subTest(table=table):
-                self.assertEqual(self._written(table), self._desktop(table))
+                self.assertEqual(self._path(table).read_bytes(), self._desktop_bytes(table))
 
     def test_setting_the_same_description_does_not_write(self) -> None:
         before = self._path("Measures Table").read_bytes()
