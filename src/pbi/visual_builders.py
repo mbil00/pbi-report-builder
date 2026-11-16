@@ -153,6 +153,7 @@ def apply_initial_sort(
     *,
     field_type: str = "auto",
     descending: bool = False,
+    save: bool = True,
 ) -> tuple[str, str, str, str]:
     """Apply an initial sort and return the resolved field details."""
     sorting_supported = supports_sorting(visual.visual_type)
@@ -166,7 +167,14 @@ def apply_initial_sort(
         field_type,
         strict=True,
     )
-    set_sort(visual, entity, prop, field_type=resolved_field_type, descending=descending)
+    set_sort(
+        visual,
+        entity,
+        prop,
+        field_type=resolved_field_type,
+        descending=descending,
+        save=save,
+    )
     direction = "Descending" if descending else "Ascending"
     return entity, prop, resolved_field_type, direction
 

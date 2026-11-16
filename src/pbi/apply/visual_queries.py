@@ -178,6 +178,9 @@ def apply_sort(
             field_ref,
             field_type=field_type,
             descending=(direction == "Descending"),
+            # apply_visual persists through the session, which journals the
+            # write for rollback; a direct save here would bypass it (#70).
+            save=False,
         )
     except ValueError as e:
         result.errors.append(f"{context}: {e}")
