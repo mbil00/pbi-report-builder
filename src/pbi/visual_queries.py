@@ -108,8 +108,16 @@ def set_sort(
     prop: str,
     field_type: str = "column",
     descending: bool = True,
+    *,
+    save: bool = True,
 ) -> None:
-    """Set the sort definition on a visual."""
+    """Set the sort definition on a visual.
+
+    An existing definition with the same sort entries is left as it is, so
+    Desktop's ``isDefaultSort`` flag (or its absence) survives a round trip.
+    Pass ``save=False`` when the caller persists the visual itself, e.g. an
+    apply session that journals the write for rollback.
+    """
     field_key = "Column" if field_type == "column" else "Measure"
     sort_entry = {
         "field": {
@@ -126,11 +134,15 @@ def set_sort(
         .setdefault("visual", {})
         .setdefault("query", {})
     )
+    existing = query.get("sortDefinition")
+    if isinstance(existing, dict) and existing.get("sort") == [sort_entry]:
+        return
     query["sortDefinition"] = {
         "sort": [sort_entry],
         "isDefaultSort": False,
     }
-    visual.save()
+    if save:
+        visual.save()
 
 
 def clear_sort(visual: Visual) -> bool:
