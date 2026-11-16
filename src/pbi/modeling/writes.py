@@ -1125,6 +1125,8 @@ def _write_tmdl_lines(path: Path, lines: list[str]) -> None:
 # named "Q/A Notes" as "Q%2FA Notes.tmdl" and keeps spaces, apostrophes,
 # "&" and parentheses as they are. "%" is escaped too, so two names never
 # share a file ("A/B" -> "A%2FB", "A%2FB" -> "A%252FB").
+# Most file systems cap one path component at 255 bytes.
+_MAX_FILE_NAME_BYTES = 255
 _TMDL_FILE_NAME_ESCAPES = set('%/\\:*?"<>|')
 
 
@@ -1134,7 +1136,13 @@ def tmdl_file_name(name: str) -> str:
         f"%{ord(ch):02X}" if ch in _TMDL_FILE_NAME_ESCAPES or ord(ch) < 32 else ch
         for ch in name
     )
-    return f"{stem}.tmdl"
+    file_name = f"{stem}.tmdl"
+    if len(file_name.encode("utf-8")) > _MAX_FILE_NAME_BYTES:
+        raise ValueError(
+            f'"{name}" makes a file name longer than {_MAX_FILE_NAME_BYTES} bytes ("{file_name[:40]}..."). '
+            "Use a shorter name or fewer special characters."
+        )
+    return file_name
 
 
 def _ensure_new_tmdl_path(

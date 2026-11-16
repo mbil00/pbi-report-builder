@@ -62,6 +62,13 @@ class TmdlFileNameTests(unittest.TestCase):
         self.assertEqual(tmdl_file_name("A%2FB"), "A%252FB.tmdl")
         self.assertEqual(tmdl_file_name("50% Margin"), "50%25 Margin.tmdl")
 
+    def test_names_too_long_for_a_file_are_an_error(self) -> None:
+        self.assertEqual(len(tmdl_file_name("%" * 83)), 254)
+        with self.assertRaisesRegex(ValueError, "longer than 255 bytes"):
+            tmdl_file_name("%" * 84)
+        with self.assertRaisesRegex(ValueError, "longer than 255 bytes"):
+            tmdl_file_name("表" * 84)
+
 
 @unittest.skipUnless(SHAPES_PBIP.exists(), "report-04 Desktop output not built yet (see BUILD-CHECKLIST.md)")
 class DesktopTmdlNamingTests(unittest.TestCase):
@@ -243,6 +250,11 @@ table Sales
         create_field_parameter(self.root, "Picker", ["Sales.Revenue"], None, model=model, edit_session=session)
         with self.assertRaisesRegex(ValueError, "Picker.tmdl"):
             create_field_parameter(self.root, "Picker", ["Sales.Revenue"], None, model=model, edit_session=session)
+
+    def test_create_with_overlong_file_name_is_a_clean_error(self) -> None:
+        result = self._invoke("model", "table", "create", "%" * 84, "{ 1 }")
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("longer than 255 bytes", result.stdout)
 
     def test_create_refuses_to_overwrite_an_existing_file(self) -> None:
         _write_table(self.root, "Extra.tmdl", "table Other\n\tmeasure X = 1")
