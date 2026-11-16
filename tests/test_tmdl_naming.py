@@ -57,6 +57,11 @@ class TmdlFileNameTests(unittest.TestCase):
     def test_other_characters_windows_refuses_are_escaped(self) -> None:
         self.assertEqual(tmdl_file_name('a\\b:c*d?e"f<g>h|i'), "a%5Cb%3Ac%2Ad%3Fe%22f%3Cg%3Eh%7Ci.tmdl")
 
+    def test_percent_is_escaped_so_names_never_share_a_file(self) -> None:
+        self.assertEqual(tmdl_file_name("A/B"), "A%2FB.tmdl")
+        self.assertEqual(tmdl_file_name("A%2FB"), "A%252FB.tmdl")
+        self.assertEqual(tmdl_file_name("50% Margin"), "50%25 Margin.tmdl")
+
 
 @unittest.skipUnless(SHAPES_PBIP.exists(), "report-04 Desktop output not built yet (see BUILD-CHECKLIST.md)")
 class DesktopTmdlNamingTests(unittest.TestCase):
@@ -198,6 +203,46 @@ table Sales
         result = self._invoke("model", "table", "create", "Extra", "{ 1 }")
         self.assertEqual(result.exit_code, 0, result.stdout)
         self.assertEqual(self.model_path.read_bytes(), b"model Model\r\n\tculture: en-US\r\n")
+
+    def _assert_refused(self, result, file_name: str) -> None:
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn(file_name, result.stdout)
+
+    def test_rename_refuses_to_overwrite_a_legacy_file(self) -> None:
+        # "Revenue Sales" saved under the pre-#52 name, which is the new name of "Revenue_Sales".
+        legacy = _write_table(self.root, "Revenue_Sales.tmdl", "table 'Revenue Sales'\n\tmeasure Kept = 1")
+        before = {path: path.read_bytes() for path in self.table.parent.iterdir()}
+        result = self._invoke("model", "table", "rename", "Sales", "Revenue_Sales")
+        self._assert_refused(result, "Revenue_Sales.tmdl")
+        self.assertEqual({path: path.read_bytes() for path in self.table.parent.iterdir()}, before)
+        self.assertIn(b"measure Kept", legacy.read_bytes())
+
+    def test_role_and_perspective_create_refuse_existing_files(self) -> None:
+        from pbi.modeling.writes_perspectives import PerspectiveMemberSpec, create_perspective
+        from pbi.modeling.writes_roles import RoleSpec, create_role
+
+        definition = self.root / "Sample.SemanticModel" / "definition"
+        for folder, name, create, spec in (
+            ("roles", "Readers", create_role, RoleSpec()),
+            ("perspectives", "Sales View", create_perspective, PerspectiveMemberSpec(include_all_tables=["Sales"])),
+        ):
+            with self.subTest(folder=folder):
+                path = definition / folder / f"{name}.tmdl"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"not a definition the model knows about\r\n")
+                with self.assertRaisesRegex(ValueError, "already exists"):
+                    create(self.root, name, spec)
+                self.assertEqual(path.read_bytes(), b"not a definition the model knows about\r\n")
+
+    def test_field_parameter_refuses_a_file_staged_in_the_same_session(self) -> None:
+        from pbi.modeling.writes import TmdlEditSession
+        from pbi.modeling.writes_field_parameters import create_field_parameter
+
+        model = SemanticModel.load(self.root)
+        session = TmdlEditSession()
+        create_field_parameter(self.root, "Picker", ["Sales.Revenue"], None, model=model, edit_session=session)
+        with self.assertRaisesRegex(ValueError, "Picker.tmdl"):
+            create_field_parameter(self.root, "Picker", ["Sales.Revenue"], None, model=model, edit_session=session)
 
     def test_create_refuses_to_overwrite_an_existing_file(self) -> None:
         _write_table(self.root, "Extra.tmdl", "table Other\n\tmeasure X = 1")

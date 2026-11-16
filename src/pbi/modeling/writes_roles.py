@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .schema import ModelRole, RoleMember, RoleTablePermission, SemanticModel
-from .writes import TmdlEditSession, _commit_tmdl_lines, tmdl_file_name, validate_model_object_name
+from .writes import TmdlEditSession, _commit_tmdl_lines, _ensure_new_tmdl_path, tmdl_file_name, validate_model_object_name
 
 _MODEL_PERMISSION_VALUES = frozenset({"none", "read", "readRefresh", "refresh", "administrator"})
 _ROLE_MEMBER_TYPES = frozenset({"user", "group", "auto", "activeDirectory"})
@@ -42,7 +42,7 @@ def create_role(
 
     role = _build_role(loaded_model, role_name, spec)
     _commit_tmdl_lines(
-        _role_path(loaded_model, role.name),
+        _ensure_new_tmdl_path(_role_path(loaded_model, role.name), "role", role.name, edit_session),
         _render_role_lines(role),
         dry_run=dry_run,
         session=edit_session,

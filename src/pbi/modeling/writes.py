@@ -93,6 +93,10 @@ class TmdlEditSession:
             self._lines_by_path[path] = lines
         return lines
 
+    def is_staged(self, path: Path) -> bool:
+        """Return True if ``path`` has a pending write in this session."""
+        return path in self._dirty_paths
+
     def mark_dirty(self, path: Path) -> None:
         """Mark a buffered file as needing a final write."""
         self._dirty_paths.add(path)
@@ -1119,8 +1123,9 @@ def _write_tmdl_lines(path: Path, lines: list[str]) -> None:
 
 # Characters Windows doesn't allow in file names. Desktop stores a table
 # named "Q/A Notes" as "Q%2FA Notes.tmdl" and keeps spaces, apostrophes,
-# "&" and parentheses as they are.
-_TMDL_FILE_NAME_ESCAPES = set('/\\:*?"<>|')
+# "&" and parentheses as they are. "%" is escaped too, so two names never
+# share a file ("A/B" -> "A%2FB", "A%2FB" -> "A%252FB").
+_TMDL_FILE_NAME_ESCAPES = set('%/\\:*?"<>|')
 
 
 def tmdl_file_name(name: str) -> str:
@@ -1132,12 +1137,30 @@ def tmdl_file_name(name: str) -> str:
     return f"{stem}.tmdl"
 
 
-def _new_table_tmdl_path(model: SemanticModel, table_name: str) -> Path:
+def _ensure_new_tmdl_path(
+    path: Path,
+    kind: str,
+    name: str,
+    session: TmdlEditSession | None = None,
+) -> Path:
+    """Refuse a path that is on disk or already staged in ``session``.
+
+    Files named the pre-#52 way (``Revenue_Sales.tmdl`` for "Revenue Sales")
+    can still match the name of a different object.
+    """
+    if path.exists() or (session is not None and session.is_staged(path)):
+        raise ValueError(f'Cannot create {kind} "{name}": "{path.name}" already exists.')
+    return path
+
+
+def _new_table_tmdl_path(
+    model: SemanticModel,
+    table_name: str,
+    session: TmdlEditSession | None = None,
+) -> Path:
     """Return the file path for a new table, refusing to overwrite a file."""
     path = model.folder / "definition" / "tables" / tmdl_file_name(table_name)
-    if path.exists():
-        raise ValueError(f'Cannot create table "{table_name}": "{path.name}" already exists.')
-    return path
+    return _ensure_new_tmdl_path(path, "table", table_name, session)
 
 
 def _add_model_table_ref(

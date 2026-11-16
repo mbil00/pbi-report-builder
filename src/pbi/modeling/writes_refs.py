@@ -314,6 +314,10 @@ def rename_table(
     if table.definition_path is None:
         raise ValueError(f'Table "{table.name}" has no TMDL definition file.')
 
+    new_path = table.definition_path.with_name(tmdl_file_name(new_name))
+    if new_path.exists() and not new_path.samefile(table.definition_path):
+        raise ValueError(f'Cannot rename table "{table.name}" to "{new_name}": "{new_path.name}" already exists.')
+
     updated_refs: list[str] = []
 
     lines = _get_tmdl_lines(table.definition_path, None)
@@ -371,7 +375,6 @@ def rename_table(
     if _rename_model_table_ref(loaded_model, table.name, new_name, dry_run=dry_run):
         updated_refs.append("model.tmdl (ref table)")
 
-    new_path = table.definition_path.with_name(tmdl_file_name(new_name))
     if not dry_run and new_path != table.definition_path:
         table.definition_path.rename(new_path)
 

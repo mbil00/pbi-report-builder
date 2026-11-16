@@ -136,7 +136,7 @@ All visual `name` fields are sanitized via `sanitize_visual_name()` in `project.
 All model subgroups follow the standard CLI verb pattern: `list`, `get`, `set`, `create`, `delete`, `rename`.
 
 **Table:** `model table list`, `model table create <name> <DAX>` (calculated tables)
-- TMDL files follow Desktop: `tables/<Name>.tmdl` with spaces and apostrophes kept and `/` (and other characters Windows refuses) as `%2F`-style escapes (`tmdl_file_name()` in `modeling/writes.py`). New files are CRLF; edits keep a file's existing line ending. Creating a table (`table create`, `field-parameter create`, `fieldParameters:` in apply) appends `ref table` after the last one in `model.tmdl`; `table rename` rewrites that line and the file name
+- TMDL files follow Desktop: `tables/<Name>.tmdl` with spaces and apostrophes kept and `/`, `%` and other characters Windows refuses as `%XX` escapes (`Q/A` → `Q%2FA`), so two names never share a file; creates and renames refuse to overwrite an existing file (`tmdl_file_name()` in `modeling/writes.py`). New files are CRLF; edits keep a file's existing line ending. Creating a table (`table create`, `field-parameter create`, `fieldParameters:` in apply) appends `ref table` after the last one in `model.tmdl`; `table rename` rewrites that line and the file name
 
 **Column:** `model column list <table>`, `model column get <Table.Column>`, `model column set <Table.Column> key=value...`, `model column create`, `model column edit`, `model column delete`, `model column rename <table> <old> <new>`, `model column hide`, `model column unhide`
 - Writable properties via `set`: `description`, `displayFolder`, `sortByColumn`, `summarizeBy`, `dataCategory`, `formatString`

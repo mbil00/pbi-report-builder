@@ -159,7 +159,7 @@ def create_field_parameter(
     lines.append("")
 
     # Write file
-    tmdl_path = _new_table_tmdl_path(loaded_model, parameter_name)
+    tmdl_path = _new_table_tmdl_path(loaded_model, parameter_name, edit_session)
 
     if not dry_run:
         tmdl_path.parent.mkdir(parents=True, exist_ok=True)
