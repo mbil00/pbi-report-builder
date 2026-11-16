@@ -62,12 +62,15 @@ class TmdlFileNameTests(unittest.TestCase):
         self.assertEqual(tmdl_file_name("A%2FB"), "A%252FB.tmdl")
         self.assertEqual(tmdl_file_name("50% Margin"), "50%25 Margin.tmdl")
 
-    def test_names_too_long_for_a_file_are_an_error(self) -> None:
-        self.assertEqual(len(tmdl_file_name("%" * 83)), 254)
-        with self.assertRaisesRegex(ValueError, "longer than 255 bytes"):
-            tmdl_file_name("%" * 84)
-        with self.assertRaisesRegex(ValueError, "longer than 255 bytes"):
-            tmdl_file_name("表" * 84)
+    def test_overlong_names_are_shortened_with_a_hash(self) -> None:
+        self.assertEqual(tmdl_file_name("%" * 83), "%25" * 83 + ".tmdl")
+        for name in ("%" * 84, "%" * 85, "表" * 84, "a" * 300):
+            with self.subTest(name=name[:3]):
+                file_name = tmdl_file_name(name)
+                self.assertLessEqual(len(file_name.encode("utf-8")), 255)
+                self.assertRegex(file_name, r"~[0-9a-f]{12}\.tmdl$")
+                self.assertNotRegex(file_name, r"%[0-9A-F]?~")
+        self.assertNotEqual(tmdl_file_name("%" * 84), tmdl_file_name("%" * 85))
 
 
 @unittest.skipUnless(SHAPES_PBIP.exists(), "report-04 Desktop output not built yet (see BUILD-CHECKLIST.md)")
@@ -251,10 +254,19 @@ table Sales
         with self.assertRaisesRegex(ValueError, "Picker.tmdl"):
             create_field_parameter(self.root, "Picker", ["Sales.Revenue"], None, model=model, edit_session=session)
 
-    def test_create_with_overlong_file_name_is_a_clean_error(self) -> None:
-        result = self._invoke("model", "table", "create", "%" * 84, "{ 1 }")
-        self.assertNotEqual(result.exit_code, 0)
-        self.assertIn("longer than 255 bytes", result.stdout)
+    def test_overlong_names_can_be_created_renamed_and_edited(self) -> None:
+        from pbi.modeling.writes_roles import RoleSpec, create_role, set_role
+
+        long_name = "%" * 84
+        result = self._invoke("model", "table", "create", long_name, "{ 1 }")
+        self.assertEqual(result.exit_code, 0, result.stdout)
+        self.assertEqual(SemanticModel.load(self.root).find_table(long_name).definition_path.name,
+                         tmdl_file_name(long_name))
+        result = self._invoke("model", "table", "rename", "Sales", "/" * 99)
+        self.assertEqual(result.exit_code, 0, result.stdout)
+
+        create_role(self.root, long_name, RoleSpec())
+        self.assertEqual(set_role(self.root, long_name, RoleSpec(model_permission="none")), (long_name, True))
 
     def test_create_refuses_to_overwrite_an_existing_file(self) -> None:
         _write_table(self.root, "Extra.tmdl", "table Other\n\tmeasure X = 1")

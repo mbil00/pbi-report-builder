@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+import hashlib
 import re
 import textwrap
 import uuid
@@ -1131,18 +1132,31 @@ _TMDL_FILE_NAME_ESCAPES = set('%/\\:*?"<>|')
 
 
 def tmdl_file_name(name: str) -> str:
-    """Return the ``.tmdl`` file name Desktop uses for a named object."""
+    """Return the ``.tmdl`` file name Desktop uses for a named object.
+
+    A name whose escaped form passes the 255-byte limit is cut short and gets
+    ``~`` plus a hash of the full name, so it still has a file of its own.
+    Power BI reads the object's name from inside the file, not from its name.
+    """
     stem = "".join(
         f"%{ord(ch):02X}" if ch in _TMDL_FILE_NAME_ESCAPES or ord(ch) < 32 else ch
         for ch in name
     )
     file_name = f"{stem}.tmdl"
-    if len(file_name.encode("utf-8")) > _MAX_FILE_NAME_BYTES:
-        raise ValueError(
-            f'"{name}" makes a file name longer than {_MAX_FILE_NAME_BYTES} bytes ("{file_name[:40]}..."). '
-            "Use a shorter name or fewer special characters."
-        )
-    return file_name
+    if len(file_name.encode("utf-8")) <= _MAX_FILE_NAME_BYTES:
+        return file_name
+    suffix = f"~{hashlib.sha1(name.encode('utf-8')).hexdigest()[:12]}.tmdl"
+    budget = _MAX_FILE_NAME_BYTES - len(suffix)
+    kept: list[str] = []
+    used = 0
+    # Cut between characters, and never inside a %XX escape.
+    for match in re.finditer(r"%[0-9A-F]{2}|.", stem, flags=re.DOTALL):
+        size = len(match.group().encode("utf-8"))
+        if used + size > budget:
+            break
+        kept.append(match.group())
+        used += size
+    return "".join(kept) + suffix
 
 
 def _ensure_new_tmdl_path(
