@@ -45,7 +45,7 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 | 13 | T4a delete harness-covered tests: apply | #85 | [x] #123 (c023ced) |
 | 14 | T4b … model | #85 | [x] #124 (ddfff49) |
 | 15 | T4c … visual/CLI | #85 | [x] #127 (370ff21) |
-| 16 | T4d … themes | #85 | [ ] |
+| 16 | T4d … themes | #85 | [x] #128 |
 | 17 | T4e … misc | #85 | [ ] |
 
 Each B unit runs the harness, removes the xfails its fix resolves, and leaves any xfails it
