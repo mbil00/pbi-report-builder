@@ -60,11 +60,6 @@ KNOWN_REPORT_ROUNDTRIP = {
     "sample-report": "#108, #109",
 }
 
-# diff prints "No differences found" on every fixture (#80). That agrees with
-# apply once apply is a no-op, so a fixture's diff xfail goes with its
-# report round-trip xfail.
-KNOWN_DIFF_AGREES = {name: "#80" for name in KNOWN_REPORT_ROUNDTRIP}
-
 # Every fixture has a table without measures, so `model measure list --json`
 # prints prose there.
 KNOWN_LIST_JSON = {name: "#101" for name in FIXTURE_NAMES}
@@ -279,7 +274,7 @@ def test_report_roundtrip_is_noop(fixture_copy: Callable[[str], Path], name: str
     assert_unchanged(root, before, "export -> apply")
 
 
-@pytest.mark.parametrize("name", per_fixture(KNOWN_DIFF_AGREES))
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
 def test_diff_agrees_with_apply(fixture_copy: Callable[[str], Path], name: str, tmp_path: Path) -> None:
     root = fixture_copy(name)
     spec = _export(root, tmp_path)
@@ -295,6 +290,13 @@ def test_diff_agrees_with_apply(fixture_copy: Callable[[str], Path], name: str, 
         f"diff says {'no differences' if diff_clean else 'differences'}; "
         f"apply exited {apply.exit_code} and changed {len(changed)} file(s)"
     )
+    assert (diff.exit_code == 0) == (apply.exit_code == 0), diff.output
+    assert diff_files(diff.output) == changed, diff.output
+
+
+def diff_files(output: str) -> list[str]:
+    """The files ``diff`` says apply would add (+), remove (-) or rewrite (~)."""
+    return sorted(re.findall(r"^  [~+-] (\S.*)$", output, flags=re.MULTILINE))
 
 
 # --- Step 4: model round-trip -----------------------------------------------------

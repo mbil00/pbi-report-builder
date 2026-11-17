@@ -189,7 +189,7 @@ The apply engine supports these property syntaxes in YAML:
 - **Visual type conversion:** when YAML specifies a different type for an existing visual, the old visual is deleted and a new one created with the new type
 - **Overwrite mode:** `--overwrite` deletes visuals not in YAML, reports deletions
 - **Dry-run completeness:** `--dry-run` lists all visuals for newly created pages
-- **Diff preview:** `pbi diff <yaml>` shows property-by-property changes before applying
+- **Diff preview:** `pbi diff <yaml>` shows property-by-property changes before applying. It runs apply on a temporary copy, so it also lists every file apply would write and fails with apply's errors (`pbi.apply.trial`)
 
 ## Schema Validation
 

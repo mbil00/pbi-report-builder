@@ -318,13 +318,14 @@ def diff_cmd(
     page: Annotated[Optional[str], typer.Option("--page", help="Only diff this page.")] = None,
     project: ProjectOpt = None,
 ) -> None:
-    """Show what 'pbi apply' would change, property by property."""
-    from pbi.bookmarks import export_bookmarks
-    from pbi.commands.visuals.helpers import DIFF_NONE, flatten_diff_spec, flatten_visual_diff_spec
-    from pbi.slicer_state import has_slicer_state
-    from pbi.export import export_visual_spec, export_yaml
-    from pbi.lookup import find_visual_exact
-    from pbi.project import Visual, sanitize_visual_name
+    """Show what 'pbi apply' would change, property by property.
+
+    The verdict comes from apply itself: the YAML is applied to a temporary
+    copy of the project, so anything apply would reject is reported as an
+    error, and every file it would write is listed, even a change the
+    property view doesn't show.
+    """
+    from pbi.apply.trial import trial_apply
 
     proj = get_project(project)
     try:
@@ -334,12 +335,59 @@ def diff_cmd(
         raise typer.Exit(1)
 
     import yaml as yaml_mod
-    spec = yaml_mod.safe_load(yaml_content)
-    if not isinstance(spec, dict) or "pages" not in spec:
-        console.print("[red]Error:[/red] YAML must have a 'pages' key.")
+    try:
+        spec = yaml_mod.safe_load(yaml_content)
+    except yaml_mod.YAMLError as e:
+        console.print(f"[red]Error:[/red] Invalid YAML: {escape(str(e))}")
+        raise typer.Exit(1)
+    if not isinstance(spec, dict):
+        console.print("[red]Error:[/red] YAML must be a mapping with a 'pages' key.")
         raise typer.Exit(1)
 
-    has_diffs = False
+    trial = trial_apply(proj, yaml_content, page_filter=page)
+    if trial.is_noop:
+        for warning in trial.result.warnings:
+            console.print(f"[yellow]Warning:[/yellow] {warning}")
+        console.print("[dim]No differences found.[/dim]")
+        return
+
+    _print_property_diffs(proj, spec, page)
+
+    if trial.changes:
+        console.print("\n[bold]Files apply would write[/bold]")
+        marks = {"added": "[green]+[/green]", "removed": "[red]-[/red]", "modified": "[yellow]~[/yellow]"}
+        for change in trial.changes:
+            console.print(f"  {marks[change.kind]} [cyan]{escape(change.path)}[/cyan]", soft_wrap=True)
+            for detail in change.details[:_DIFF_DETAIL_LIMIT]:
+                console.print(f"      [dim]{escape(detail)}[/dim]", soft_wrap=True)
+            hidden = len(change.details) - _DIFF_DETAIL_LIMIT
+            if hidden > 0:
+                console.print(f"      [dim]... and {hidden} more[/dim]")
+
+    for warning in trial.result.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+    if trial.result.errors:
+        for error in trial.result.errors:
+            console.print(f"[red]Error:[/red] {error}")
+        console.print("[yellow]apply would fail and change nothing.[/yellow]")
+        raise typer.Exit(1)
+
+
+_DIFF_DETAIL_LIMIT = 8
+
+
+def _print_property_diffs(proj, spec: dict, page: str | None) -> None:
+    """Print the property-by-property view: current export against the YAML."""
+    from pbi.bookmarks import export_bookmarks
+    from pbi.commands.visuals.helpers import DIFF_NONE, flatten_diff_spec, flatten_visual_diff_spec
+    from pbi.slicer_state import has_slicer_state
+    from pbi.export import export_visual_spec
+    from pbi.lookup import find_visual_exact
+    from pbi.project import Visual, sanitize_visual_name
+
+    pages_spec = spec.get("pages", [])
+    if not isinstance(pages_spec, list):
+        pages_spec = []
     if page is None and isinstance(spec.get("theme"), dict):
         from pbi.apply.plan_theme import plan_theme_spec
         from pbi.theme_roundtrip import export_theme_spec
@@ -357,7 +405,6 @@ def diff_cmd(
                 if curr != planned:
                     theme_diffs.append((key, curr or "(none)", planned or "(none)"))
             if theme_diffs:
-                has_diffs = True
                 console.print("\n[bold]Theme[/bold]")
                 for prop, old, new in theme_diffs:
                     label = f"theme.{prop}" if prop else "theme"
@@ -383,13 +430,16 @@ def diff_cmd(
                 if curr != planned:
                     report_diffs.append((key, curr or "(none)", planned or "(none)"))
             if report_diffs:
-                has_diffs = True
                 console.print("\n[bold]Report[/bold]")
                 for prop, old, new in report_diffs:
                     label = f"report.{prop}" if prop else "report"
                     console.print(f"  [cyan]{label}[/cyan]: {old} [dim]->[/dim] {new}")
-    for page_spec in spec["pages"]:
+    for page_spec in pages_spec:
+        if not isinstance(page_spec, dict):
+            continue
         page_name = page_spec.get("name", "")
+        if not isinstance(page_name, str) or not page_name:
+            continue
         if page and page_name.lower() != page.lower():
             continue
 
@@ -400,7 +450,6 @@ def diff_cmd(
             vis_count = len(page_spec.get("visuals", []))
             if vis_count:
                 console.print(f"  {vis_count} visual(s) would be created")
-            has_diffs = True
             continue
 
         visuals = proj.get_visuals(pg)
@@ -421,7 +470,10 @@ def diff_cmd(
             except ValueError:
                 return None
 
-        for vis_spec in page_spec.get("visuals", []):
+        visual_specs = page_spec.get("visuals", [])
+        for vis_spec in visual_specs if isinstance(visual_specs, list) else []:
+            if not isinstance(vis_spec, dict):
+                continue
             vis_name = vis_spec.get("name", "")
             vis_id = vis_spec.get("id", "")
 
@@ -430,7 +482,6 @@ def diff_cmd(
             existing = (vis_by_folder.get(vis_id) if isinstance(vis_id, str) else None) or _match(vis_name)
             if not existing:
                 console.print(f'\n[green]+ New visual:[/green] [cyan]{vis_name}[/cyan] on "{page_name}"')
-                has_diffs = True
                 continue
 
             # Compare current vs YAML spec
@@ -462,7 +513,6 @@ def diff_cmd(
                     diffs.append((key, curr, proposed))
 
             if diffs:
-                has_diffs = True
                 console.print(f'\n[bold]{page_name}/{existing.name}[/bold]')
                 for prop, old, new in diffs:
                     console.print(f"  [cyan]{prop}[/cyan]: {old or '(none)'} [dim]->[/dim] {new}")
@@ -494,7 +544,6 @@ def diff_cmd(
             existing = current_bookmarks.get(bookmark_name)
             if existing is None:
                 console.print(f'\n[green]+ New bookmark:[/green] [cyan]{bookmark_name}[/cyan]')
-                has_diffs = True
                 continue
 
             current_flat = flatten_diff_spec(existing, ignore_keys={"name"})
@@ -507,13 +556,9 @@ def diff_cmd(
                     diffs.append((key, curr or "(none)", proposed_text))
 
             if diffs:
-                has_diffs = True
                 console.print(f'\n[bold]Bookmark {bookmark_name}[/bold]')
                 for prop, old, new in diffs:
                     console.print(f"  [cyan]{prop}[/cyan]: {old} [dim]->[/dim] {new}")
-
-    if not has_diffs:
-        console.print("[dim]No differences found.[/dim]")
 
 
 # ── Batch runner ──────────────────────────────────────────────────
