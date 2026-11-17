@@ -100,7 +100,13 @@ def _copied_paths(project: Project) -> list[Path]:
             if child.is_dir() and child.name.startswith(_SIDECAR_PREFIX)
         )
     )
-    return [path for path in paths if path.exists()]
+    paths = [path for path in paths if path.exists()]
+    # Copy each tree once: a report folder can sit inside a ``.pbi-*`` folder.
+    kept: list[Path] = []
+    for path in paths:
+        if path not in kept and not any(other in path.parents for other in paths):
+            kept.append(path)
+    return kept
 
 
 def _compare(before: Path, after: Path, rel: Path) -> list[FileChange]:

@@ -225,3 +225,18 @@ def test_json_changes_reports_values_types_keys_and_order() -> None:
     assert _changes({"l": [1]}, {"l": [1, {}]}) == ["l[1]: added"]
     assert _changes({"l": [{"x": "a"}]}, {"l": [{"x": "b"}]}) == ['l[0].x: "a" -> "b"']
     assert _changes({"a": None}, {"a": {}}) == ["a: null -> {}"]
+
+
+def test_diff_copies_a_report_inside_a_sidecar_folder_once(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    (tmp_path / ".pbi-reports").mkdir()
+    (tmp_path / "Sample.Report").rename(tmp_path / ".pbi-reports" / "Sample.Report")
+    (tmp_path / "Sample.pbip").write_text(
+        '{"artifacts": [{"report": {"path": ".pbi-reports/Sample.Report"}}]}\n', encoding="utf-8"
+    )
+    spec_file = _write(tmp_path / "empty.yaml", {"pages": []})
+
+    diff = cli("diff", spec_file, project=tmp_path)
+
+    assert diff.exit_code == 0, diff.output
+    assert "No differences found" in diff.output
