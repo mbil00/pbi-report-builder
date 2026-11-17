@@ -81,13 +81,17 @@ def textbox_content_matches(
 ) -> bool:
     """True when the textbox already shows ``text`` with every style in ``style_updates``.
 
-    Compares what ``extract_textbox_spec`` reads back, so an unedited
-    export -> apply leaves the visual's paragraphs and runs as they are.
+    Reads the first run the way ``extract_textbox_spec`` does, so an unedited
+    export -> apply leaves the visual's paragraphs and runs as they are. The
+    run's style counts even when its text is empty. A textbox with no run
+    never matches.
     """
-    spec = extract_textbox_spec(visual_data) or {}
-    if spec.get("text", "") != str(text):
+    run = _first_text_run(visual_data)
+    if not isinstance(run, dict):
         return False
-    current = spec.get("textStyle", {})
+    if _decode_text_literal(run.get("value", "")) != str(text):
+        return False
+    current = _decode_text_style(run.get("textStyle", {}))
     for key, value in (style_updates or {}).items():
         if key == "fontSize":
             if normalize_font_size(value) != current.get("fontSize"):

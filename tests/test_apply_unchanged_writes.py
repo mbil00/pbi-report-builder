@@ -219,3 +219,23 @@ def test_unedited_legacy_quoted_textbox_is_left_alone(fixture_copy) -> None:
     assert result.exit_code == 0, result.output
     run = json.loads(title.read_bytes())["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]
     assert run["value"] == "Finance Dashboard"
+
+
+def test_style_reset_on_an_empty_textbox_is_written() -> None:
+    """An empty run keeps its style; resetting that style is a change (PR #117 F1)."""
+    from pbi.textbox import textbox_content_matches
+
+    data = {"visual": {"objects": {"general": [{"properties": {"paragraphs": [
+        {"textRuns": [{"value": "", "textStyle": {"fontWeight": "bold", "fontStyle": "italic", "fontFamily": "Georgia"}}]},
+    ]}}]}}}
+
+    assert not textbox_content_matches(data, text="", style_updates={"bold": False})
+    assert not textbox_content_matches(data, text="", style_updates={"italic": False})
+    assert not textbox_content_matches(data, text="", style_updates={"fontFamily": ""})
+    assert textbox_content_matches(data, text="", style_updates={"bold": True, "fontFamily": "Georgia"})
+
+
+def test_textbox_without_a_run_never_matches() -> None:
+    from pbi.textbox import textbox_content_matches
+
+    assert not textbox_content_matches({"visual": {"objects": {}}}, text="")
