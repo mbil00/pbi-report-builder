@@ -8,6 +8,16 @@ from pathlib import Path
 
 
 @dataclass
+class ColumnVariation:
+    """A column ``variation`` block, e.g. the auto date/time hierarchy of a date column."""
+
+    name: str
+    # The variation's ``defaultHierarchy`` as (table, hierarchy); empty when absent.
+    default_hierarchy_table: str = ""
+    default_hierarchy: str = ""
+
+
+@dataclass
 class Column:
     name: str
     table: str
@@ -25,6 +35,7 @@ class Column:
     sort_by_column: str = ""
     data_category: str = ""
     is_key: bool = False
+    variations: list[ColumnVariation] = field(default_factory=list)
 
 
 @dataclass

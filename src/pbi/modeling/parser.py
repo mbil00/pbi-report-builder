@@ -7,6 +7,7 @@ import textwrap
 
 from .schema import (
     Column,
+    ColumnVariation,
     Hierarchy,
     HierarchyLevel,
     Measure,
@@ -146,6 +147,9 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     current_partition_source: list[str] = []
     current_partition_source_inline = ""
     partition_source_block = False
+    # ``variation`` blocks of the current column, and the one being read.
+    current_variations: list[ColumnVariation] = []
+    current_variation: ColumnVariation | None = None
 
     # Hierarchy parsing state
     current_levels: list[HierarchyLevel] = []
@@ -167,7 +171,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
 
     def _flush() -> None:
         nonlocal current_type, current_name, current_props, current_expr
-        nonlocal current_levels
+        nonlocal current_levels, current_variations
         nonlocal current_partition_type, current_partition_source, current_partition_source_inline, partition_source_block
         if current_type == "column" and table_name:
             columns.append(
@@ -188,6 +192,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     sort_by_column=current_props.get("sortByColumn", ""),
                     data_category=current_props.get("dataCategory", ""),
                     is_key="isKey" in current_props,
+                    variations=list(current_variations),
                 )
             )
         elif current_type == "measure" and table_name:
@@ -234,6 +239,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         current_name = ""
         current_props = {}
         current_expr = ""
+        current_variations = []
         current_partition_type = ""
         current_partition_source = []
         current_partition_source_inline = ""
@@ -262,8 +268,21 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
 
         if nested_block_indent is not None:
             if indent > nested_block_indent:
+                if (
+                    current_variation is not None
+                    and indent == nested_block_indent + 1
+                    and stripped.startswith("defaultHierarchy:")
+                ):
+                    try:
+                        table, hierarchy = _parse_tmdl_field_ref(stripped.partition(":")[2])
+                    except ValueError:
+                        pass
+                    else:
+                        current_variation.default_hierarchy_table = table
+                        current_variation.default_hierarchy = hierarchy
                 continue
             nested_block_indent = None
+            current_variation = None
 
         if stripped.startswith("///"):
             # A description sits directly above a table (indent 0) or a table
@@ -380,6 +399,11 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 # A nested block at property indent: skip it and its children.
                 # Deeper, the same text is part of a multi-line DAX body.
                 nested_block_indent = indent
+                if current_type == "column" and stripped.startswith("variation "):
+                    current_variation = ColumnVariation(
+                        name=_parse_tmdl_name(stripped[len("variation "):])
+                    )
+                    current_variations.append(current_variation)
             elif indent == 2 and _is_changed_property(stripped):
                 # Member metadata at property indent. A multi-line DAX body
                 # sits one level deeper, where the same text is a comparison.
