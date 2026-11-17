@@ -180,6 +180,10 @@ def model_apply(
         console.print(f"{prefix}Created perspective [cyan]{ref}[/cyan]")
     for ref in result.perspectives_updated:
         console.print(f"{prefix}Updated perspective [cyan]{ref}[/cyan]")
+    for ref in result.field_parameters_created:
+        console.print(f"{prefix}Created field parameter [cyan]{ref}[/cyan]")
+    for ref in result.field_parameters_updated:
+        console.print(f"{prefix}Updated field parameter [cyan]{ref}[/cyan]")
     for error in result.errors:
         console.print(f"[red]Error:[/red] {error}")
 

@@ -13,6 +13,7 @@ from pbi.modeling.desktop_metadata import (
     normalize_summarize_by,
     normalize_table_data_category,
 )
+from pbi.modeling.writes_field_parameters import exportable_field_parameter_fields
 
 
 def export_model_yaml(
@@ -55,11 +56,14 @@ def export_model_yaml(
     field_param_tables: set[str] = set()
     field_params_section: dict = {}
     for table in loaded_model.tables:
-        if table.is_parameter_type:
+        # A field parameter whose rows wouldn't apply back unchanged stays
+        # an ordinary table below, so nothing about it is lost.
+        fp_fields = exportable_field_parameter_fields(loaded_model, table)
+        if fp_fields:
             field_param_tables.add(table.name)
-            fp_fields = _extract_field_parameter_fields(table)
-            if fp_fields:
-                field_params_section[table.name] = {"fields": fp_fields}
+            field_params_section[table.name] = {
+                "fields": [{"field": row.ref, "label": row.label} for row in fp_fields]
+            }
     if field_params_section:
         spec["fieldParameters"] = field_params_section
 
@@ -237,17 +241,3 @@ def _export_table_data_category(value: str) -> str:
         return normalize_table_data_category(value)
     except ValueError:
         return value
-
-
-def _extract_field_parameter_fields(table) -> list[dict]:
-    """Extract field references from a field parameter table's partition DAX."""
-    import re
-
-    result = []
-    for partition in table.partitions:
-        source = partition.source_expression or ""
-        pattern = r'\(\s*"([^"]+)"\s*,\s*NAMEOF\(\'([^\']+)\'\[([^\]]+)\]\)\s*,\s*(\d+)\s*\)'
-        for match in re.finditer(pattern, source):
-            label, tbl, fld, ordinal = match.groups()
-            result.append({"field": f"{tbl}.{fld}", "label": label})
-    return result

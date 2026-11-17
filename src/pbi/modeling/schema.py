@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,6 +37,24 @@ class Column:
     data_category: str = ""
     is_key: bool = False
     variations: list[ColumnVariation] = field(default_factory=list)
+    # ``extendedProperty <name> = <json>`` blocks, raw JSON text by name.
+    extended_properties: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def is_field_parameter_fields(self) -> bool:
+        """True for the fields column of a Desktop field parameter.
+
+        Desktop marks it with ``extendedProperty ParameterMetadata`` of
+        ``"kind": 2``; a what-if parameter's value column has no ``kind``.
+        """
+        raw = self.extended_properties.get("ParameterMetadata")
+        if raw is None:
+            return False
+        try:
+            metadata = json.loads(raw)
+        except ValueError:
+            return False
+        return isinstance(metadata, dict) and metadata.get("kind") == 2
 
 
 @dataclass
@@ -86,8 +105,14 @@ class SemanticTable:
     partitions: list[Partition] = field(default_factory=list)
     definition_path: Path | None = None
     data_category: str = ""
+    # The ``isParameterType`` flag older ``pbi`` versions wrote on field parameters.
     is_parameter_type: bool = False
     description: str = ""
+
+    @property
+    def is_field_parameter(self) -> bool:
+        """True for a field parameter table, in Desktop's shape or the old ``pbi`` one."""
+        return self.is_parameter_type or any(c.is_field_parameter_fields for c in self.columns)
 
     @property
     def date_table_column(self) -> str | None:

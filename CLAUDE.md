@@ -149,7 +149,7 @@ All model subgroups follow the standard CLI verb pattern: `list`, `get`, `set`, 
 
 **Hierarchy:** `model hierarchy list <table>`, `model hierarchy create <table> <name> <columns...>`, `model hierarchy delete <table> <name>`
 
-**Field Parameter:** `model field-parameter create <name> <Table.Field...> [--labels Label...]` — scaffolds a field parameter table with `isParameterType`, three columns (Name/Fields/Order), and a DAX `NAMEOF` table constructor. Labels default to field names if omitted.
+**Field Parameter:** `model field-parameter create <name> <Table.Field...> [--labels Label...]` — writes a field parameter table in Desktop's shape (`Metric Selector` in report-04): columns `<name>` / `<name> Fields` / `<name> Order` on `[Value1..3]`, `extendedProperty ParameterMetadata` (`kind: 2`) on the Fields column, and a DAX `NAMEOF` table constructor. Labels default to field names if omitted. Tables with the old `isParameterType` flag still read as field parameters (`SemanticTable.is_field_parameter`, `pbi.modeling.writes_field_parameters`)
 
 **Other model commands:**
 - `model export [-o file.yaml]` — YAML round-trip through `model apply`
@@ -169,7 +169,7 @@ The `model apply` engine supports these top-level sections:
 - **hierarchies:** table-keyed list of `{name, levels: [col1, col2], description}` — creates or delete-and-recreates if levels differ (the description carries over)
 - **tables:** name-keyed mapping with `dataCategory`, `dateTable`, `description`
 - **description** on any of these is written as TMDL `///` lines above the object (one per line), the form Desktop saves
-- **fieldParameters:** name-keyed mapping with `fields` list of `{field: Table.Field, label: DisplayName}` — creates field parameter tables
+- **fieldParameters:** name-keyed mapping with `fields` list of `{field: Table.Field, label: DisplayName}` (or bare `Table.Field`) — creates field parameter tables; for an existing one it rewrites only the partition's rows. `export` lists a field parameter here only when it can read every row of its DAX
 
 ## YAML Apply Features
 

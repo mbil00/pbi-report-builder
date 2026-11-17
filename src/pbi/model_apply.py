@@ -64,6 +64,7 @@ class ModelApplyResult:
     perspectives_created: list[str] = field(default_factory=list)
     perspectives_updated: list[str] = field(default_factory=list)
     field_parameters_created: list[str] = field(default_factory=list)
+    field_parameters_updated: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     rolled_back: bool = False
 
@@ -88,6 +89,7 @@ class ModelApplyResult:
             or self.perspectives_created
             or self.perspectives_updated
             or self.field_parameters_created
+            or self.field_parameters_updated
         )
 
 
@@ -1152,12 +1154,15 @@ def _apply_field_parameters(
     model: SemanticModel,
     edit_session: TmdlEditSession,
 ) -> None:
-    """Apply fieldParameters section."""
+    """Apply fieldParameters section: create new tables, update the rows of existing ones."""
     if not isinstance(spec, dict):
         result.errors.append("fieldParameters must be a mapping.")
         return
 
-    from pbi.model import create_field_parameter
+    from pbi.modeling.writes_field_parameters import (
+        create_field_parameter,
+        set_field_parameter_fields,
+    )
 
     for param_name, param_spec in spec.items():
         if not isinstance(param_spec, dict):
@@ -1169,37 +1174,55 @@ def _apply_field_parameters(
             result.errors.append(f'fieldParameters.{param_name}: requires a non-empty "fields" list.')
             continue
 
-        field_refs = []
-        labels = []
+        field_refs: list[str] = []
+        labels: list[str | None] = []
         for entry in fields_list:
-            if isinstance(entry, dict):
-                field_refs.append(entry.get("field", ""))
-                labels.append(entry.get("label", entry.get("field", "").split(".")[-1]))
+            if isinstance(entry, dict) and isinstance(entry.get("field"), str):
+                label = entry.get("label")
+                field_refs.append(entry["field"])
+                labels.append(None if label is None else str(label))
             elif isinstance(entry, str):
                 field_refs.append(entry)
-                labels.append(entry.split(".")[-1])
+                labels.append(None)
             else:
-                result.errors.append(f'fieldParameters.{param_name}: each field must be a string or mapping.')
-                continue
-
-        # Skip if table already exists as a field parameter
-        try:
-            existing = model.find_table(param_name)
-            if existing.is_parameter_type:
-                continue
-        except ValueError:
-            pass
-
-        try:
-            create_field_parameter(
-                project_root,
-                param_name,
-                fields=field_refs,
-                labels=labels,
-                dry_run=dry_run,
-                model=model,
-                edit_session=edit_session,
+                break
+        if len(field_refs) != len(fields_list):
+            result.errors.append(
+                f'fieldParameters.{param_name}: each field must be a "Table.Field" string '
+                'or a mapping with a "field" string.'
             )
-            result.field_parameters_created.append(param_name)
+            continue
+
+        try:
+            existing = model.find_table(str(param_name))
+        except ValueError:
+            existing = None
+        if existing is not None and existing.name.lower() != str(param_name).lower():
+            existing = None  # a partial or fuzzy match is a different table
+
+        try:
+            if existing is None:
+                create_field_parameter(
+                    project_root,
+                    str(param_name),
+                    fields=field_refs,
+                    labels=labels,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                result.field_parameters_created.append(str(param_name))
+            else:
+                table_name, changed = set_field_parameter_fields(
+                    project_root,
+                    existing.name,
+                    fields=field_refs,
+                    labels=labels,
+                    dry_run=dry_run,
+                    model=model,
+                    edit_session=edit_session,
+                )
+                if changed:
+                    result.field_parameters_updated.append(table_name)
         except ValueError as e:
             result.errors.append(f'fieldParameters.{param_name}: {e}')
