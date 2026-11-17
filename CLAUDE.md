@@ -175,6 +175,7 @@ The `model apply` engine supports these top-level sections:
 
 The apply engine supports these property syntaxes in YAML:
 - **Nested properties:** `title: { show: true, text: "Hello" }` → `title.show=true`
+- **Hierarchy levels:** a binding or filter field may be `{hierarchy: Table.Hierarchy, level: L}` or, for a date column's variation, `{column: Table.Column, variation: V, hierarchy: H, level: L}` (Desktop's `HierarchyLevel` field); rich bindings nest it under `field:`. `pbi.hierarchy_fields` encodes and validates it
 - **Bracket selectors:** `value.fontSize [Measures Table.X]: 20` → per-measure formatting
 - **Chart object properties:** `legend.show: true` → auto-resolved via schema when the object+property is valid for the visual type. `chart:` prefix also supported explicitly.
 - **Chart with selector:** `legend.position [default]: Top` or `chart:icon.shapeType [default]: back`

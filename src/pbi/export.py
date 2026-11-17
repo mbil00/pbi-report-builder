@@ -19,6 +19,7 @@ from pbi.slicer_state import export_slicer_selection, export_sync_group, without
 from pbi.project import Project, Page, Visual
 from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.filters import filter_field_refs, get_filters, parse_filter
+from pbi.hierarchy_fields import HierarchyLevelRef
 from pbi.report_roundtrip import export_report_spec
 from pbi.visual_queries import get_sort
 from pbi.roundtrip_primitives import (
@@ -363,8 +364,14 @@ def _export_filters(data: dict) -> list[dict]:
     for f in filters:
         info = parse_filter(f)
         field_refs = filter_field_refs(f)
+        hierarchy_ref = HierarchyLevelRef.from_field(f.get("field"))
+        field: Any
+        if hierarchy_ref is not None:
+            field = hierarchy_ref.to_spec()
+        else:
+            field = field_refs[0] if field_refs else f"{info.field_entity}.{info.field_prop}"
         entry: dict[str, Any] = {
-            "field": field_refs[0] if field_refs else f"{info.field_entity}.{info.field_prop}",
+            "field": field,
             "type": info.filter_type,
             "raw": copy.deepcopy(f),
         }

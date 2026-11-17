@@ -57,9 +57,9 @@ KNOWN_REPORT_ROUNDTRIP = {
     "report-01-kitchen-sink": "#77",
     "report-02-model-heavy": "#78",
     "report-03-authoring-parity-lab": "#79",
-    "report-04-desktop-shapes": "#69, #108",
-    "report-04-desktop-shapes-renamed": "#69, #108",
-    "sample-report": "#69, #108, #109",
+    "report-04-desktop-shapes": "#108",
+    "report-04-desktop-shapes-renamed": "#108",
+    "sample-report": "#108, #109",
 }
 
 # diff prints "No differences found" on every fixture (#80). That agrees with

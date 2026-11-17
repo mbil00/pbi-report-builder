@@ -55,6 +55,12 @@ def apply_bindings(
             return
         resolved_fields: list[BoundField] = []
         for item in parsed_items:
+            if item.hierarchy is not None:
+                # Already resolved against the model by parse_binding_items.
+                resolved_fields.append(
+                    BoundField(canonical_role, item.entity, item.prop, item.field_type, item.data_type)
+                )
+                continue
             try:
                 entity, prop, field_type, data_type = resolve_field_info(
                     project,

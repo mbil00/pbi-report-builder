@@ -207,6 +207,18 @@ pbi apply overview.yaml                       # 4. apply
 
 **YAML supports:** visuals, bindings, properties, filters (categorical, range, topN, advanced, relative date/time), interactions, conditional formatting, fixed data colours per value or series (`seriesColors`), slicer sync groups and saved selections (`sync`, `selected`), sort, KPI cards, textbox content, bookmarks, drillthrough/tooltip pages, styles, and raw PBIR passthrough.
 
+**Hierarchy levels** (a matrix's row levels, a date column's Year/Quarter/Month/Day) bind and filter as a mapping, not a dotted string, because table, hierarchy and level names may contain dots:
+```yaml
+bindings:
+  Rows:
+  - {hierarchy: Project.Portfolio Tree, level: Portfolio}         # model hierarchy (Table.Hierarchy)
+  - {field: {hierarchy: Project.Portfolio Tree, level: ProjectName}, displayName: Project}
+  Values:
+  - {column: Date.Date, variation: Variation, hierarchy: Date Hierarchy, level: Year}   # auto date/time
+filters:
+- field: {hierarchy: Project.Portfolio Tree, level: Portfolio}   # empty Categorical, or give `raw`
+```
+
 ---
 
 ## Batch — Imperative Sequences

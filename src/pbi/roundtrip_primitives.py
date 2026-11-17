@@ -18,6 +18,11 @@ from pbi.drillthrough import (
     parse_tooltip_shorthand,
 )
 from pbi.fields import resolve_binding_ref as _resolve_binding_ref
+from pbi.hierarchy_fields import (
+    HierarchyLevelRef,
+    is_hierarchy_spec,
+    parse_hierarchy_spec,
+)
 from pbi.properties import (
     VISUAL_PROPERTIES,
     canonical_object_property_name,
@@ -36,6 +41,10 @@ class BindingItem:
     field_type: str
     display_name: str | None = None
     width: float | None = None
+    # Set for a hierarchy-level binding; entity/prop then name the hierarchy
+    # table and level, and field_type is "column".
+    hierarchy: HierarchyLevelRef | None = None
+    data_type: str | None = None
 
 
 def export_page_roundtrip_fields(page_data: Mapping[str, Any]) -> dict[str, Any]:
@@ -149,7 +158,8 @@ def export_bindings(visual_data: Mapping[str, Any]) -> dict[str, Any]:
         items: list[Any] = []
         has_rich_item = False
         for projection in projections:
-            ref = projection_field_ref(projection)
+            hierarchy_ref = HierarchyLevelRef.from_field(projection.get("field"))
+            ref: Any = hierarchy_ref.to_spec() if hierarchy_ref else projection_field_ref(projection)
             if not ref:
                 continue
 
@@ -194,9 +204,19 @@ def _parse_binding_item(project_root: Path, binding_spec: Any, *, model: Any = N
     display_name: str | None = None
     width: float | None = None
 
+    if is_hierarchy_spec(binding_spec):
+        return _parse_hierarchy_binding(project_root, binding_spec, model=model)
     if isinstance(binding_spec, dict):
         if "field" not in binding_spec:
             raise ValueError("binding objects must include 'field'")
+        if is_hierarchy_spec(binding_spec["field"]):
+            return _parse_hierarchy_binding(
+                project_root,
+                binding_spec["field"],
+                model=model,
+                display_name=binding_spec.get("displayName"),
+                width=binding_spec.get("width"),
+            )
         field_ref = str(binding_spec["field"]).strip()
         if not field_ref:
             raise ValueError("binding field cannot be empty")
@@ -218,6 +238,39 @@ def _parse_binding_item(project_root: Path, binding_spec: Any, *, model: Any = N
         display_name=display_name,
         width=width,
     )
+
+
+def _parse_hierarchy_binding(
+    project_root: Path,
+    spec: Mapping[str, Any],
+    *,
+    model: Any = None,
+    display_name: Any = None,
+    width: Any = None,
+) -> BindingItem:
+    """Parse a hierarchy-level binding mapping, validated against the model."""
+    if model is None:
+        model = _load_model(project_root)
+    ref, data_type = parse_hierarchy_spec(spec, model)
+    return BindingItem(
+        field_ref=ref.query_ref,
+        entity=ref.entity,
+        prop=ref.level,
+        field_type="column",
+        display_name=str(display_name) if display_name is not None else None,
+        width=parse_binding_width(width) if width is not None else None,
+        hierarchy=ref,
+        data_type=data_type,
+    )
+
+
+def _load_model(project_root: Path) -> Any:
+    try:
+        from pbi.model import SemanticModel
+
+        return SemanticModel.load(project_root)
+    except (FileNotFoundError, ValueError, TypeError):
+        return None
 
 
 def parse_binding_string(value: str) -> tuple[str, str | None, float | None]:
@@ -256,6 +309,12 @@ def match_existing_projection(
     item: BindingItem,
 ) -> dict[str, Any] | None:
     """Return and remove a matching existing projection, if one exists."""
+    if item.hierarchy is not None:
+        for index, projection in enumerate(existing_projections):
+            existing = HierarchyLevelRef.from_field(projection.get("field"))
+            if existing is not None and existing.matches(item.hierarchy):
+                return existing_projections.pop(index)
+        return None
     target_field = item.field_ref.lower()
     target_query = f"{item.entity}.{item.prop}".lower()
     for index, projection in enumerate(existing_projections):
@@ -294,6 +353,15 @@ def projection_field_ref(projection: Mapping[str, Any]) -> str | None:
 
 def build_projection(item: BindingItem) -> dict[str, Any]:
     """Build a new projection payload from a normalized binding item."""
+    if item.hierarchy is not None:
+        projection: dict[str, Any] = {
+            "field": item.hierarchy.to_field(),
+            "queryRef": item.hierarchy.query_ref,
+            "nativeQueryRef": item.hierarchy.native_query_ref,
+        }
+        if item.display_name:
+            projection["displayName"] = item.display_name
+        return projection
     field_key = "Column" if item.field_type == "column" else "Measure"
     projection = {
         "field": {

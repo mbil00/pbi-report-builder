@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import secrets
 
 from pbi.fields import resolve_field_info
 from pbi.filters import add_categorical_filter
+from pbi.hierarchy_fields import is_hierarchy_spec, parse_hierarchy_spec
 from pbi.project import Page, Project
 
 from .state import ApplyResult, PageVisualState, PbirApplySession
@@ -20,6 +22,57 @@ def resolve_apply_field(
     """Resolve a field reference to (entity, prop, field_type, data_type)."""
     model = session.get_model(project) if session is not None else None
     return resolve_field_info(project, field_ref, "auto", model=model, strict=True)
+
+
+def _apply_hierarchy_filter(
+    data: dict,
+    filter_spec: dict,
+    result: ApplyResult,
+    *,
+    context: str,
+    dry_run: bool,
+    model: object | None,
+) -> None:
+    """Apply a filter whose field is a hierarchy level.
+
+    The Desktop filter is taken from ``raw`` when present. Otherwise only an
+    empty Categorical filter (the field in the filter pane, nothing selected)
+    can be built, in the shape Desktop writes for a hierarchy level.
+    """
+    try:
+        ref, _data_type = parse_hierarchy_spec(filter_spec["field"], model)
+    except ValueError as e:
+        result.errors.append(f"{context}: invalid filter field: {e}")
+        return
+
+    raw_filter = filter_spec.get("raw")
+    filter_type = str(filter_spec.get("type", "Categorical"))
+    if not isinstance(raw_filter, dict) and (
+        filter_type.lower() != "categorical" or filter_spec.get("values")
+    ):
+        result.errors.append(
+            f"{context}: a hierarchy-level filter supports only an empty Categorical "
+            f"filter; give other filters as 'raw' Desktop JSON ({ref.query_ref})"
+        )
+        return
+    if dry_run:
+        result.filters_added += 1
+        return
+
+    if isinstance(raw_filter, dict):
+        filter_obj = copy.deepcopy(raw_filter)
+    else:
+        filter_obj = {
+            "name": str(filter_spec.get("name") or secrets.token_hex(10)),
+            "field": ref.to_field(),
+            "type": "Categorical",
+        }
+        if filter_spec.get("hidden"):
+            filter_obj["isHiddenInViewMode"] = True
+        if filter_spec.get("locked"):
+            filter_obj["isLockedInViewMode"] = True
+    data.setdefault("filterConfig", {}).setdefault("filters", []).append(filter_obj)
+    result.filters_added += 1
 
 
 def apply_filters_spec(
@@ -50,6 +103,20 @@ def apply_filters_spec(
         values = filter_spec.get("values", [])
         is_hidden = filter_spec.get("hidden", False)
         is_locked = filter_spec.get("locked", False)
+
+        if is_hierarchy_spec(field_ref):
+            _apply_hierarchy_filter(
+                data,
+                filter_spec,
+                result,
+                context=context,
+                dry_run=dry_run,
+                model=model if project is not None else None,
+            )
+            continue
+        if not isinstance(field_ref, str):
+            result.errors.append(f"{context}: filter field must be Table.Field format: {field_ref}")
+            continue
 
         dot = field_ref.find(".")
         if dot == -1:
