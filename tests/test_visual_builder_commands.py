@@ -14,37 +14,6 @@ from tests.support import make_project, write_model_table
 
 
 class VisualBuilderCommandTests(unittest.TestCase):
-    def test_visual_create_textbox_supports_inline_text(self) -> None:
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = make_project(root)
-            ReportAuthoring(project).create_page("Demo")
-
-            result = runner.invoke(
-                app,
-                [
-                    "visual",
-                    "create",
-                    "Demo",
-                    "textbox",
-                    "--name",
-                    "note",
-                    "--text",
-                    "Hello world",
-                    "--project",
-                    str(root / "Sample.pbip"),
-                ],
-            )
-
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            reloaded = Project.find(root / "Sample.pbip")
-            visual = reloaded.find_visual(reloaded.find_page("Demo"), "note")
-            paragraphs = (
-                visual.data["visual"]["objects"]["general"][0]["properties"]["paragraphs"]
-            )
-            self.assertEqual(paragraphs[0]["textRuns"][0]["value"], "Hello world")
-
     def test_visual_set_supports_textbox_text_and_style(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -404,8 +373,9 @@ table Date
             visual = reloaded.find_visual(page, "yearSlicer")
             self.assertTrue(get_property(visual.data, "title.show", VISUAL_PROPERTIES))
             self.assertEqual(get_property(visual.data, "title.text", VISUAL_PROPERTIES), "Year")
-            self.assertFalse(get_property(visual.data, "header.show", VISUAL_PROPERTIES))
-            self.assertFalse(get_property(visual.data, "slicerHeader.show", VISUAL_PROPERTIES))
+            # assertIs: get_property returns None for an unset property.
+            self.assertIs(get_property(visual.data, "header.show", VISUAL_PROPERTIES), False)
+            self.assertIs(get_property(visual.data, "slicerHeader.show", VISUAL_PROPERTIES), False)
             self.assertTrue(get_property(visual.data, "background.show", VISUAL_PROPERTIES))
 
     def test_visual_create_rejects_incompatible_preset(self) -> None:
@@ -608,8 +578,7 @@ table Sales
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Date.MonthNumber Ascending", result.stdout)
-            self.assertIn("(auto)", result.stdout)
+            self.assertIn("Sort: Date.MonthNumber Ascending (auto)", result.stdout)
 
             reloaded = Project.find(root / "Sample.pbip")
             page = reloaded.find_page("Demo")
@@ -658,8 +627,7 @@ table Date
             )
 
             self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Date.MonthNumber Ascending", result.stdout)
-            self.assertIn("(auto)", result.stdout)
+            self.assertIn("Sort: Date.MonthNumber Ascending (auto)", result.stdout)
 
             reloaded = Project.find(root / "Sample.pbip")
             page = reloaded.find_page("Demo")

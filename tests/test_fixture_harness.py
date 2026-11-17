@@ -3,7 +3,8 @@
 The Desktop-saved fixtures are the main validation target. Each fixture is
 copied to a temporary folder (never edited in place) and run through:
 
-1. ``validate`` and ``model check``: no errors, no schema warnings.
+1. ``validate`` and ``model check``: no errors, no schema or relationship-path
+   warnings.
 2. A read-only sweep of the project, page, visual and model-table commands.
 3. Report round-trip: ``export`` then ``apply`` changes no bytes, and ``diff``
    agrees with ``apply``.
@@ -170,8 +171,12 @@ def test_validate_clean(fixture_copy: Callable[[str], Path], name: str) -> None:
     schema_warnings = [
         issue for issue in issues if issue["level"] == "warning" and issue["message"].startswith("Schema:")
     ]
+    # Measures carry their own filter context, so a visual binding a measure from
+    # an unrelated table (or Desktop's `Measures Table`) needs no relationship path.
+    path_warnings = [issue for issue in issues if "relationship path" in issue["message"]]
     assert errors == []
     assert schema_warnings == []
+    assert path_warnings == []
 
 
 @pytest.mark.parametrize("name", per_fixture({}))
