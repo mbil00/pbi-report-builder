@@ -180,24 +180,9 @@ def _resolve_table_hierarchy(
         entity, _, hierarchy = ref.partition(".")
         return HierarchyLevelRef(entity, hierarchy, level), None
 
-    # A table name may contain dots: take the first split that names an
-    # existing table and hierarchy, else report against the first dot.
-    table = hierarchy_obj = None
-    for index, char in enumerate(ref):
-        if char != ".":
-            continue
-        try:
-            candidate = model.find_table(ref[:index])
-            hierarchy_obj = candidate.find_hierarchy(ref[index + 1 :])
-        except ValueError:
-            continue
-        table = candidate
-        break
-    if table is None or hierarchy_obj is None:
-        entity, _, hierarchy = ref.partition(".")
-        table = model.find_table(entity)
-        hierarchy_obj = table.find_hierarchy(hierarchy)
-
+    table, hierarchy_obj = _split_table_member(
+        model, ref, lambda table, name: table.find_hierarchy(name)
+    )
     level_obj = _find_level(hierarchy_obj, level)
     return (
         HierarchyLevelRef(table.name, hierarchy_obj.name, level_obj.name),
@@ -219,10 +204,12 @@ def _resolve_variation_hierarchy(
         entity, _, column = column_ref.partition(".")
         return HierarchyLevelRef(entity, hierarchy, level, column=column, variation=variation), None
 
-    entity, column, field_type = model.resolve_field(column_ref)
-    if field_type != "column":
-        raise ValueError(f'"{column_ref}" is a measure; a variation hierarchy needs a column')
-    column_obj = model.find_table(entity).find_column(column)
+    if "." not in column_ref:
+        raise ValueError(f'column "{column_ref}" must be Table.Column')
+    table, column_obj = _split_table_member(
+        model, column_ref, lambda table, name: table.find_column(name)
+    )
+    entity, column = table.name, column_obj.name
     variation_obj = _find_named(
         column_obj.variations,
         variation,
@@ -246,6 +233,25 @@ def _resolve_variation_hierarchy(
         variation=variation_obj.name,
     )
     return ref, _column_data_type(target, level_obj.column)
+
+
+def _split_table_member(model: Any, ref: str, find_member: Any) -> tuple[Any, Any]:
+    """Resolve ``Table.Member`` where the table name may contain dots.
+
+    Takes the first dot split that names an existing table and member; when
+    none does, resolves at the first dot so the error names what is missing.
+    """
+    for index, char in enumerate(ref):
+        if char != ".":
+            continue
+        try:
+            table = model.find_table(ref[:index])
+            return table, find_member(table, ref[index + 1 :])
+        except ValueError:
+            continue
+    entity, _, member = ref.partition(".")
+    table = model.find_table(entity)
+    return table, find_member(table, member)
 
 
 def _find_level(hierarchy: Any, name: str) -> Any:

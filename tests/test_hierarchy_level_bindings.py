@@ -333,6 +333,29 @@ def test_parser_reads_column_variations(tmp_path: Path) -> None:
     assert "VAR variation = 1" in late.expression
 
 
+def test_variation_on_dotted_table_round_trips(tmp_path: Path) -> None:
+    project = make_project(tmp_path)
+    write_model_table(
+        tmp_path,
+        "Orders.EU.tmdl",
+        VARIATION_TABLES["Orders.tmdl"].replace("table Orders", "table 'Orders.EU'"),
+    )
+    write_model_table(tmp_path, "LocalDateTable_1.tmdl", VARIATION_TABLES["LocalDateTable_1.tmdl"])
+    model = SemanticModel.load(project.root)
+    exported = HierarchyLevelRef.from_field(
+        HierarchyLevelRef(
+            "Orders.EU", "Date Hierarchy", "Year", column="OrderDate", variation="Variation"
+        ).to_field()
+    )
+    assert exported is not None
+    assert exported.to_spec()["column"] == "Orders.EU.OrderDate"
+
+    ref, data_type = parse_hierarchy_spec(exported.to_spec(), model)
+
+    assert ref == exported
+    assert data_type == "int64"
+
+
 def test_variation_without_default_hierarchy_keeps_names(tmp_path: Path) -> None:
     project = make_project(tmp_path)
     for name, content in VARIATION_TABLES.items():
