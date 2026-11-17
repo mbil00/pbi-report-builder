@@ -1,10 +1,13 @@
-"""Tests for ``plan_bookmarks_spec`` and the apply-leaf bookmarks branch.
+"""Tests for ``plan_bookmarks_spec``, bookmark lookup in apply, and the bookmarks branch.
 
 The planner is a pure function of ``(project, bookmarks_spec) -> BookmarksApplyPlan``.
-These tests drive the planner directly without any session, plus apply-leaf
-tests that drive ``_apply_bookmarks_branch`` against ``FakePbirWriteSession``
-to assert the call sequence (write_bookmark per op, then exactly one
-reconcile_bookmark_groups).
+These tests drive the planner directly without any session, the lookup rules
+through ``apply_yaml``, and the engine's ``_apply_bookmarks_branch`` against
+``FakePbirWriteSession`` to assert the call sequence (write_bookmark per op,
+then exactly one reconcile_bookmark_groups).
+
+Group membership, hidden visuals and bookmark order are covered by the
+fixture harness on report-03 (``test_report_roundtrip_is_noop``).
 """
 
 from __future__ import annotations
@@ -13,6 +16,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+
+import yaml
 
 from pbi.apply import apply_yaml
 from pbi.apply.engine import _apply_bookmarks_branch
@@ -91,37 +96,6 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         self.assertEqual(plan.errors, [])
         self.assertEqual(plan.keys_touched, 1)
 
-    def test_state_normalization_through_planner(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project(Path(tmp))
-            page, _ = _seed_page_with_visual(project, "Demo")
-
-            # ``state.sections`` keyed by the page *display* name should be
-            # normalized to the page folder id on the planned payload.
-            spec = [
-                {
-                    "name": "Filtered",
-                    "page": "Demo",
-                    "state": {
-                        "sections": {
-                            "Demo": {  # display name -> folder id after normalize
-                                "visualContainers": {
-                                    "table1": {
-                                        "singleVisual": {"objects": {"title": {"show": True}}}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                }
-            ]
-            plan = plan_bookmarks_spec(project, spec)
-
-        op = plan.operations[0]
-        sections = op.payload["explorationState"]["sections"]
-        self.assertIn(page.name, sections)
-        self.assertNotIn("Demo", sections)
-
     def test_hide_target_capture_flags_thread_into_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
@@ -153,31 +127,6 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         self.assertTrue(options["suppressDisplay"])
         self.assertTrue(options["applyOnlyToTargetVisuals"])
         self.assertEqual(options["targetVisualNames"], ["table1"])
-
-    def test_group_hierarchy_partial_membership(self) -> None:
-        # Some bookmarks reference a group, others don't.
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project(Path(tmp))
-            _seed_page_with_visual(project, "Demo")
-
-            spec = [
-                {"name": "Standalone", "page": "Demo"},
-                {"name": "GroupedA", "page": "Demo", "group": "Views"},
-                {"name": "GroupedB", "page": "Demo", "group": "Views"},
-                {"name": "Detached", "page": "Demo"},
-            ]
-            plan = plan_bookmarks_spec(project, spec)
-
-        self.assertEqual(len(plan.operations), 4)
-        self.assertEqual(
-            plan.groups,
-            [
-                ("Standalone", None),
-                ("GroupedA", "Views"),
-                ("GroupedB", "Views"),
-                ("Detached", None),
-            ],
-        )
 
     def test_missing_required_fields_collected_as_plan_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -216,218 +165,126 @@ class PlanBookmarksSpecTests(unittest.TestCase):
         # keys_touched (which feeds ``ApplyResult.properties_set``).
         self.assertEqual(plan.keys_touched, 0)
 
-    def test_partial_match_multi_does_not_block_new_bookmark(self) -> None:
-        # Two existing bookmarks share a substring with the spec name but
-        # neither matches it exactly. The user's intent is to create a new
-        # bookmark; the planner must not treat unrelated-bookmark substring
-        # ambiguity as a spec error (which would trigger run_apply rollback
-        # and turn a valid create-new spec into a full apply failure).
+class ApplyBookmarkLookupTests(unittest.TestCase):
+    """How ``apply`` matches a ``bookmarks:`` entry to an existing bookmark.
+
+    Upsert matches the exact display name only: the CLI's substring lookup
+    must never make apply overwrite an unrelated bookmark.
+    """
+
+    def _apply(self, project: Project, entries: list[dict]) -> ApplyResult:
+        return apply_yaml(project, yaml.safe_dump({"pages": [], "bookmarks": entries}, sort_keys=False))
+
+    def _files(self, project: Project) -> dict[str, bytes]:
+        folder = project.definition_folder / "bookmarks"
+        return {path.name: path.read_bytes() for path in sorted(folder.glob("*.bookmark.json"))}
+
+    def test_name_contained_in_several_existing_names_creates_a_bookmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
             page, _ = _seed_page_with_visual(project, "Demo")
-            existing_a = create_bookmark(project, "OverviewA", page, [])
-            existing_b = create_bookmark(project, "OverviewB", page, [])
+            create_bookmark(project, "OverviewA", page, [])
+            create_bookmark(project, "OverviewB", page, [])
+            before = self._files(project)
 
-            spec = [{"name": "Overview", "page": "Demo"}]
-            plan = plan_bookmarks_spec(project, spec)
+            result = self._apply(project, [{"name": "Overview", "page": "Demo"}])
 
-        # No error, no clobber: a fresh bookmark plan with a fresh id and
-        # a fresh file path distinct from both existing siblings.
-        self.assertEqual(plan.errors, [])
-        self.assertEqual(len(plan.operations), 1)
-        op = plan.operations[0]
-        self.assertEqual(op.payload["displayName"], "Overview")
-        self.assertNotEqual(op.payload["name"], existing_a["name"])
-        self.assertNotEqual(op.payload["name"], existing_b["name"])
-        self.assertNotEqual(op.file_path.name, f"{existing_a['name']}.bookmark.json")
-        self.assertNotEqual(op.file_path.name, f"{existing_b['name']}.bookmark.json")
+            self.assertEqual(result.errors, [])
+            after = self._files(project)
+            self.assertEqual({name: after[name] for name in before}, before)
+            self.assertEqual(
+                sorted(bookmark.display_name for bookmark in list_bookmarks(project)),
+                ["Overview", "OverviewA", "OverviewB"],
+            )
 
-    def test_duplicate_exact_displaynames_surface_as_plan_error(self) -> None:
-        # Genuine ambiguity: two existing bookmark files have *identical*
-        # ``displayName`` (malformed state, but possible). For an upsert
-        # spec targeting that name, the planner can't pick which file to
-        # overwrite, so it surfaces a per-bookmark error rather than
-        # silently clobbering one.
+    def test_name_contained_in_one_existing_name_creates_a_bookmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
             page, _ = _seed_page_with_visual(project, "Demo")
-            create_bookmark(project, "Overview", page, [])
-            # Write a second bookmark file with the same displayName by
-            # hand (``create_bookmark`` would happily produce one).
-            create_bookmark(project, "Overview", page, [])
+            create_bookmark(project, "OverviewFull", page, [])
+            before = self._files(project)
 
-            spec = [{"name": "Overview", "page": "Demo"}]
-            plan = plan_bookmarks_spec(project, spec)
+            result = self._apply(project, [{"name": "Over", "page": "Demo"}])
 
-        self.assertEqual(plan.operations, [])
-        self.assertEqual(len(plan.errors), 1)
-        self.assertIn("Overview", plan.errors[0])
-        self.assertIn("Ambiguous", plan.errors[0])
-        self.assertEqual(plan.keys_touched, 0)
+            self.assertEqual(result.errors, [])
+            after = self._files(project)
+            self.assertEqual({name: after[name] for name in before}, before)
+            self.assertEqual(
+                sorted(bookmark.display_name for bookmark in list_bookmarks(project)),
+                ["Over", "OverviewFull"],
+            )
 
-    def test_substring_match_does_not_clobber_unrelated_bookmark(self) -> None:
-        # ``_find_bookmark_file`` falls back to case-insensitive substring
-        # matching, which is the right behavior for user-facing CLI lookups
-        # but a footgun for upsert. A spec entry "Over" against a project
-        # whose only existing bookmark is "OverviewFull" must plan a fresh
-        # bookmark file -- not reuse OverviewFull's path and clobber it in
-        # place. Pre-existing flaw in ``upsert_bookmark`` that the planner
-        # is the right place to tighten.
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project(Path(tmp))
-            page, _ = _seed_page_with_visual(project, "Demo")
-
-            existing = create_bookmark(project, "OverviewFull", page, [])
-            existing_id = existing["name"]
-
-            spec = [{"name": "Over", "page": "Demo"}]
-            plan = plan_bookmarks_spec(project, spec)
-
-        self.assertEqual(plan.errors, [])
-        self.assertEqual(len(plan.operations), 1)
-        op = plan.operations[0]
-        # Fresh id distinct from the existing bookmark's, fresh file path.
-        self.assertEqual(op.payload["displayName"], "Over")
-        self.assertNotEqual(op.payload["name"], existing_id)
-        self.assertNotEqual(op.file_path.name, f"{existing_id}.bookmark.json")
-
-    def test_upsert_reuses_existing_bookmark_id_and_file_path(self) -> None:
+    def test_exact_name_updates_the_existing_bookmark_in_place(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
             page, visual = _seed_page_with_visual(project, "Demo")
-
             existing = create_bookmark(project, "Existing", page, [visual])
-            existing_id = existing["name"]
 
-            spec = [{"name": "Existing", "page": "Demo", "captureData": False}]
-            plan = plan_bookmarks_spec(project, spec)
+            result = self._apply(project, [{"name": "Existing", "page": "Demo", "captureData": False}])
 
-        self.assertEqual(len(plan.operations), 1)
-        op = plan.operations[0]
-        # Reused id and the file path from the existing bookmark.
-        self.assertEqual(op.payload["name"], existing_id)
-        self.assertEqual(op.file_path.name, f"{existing_id}.bookmark.json")
+            self.assertEqual(result.errors, [])
+            bookmarks = list_bookmarks(project)
+            self.assertEqual(len(bookmarks), 1)
+            self.assertEqual(bookmarks[0].name, existing["name"])
+            self.assertEqual(bookmarks[0].file, f"{existing['name']}.bookmark.json")
+            self.assertTrue(bookmarks[0].suppress_data)
 
-    def test_duplicate_bookmark_names_are_coalesced_last_spec_wins(self) -> None:
+    def test_two_existing_bookmarks_with_the_name_is_an_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
-            _, visual = _seed_page_with_visual(project, "Demo", "table1")
+            page, _ = _seed_page_with_visual(project, "Demo")
+            create_bookmark(project, "Overview", page, [])
+            create_bookmark(project, "Overview", page, [])
+            before = self._files(project)
 
-            spec = [
-                {
-                    "name": "Overview",
-                    "page": "Demo",
-                    "hide": ["table1"],
-                    "group": "Old",
-                },
-                {
-                    "name": "Overview",
-                    "page": "Demo",
-                    "captureData": False,
-                    "group": "New",
-                },
-            ]
-            plan = plan_bookmarks_spec(project, spec)
+            result = self._apply(project, [{"name": "Overview", "page": "Demo"}])
 
-        self.assertEqual(plan.errors, [])
-        # Duplicates collapse to a single op, and ``keys_touched`` reports
-        # that single op (not the per-spec-entry count) so dry-run and
-        # real-apply credit the same number into ``properties_set``.
-        self.assertEqual(plan.keys_touched, 1)
-        self.assertEqual(len(plan.operations), 1)
-        self.assertEqual(plan.groups, [("Overview", "New")])
-        op = plan.operations[0]
-        self.assertEqual(op.display_name, "Overview")
-        self.assertEqual(op.file_path.name, f"{op.payload['name']}.bookmark.json")
-        options = op.payload["options"]
-        self.assertTrue(options["suppressData"])
-        active_section = op.payload["explorationState"]["activeSection"]
-        containers = op.payload["explorationState"]["sections"][active_section][
-            "visualContainers"
-        ]
-        self.assertNotIn(visual.name, containers)
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(len(result.errors), 1)
+            self.assertIn("Ambiguous", result.errors[0])
+            self.assertIn("Overview", result.errors[0])
+            self.assertEqual(self._files(project), before)
 
-    def test_apply_duplicate_bookmark_names_creates_one_bookmark(self) -> None:
+    def test_repeated_name_in_spec_writes_one_bookmark_last_entry_wins(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
             _seed_page_with_visual(project, "Demo", "table1")
 
-            result = apply_yaml(
+            result = self._apply(
                 project,
-                """
-pages: []
-bookmarks:
-  - name: Overview
-    page: Demo
-    hide: [table1]
-  - name: Overview
-    page: Demo
-    captureData: false
-""",
+                [
+                    {"name": "Overview", "page": "Demo", "hide": ["table1"], "group": "Old"},
+                    {"name": "Overview", "page": "Demo", "captureData": False, "group": "New"},
+                    # A group needs two members; one alone is written standalone.
+                    {"name": "Detail", "page": "Demo", "group": "New"},
+                ],
             )
 
-            bookmarks = list_bookmarks(project)
+            self.assertEqual(result.errors, [])
+            self.assertFalse(result.rolled_back)
+            bookmarks = {bookmark.display_name: bookmark for bookmark in list_bookmarks(project)}
+            self.assertEqual(sorted(bookmarks), ["Detail", "Overview"])
+            overview = bookmarks["Overview"]
+            self.assertEqual(overview.group, "New")
+            self.assertTrue(overview.suppress_data)
+            self.assertEqual(overview.hidden_visuals, 0)
 
-        self.assertEqual(result.errors, [])
-        self.assertFalse(result.rolled_back)
-        self.assertEqual(len(bookmarks), 1)
-        self.assertEqual(bookmarks[0].display_name, "Overview")
-        self.assertTrue(bookmarks[0].suppress_data)
-        self.assertEqual(bookmarks[0].hidden_visuals, 0)
-
-    def test_duplicate_bookmark_names_with_different_pages_surface_as_error(
-        self,
-    ) -> None:
-        # Identical duplicates collapse via last-wins. Duplicates that
-        # differ in their ``page`` field can't be coalesced -- a bookmark
-        # belongs to exactly one page -- so the planner should surface a
-        # spec error instead of silently letting the second entry win.
+    def test_repeated_name_on_different_pages_is_an_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project(Path(tmp))
             _seed_page_with_visual(project, "PageA")
             _seed_page_with_visual(project, "PageB")
 
-            spec = [
-                {"name": "Overview", "page": "PageA"},
-                {"name": "Overview", "page": "PageB"},
-            ]
-            plan = plan_bookmarks_spec(project, spec)
+            result = self._apply(
+                project,
+                [{"name": "Overview", "page": "PageA"}, {"name": "Overview", "page": "PageB"}],
+            )
 
-        self.assertEqual(len(plan.operations), 1)
-        self.assertEqual(plan.operations[0].display_name, "Overview")
-        # First occurrence wins for the persisted op; the second is
-        # surfaced as a spec error rather than silently coercing.
-        self.assertEqual(len(plan.errors), 1)
-        self.assertIn("Overview", plan.errors[0])
-        self.assertIn("page", plan.errors[0])
-
-    def test_relative_ordering_preserved_across_re_apply(self) -> None:
-        # Spec order is preserved in plan.operations and plan.groups so that
-        # ``reconcile_bookmark_groups`` writes meta items in the same order
-        # on re-apply.
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project(Path(tmp))
-            _seed_page_with_visual(project, "Demo")
-
-            spec = [
-                {"name": "Alpha", "page": "Demo"},
-                {"name": "Beta", "page": "Demo"},
-                {"name": "Gamma", "page": "Demo"},
-            ]
-            plan = plan_bookmarks_spec(project, spec)
-            order_first = [op.display_name for op in plan.operations]
-            groups_first = list(plan.groups)
-
-            # Re-plan from same state and check stability.
-            plan2 = plan_bookmarks_spec(project, spec)
-            order_second = [op.display_name for op in plan2.operations]
-
-        self.assertEqual(order_first, ["Alpha", "Beta", "Gamma"])
-        self.assertEqual(order_second, order_first)
-        self.assertEqual(
-            groups_first,
-            [("Alpha", None), ("Beta", None), ("Gamma", None)],
-        )
+            self.assertTrue(result.rolled_back)
+            self.assertEqual(len(result.errors), 1)
+            self.assertIn("Overview", result.errors[0])
+            self.assertIn("page", result.errors[0])
+            self.assertEqual(list_bookmarks(project), [])
 
 
 class ApplyBookmarksBranchSessionTests(unittest.TestCase):

@@ -8,19 +8,14 @@ from dataclasses import dataclass, field
 from unittest import mock
 from pathlib import Path
 
+import yaml
+
+from pbi.apply import apply_yaml
 from pbi.apply.session import run_apply
-from pbi.apply.state import (
-    ApplyResult,
-    PageVisualState,
-    PbirApplySession,
-    save_page_if_changed,
-    save_visual_if_changed,
-)
-from pbi.apply.visuals import apply_visual
-from pbi.project import Page, Project, Visual
+from pbi.apply.state import ApplyResult, PbirApplySession
+from pbi.project import Project
 from pbi.report_authoring import ReportAuthoring
 
-from tests.apply_session_fakes import FakePbirWriteSession
 from tests.support import make_project
 
 
@@ -96,330 +91,6 @@ class RunApplyLifecycleTests(unittest.TestCase):
         self.assertEqual(session.calls, ["begin", "commit", "rollback", "cleanup"])
         self.assertTrue(result.rolled_back)
         self.assertEqual(result.errors, ["Commit failed: commit blew up"])
-
-
-class SaveVisualLeafSeamTests(unittest.TestCase):
-    """Apply leaf paths that persist a Visual go through ``session.save_visual``.
-
-    Drives ``save_visual_if_changed`` against an in-memory
-    ``FakePbirWriteSession`` so the test runs without a PBIP project on disk.
-    """
-
-    def _make_visual(self, *, data: dict | None = None) -> Visual:
-        # Folder is never touched because the fake records the call instead of
-        # invoking ``Visual.save``; an arbitrary Path keeps the dataclass valid.
-        return Visual(folder=Path("/nonexistent/visuals/v1"), data=data or {})
-
-    def test_changed_visual_routes_through_save_visual(self) -> None:
-        baseline = {"name": "v1", "visual": {"visualType": "card"}}
-        visual = self._make_visual(data={**baseline, "isHidden": True})
-        session = FakePbirWriteSession()
-
-        wrote = save_visual_if_changed(
-            project=None,  # type: ignore[arg-type]
-            visual=visual,
-            original_data=baseline,
-            session=session,
-        )
-
-        self.assertTrue(wrote)
-        self.assertEqual(session.call_names(), ["save_visual"])
-        self.assertIs(session.calls[0][1], visual)
-
-    def test_unchanged_visual_does_not_call_save_visual(self) -> None:
-        baseline = {"name": "v1", "visual": {"visualType": "card"}}
-        visual = self._make_visual(data=dict(baseline))
-        session = FakePbirWriteSession()
-
-        wrote = save_visual_if_changed(
-            project=None,  # type: ignore[arg-type]
-            visual=visual,
-            original_data=baseline,
-            session=session,
-        )
-
-        self.assertFalse(wrote)
-        self.assertEqual(session.calls, [])
-
-
-class SavePageLeafSeamTests(unittest.TestCase):
-    """Apply leaf paths that persist a Page go through ``session.save_page``.
-
-    Drives ``save_page_if_changed`` against an in-memory
-    ``FakePbirWriteSession`` so the test runs without a PBIP project on disk.
-    """
-
-    def _make_page(self, *, data: dict | None = None) -> Page:
-        # Folder is never touched because the fake records the call instead of
-        # invoking ``Page.save``; an arbitrary Path keeps the dataclass valid.
-        return Page(folder=Path("/nonexistent/pages/p1"), data=data or {})
-
-    def test_changed_page_routes_through_save_page(self) -> None:
-        baseline = {"displayName": "Page 1", "width": 1280, "height": 720}
-        page = self._make_page(data={**baseline, "displayOption": "FitToPage"})
-        session = FakePbirWriteSession()
-
-        wrote = save_page_if_changed(
-            project=None,  # type: ignore[arg-type]
-            page=page,
-            original_data=baseline,
-            session=session,
-        )
-
-        self.assertTrue(wrote)
-        self.assertEqual(session.call_names(), ["save_page"])
-        self.assertIs(session.calls[0][1], page)
-
-    def test_unchanged_page_does_not_call_save_page(self) -> None:
-        baseline = {"displayName": "Page 1", "width": 1280, "height": 720}
-        page = self._make_page(data=dict(baseline))
-        session = FakePbirWriteSession()
-
-        wrote = save_page_if_changed(
-            project=None,  # type: ignore[arg-type]
-            page=page,
-            original_data=baseline,
-            session=session,
-        )
-
-        self.assertFalse(wrote)
-        self.assertEqual(session.calls, [])
-
-
-class _StubbedPbirWriteSession(FakePbirWriteSession):
-    """Fake session that returns scaffolded entities from ``create_*``.
-
-    Apply-leaf tests for the structural creation paths need the session to
-    return Page/Visual objects that the leaf code can mutate. The plain
-    ``FakePbirWriteSession`` returns ``None`` from those methods — useful for
-    paths that do not consume the return value, but ``apply_visual`` and
-    friends do, so a subclass scaffolds in-memory entities here.
-    """
-
-    def create_page(  # type: ignore[override]
-        self,
-        display_name: str,
-        *,
-        width: int = 1280,
-        height: int = 720,
-        display_option: str = "FitToPage",
-    ) -> Page:
-        super().create_page(
-            display_name,
-            width=width,
-            height=height,
-            display_option=display_option,
-        )
-        return Page(
-            folder=Path("/fake/pages") / display_name.replace(" ", ""),
-            data={
-                "displayName": display_name,
-                "width": width,
-                "height": height,
-                "displayOption": display_option,
-            },
-        )
-
-    def create_visual(  # type: ignore[override]
-        self,
-        page: Page,
-        visual_type: str,
-        *,
-        x: int = 0,
-        y: int = 0,
-        width: int = 300,
-        height: int = 200,
-        behind: bool = False,
-    ) -> Visual:
-        super().create_visual(
-            page,
-            visual_type,
-            x=x,
-            y=y,
-            width=width,
-            height=height,
-            behind=behind,
-        )
-        return Visual(
-            folder=Path("/fake/visuals/v_new"),
-            data={
-                "name": "v_new",
-                "position": {
-                    "x": x,
-                    "y": y,
-                    "width": width,
-                    "height": height,
-                },
-                "visual": {
-                    "visualType": visual_type,
-                    "query": {"queryState": {}},
-                    "objects": {},
-                },
-            },
-        )
-
-    def create_group_container(  # type: ignore[override]
-        self,
-        page: Page,
-        *,
-        name: str | None = None,
-        display_name: str | None = None,
-        x: int = 0,
-        y: int = 0,
-        width: int = 0,
-        height: int = 0,
-    ) -> Visual:
-        super().create_group_container(
-            page,
-            name=name,
-            display_name=display_name,
-            x=x,
-            y=y,
-            width=width,
-            height=height,
-        )
-        return Visual(
-            folder=Path("/fake/visuals") / (name or "g_new"),
-            data={
-                "name": name or "g_new",
-                "position": {
-                    "x": x,
-                    "y": y,
-                    "width": width,
-                    "height": height,
-                },
-                "visualGroup": {"displayName": display_name or name or "group"},
-            },
-        )
-
-
-class StructuralLeafSeamTests(unittest.TestCase):
-    """Apply-leaf paths reach ``create_*`` / ``delete_visual`` through the session.
-
-    Each test drives the migrated leaf path against ``_StubbedPbirWriteSession``
-    so the call sequence is observable without touching a real PBIP project.
-    """
-
-    def _make_page(self) -> Page:
-        return Page(
-            folder=Path("/fake/pages/p1"),
-            data={"displayName": "P1", "width": 1280, "height": 720},
-        )
-
-    def test_create_visual_routes_through_session(self) -> None:
-        page = self._make_page()
-        page_state = PageVisualState(page=page, visuals=[])
-        session = _StubbedPbirWriteSession()
-
-        apply_visual(
-            project=None,  # type: ignore[arg-type]
-            page=page,
-            vis_spec={"name": "v1", "type": "cardVisual"},
-            result=ApplyResult(),
-            dry_run=False,
-            style_cache={},
-            session=session,  # type: ignore[arg-type]
-            page_state=page_state,
-        )
-
-        names = session.call_names()
-        self.assertEqual(names[0], "create_visual")
-        # The eager save persists the name override before further mutation.
-        self.assertIn("save_visual", names)
-
-    def test_delete_visual_routes_through_session_on_type_conversion(self) -> None:
-        # An existing card visual is replaced with a line chart. The migrated
-        # path must read as: delete_visual → create_visual (→ optional
-        # save_visual eager + final save_visual_if_changed equivalent).
-        page = self._make_page()
-        existing = Visual(
-            folder=Path("/fake/visuals/v1"),
-            data={
-                "name": "v1",
-                "position": {"x": 0, "y": 0, "width": 100, "height": 50},
-                "visual": {
-                    "visualType": "cardVisual",
-                    "query": {"queryState": {}},
-                    "objects": {},
-                },
-            },
-        )
-        page_state = PageVisualState(page=page, visuals=[existing])
-        session = _StubbedPbirWriteSession()
-
-        apply_visual(
-            project=None,  # type: ignore[arg-type]
-            page=page,
-            vis_spec={"name": "v1", "type": "lineChart"},
-            result=ApplyResult(),
-            dry_run=False,
-            style_cache={},
-            session=session,  # type: ignore[arg-type]
-            page_state=page_state,
-        )
-
-        names = session.call_names()
-        self.assertEqual(names[0], "delete_visual")
-        self.assertEqual(names[1], "create_visual")
-        # The eager save_visual after the name override is the third call.
-        self.assertEqual(names[2], "save_visual")
-        # The two delete/create entries each carry their target object.
-        self.assertIs(session.calls[0][1], existing)
-
-    def test_create_group_container_routes_through_session(self) -> None:
-        page = self._make_page()
-        page_state = PageVisualState(page=page, visuals=[])
-        session = _StubbedPbirWriteSession()
-
-        apply_visual(
-            project=None,  # type: ignore[arg-type]
-            page=page,
-            vis_spec={
-                "name": "section",
-                "type": "group",
-                "displayName": "Section",
-            },
-            result=ApplyResult(),
-            dry_run=False,
-            style_cache={},
-            session=session,  # type: ignore[arg-type]
-            page_state=page_state,
-        )
-
-        names = session.call_names()
-        self.assertEqual(names[0], "create_group_container")
-
-    def test_create_page_routes_through_session(self) -> None:
-        # Drive the apply_page leaf path for a brand-new page. The page
-        # creation lookup is patched out so this test does not need a Project.
-        from pbi.apply.pages import apply_page
-
-        class _NoFindProject:
-            root = Path("/fake/project")
-
-            def find_page(self, _name: str) -> Page:
-                raise ValueError("not found")
-
-            def get_visuals(self, _page: Page) -> list[Visual]:
-                return []
-
-        session = _StubbedPbirWriteSession()
-        result = ApplyResult()
-
-        apply_page(
-            project=_NoFindProject(),  # type: ignore[arg-type]
-            page_spec={"name": "Demo", "width": 1280, "height": 720},
-            result=result,
-            dry_run=False,
-            overwrite=False,
-            style_cache={},
-            session=session,  # type: ignore[arg-type]
-        )
-
-        names = session.call_names()
-        self.assertEqual(names[0], "create_page")
-        self.assertEqual(session.calls[0][1], "Demo")
-        self.assertIn("Demo", result.pages_created)
 
 
 class PbirApplySessionRollbackTests(unittest.TestCase):
@@ -562,6 +233,37 @@ class PbirApplySessionRollbackTests(unittest.TestCase):
                     run_apply(session, body)
 
             self.assertFalse((visuals_dir / "visual0001").exists())
+
+    def test_failed_apply_restores_edited_page_and_removes_new_group(self) -> None:
+        # Page saves and group creation must go through the session, so a
+        # failed apply restores page.json and removes the new group folder.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            visual = ReportAuthoring(project).create_visual(page, "cardVisual", x=10, y=20, width=100, height=50)
+            visual.data["name"] = "card1"
+            visual.save()
+            before = self._capture_report(project)
+
+            spec = {
+                "pages": [
+                    {
+                        "name": "Demo",
+                        "width": 1600,
+                        "displayOption": "FitToWidth",
+                        "visuals": [
+                            {"name": "section", "type": "group", "displayName": "Section"},
+                            {"name": "card1", "notARealProperty": {"bogus": True}},
+                        ],
+                    }
+                ]
+            }
+            result = apply_yaml(project, yaml.safe_dump(spec, sort_keys=False))
+
+            self.assertTrue(result.rolled_back)
+            self.assertTrue(result.errors)
+            self.assertEqual(self._capture_report(project), before)
 
     def test_eager_visual_update_rollback_uses_journal_without_copytree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

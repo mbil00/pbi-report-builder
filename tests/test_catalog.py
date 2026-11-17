@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -12,7 +14,15 @@ from typer.testing import CliRunner
 
 from pbi.catalog import get_catalog_item, list_catalog_items, validate_catalog
 from pbi.cli import app
-from pbi.components import apply_component, list_components, save_component_from_yaml
+from pbi.images import add_image, build_image_resource_property
+from pbi.components import (
+    apply_component,
+    apply_component_row,
+    get_component,
+    list_components,
+    save_component,
+    save_component_from_yaml,
+)
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.project import Project
 from pbi.validate import validate_project
@@ -20,6 +30,8 @@ from pbi.visual_schema import get_data_roles
 from pbi.styles import create_style
 from pbi.templates import save_template
 from pbi.report_authoring import ReportAuthoring
+from pbi.roundtrip_primitives import export_bindings
+from pbi.textbox import set_textbox_content
 from pbi.visual_templates import (
     apply_visual_template,
     list_visual_templates,
@@ -284,6 +296,259 @@ table Sales
                 if issue.message.startswith("Schema:")
             ]
             self.assertEqual(schema_issues, [])
+
+
+class ComponentTests(unittest.TestCase):
+    """Component save, stamp and row-stamp through the library API."""
+
+    def test_component_save_detects_textbox_text_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            title = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=200, height=40)
+            title.data["name"] = "header-title"
+            set_textbox_content(title.data, text="Executive Summary")
+            title.save()
+            subtitle = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=50, width=200, height=30)
+            subtitle.data["name"] = "header-subtitle"
+            set_textbox_content(subtitle.data, text="FY26 outlook")
+            subtitle.save()
+            group = ReportAuthoring(project).create_group(page, [title, subtitle], display_name="page_header")
+
+            save_component(project, page, group, "page_header")
+            target = ReportAuthoring(project).create_page("Target")
+            stamped = apply_component(
+                project,
+                target,
+                "page_header",
+                params={"title": "Department Breakdown", "subtitle": "Operations"},
+            )
+
+            self.assertEqual(len(stamped), 3)
+            target_visuals = {
+                vis.name: vis for vis in project.get_visuals(target)
+                if "visualGroup" not in vis.data
+            }
+            title_text = (
+                target_visuals["header-title"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
+            )
+            subtitle_text = (
+                target_visuals["header-subtitle"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
+            )
+            self.assertEqual(title_text, "Department Breakdown")
+            self.assertEqual(subtitle_text, "Operations")
+
+    def test_component_apply_preserves_nested_image_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            title = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=200, height=40)
+            title.data["name"] = "header-title"
+            set_textbox_content(title.data, text="Executive Summary")
+            title.save()
+
+            image_path = root / "logo.png"
+            image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5Wv2QAAAAASUVORK5CYII="))
+            add_image(project, image_path)
+
+            logo = ReportAuthoring(project).create_visual(page, "image", x=0, y=50, width=40, height=40)
+            logo.data["name"] = "header-logo"
+            logo.data["visual"]["objects"] = {
+                "image": [
+                    {
+                        "properties": {
+                            "sourceType": {"expr": {"Literal": {"Value": "'image'"}}},
+                            "sourceFile": build_image_resource_property(project, "logo.png"),
+                        }
+                    }
+                ]
+            }
+            logo.save()
+
+            group = ReportAuthoring(project).create_group(page, [title, logo], display_name="page_header")
+            save_component(project, page, group, "page_header")
+            target = ReportAuthoring(project).create_page("Target")
+
+            stamped = apply_component(project, target, "page_header")
+
+            self.assertEqual(len(stamped), 3)
+            target_visuals = {
+                vis.name: vis for vis in project.get_visuals(target)
+                if "visualGroup" not in vis.data
+            }
+            image_props = target_visuals["header-logo"].data["visual"]["objects"]["image"][0]["properties"]
+            self.assertIn("sourceFile", image_props)
+            self.assertNotIn("sourceFile.image", image_props)
+            self.assertEqual(
+                image_props["sourceFile"]["image"]["url"]["expr"]["ResourcePackageItem"]["PackageName"],
+                "RegisteredResources",
+            )
+
+    def test_component_apply_replaces_existing_group_with_same_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first.data["name"] = "title"
+            set_textbox_content(first.data, text="One")
+            first.save()
+            second = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=40, width=100, height=30)
+            second.data["name"] = "subtitle"
+            set_textbox_content(second.data, text="Two")
+            second.save()
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="page_header")
+
+            save_component(project, page, group, "page_header")
+            apply_component(project, page, "page_header", x=0, y=0)
+            apply_component(project, page, "page_header", x=20, y=20)
+
+            project.clear_caches()
+            visuals = project.get_visuals(page)
+            groups = [vis for vis in visuals if "visualGroup" in vis.data and vis.name == "page_header"]
+            children = [vis for vis in visuals if vis.data.get("parentGroupName") == "page_header"]
+            self.assertEqual(len(groups), 1)
+            self.assertEqual({vis.name for vis in children}, {"title", "subtitle"})
+
+    def test_component_save_detects_binding_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+
+            card = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
+            card.data["name"] = "kpi-card"
+            ReportAuthoring(project).add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
+            card.save()
+
+            bg = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=220, height=120)
+            bg.data["name"] = "kpi-bg"
+            bg.save()
+
+            group = ReportAuthoring(project).create_group(page, [card, bg], display_name="kpi_tile")
+            save_component(project, page, group, "kpi_tile")
+            comp = get_component(project, "kpi_tile")
+
+            self.assertIn("data", comp.parameters)
+            self.assertEqual(comp.parameters["data"]["default"], "Sales.Revenue (measure)")
+
+    def test_component_apply_substitutes_binding_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+
+            card = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
+            card.data["name"] = "kpi-card"
+            ReportAuthoring(project).add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
+            card.save()
+
+            bg = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=220, height=120)
+            bg.data["name"] = "kpi-bg"
+            bg.save()
+
+            group = ReportAuthoring(project).create_group(page, [card, bg], display_name="kpi_tile")
+            save_component(project, page, group, "kpi_tile")
+
+            target = ReportAuthoring(project).create_page("Target")
+            stamped = apply_component(
+                project, target, "kpi_tile",
+                params={"data": "Budget.Amount (measure)"},
+            )
+
+            target_visuals = project.get_visuals(target)
+            cards = [v for v in target_visuals if v.visual_type == "cardVisual"]
+            self.assertEqual(len(cards), 1)
+            bindings = export_bindings(cards[0].data)
+            self.assertIn("Data", bindings)
+            bound_field = bindings["Data"]
+            if isinstance(bound_field, list):
+                bound_field = bound_field[0]
+            self.assertIn("Budget.Amount", bound_field)
+
+    def test_component_row_creates_indexed_instance_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+
+            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first.data["name"] = "label"
+            set_textbox_content(first.data, text="Value")
+            first.save()
+            second = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=120, height=50)
+            second.data["name"] = "bg"
+            second.save()
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="tile")
+
+            save_component(project, page, group, "tile")
+            target = ReportAuthoring(project).create_page("Target")
+            all_created = apply_component_row(project, target, "tile", 3, x=0, y=0, gap=10)
+
+            project.clear_caches()
+            visuals = project.get_visuals(target)
+            groups = [v for v in visuals if "visualGroup" in v.data]
+            group_names = sorted(v.name for v in groups)
+            self.assertEqual(group_names, ["tile-1", "tile-2", "tile-3"])
+
+    def test_component_row_restamp_cleans_up_indexed_instances(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            page = ReportAuthoring(project).create_page("Demo")
+
+            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
+            first.data["name"] = "label"
+            set_textbox_content(first.data, text="Value")
+            first.save()
+            second = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=120, height=50)
+            second.data["name"] = "bg"
+            second.save()
+            group = ReportAuthoring(project).create_group(page, [first, second], display_name="tile")
+
+            save_component(project, page, group, "tile")
+            target = ReportAuthoring(project).create_page("Target")
+
+            apply_component_row(project, target, "tile", 4, x=0, y=0, gap=10)
+            apply_component_row(project, target, "tile", 2, x=0, y=0, gap=10)
+
+            project.clear_caches()
+            visuals = project.get_visuals(target)
+            groups = [v for v in visuals if "visualGroup" in v.data]
+            group_names = sorted(v.name for v in groups)
+            self.assertEqual(group_names, ["tile-1", "tile-2"])
+
+    def test_component_create_from_yaml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+
+            spec_content = textwrap.dedent("""\
+                visuals:
+                  - name: bg-shape
+                    type: shape
+                    position: 0, 0
+                    size: 220 x 120
+                  - name: value-card
+                    type: cardVisual
+                    position: 10, 10
+                    size: 200 x 100
+                parameters:
+                  data:
+                    source: value-card.bindings.Data
+                    default: "Sales.Revenue (measure)"
+            """)
+            spec_path = root / "kpi-spec.yaml"
+            spec_path.write_text(spec_content, encoding="utf-8")
+
+            save_component_from_yaml(project, spec_path, "kpi_tile")
+            comp = get_component(project, "kpi_tile")
+
+            self.assertEqual(len(comp.visuals), 2)
+            self.assertIn("data", comp.parameters)
+            self.assertEqual(comp.size, (220, 120))
 
 
 class CatalogCliTests(unittest.TestCase):
