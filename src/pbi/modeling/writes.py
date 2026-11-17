@@ -17,7 +17,7 @@ from .desktop_metadata import (
     normalize_summarize_by,
     normalize_table_data_category,
 )
-from .parser import _TMDL_PROPERTY_NAMES, _parse_tmdl_name
+from .parser import _TMDL_PROPERTY_NAMES, _is_changed_property, _parse_tmdl_name
 from .schema import SemanticModel
 
 
@@ -993,10 +993,14 @@ def _starts_new_table_block(stripped: str) -> bool:
 
     A ``///`` description belongs to the object declared below it, so at table
     level it starts that object's block rather than ending the previous one.
+    A table-level ``changedProperty = X`` line is table metadata, so it ends
+    the member block above it too.
     """
-    return stripped.startswith(
+    if stripped.startswith(
         ("///", "column ", "calculatedColumn ", "measure ", "partition ", "hierarchy ", "annotation ")
-    )
+    ):
+        return True
+    return _is_changed_property(stripped)
 
 
 def _description_start(lines: list[str], start: int) -> int:
@@ -1465,6 +1469,8 @@ def _measure_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
             return idx
+        if _indent_level(lines[idx]) == 2 and _is_changed_property(stripped):
+            return idx
         if ":" in stripped:
             key = stripped.partition(":")[0].strip()
             if key in _TMDL_PROPERTY_NAMES:
@@ -1534,6 +1540,8 @@ def _column_property_start(lines: list[str], start: int, end: int) -> int:
         if _indent_level(lines[idx]) < 2:
             continue
         if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
+            return idx
+        if _indent_level(lines[idx]) == 2 and _is_changed_property(stripped):
             return idx
         if ":" in stripped:
             key = stripped.partition(":")[0].strip()
