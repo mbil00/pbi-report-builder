@@ -11,9 +11,13 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pbi.project import Project, _read_json
 from pbi.textbox import is_legacy_quoted_run
+
+if TYPE_CHECKING:
+    from pbi.modeling.schema import SemanticModel
 
 
 @dataclass
@@ -136,15 +140,25 @@ def validate_project(
     if include_layout_checks:
         issues.extend(_validate_layout(project, loaded_pages=loaded_pages, loaded_visuals=loaded_visuals))
 
-    # Validate cross-table relationships in visual bindings
+    # Validate visual bindings and sorts against the semantic model
     if include_model_checks:
-        issues.extend(
-            _validate_visual_relationships(
-                project,
-                loaded_pages=loaded_pages,
-                loaded_visuals=loaded_visuals,
+        model = _load_model(project)
+        if model is not None:
+            issues.extend(
+                _validate_visual_relationships(
+                    project,
+                    loaded_pages=loaded_pages,
+                    loaded_visuals=loaded_visuals,
+                    model=model,
+                )
             )
-        )
+            issues.extend(
+                _validate_visual_field_refs(
+                    project,
+                    model,
+                    _page_visual_items(project, loaded_pages, loaded_visuals),
+                )
+            )
 
     # Validate bookmarks
     bookmarks_dir = project.definition_folder / "bookmarks"
@@ -446,6 +460,7 @@ def _validate_visual_data(data: dict, rel: str) -> list[ValidationIssue]:
         visual_type = visual.get("visualType")
         if visual_type and objects:
             issues.extend(_validate_visual_schema(visual_type, objects, rel))
+        issues.extend(_validate_query_roles(visual, rel))
 
     # Validate parentGroupName is a string
     parent = data.get("parentGroupName")
@@ -817,41 +832,57 @@ def _projection_column_table(projection: dict) -> str | None:
     return ref[:dot] if dot > 0 else None
 
 
-def _validate_visual_relationships(
-    project: Project,
-    *,
-    loaded_pages: dict[str, dict] | None = None,
-    loaded_visuals: dict[str, list[tuple[str, dict]]] | None = None,
-) -> list[ValidationIssue]:
-    """Check visual bindings for cross-table fields without relationship paths."""
-    issues: list[ValidationIssue] = []
+def _load_model(project: Project) -> SemanticModel | None:
+    """Load the project's semantic model, or None when it is absent or unreadable."""
+    from pbi.modeling.schema import SemanticModel
 
     try:
-        from pbi.modeling.schema import SemanticModel
-        model = SemanticModel.load(project.root)
-    except (FileNotFoundError, Exception):
-        return issues  # No model or can't load — skip
+        return SemanticModel.load(project.root)
+    except Exception:
+        return None
 
-    if not model.relationships:
-        return issues  # No relationships to validate against
 
-    table_names = {t.name.lower() for t in model.tables}
-
+def _page_visual_items(
+    project: Project,
+    loaded_pages: dict[str, dict] | None,
+    loaded_visuals: dict[str, list[tuple[str, dict]]] | None,
+) -> list[tuple[str, list[tuple[str, dict]]]]:
+    """Return (page folder, [(visual folder, visual data)]) pairs to check."""
     if loaded_pages is None or loaded_visuals is None:
-        page_items = [
+        return [
             (
                 page.folder.name,
                 [(visual.folder.name, visual.data) for visual in project.get_visuals(page)],
             )
             for page in project.get_pages()
         ]
-    else:
-        page_items = [
-            (page_name, loaded_visuals.get(page_name, []))
-            for page_name in loaded_pages
-        ]
+    return [
+        (page_name, loaded_visuals.get(page_name, []))
+        for page_name in loaded_pages
+    ]
 
-    for page_name, visuals in page_items:
+
+def _validate_visual_relationships(
+    project: Project,
+    *,
+    loaded_pages: dict[str, dict] | None = None,
+    loaded_visuals: dict[str, list[tuple[str, dict]]] | None = None,
+    model: SemanticModel | None = None,
+) -> list[ValidationIssue]:
+    """Check visual bindings for cross-table fields without relationship paths."""
+    issues: list[ValidationIssue] = []
+
+    if model is None:
+        model = _load_model(project)
+        if model is None:
+            return issues  # No model or can't load — skip
+
+    if not model.relationships:
+        return issues  # No relationships to validate against
+
+    table_names = {t.name.lower() for t in model.tables}
+
+    for page_name, visuals in _page_visual_items(project, loaded_pages, loaded_visuals):
         for visual_id, visual_data in visuals:
             query_state = visual_data.get("visual", {}).get("query", {}).get("queryState", {})
             if not query_state:
@@ -892,6 +923,212 @@ def _validate_visual_relationships(
                             f'which have no relationship path',
                         ))
 
+    return issues
+
+
+# Roles Desktop writes that the extracted capability schema lacks. Desktop's
+# sample-report binds a cardVisual `Rows` field; apply still rejects it (#109).
+_DESKTOP_ROLE_GAPS: dict[str, frozenset[str]] = {
+    "cardVisual": frozenset({"Rows"}),
+}
+
+
+def _validate_query_roles(visual: dict, rel: str) -> list[ValidationIssue]:
+    """Flag queryState roles that the visual type does not have."""
+    from pbi.visual_analysis import allowed_role_names
+
+    visual_type = visual.get("visualType")
+    query = visual.get("query")
+    query_state = query.get("queryState") if isinstance(query, dict) else None
+    if not isinstance(visual_type, str) or not isinstance(query_state, dict):
+        return []
+    roles = allowed_role_names(visual_type)
+    if not roles:
+        return []  # A custom visual or a type the schema doesn't describe
+    roles |= _DESKTOP_ROLE_GAPS.get(visual_type, frozenset())
+
+    return [
+        ValidationIssue(
+            rel,
+            "error",
+            f'Role "{role}" is not a data role of {visual_type}. '
+            f'Roles: {", ".join(sorted(roles))}',
+            f"visual.query.queryState.{role}",
+        )
+        for role in query_state
+        if role not in roles
+    ]
+
+
+@dataclass
+class _ModelNames:
+    """Lower-cased table, field, hierarchy and level names a visual may reference."""
+
+    fields: dict[str, set[str]]
+    hierarchies: dict[str, dict[str, set[str]]]
+
+    @classmethod
+    def build(cls, model: SemanticModel, project: Project) -> _ModelNames:
+        fields: dict[str, set[str]] = {}
+        hierarchies: dict[str, dict[str, set[str]]] = {}
+        for table in model.tables:
+            key = table.name.lower()
+            fields[key] = {column.name.lower() for column in table.columns}
+            fields[key] |= {measure.name.lower() for measure in table.measures}
+            hierarchies[key] = {
+                hierarchy.name.lower(): {level.name.lower() for level in hierarchy.levels}
+                for hierarchy in table.hierarchies
+            }
+        # Report-level measures (definition/reportExtensions.json) live outside
+        # the model, on a model table or on an entity of their own.
+        for entity, measures in _report_extension_measures(project).items():
+            fields.setdefault(entity.lower(), set()).update(m.lower() for m in measures)
+            hierarchies.setdefault(entity.lower(), {})
+        return cls(fields, hierarchies)
+
+    def table_problem(self, entity: str) -> str | None:
+        if entity.lower() not in self.fields:
+            return f'table "{entity}"'
+        return None
+
+    def field_problem(self, entity: str, prop: object) -> str | None:
+        problem = self.table_problem(entity)
+        if problem or not isinstance(prop, str):
+            return problem
+        if prop.lower() not in self.fields[entity.lower()]:
+            return f'field "{entity}.{prop}"'
+        return None
+
+    def level_problem(self, entity: str, hierarchy: object, level: object) -> str | None:
+        problem = self.table_problem(entity)
+        if problem or not isinstance(hierarchy, str):
+            return problem
+        levels = self.hierarchies[entity.lower()].get(hierarchy.lower())
+        if levels is None:
+            return f'hierarchy "{entity}.{hierarchy}"'
+        if isinstance(level, str) and level.lower() not in levels:
+            return f'level "{level}" of hierarchy "{entity}.{hierarchy}"'
+        return None
+
+
+def _report_extension_measures(project: Project) -> dict[str, list[str]]:
+    """Return report-level measure names by entity from reportExtensions.json."""
+    path = project.definition_folder / "reportExtensions.json"
+    if not path.exists():
+        return {}
+    try:
+        data = _read_json(path)
+    except (OSError, ValueError):
+        return {}
+    measures: dict[str, list[str]] = {}
+    for entity in data.get("entities", []) if isinstance(data, dict) else []:
+        if not isinstance(entity, dict) or not isinstance(entity.get("name"), str):
+            continue
+        names = measures.setdefault(entity["name"], [])
+        for measure in entity.get("measures", []):
+            if isinstance(measure, dict) and isinstance(measure.get("name"), str):
+                names.append(measure["name"])
+    return measures
+
+
+def _source_entity(expression: object) -> str | None:
+    """Return ``Expression.SourceRef.Entity`` when the expression is a plain table ref."""
+    if not isinstance(expression, dict):
+        return None
+    source_ref = expression.get("SourceRef")
+    if isinstance(source_ref, dict) and isinstance(source_ref.get("Entity"), str):
+        return source_ref["Entity"]
+    return None
+
+
+def _field_ref_problems(node: object, names: _ModelNames) -> list[str]:
+    """Return the model objects a PBIR field expression names but the model lacks."""
+    problems: list[str] = []
+    if isinstance(node, list):
+        for item in node:
+            problems.extend(_field_ref_problems(item, names))
+        return problems
+    if not isinstance(node, dict):
+        return problems
+
+    for key, value in node.items():
+        if not isinstance(value, dict):
+            continue
+        problem: str | None = None
+        entity: str | None = None
+        if key in ("Column", "Measure", "PropertyVariationSource"):
+            entity = _source_entity(value.get("Expression"))
+            if entity is not None:
+                problem = names.field_problem(entity, value.get("Property"))
+        elif key == "HierarchyLevel":
+            expression = value.get("Expression")
+            hierarchy = expression.get("Hierarchy") if isinstance(expression, dict) else None
+            if isinstance(hierarchy, dict):
+                entity = _source_entity(hierarchy.get("Expression"))
+                if entity is not None:
+                    problem = names.level_problem(
+                        entity, hierarchy.get("Hierarchy"), value.get("Level")
+                    )
+        elif key == "SourceRef" and isinstance(value.get("Entity"), str):
+            entity = value["Entity"]
+            problem = names.table_problem(entity)
+
+        if entity is None:
+            # Not a plain table ref (an aggregation, a date variation, a
+            # visual calculation): look inside it.
+            problems.extend(_field_ref_problems(value, names))
+        elif problem is not None:
+            problems.append(problem)
+    return problems
+
+
+def _validate_visual_field_refs(
+    project: Project,
+    model: SemanticModel,
+    page_items: list[tuple[str, list[tuple[str, dict]]]],
+) -> list[ValidationIssue]:
+    """Flag binding and sort refs to tables, fields or hierarchies the model lacks."""
+    if not model.tables:
+        return []
+    names = _ModelNames.build(model, project)
+    issues: list[ValidationIssue] = []
+
+    for page_name, visuals in page_items:
+        for visual_id, visual_data in visuals:
+            visual = visual_data.get("visual")
+            query = visual.get("query") if isinstance(visual, dict) else None
+            if not isinstance(query, dict):
+                continue
+            rel = f"pages/{page_name}/visuals/{visual_id}/visual.json"
+            label = visual_data.get("name", visual_id)
+
+            refs: list[tuple[str, str, object]] = []
+            query_state = query.get("queryState")
+            if isinstance(query_state, dict):
+                for role, config in query_state.items():
+                    projections = config.get("projections") if isinstance(config, dict) else None
+                    for i, projection in enumerate(projections if isinstance(projections, list) else []):
+                        if isinstance(projection, dict):
+                            refs.append((
+                                f'binding "{role}"',
+                                f"visual.query.queryState.{role}.projections[{i}]",
+                                projection.get("field"),
+                            ))
+            sort_definition = query.get("sortDefinition")
+            sorts = sort_definition.get("sort") if isinstance(sort_definition, dict) else None
+            for i, sort in enumerate(sorts if isinstance(sorts, list) else []):
+                if isinstance(sort, dict):
+                    refs.append(("sort", f"visual.query.sortDefinition.sort[{i}]", sort.get("field")))
+
+            for where, path, field_expr in refs:
+                for problem in dict.fromkeys(_field_ref_problems(field_expr, names)):
+                    issues.append(ValidationIssue(
+                        rel,
+                        "error",
+                        f'Visual "{label}" {where} references {problem}, '
+                        f"which is not in the semantic model",
+                        path,
+                    ))
     return issues
 
 

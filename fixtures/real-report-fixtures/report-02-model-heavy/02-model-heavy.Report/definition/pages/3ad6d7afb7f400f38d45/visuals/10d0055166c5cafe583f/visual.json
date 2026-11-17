@@ -13,10 +13,7 @@
     "visualType": "card",
     "query": {
       "queryState": {
-        "Data": {
-          "projections": []
-        },
-        "Fields": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -33,12 +30,6 @@
               "nativeQueryRef": "Actual vs Budget"
             }
           ]
-        },
-        "Rows": {
-          "projections": []
-        },
-        "Tooltips": {
-          "projections": []
         }
       }
     },

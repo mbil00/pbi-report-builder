@@ -25,7 +25,7 @@ def create_visual(
     When *behind* is True the visual is placed below all existing visuals
     (useful for background shapes).
     """
-    from pbi.roles import get_visual_roles
+    from pbi.roles import stored_visual_roles
 
     visual_id = secrets.token_hex(10)
     visual_dir = page.folder / "visuals" / visual_id
@@ -39,7 +39,7 @@ def create_visual(
         max_z = max((visual.position.get("z", 0) for visual in existing), default=0)
         z = max_z + 1000
 
-    roles = get_visual_roles(visual_type)
+    roles = stored_visual_roles(visual_type)
     query_state: dict = {}
     for role in roles:
         query_state[role["name"]] = {"projections": []}

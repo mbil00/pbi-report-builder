@@ -210,7 +210,7 @@ class BufferedPbirApplySession:
         height: int = 200,
         behind: bool = False,
     ) -> Visual:
-        from pbi.roles import get_visual_roles
+        from pbi.roles import stored_visual_roles
 
         visual_id = secrets.token_hex(10)
         visual_dir = page.folder / "visuals" / visual_id
@@ -223,7 +223,7 @@ class BufferedPbirApplySession:
             z = max_z + 1000
 
         query_state: dict[str, Any] = {}
-        for role in get_visual_roles(visual_type):
+        for role in stored_visual_roles(visual_type):
             query_state[role["name"]] = {"projections": []}
 
         data = {

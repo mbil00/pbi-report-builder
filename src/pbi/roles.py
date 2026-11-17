@@ -23,6 +23,8 @@ VISUAL_ROLE_ALIASES: dict[str, dict[str, str]] = {
         "Value": "Data",
         "Fields": "Data",
     },
+    # Desktop labels the legacy card's `Values` role "Fields".
+    "card": {"Fields": "Values"},
     "slicer": {"Field": "Values"},
     "advancedSlicerVisual": {"Field": "Values"},
     "listSlicer": {"Field": "Values"},
@@ -379,11 +381,34 @@ def get_visual_roles(visual_type: str) -> list[dict]:
     return schema
 
 
+def _stored_role_type(visual_type: str) -> str:
+    """Return the type whose roles a visual stored as *visual_type* has.
+
+    `card` is both the user-facing alias for cardVisual and Desktop's legacy
+    card type. A visual stored as `card` is the legacy card, which binds
+    `Values`; it does not take cardVisual's `Data`/`Tooltips`.
+    """
+    if visual_type in VISUAL_TYPE_ALIASES and _schema_roles(visual_type):
+        return visual_type
+    return normalize_visual_type(visual_type)
+
+
+def stored_visual_roles(visual_type: str) -> list[dict]:
+    """Return role metadata for a visualType as PBIR stores it (no type aliasing)."""
+    role_type = _stored_role_type(visual_type)
+    if role_type in VISUAL_TYPE_ALIASES:
+        return _schema_roles(role_type)
+    return get_visual_roles(role_type)
+
+
 def normalize_visual_role(visual_type: str, role: str) -> str:
-    """Normalize a user-facing role name to the exported PBIR role name."""
-    canonical_type = normalize_visual_type(visual_type)
-    all_roles = get_visual_roles(canonical_type)
-    known_roles = [entry["name"] for entry in all_roles]
+    """Normalize a user-facing role name to the exported PBIR role name.
+
+    *visual_type* is the visualType a visual is stored with (or a canonical
+    type); a stored legacy `card` keeps its own roles.
+    """
+    canonical_type = _stored_role_type(visual_type)
+    known_roles = [entry["name"] for entry in stored_visual_roles(visual_type)]
 
     for known_role in known_roles:
         if known_role.lower() == role.lower():
