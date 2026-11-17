@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from pbi.project import Project
-from tests.support import KITCHEN_SINK_DIR, SHAPES_DIR, cli, copy_fixture, pbip_path, visual_by_title
+from tests.support import KITCHEN_SINK_DIR, SHAPES_DIR, cli, copy_fixture, pbip_path, table, visual_by_title
 
 OVERVIEW = "Executive Overview"
 
@@ -30,28 +30,6 @@ def pbi(root: Path, *args: str) -> str:
     result = cli(*args, project=root)
     assert result.exit_code == 0, result.output
     return result.output
-
-
-def table(output: str) -> list[dict[str, str]]:
-    """Parse the one Rich table in ``output`` into rows keyed by column title.
-
-    Columns are cut at the header titles' offsets, so an empty cell stays
-    empty instead of shifting the next value left.
-    """
-    lines = output.splitlines()
-    rule = next(i for i, line in enumerate(lines) if line.strip().startswith("─"))
-    header = lines[rule - 1]
-    columns = [(match.group(), match.start()) for match in re.finditer(r"\S+(?: \S+)*", header)]
-    rows = []
-    for line in lines[rule + 1:]:
-        if not line.strip():
-            continue
-        cells = {}
-        for index, (title, start) in enumerate(columns):
-            end = columns[index + 1][1] if index + 1 < len(columns) else None
-            cells[title] = line[start:end].strip()
-        rows.append(cells)
-    return rows
 
 
 def values(output: str, key: str = "Property", value: str = "Value") -> dict[str, str]:

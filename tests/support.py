@@ -8,6 +8,7 @@ Test modules import helpers from here, never from another test module.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -210,6 +211,48 @@ def cli(*args: Any, project: Path | Project | None = None, **invoke_kwargs: Any)
         root = project.root if isinstance(project, Project) else project
         argv = ["--project", str(root), *argv]
     return CliRunner().invoke(app, argv, **invoke_kwargs)
+
+
+def _table_rows(lines: list[str], rule: int, *, stop_at_blank: bool) -> list[dict[str, str]]:
+    header = lines[rule - 1]
+    columns = [(match.group(), match.start()) for match in re.finditer(r"\S+(?: \S+)*", header)]
+    rows = []
+    for line in lines[rule + 1:]:
+        if not line.strip():
+            if stop_at_blank:
+                break
+            continue
+        cells = {}
+        for index, (title, start) in enumerate(columns):
+            end = columns[index + 1][1] if index + 1 < len(columns) else None
+            cells[title] = line[start:end].strip()
+        rows.append(cells)
+    return rows
+
+
+def table(output: str) -> list[dict[str, str]]:
+    """Parse the one Rich table in ``output`` into rows keyed by column title.
+
+    Columns are cut at the header titles' offsets, so an empty cell stays
+    empty instead of shifting the next value left. Blank lines are skipped,
+    so a table with blank section rows stays one table.
+    """
+    lines = output.splitlines()
+    rule = next(i for i, line in enumerate(lines) if line.strip().startswith("─"))
+    return _table_rows(lines, rule, stop_at_blank=False)
+
+
+def tables(output: str) -> list[list[dict[str, str]]]:
+    """Parse every Rich table in ``output``, in order (see ``table``).
+
+    Each table's rows end at the first blank line after its header rule.
+    """
+    lines = output.splitlines()
+    return [
+        _table_rows(lines, index, stop_at_blank=True)
+        for index, line in enumerate(lines)
+        if line.strip().startswith("─")
+    ]
 
 
 # --- PBIR readers (Desktop fixtures identify visuals by title) ----------------

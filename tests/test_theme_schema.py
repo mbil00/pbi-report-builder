@@ -35,6 +35,8 @@ class TestValidateAndEncode(unittest.TestCase):
             validate_and_encode("foreground", "red")
         with self.assertRaises(ValueError):
             validate_and_encode("foreground", "#GG0000")
+        with self.assertRaises(ValueError):
+            validate_and_encode("foreground", "123456")
 
     def test_color_list_splits_and_validates_each(self) -> None:
         result = validate_and_encode("dataColors", "#FF0000, #00FF00, #0000FF")
