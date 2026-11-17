@@ -38,6 +38,16 @@ TABLE = "\n".join(
         "",
         "\t\tannotation SummarizationSetBy = Automatic",
         "",
+        "\tmeasure Count =",
+        "\t\t\t/*",
+        "\t\t\tannotation notes",
+        "\t\t\tvariation notes",
+        "\t\t\t*/",
+        "\t\t\tCOUNTROWS(Events)",
+        "\t\tlineageTag: 00000000-0000-0000-0000-000000000004",
+        "",
+        "\t\tannotation PBI_FormatHint = {\"isGeneralNumber\":true}",
+        "",
         "\tpartition Events-2024 = m",
         "\t\tmode: import",
         "\t\tqueryGroup: Facts",
@@ -65,6 +75,12 @@ def test_variation_block_is_not_part_of_the_expression(tmp_path: Path) -> None:
     _project(tmp_path)
     column = SemanticModel.load(tmp_path).find_table("Events").find_column("When")
     assert column.expression == "NOW() + Events[Offset]"
+
+
+def test_annotation_text_inside_a_dax_body_stays_dax(tmp_path: Path) -> None:
+    _project(tmp_path)
+    measure = SemanticModel.load(tmp_path).find_table("Events").find_measure("Count")
+    assert measure.expression == "/*\nannotation notes\nvariation notes\n*/\nCOUNTROWS(Events)"
 
 
 def test_unchanged_partition_is_not_rewritten(tmp_path: Path) -> None:

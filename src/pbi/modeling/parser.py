@@ -376,8 +376,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_props["isHidden"] = "true"
             elif stripped == "isKey":
                 current_props["isKey"] = "true"
-            elif stripped.startswith(("annotation ", "variation ")):
-                nested_block_indent = indent  # skip the nested block and its children
+            elif indent == 2 and stripped.startswith(("annotation ", "variation ")):
+                # A nested block at property indent: skip it and its children.
+                # Deeper, the same text is part of a multi-line DAX body.
+                nested_block_indent = indent
             elif indent == 2 and _is_changed_property(stripped):
                 # Member metadata at property indent. A multi-line DAX body
                 # sits one level deeper, where the same text is a comparison.
