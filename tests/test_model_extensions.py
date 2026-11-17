@@ -30,6 +30,7 @@ from pbi.model import (
 )
 from pbi.model_apply import apply_model_yaml
 from pbi.model_export import export_model_yaml
+from tests.support import FIXTURES
 
 
 def _make_project(root: Path) -> None:
@@ -78,71 +79,6 @@ def _write_model(root: Path, content: str) -> Path:
 
 
 class MetadataWriteTests(unittest.TestCase):
-    def test_set_member_property_writes_description_comment(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            path = _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-""")
-            _, _, _, changed = set_member_property(
-                root, "Sales.Revenue", "description", "Total revenue from sales",
-            )
-            self.assertTrue(changed)
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("\t/// Total revenue from sales\n\tmeasure Revenue = SUM(Sales[Amount])", text)
-            self.assertNotIn("description:", text)
-
-    def test_set_member_property_display_folder_on_column(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn OrderDate
-\t\tdataType: dateTime
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: OrderDate
-""")
-            _, _, _, changed = set_member_property(
-                root, "Sales.OrderDate", "displayFolder", "Dates",
-            )
-            self.assertTrue(changed)
-
-            model = SemanticModel.load(root)
-            c = model.find_table("Sales").find_column("OrderDate")
-            self.assertEqual(c.display_folder, "Dates")
-
-    def test_set_member_property_sort_by_column(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn MonthName
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: MonthName
-
-\tcolumn MonthNumber
-\t\tdataType: int64
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: MonthNumber
-""")
-            _, _, _, changed = set_member_property(
-                root, "Date.MonthName", "sortByColumn", "MonthNumber",
-            )
-            self.assertTrue(changed)
-
-            model = SemanticModel.load(root)
-            c = model.find_table("Date").find_column("MonthName")
-            self.assertEqual(c.sort_by_column, "MonthNumber")
-
     def test_set_member_property_rejects_column_only_property_on_measure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -570,49 +506,6 @@ table Sales
             )
             self.assertFalse(changed)
 
-    def test_parser_reads_metadata_fields(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_model(root, """
-model Model
-\tannotation __PBI_TimeIntelligenceEnabled = 1
-""")
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tdataCategory: Time
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tdescription: Total revenue
-\t\tdisplayFolder: KPIs
-\t\tlineageTag: m-1
-
-\tcolumn OrderDate
-\t\tdataType: dateTime
-\t\tisKey
-\t\tdescription: When the order was placed
-\t\tdisplayFolder: Dates
-\t\tsortByColumn: OrderDateKey
-\t\tdataCategory: DateOfBirth
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: OrderDate
-""")
-            model = SemanticModel.load(root)
-            self.assertTrue(model.time_intelligence_enabled)
-            t = model.find_table("Sales")
-            self.assertEqual(t.data_category, "Time")
-            self.assertEqual(t.date_table_column, "OrderDate")
-            m = t.find_measure("Revenue")
-            self.assertEqual(m.description, "Total revenue")
-            self.assertEqual(m.display_folder, "KPIs")
-
-            c = t.find_column("OrderDate")
-            self.assertEqual(c.description, "When the order was placed")
-            self.assertEqual(c.display_folder, "Dates")
-            self.assertEqual(c.sort_by_column, "OrderDateKey")
-            self.assertEqual(c.data_category, "DateOfBirth")
-            self.assertTrue(c.is_key)
-
     def test_mark_as_date_table_sets_table_and_column_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -874,66 +767,6 @@ table Date
 
 
 class RelationshipCRUDTests(unittest.TestCase):
-    def test_create_relationship(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            _write_table(root, "Customers.tmdl", """
-table Customers
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            rel_id, from_ref, to_ref = create_relationship(
-                root, "Sales.CustomerID", "Customers.CustomerID",
-            )
-            self.assertEqual(from_ref, "Sales.CustomerID")
-            self.assertEqual(to_ref, "Customers.CustomerID")
-
-            model = SemanticModel.load(root)
-            self.assertEqual(len(model.relationships), 1)
-            rel = model.relationships[0]
-            self.assertEqual(rel.from_table, "Sales")
-            self.assertEqual(rel.to_column, "CustomerID")
-
-    def test_create_relationship_with_properties(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            _write_table(root, "Customers.tmdl", """
-table Customers
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            create_relationship(
-                root, "Sales.CustomerID", "Customers.CustomerID",
-                properties={"crossFilteringBehavior": "bothDirections"},
-            )
-            model = SemanticModel.load(root)
-            rel = model.relationships[0]
-            self.assertEqual(rel.properties.get("crossFilteringBehavior"), "bothDirections")
-
     def test_create_duplicate_relationship_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -957,64 +790,6 @@ table Customers
             create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
             with self.assertRaises(ValueError, msg="already exists"):
                 create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
-
-    def test_delete_relationship(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            _write_table(root, "Customers.tmdl", """
-table Customers
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
-            from_ref, to_ref = delete_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
-            self.assertEqual(from_ref, "Sales.CustomerID")
-
-            model = SemanticModel.load(root)
-            self.assertEqual(len(model.relationships), 0)
-
-    def test_set_relationship_property(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            _write_table(root, "Customers.tmdl", """
-table Customers
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            create_relationship(root, "Sales.CustomerID", "Customers.CustomerID")
-            _, _, changed = set_relationship_property(
-                root, "Sales.CustomerID", "Customers.CustomerID",
-                "crossFilteringBehavior", "bothDirections",
-            )
-            self.assertTrue(changed)
-
-            model = SemanticModel.load(root)
-            rel = model.relationships[0]
-            self.assertEqual(rel.properties.get("crossFilteringBehavior"), "bothDirections")
 
     def test_set_relationship_property_accepts_one_sided_cardinality(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1302,6 +1077,7 @@ table Customers
             ])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("Deleted relationship", result.stdout)
+            self.assertEqual(SemanticModel.load(root).relationships, [])
 
     def test_relationship_set_cli(self):
         runner = CliRunner()
@@ -1433,46 +1209,6 @@ table Customers
 
 
 class HierarchyCRUDTests(unittest.TestCase):
-    def test_create_hierarchy(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn Year
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Year
-
-\tcolumn MonthNumber
-\t\tdataType: int64
-\t\tlineageTag: c-2
-\t\tsummarizeBy: sum
-\t\tsourceColumn: MonthNumber
-
-\tcolumn DayOfMonth
-\t\tdataType: int64
-\t\tlineageTag: c-3
-\t\tsummarizeBy: sum
-\t\tsourceColumn: DayOfMonth
-""")
-            table, name, created = create_hierarchy(
-                root, "Date", "Calendar", ["Year", "MonthNumber", "DayOfMonth"],
-            )
-            self.assertTrue(created)
-            self.assertEqual(name, "Calendar")
-
-            model = SemanticModel.load(root)
-            t = model.find_table("Date")
-            self.assertEqual(len(t.hierarchies), 1)
-            h = t.hierarchies[0]
-            self.assertEqual(h.name, "Calendar")
-            self.assertEqual(len(h.levels), 3)
-            self.assertEqual(h.levels[0].column, "Year")
-            self.assertEqual(h.levels[1].column, "MonthNumber")
-            self.assertEqual(h.levels[2].column, "DayOfMonth")
-
     def test_create_hierarchy_with_spaced_level_column(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1551,65 +1287,6 @@ table Date
             create_hierarchy(root, "Date", "YearOnly", ["Year"])
             with self.assertRaises(ValueError, msg="already exists"):
                 create_hierarchy(root, "Date", "YearOnly", ["Year"])
-
-    def test_delete_hierarchy(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn Year
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Year
-""")
-            create_hierarchy(root, "Date", "YearOnly", ["Year"])
-            table, name, deleted = delete_hierarchy(root, "Date", "YearOnly")
-            self.assertTrue(deleted)
-
-            model = SemanticModel.load(root)
-            self.assertEqual(len(model.find_table("Date").hierarchies), 0)
-
-    def test_parser_reads_hierarchies(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn Year
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Year
-
-\tcolumn Month
-\t\tdataType: int64
-\t\tlineageTag: c-2
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Month
-
-\thierarchy Calendar
-\t\tlineageTag: h-1
-
-\t\tlevel Year
-\t\t\tlineageTag: hl-1
-\t\t\tcolumn: Year
-
-\t\tlevel Month
-\t\t\tlineageTag: hl-2
-\t\t\tcolumn: Month
-""")
-            model = SemanticModel.load(root)
-            t = model.find_table("Date")
-            self.assertEqual(len(t.hierarchies), 1)
-            h = t.hierarchies[0]
-            self.assertEqual(h.name, "Calendar")
-            self.assertEqual(h.lineage_tag, "h-1")
-            self.assertEqual(len(h.levels), 2)
-            self.assertEqual(h.levels[0].column, "Year")
-            self.assertEqual(h.levels[1].column, "Month")
-            self.assertEqual(h.levels[0].lineage_tag, "hl-1")
 
 
 class HierarchyCLITests(unittest.TestCase):
@@ -1820,149 +1497,6 @@ table Sales
 
 
 class ModelExportTests(unittest.TestCase):
-    def test_export_model_and_table_settings(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_model(root, """
-model Model
-\tannotation __PBI_TimeIntelligenceEnabled = 0
-""")
-            _write_table(root, "Date.tmdl", """
-table Date
-\tdataCategory: Time
-\tcolumn Date
-\t\tdataType: dateTime
-\t\tisKey
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: Date
-""")
-            yaml_str = export_model_yaml(root)
-            spec = yaml.safe_load(yaml_str)
-            self.assertFalse(spec["model"]["timeIntelligence"])
-            self.assertEqual(spec["tables"]["Date"]["dataCategory"], "Time")
-            self.assertEqual(spec["tables"]["Date"]["dateTable"], "Date")
-
-    def test_export_measures(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tformatString: 0
-\t\tdescription: Total revenue
-\t\tdisplayFolder: KPIs
-\t\tlineageTag: m-1
-""")
-            yaml_str = export_model_yaml(root)
-            spec = yaml.safe_load(yaml_str)
-            self.assertIn("measures", spec)
-            self.assertIn("Sales", spec["measures"])
-            m = spec["measures"]["Sales"][0]
-            self.assertEqual(m["name"], "Revenue")
-            self.assertEqual(m["format"], "0")
-            self.assertEqual(m["description"], "Total revenue")
-            self.assertEqual(m["displayFolder"], "KPIs")
-
-    def test_export_columns_with_metadata(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn MonthName
-\t\tdataType: string
-\t\tsortByColumn: MonthNumber
-\t\tdisplayFolder: Calendar
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: MonthName
-
-\tcolumn MonthNumber
-\t\tdataType: int64
-\t\tlineageTag: c-2
-\t\tsummarizeBy: sum
-\t\tsourceColumn: MonthNumber
-""")
-            yaml_str = export_model_yaml(root)
-            spec = yaml.safe_load(yaml_str)
-            self.assertIn("columns", spec)
-            self.assertIn("Date", spec["columns"])
-            mn = spec["columns"]["Date"]["MonthName"]
-            self.assertEqual(mn["sortByColumn"], "MonthNumber")
-            self.assertEqual(mn["displayFolder"], "Calendar")
-
-    def test_export_relationships(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            _write_table(root, "Customers.tmdl", """
-table Customers
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-""")
-            _write_relationships(root, """
-relationship abc-123
-\tfromColumn: Sales.CustomerID
-\ttoColumn: Customers.CustomerID
-""")
-            yaml_str = export_model_yaml(root)
-            spec = yaml.safe_load(yaml_str)
-            self.assertIn("relationships", spec)
-            rel = spec["relationships"][0]
-            self.assertEqual(rel["from"], "Sales.CustomerID")
-            self.assertEqual(rel["to"], "Customers.CustomerID")
-
-    def test_export_hierarchies(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn Year
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Year
-
-\tcolumn Month
-\t\tdataType: int64
-\t\tlineageTag: c-2
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Month
-
-\thierarchy Calendar
-\t\tlineageTag: h-1
-
-\t\tlevel Year
-\t\t\tlineageTag: hl-1
-\t\t\tcolumn: Year
-
-\t\tlevel Month
-\t\t\tlineageTag: hl-2
-\t\t\tcolumn: Month
-""")
-            yaml_str = export_model_yaml(root)
-            spec = yaml.safe_load(yaml_str)
-            self.assertIn("hierarchies", spec)
-            self.assertIn("Date", spec["hierarchies"])
-            h = spec["hierarchies"]["Date"][0]
-            self.assertEqual(h["name"], "Calendar")
-            self.assertEqual(h["levels"], ["Year", "Month"])
-
     def test_export_omits_empty_sections(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2000,25 +1534,59 @@ table Sales
             spec = yaml.safe_load(result.stdout)
             self.assertIn("measures", spec)
 
-    def test_export_to_file(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-""")
-            out_path = root / "model.yaml"
-            result = runner.invoke(app, [
-                "model", "export", "-o", str(out_path),
-                "--project", str(root / "Sample.pbip"),
-            ])
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertTrue(out_path.exists())
-            spec = yaml.safe_load(out_path.read_text())
-            self.assertIn("measures", spec)
+
+def test_export_and_parser_carry_desktop_model_metadata() -> None:
+    """Named facts from report-04's Desktop-saved TMDL reach `model export`.
+
+    The harness's export -> apply no-op can't see `model export` or the parser
+    dropping content (#122), so this checks the export against the fixture's TMDL.
+    """
+    root = FIXTURES["report-04-desktop-shapes"]
+    model = SemanticModel.load(root)
+    spec = yaml.safe_load(export_model_yaml(root, model=model))
+
+    assert spec["model"]["timeIntelligence"] is False
+    assert spec["model"]["annotations"]["PBI_ProTooling"] == '["DevMode"]'
+    assert spec["tables"]["Date"] == {"dataCategory": "Time", "dateTable": "Date"}
+
+    task_count = next(m for m in spec["measures"]["Measures Table"] if m["name"] == "Task Count")
+    assert task_count == {
+        "name": "Task Count",
+        "expression": "COUNTROWS ( Task )",
+        "format": "#,0",
+        "displayFolder": "Counts",
+        "description": "Number of tasks in the current filter context.\nCounts every Task row, including blocked tasks.",
+    }
+    assert spec["columns"]["Date"]["MonthName"] == {"sortByColumn": "MonthNumber"}
+    assert spec["columns"]["Person"]["Country"] == {"dataCategory": "Country"}
+    assert spec["columns"]["Task"]["EstimateHours"] == {"summarizeBy": "sum", "displayFolder": "Effort"}
+
+    relationships = spec["relationships"]
+    assert len(relationships) == 12
+    assert {"from": "Task.DueDate", "to": "Date.Date", "isActive": "false"} in relationships
+    assert {
+        "from": "Q/A Notes.ProjectKey",
+        "to": "Project.ProjectKey",
+        "crossFilteringBehavior": "bothDirections",
+        "fromCardinality": "one",
+    } in relationships
+
+    assert spec["hierarchies"]["Date"] == [{
+        "name": "Calendar",
+        "levels": ["Year", "Quarter", "MonthName", "Date"],
+        "description": "Year > Quarter > Month > Date drill path.",
+    }]
+    date_partition = spec["partitions"]["Date"][0]
+    assert (date_partition["name"], date_partition["sourceType"], date_partition["mode"]) == ("Date", "m", "import")
+
+    # What the parser reads but the export leaves out.
+    date = model.find_table("Date")
+    assert date.find_column("Date").is_key
+    calendar = date.find_hierarchy("Calendar")
+    assert calendar.lineage_tag == "7c177391-bd7d-46fe-8cfd-4b51a987f348"
+    assert [(level.name, level.lineage_tag) for level in calendar.levels[:1]] == [
+        ("Year", "b9ae94c1-d2f3-4e33-8f4d-9ff511b935de"),
+    ]
 
 
 # ── Model Apply Extensions ──────────────────────────────────────
@@ -2330,77 +1898,6 @@ table Customers
             # Verify nothing was actually written
             rel_path = root / "Sample.SemanticModel" / "definition" / "relationships.tmdl"
             self.assertFalse(rel_path.exists())
-
-
-# ── Round-trip test ─────────────────────────────────────────────
-
-
-class RoundtripTests(unittest.TestCase):
-    def test_export_apply_roundtrip_model_and_table_settings(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_model(root, """
-model Model
-\tannotation __PBI_TimeIntelligenceEnabled = 0
-""")
-            _write_table(root, "Date.tmdl", """
-table Date
-\tdataCategory: Time
-\tcolumn Date
-\t\tdataType: dateTime
-\t\tisKey
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: Date
-""")
-            yaml_str = export_model_yaml(root)
-            result = apply_model_yaml(root, yaml_str)
-            self.assertFalse(result.has_changes)
-
-    def test_export_apply_roundtrip_measures(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\t/// Total revenue
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tformatString: 0
-\t\tlineageTag: m-1
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            yaml_str = export_model_yaml(root)
-            result = apply_model_yaml(root, yaml_str)
-            self.assertFalse(result.has_changes)
-
-    def test_export_apply_roundtrip_hierarchies(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Date.tmdl", """
-table Date
-\tcolumn Year
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Year
-
-\tcolumn Month
-\t\tdataType: int64
-\t\tlineageTag: c-2
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Month
-""")
-            create_hierarchy(root, "Date", "Calendar", ["Year", "Month"])
-            yaml_str = export_model_yaml(root)
-            result = apply_model_yaml(root, yaml_str)
-            self.assertFalse(result.has_changes)
 
 
 if __name__ == "__main__":

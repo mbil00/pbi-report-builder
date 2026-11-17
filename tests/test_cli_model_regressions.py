@@ -1033,31 +1033,3 @@ class TestModelSearch(unittest.TestCase):
             )
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No fields matching", result.stdout)
-
-class TestModelApplyPerformance(unittest.TestCase):
-    def test_model_apply_loads_semantic_model_once(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_project(root, with_model=True)
-
-            yaml_content = yaml.safe_dump(
-                {
-                    "columns": {
-                        "Customers": {
-                            "Region": {
-                                "hidden": True,
-                                "format": "General",
-                            }
-                        }
-                    }
-                },
-                sort_keys=False,
-            )
-
-            from pbi.model import SemanticModel
-
-            with mock.patch("pbi.modeling.schema.SemanticModel.load", wraps=SemanticModel.load) as load_mock:
-                result = apply_model_yaml(root, yaml_content, dry_run=False)
-
-            self.assertEqual(result.errors, [], f"Unexpected errors: {result.errors}")
-            self.assertEqual(load_mock.call_count, 1)

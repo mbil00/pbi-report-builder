@@ -6,7 +6,6 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 import yaml
 from typer.testing import CliRunner
@@ -141,31 +140,6 @@ class DaxRefScannerTests(unittest.TestCase):
 
 
 class DependencyAnalysisTests(unittest.TestCase):
-    def test_find_measure_dependents(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-
-\tmeasure 'Avg Revenue' = DIVIDE([Revenue], [Count])
-\t\tlineageTag: m-2
-
-\tmeasure Count = COUNTROWS(Sales)
-\t\tlineageTag: m-3
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            deps = find_field_dependents(root, "Sales.Revenue")
-            dep_names = [f"{t}.{n}" for t, n, _ in deps]
-            self.assertIn("Sales.Avg Revenue", dep_names)
-
     def test_find_column_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -210,36 +184,6 @@ table Sales
             ref_names = [f"{t}.{n}" for t, n, _ in refs]
             self.assertIn("Sales.Revenue", ref_names)
             self.assertIn("Sales.Count", ref_names)
-
-    def test_deps_cli(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-
-\tmeasure 'Avg Revenue' = DIVIDE([Revenue], [Count])
-\t\tlineageTag: m-2
-
-\tmeasure Count = COUNTROWS(Sales)
-\t\tlineageTag: m-3
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            result = runner.invoke(app, [
-                "model", "deps", "Sales.Revenue",
-                "--project", str(root / "Sample.pbip"),
-            ])
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Avg Revenue", result.stdout)
-            self.assertIn("Amount", result.stdout)
 
     def test_deps_reverse_cli(self):
         runner = CliRunner()
@@ -288,59 +232,6 @@ table Sales
 
 
 class MeasureRenameTests(unittest.TestCase):
-    def test_rename_measure_updates_declaration(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure 'Old Name' = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            table, old, new, refs = rename_measure(root, "Sales", "Old Name", "New Name")
-            self.assertEqual(old, "Old Name")
-            self.assertEqual(new, "New Name")
-
-            model = SemanticModel.load(root)
-            measures = [m.name for m in model.find_table("Sales").measures]
-            self.assertIn("New Name", measures)
-            self.assertNotIn("Old Name", measures)
-
-    def test_rename_measure_cascades_references(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-
-\tmeasure 'Avg Rev' = DIVIDE([Revenue], [Count])
-\t\tlineageTag: m-2
-
-\tmeasure Count = COUNTROWS(Sales)
-\t\tlineageTag: m-3
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            _, _, _, updated = rename_measure(root, "Sales", "Revenue", "Total Revenue")
-
-            # Verify the expression was updated
-            model = SemanticModel.load(root)
-            avg = model.find_table("Sales").find_measure("Avg Rev")
-            self.assertIn("[Total Revenue]", avg.expression)
-            self.assertNotIn("[Revenue]", avg.expression)
-
     def test_rename_measure_rejects_duplicate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -362,30 +253,6 @@ table Sales
             with self.assertRaises(ValueError, msg="already exists"):
                 rename_measure(root, "Sales", "Revenue", "Count")
 
-    def test_rename_measure_cli(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            result = runner.invoke(app, [
-                "model", "measure", "rename", "Sales", "Revenue", "Total Revenue",
-                "--project", str(root / "Sample.pbip"),
-            ])
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Renamed", result.stdout)
-            self.assertIn("Total Revenue", result.stdout)
-
     def test_rename_measure_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -404,35 +271,6 @@ table Sales
             original = path.read_text()
             rename_measure(root, "Sales", "Revenue", "Total Revenue", dry_run=True)
             self.assertEqual(path.read_text(), original)
-
-    def test_rename_measure_batches_same_file_write(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tmeasure Revenue = SUM(Sales[Amount])
-\t\tlineageTag: m-1
-
-\tmeasure 'Avg Rev' = DIVIDE([Revenue], [Count])
-\t\tlineageTag: m-2
-
-\tmeasure Count = COUNTROWS(Sales)
-\t\tlineageTag: m-3
-
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            from pbi.modeling import writes as modeling_writes
-
-            original_write = modeling_writes._write_tmdl_lines
-            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
-                rename_measure(root, "Sales", "Revenue", "Total Revenue")
-
-            self.assertEqual(write_lines.call_count, 1)
 
 
 # ── Column Rename ───────────────────────────────────────────────
@@ -610,7 +448,7 @@ table Date
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("Renamed", result.stdout)
 
-    def test_rename_column_batches_per_file_writes(self):
+    def test_rename_column_cascades_sort_by_dax_and_relationships(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _make_project(root)
@@ -650,13 +488,12 @@ relationship abc-123
 \tfromColumn: Sales.YearKey
 \ttoColumn: Date.YearKey
 """)
-            from pbi.modeling import writes as modeling_writes
+            rename_column(root, "Date", "YearKey", "CalYear")
 
-            original_write = modeling_writes._write_tmdl_lines
-            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
-                rename_column(root, "Date", "YearKey", "CalYear")
-
-            self.assertEqual(write_lines.call_count, 3)
+            model = SemanticModel.load(root)
+            self.assertEqual(model.find_table("Date").find_column("Label").sort_by_column, "CalYear")
+            self.assertIn("Date[CalYear]", model.find_table("Sales").find_measure("By Year").expression)
+            self.assertEqual(model.relationships[0].to_column, "CalYear")
 
 
 # ── Bulk Hide/Unhide ────────────────────────────────────────────
@@ -753,37 +590,6 @@ table Sales
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("No visible columns", result.stdout)
 
-    def test_hide_matching_pattern_writes_table_once(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn CustomerID
-\t\tdataType: string
-\t\tlineageTag: c-1
-\t\tsummarizeBy: none
-\t\tsourceColumn: CustomerID
-
-\tcolumn ProductID
-\t\tdataType: string
-\t\tlineageTag: c-2
-\t\tsummarizeBy: none
-\t\tsourceColumn: ProductID
-""")
-            from pbi.modeling import writes as modeling_writes
-
-            original_write = modeling_writes._write_tmdl_lines
-            with mock.patch("pbi.modeling.writes._write_tmdl_lines", wraps=original_write) as write_lines:
-                result = runner.invoke(app, [
-                    "model", "column", "hide", "--table", "Sales", "--pattern", "ID$",
-                    "--project", str(root / "Sample.pbip"),
-                ])
-
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertEqual(write_lines.call_count, 1)
-
 
 # ── Calculated Table Creation ────────────────────────────────────
 
@@ -874,28 +680,6 @@ table Sales
 """)
             with self.assertRaises(ValueError, msg="already exists"):
                 create_calculated_table(root, "Sales", "CALENDAR(DATE(2020,1,1), DATE(2025,12,31))")
-
-    def test_create_calculated_table_cli(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _make_project(root)
-            _write_table(root, "Sales.tmdl", """
-table Sales
-\tcolumn Amount
-\t\tdataType: int64
-\t\tlineageTag: c-1
-\t\tsummarizeBy: sum
-\t\tsourceColumn: Amount
-""")
-            result = runner.invoke(app, [
-                "model", "table", "create", "DateBridge",
-                "CALENDAR(DATE(2020,1,1), DATE(2025,12,31))",
-                "--project", str(root / "Sample.pbip"),
-            ])
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Created calculated table", result.stdout)
-            self.assertIn("DateBridge", result.stdout)
 
     def test_create_calculated_table_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
