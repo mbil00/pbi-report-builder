@@ -55,8 +55,6 @@ FIXTURE_NAMES = list(FIXTURES)
 
 KNOWN_REPORT_ROUNDTRIP = {
     "report-01-kitchen-sink": "#108, #113",
-    "report-02-model-heavy": "#108",
-    "report-03-authoring-parity-lab": "#79",
     "report-04-desktop-shapes": "#108",
     "report-04-desktop-shapes-renamed": "#108",
     "sample-report": "#108, #109",
