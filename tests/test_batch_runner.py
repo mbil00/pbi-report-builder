@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 import click
+import pytest
 import typer
 from rich.console import Console
 from rich.errors import MarkupError
@@ -152,18 +153,20 @@ class SplitCommandLineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             split_command_line('visual set "unterminated')
 
-    def test_value_with_both_quote_types_is_mis_split(self) -> None:
-        # Documented limitation: with backslash kept literal (escape=""), a value
-        # containing BOTH a single and a double quote has no faithful inline
-        # encoding — wrapping in double quotes silently strips the inner double
-        # quotes. Lock this in so the docstring/help guidance (pass such DAX via
-        # `model ... edit --from-file`) stays honest if the tokenizer changes.
-        tokens = split_command_line(
-            'model measure set Sales.Flag expression="IF(\'Sales T\'[x]>0,"Yes","No")"'
-        )
+    @pytest.mark.xfail(strict=True, reason="#99")
+    def test_value_with_both_quote_types_is_kept_or_rejected(self) -> None:
+        # With backslash kept literal (escape=""), a value holding BOTH a single
+        # and a double quote is silently mis-split: the inner "Yes"/"No" quotes
+        # are dropped and the DAX changes. The line must either keep the value
+        # intact or fail loudly; it must never yield different DAX.
+        line = 'model measure set Sales.Flag expression="IF(\'Sales T\'[x]>0,"Yes","No")"'
+        try:
+            tokens = split_command_line(line)
+        except ValueError:
+            return
         self.assertEqual(
             tokens[-1],
-            "expression=IF('Sales T'[x]>0,Yes,No)",  # inner "Yes"/"No" quotes lost
+            'expression=IF(\'Sales T\'[x]>0,"Yes","No")',
         )
 
     def test_unquoted_apostrophe_error_explains_the_quoting_rule(self) -> None:
