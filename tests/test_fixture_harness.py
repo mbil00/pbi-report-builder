@@ -67,15 +67,6 @@ KNOWN_REPORT_ROUNDTRIP = {
 # report round-trip xfail.
 KNOWN_DIFF_AGREES = {name: "#80" for name in KNOWN_REPORT_ROUNDTRIP}
 
-KNOWN_MODEL_ROUNDTRIP = {
-    "report-01-kitchen-sink": "#76",
-    "report-02-model-heavy": "#76",
-    "report-03-authoring-parity-lab": "#76",
-    "report-04-desktop-shapes": "#76",
-    "report-04-desktop-shapes-renamed": "#76",
-    "sample-report": "#76",
-}
-
 # Every fixture has a table without measures, so `model measure list --json`
 # prints prose there.
 KNOWN_LIST_JSON = {name: "#101" for name in FIXTURE_NAMES}
@@ -311,7 +302,7 @@ def test_diff_agrees_with_apply(fixture_copy: Callable[[str], Path], name: str, 
 # --- Step 4: model round-trip -----------------------------------------------------
 
 
-@pytest.mark.parametrize("name", per_fixture(KNOWN_MODEL_ROUNDTRIP))
+@pytest.mark.parametrize("name", per_fixture({}))
 def test_model_roundtrip_is_noop(fixture_copy: Callable[[str], Path], name: str, tmp_path: Path) -> None:
     root = fixture_copy(name)
     spec = tmp_path / "model.yaml"
@@ -321,45 +312,27 @@ def test_model_roundtrip_is_noop(fixture_copy: Callable[[str], Path], name: str,
     assert_unchanged(root, before, "model export -> model apply")
 
 
-def _tmdl_content_lines(root: Path) -> dict[str, list[str]]:
-    """Each TMDL file's non-blank lines, so #76's blank-line churn doesn't count."""
-    return {
-        path.relative_to(root).as_posix(): [line for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
-        for path in sorted(root.rglob("*.tmdl"))
-    }
-
-
 @pytest.mark.parametrize("name", ["report-04-desktop-shapes", "report-04-desktop-shapes-renamed"])
-def test_model_roundtrip_keeps_changed_property_lines(
-    fixture_copy: Callable[[str], Path], name: str, tmp_path: Path
-) -> None:
+def test_changed_property_is_metadata(fixture_copy: Callable[[str], Path], name: str, tmp_path: Path) -> None:
     """``changedProperty`` is metadata, not DAX (#75).
 
     Desktop writes ``changedProperty = X`` under columns and tables. The model
-    round-trip must keep them where Desktop wrote them, keep the calculated
-    columns' DAX and single-line layout, and keep table-level ones that follow
-    a partition. The whole-tree no-op check stays xfailed for #76's blank lines.
+    export leaves them out and keeps the calculated columns' DAX intact;
+    ``test_model_roundtrip_is_noop`` checks that apply keeps the lines.
     """
     root = fixture_copy(name)
-    task = root / "04-desktop-shapes.SemanticModel" / "definition" / "tables" / "Task.tmdl"
-    duration_band = (
-        "\tcolumn 'Duration Band' = SWITCH ( TRUE (), Task[Duration Days] <= 7, \"Up to 1 week\", "
-        "Task[Duration Days] <= 14, \"1-2 weeks\", Task[Duration Days] <= 30, \"2-4 weeks\", \"Over 4 weeks\" )"
-    )
-    assert duration_band in task.read_text(encoding="utf-8-sig").splitlines()
+    tmdl = [line.strip() for path in root.rglob("*.tmdl") for line in path.read_text(encoding="utf-8-sig").splitlines()]
+    assert sum(line.startswith("changedProperty") for line in tmdl) == 22
 
     spec = tmp_path / "model.yaml"
     run_ok(root, "model", "export", "-o", spec)
-    exported = spec.read_text(encoding="utf-8")
-    assert "changedProperty" not in exported
-
-    before = _tmdl_content_lines(root)
-    assert sum(line.strip().startswith("changedProperty") for lines in before.values() for line in lines) == 22
-    run_ok(root, "model", "apply", spec)
-    assert _tmdl_content_lines(root) == before
+    assert "changedProperty" not in spec.read_text(encoding="utf-8")
 
     columns = {column.name: column.expression for column in SemanticModel.load(root).find_table("Task").columns}
-    assert columns["Duration Band"] == duration_band.partition(" = ")[2]
+    assert columns["Duration Band"] == (
+        'SWITCH ( TRUE (), Task[Duration Days] <= 7, "Up to 1 week", Task[Duration Days] <= 14, "1-2 weeks", '
+        'Task[Duration Days] <= 30, "2-4 weeks", "Over 4 weeks" )'
+    )
     assert columns["Duration Band Order"] == (
         "SWITCH ( TRUE (), Task[Duration Days] <= 7, 1, Task[Duration Days] <= 14, 2, "
         "Task[Duration Days] <= 30, 3, 4 )"
