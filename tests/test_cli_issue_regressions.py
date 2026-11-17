@@ -16,7 +16,7 @@ from pbi.interactions import set_interaction
 from pbi.project import _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import make_project, write_model_table
 
 
 class ImageResourceRegressionTests(unittest.TestCase):

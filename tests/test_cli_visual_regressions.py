@@ -21,7 +21,7 @@ from pbi.model import _parse_tmdl_name
 from pbi.project import Project, _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class VisualDiffRegressionTests(unittest.TestCase):

@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from pbi.cli import app
 from pbi.model_apply import apply_model_yaml
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import make_project, write_model_table
 
 
 class ModelApplyPerformanceRegressionTests(unittest.TestCase):

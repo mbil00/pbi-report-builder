@@ -9,7 +9,7 @@ import yaml
 from pbi.apply import apply_yaml
 from pbi.properties import VISUAL_PROPERTIES, set_property
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class TestBug026FillRuleInput(unittest.TestCase):

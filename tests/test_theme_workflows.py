@@ -12,12 +12,12 @@ from pbi.themes import (
     get_theme_data,
     update_theme_properties,
 )
-from tests.test_themes import _scaffold_project
+from tests.support import make_themed_project
 
 
 def test_apply_theme_data_writes_registered_theme_file_and_report_reference() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        pbip = _scaffold_project(Path(tmp))
+        pbip = make_themed_project(Path(tmp))
         project = Project.find(pbip)
 
         name = apply_theme_data(project, create_theme("Brand", foreground="#333333"))
@@ -37,7 +37,7 @@ def test_apply_theme_data_writes_registered_theme_file_and_report_reference() ->
 
 def test_create_and_apply_theme_replaces_old_custom_theme() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        pbip = _scaffold_project(Path(tmp), theme_data=create_theme("OldTheme"))
+        pbip = make_themed_project(Path(tmp), theme_data=create_theme("OldTheme"))
         project = Project.find(pbip)
 
         name = create_and_apply_theme(project, "NewTheme", foreground="#111111", accent="#0078D4")
@@ -53,7 +53,7 @@ def test_create_and_apply_theme_replaces_old_custom_theme() -> None:
 
 def test_update_theme_properties_returns_structured_changes_and_persists() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        pbip = _scaffold_project(Path(tmp), theme_data=create_theme("Active"))
+        pbip = make_themed_project(Path(tmp), theme_data=create_theme("Active"))
         project = Project.find(pbip)
 
         changes = update_theme_properties(

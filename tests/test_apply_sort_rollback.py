@@ -17,10 +17,9 @@ import yaml
 from pbi.apply import apply_yaml
 from pbi.project import Project, Visual
 from pbi.visual_queries import set_sort
+from tests.support import SHAPES_DIR
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SHAPES_DIR = REPO_ROOT / "fixtures" / "real-report-fixtures" / "report-04-desktop-shapes"
 SHAPES_PBIP = SHAPES_DIR / "04-desktop-shapes.pbip"
 
 SLICER_ID = "2583acebb02c0007195a"  # Date.Date Ascending, isDefaultSort: true

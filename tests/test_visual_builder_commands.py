@@ -10,7 +10,7 @@ from pbi.cli import app
 from pbi.properties import VISUAL_PROPERTIES, get_property
 from pbi.project import Project
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import make_project, write_model_table
 
 
 class VisualBuilderCommandTests(unittest.TestCase):

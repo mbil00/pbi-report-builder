@@ -21,7 +21,7 @@ from pbi.project import Page, Project, Visual
 from pbi.report_authoring import ReportAuthoring
 
 from tests.apply_session_fakes import FakePbirWriteSession
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 @dataclass

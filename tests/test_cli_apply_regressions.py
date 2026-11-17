@@ -16,7 +16,7 @@ from pbi.export import export_yaml
 from pbi.project import Project
 from pbi.validate import validate_project
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import make_project, write_model_table
 
 
 class ApplyWorkflowRegressionTests(unittest.TestCase):

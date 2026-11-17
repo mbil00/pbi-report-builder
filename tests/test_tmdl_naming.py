@@ -22,8 +22,7 @@ from pbi.cli import app
 from pbi.model import SemanticModel
 from pbi.model_apply import apply_model_yaml
 from pbi.modeling.writes import tmdl_file_name
-from tests.test_desktop_shapes_fixture import SHAPES_DIR, SHAPES_PBIP
-from tests.test_model_extensions import _make_project, _write_table
+from tests.support import SHAPES_DIR, SHAPES_PBIP, make_project, write_model_table
 
 DEFINITION = Path("04-desktop-shapes.SemanticModel") / "definition"
 DESKTOP_MODEL = SHAPES_DIR / DEFINITION / "model.tmdl"
@@ -187,8 +186,8 @@ class TmdlWriteEdgeTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        _make_project(self.root)
-        self.table = _write_table(self.root, "Sales.tmdl", """
+        make_project(self.root)
+        self.table = write_model_table(self.root, "Sales.tmdl", """
 table Sales
 \tmeasure Revenue = 1
 """)
@@ -220,7 +219,7 @@ table Sales
 
     def test_rename_refuses_to_overwrite_a_legacy_file(self) -> None:
         # "Revenue Sales" saved under the pre-#52 name, which is the new name of "Revenue_Sales".
-        legacy = _write_table(self.root, "Revenue_Sales.tmdl", "table 'Revenue Sales'\n\tmeasure Kept = 1")
+        legacy = write_model_table(self.root, "Revenue_Sales.tmdl", "table 'Revenue Sales'\n\tmeasure Kept = 1")
         before = {path: path.read_bytes() for path in self.table.parent.iterdir()}
         result = self._invoke("model", "table", "rename", "Sales", "Revenue_Sales")
         self._assert_refused(result, "Revenue_Sales.tmdl")
@@ -269,7 +268,7 @@ table Sales
         self.assertEqual(set_role(self.root, long_name, RoleSpec(model_permission="none")), (long_name, True))
 
     def test_create_refuses_to_overwrite_an_existing_file(self) -> None:
-        _write_table(self.root, "Extra.tmdl", "table Other\n\tmeasure X = 1")
+        write_model_table(self.root, "Extra.tmdl", "table Other\n\tmeasure X = 1")
         result = self._invoke("model", "table", "create", "Extra", "{ 1 }")
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("Extra.tmdl", result.stdout)

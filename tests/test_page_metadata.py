@@ -20,7 +20,7 @@ from pbi.page_metadata import (
 from pbi.page_sections import create_page_section, list_page_sections
 from pbi.properties import PAGE_PROPERTIES, get_property
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 def test_page_listing_reorder_and_active_page() -> None:

@@ -20,13 +20,22 @@ from types import ModuleType
 
 from pbi.model import SemanticModel
 from pbi.project import Project
+from tests.support import (
+    RENAMED_DIR,
+    REPO_ROOT,
+    SHAPES_DATA,
+    SHAPES_DIR,
+    SHAPES_PBIP,
+    literal_value,
+    page_folders,
+    page_visuals,
+    read_json,
+    report_definition,
+    visual_by_title,
+    visual_objects,
+    visual_title,
+)
 
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-FIXTURE_ROOT = REPO_ROOT / "fixtures" / "real-report-fixtures"
-SHAPES_DIR = FIXTURE_ROOT / "report-04-desktop-shapes"
-SHAPES_DATA = SHAPES_DIR / "data"
-SHAPES_PBIP = SHAPES_DIR / "04-desktop-shapes.pbip"
 
 EXPECTED_PAGES = [
     "Overview",
@@ -97,59 +106,11 @@ class DesktopShapesInputsTests(unittest.TestCase):
 # The fixture identifies visuals by title text (Desktop assigns random IDs) and
 # the tests assert on shapes, not on positions, IDs or lineage tags. See the
 # "Consuming The Fixture" and "What The Build Showed" sections of SPEC.md.
-
-RENAMED_DIR = FIXTURE_ROOT / "report-04-desktop-shapes-renamed"
-
-
-def _report_dir(root: Path = SHAPES_DIR) -> Path:
-    return root / "04-desktop-shapes.Report" / "definition"
+# The PBIR readers shared with other test modules live in tests/support.py.
 
 
 def _tables_dir(root: Path = SHAPES_DIR) -> Path:
     return root / "04-desktop-shapes.SemanticModel" / "definition" / "tables"
-
-
-def _read_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _literal(value: object) -> object:
-    """Unwrap `{"expr": {"Literal": {"Value": x}}}` to `x`."""
-    if isinstance(value, dict):
-        return value.get("expr", value).get("Literal", {}).get("Value")
-    return None
-
-
-def _title(visual: dict) -> str | None:
-    containers = visual["visual"].get("visualContainerObjects", {})
-    for entry in containers.get("title", []):
-        text = _literal(entry.get("properties", {}).get("text"))
-        if isinstance(text, str):
-            return text.strip("'")
-    return None
-
-
-def _pages(root: Path = SHAPES_DIR) -> dict[str, Path]:
-    """Map page display name to page folder, in page order."""
-    pages_dir = _report_dir(root) / "pages"
-    order = _read_json(pages_dir / "pages.json")["pageOrder"]
-    return {_read_json(pages_dir / pid / "page.json")["displayName"]: pages_dir / pid for pid in order}
-
-
-def _visuals(page: str, root: Path = SHAPES_DIR) -> list[dict]:
-    folder = _pages(root)[page] / "visuals"
-    return [_read_json(path / "visual.json") for path in sorted(folder.iterdir())]
-
-
-def _visual(page: str, title: str, root: Path = SHAPES_DIR) -> dict:
-    matches = [v for v in _visuals(page, root) if _title(v) == title]
-    if len(matches) != 1:
-        raise AssertionError(f"expected one visual titled {title!r} on {page!r}, found {len(matches)}")
-    return matches[0]
-
-
-def _objects(visual: dict, name: str) -> list[dict]:
-    return visual["visual"].get("objects", {}).get(name, [])
 
 
 def _tmdl(name: str, root: Path = SHAPES_DIR) -> str:
@@ -194,7 +155,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         self.assertEqual([page.display_name for page in project.get_pages()], EXPECTED_PAGES)
 
     def test_page_kinds(self) -> None:
-        pages = {name: _read_json(path / "page.json") for name, path in _pages().items()}
+        pages = {name: read_json(path / "page.json") for name, path in page_folders().items()}
         self.assertEqual(pages["Project Detail"]["pageBinding"]["type"], "Drillthrough")
         self.assertEqual(pages["Person Tooltip"]["pageBinding"]["type"], "Tooltip")
         self.assertEqual(pages["Person Tooltip"]["type"], "Tooltip")
@@ -203,7 +164,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
 
     def test_titles_unique_per_page(self) -> None:
         for page in EXPECTED_PAGES:
-            titles = [_title(v) for v in _visuals(page)]
+            titles = [visual_title(v) for v in page_visuals(page)]
             self.assertNotIn(None, titles, page)
             self.assertEqual(len(titles), len(set(titles)), page)
 
@@ -310,7 +271,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
     # --- #34 textbox runs ---------------------------------------------------
 
     def test_textbox_paragraphs_and_runs(self) -> None:
-        header = _objects(_visual("Overview", "Overview Header"), "general")[0]["properties"]["paragraphs"]
+        header = visual_objects(visual_by_title("Overview", "Overview Header"), "general")[0]["properties"]["paragraphs"]
         self.assertEqual([len(p["textRuns"]) for p in header], [1, 2])
         title_run = header[0]["textRuns"][0]
         self.assertEqual(title_run["value"], "Delivery Overview")
@@ -324,21 +285,21 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         self.assertEqual(styled["textStyle"]["fontStyle"], "italic")
         self.assertEqual(styled["textStyle"]["color"], "#d64550")
 
-        link = _objects(_visual("Overview", "Overview Link"), "general")[0]["properties"]["paragraphs"][0]["textRuns"]
+        link = visual_objects(visual_by_title("Overview", "Overview Link"), "general")[0]["properties"]["paragraphs"][0]["textRuns"]
         self.assertEqual(link[0], {"value": "Open the "})
         self.assertEqual(link[1], {"value": "project handbook", "textStyle": {}, "url": "https://example.com/handbook"})
 
-        note = _objects(_visual("QA Hidden", "QA Note"), "general")[0]["properties"]["paragraphs"]
+        note = visual_objects(visual_by_title("QA Hidden", "QA Note"), "general")[0]["properties"]["paragraphs"]
         self.assertEqual(note, [{"textRuns": [{"value": "Hidden page for fixture QA."}]}])
 
     # --- #41 data colours ---------------------------------------------------
 
     def _scope_literals(self, page: str, title: str) -> dict[object, object]:
         result = {}
-        for entry in _objects(_visual(page, title), "dataPoint"):
+        for entry in visual_objects(visual_by_title(page, title), "dataPoint"):
             comparison = entry["selector"]["data"][0]["scopeId"]["Comparison"]
             self.assertEqual(comparison["ComparisonKind"], 0)
-            colour = _literal(entry["properties"]["fill"]["solid"]["color"])
+            colour = literal_value(entry["properties"]["fill"]["solid"]["color"])
             result[comparison["Right"]["Literal"]["Value"]] = colour
         return result
 
@@ -354,7 +315,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         # Engineering #118DFF equals the theme's first data colour, so Desktop wrote no entry for it.
         self.assertNotIn("'Engineering'", self._scope_literals("Chart Gallery", "Hours by Team"))
 
-        series = _objects(_visual("Chart Gallery", "Hours by Measure Series"), "dataPoint")
+        series = visual_objects(visual_by_title("Chart Gallery", "Hours by Measure Series"), "dataPoint")
         self.assertEqual([e["selector"] for e in series], [{"metadata": "Measures Table.Estimate Hours"}])
 
     # --- #42 slicers ----------------------------------------------------------
@@ -362,7 +323,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
     def test_slicer_sync_group(self) -> None:
         synced = []
         for page in EXPECTED_PAGES:
-            for visual in _visuals(page):
+            for visual in page_visuals(page):
                 group = visual["visual"].get("syncGroup")
                 if group:
                     synced.append((page, bool(visual.get("isHidden")), group))
@@ -374,7 +335,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
             self.assertEqual(group, {"groupName": "PortfolioSync", "fieldChanges": True, "filterChanges": True})
 
     def _saved_condition(self, title: str) -> dict:
-        general = _objects(_visual("Task Board", title), "general")[0]["properties"]
+        general = visual_objects(visual_by_title("Task Board", title), "general")[0]["properties"]
         query = general["filter"]["filter"]
         self.assertEqual(query["Version"], 2)
         return query["Where"][0]["Condition"]
@@ -383,7 +344,7 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         priority = self._saved_condition("Priority Slicer")["In"]["Values"]
         self.assertEqual(priority, [[{"Literal": {"Value": "'High'"}}]])
         self.assertEqual(
-            _literal(_objects(_visual("Task Board", "Priority Slicer"), "selection")[0]["properties"]["strictSingleSelect"]),
+            literal_value(visual_objects(visual_by_title("Task Board", "Priority Slicer"), "selection")[0]["properties"]["strictSingleSelect"]),
             "true",
         )
 
@@ -392,8 +353,8 @@ class DesktopShapesFixtureTests(unittest.TestCase):
 
         team = self._saved_condition("Team Slicer")
         self.assertEqual(team["Not"]["Expression"]["In"]["Values"], [[{"Literal": {"Value": "'Design'"}}]])
-        team_data = _objects(_visual("Task Board", "Team Slicer"), "data")[0]["properties"]
-        self.assertEqual(_literal(team_data["isInvertedSelectionMode"]), "true")
+        team_data = visual_objects(visual_by_title("Task Board", "Team Slicer"), "data")[0]["properties"]
+        self.assertEqual(literal_value(team_data["isInvertedSelectionMode"]), "true")
 
         dates = self._saved_condition("Date Range Slicer")["And"]
         self.assertEqual(dates["Left"]["Comparison"]["ComparisonKind"], 2)
@@ -401,12 +362,12 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         # The end bound is exclusive: the day after the picked end date.
         self.assertEqual(dates["Right"]["Comparison"]["ComparisonKind"], 3)
         self.assertEqual(dates["Right"]["Comparison"]["Right"]["Literal"]["Value"], "datetime'2025-07-01T00:00:00'")
-        date_data = _objects(_visual("Task Board", "Date Range Slicer"), "data")[0]["properties"]
-        self.assertEqual(_literal(date_data["mode"]), "'Between'")
-        self.assertEqual(_literal(date_data["endDate"]), "datetime'2025-06-30T00:00:00'")
+        date_data = visual_objects(visual_by_title("Task Board", "Date Range Slicer"), "data")[0]["properties"]
+        self.assertEqual(literal_value(date_data["mode"]), "'Between'")
+        self.assertEqual(literal_value(date_data["endDate"]), "datetime'2025-06-30T00:00:00'")
 
-        portfolio = _visual("Task Board", "Portfolio Slicer")
-        self.assertNotIn("filter", _objects(portfolio, "general")[0]["properties"])
+        portfolio = visual_by_title("Task Board", "Portfolio Slicer")
+        self.assertNotIn("filter", visual_objects(portfolio, "general")[0]["properties"])
 
     # --- #35 filter literals ------------------------------------------------
 
@@ -422,47 +383,47 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         }
         for title, (kind, literal) in expected.items():
             with self.subTest(title=title):
-                filters = [f for f in _visual("Filter Lab", title)["filterConfig"]["filters"] if "filter" in f]
+                filters = [f for f in visual_by_title("Filter Lab", title)["filterConfig"]["filters"] if "filter" in f]
                 self.assertEqual(len(filters), 1)
                 self.assertEqual(filters[0]["type"], "Advanced")
                 comparison = filters[0]["filter"]["Where"][0]["Condition"]["Comparison"]
                 self.assertEqual(comparison["ComparisonKind"], kind)
                 self.assertEqual(comparison["Right"]["Literal"]["Value"], literal)
 
-        top_n = [f for f in _visual("Filter Lab", "Filter - Top N")["filterConfig"]["filters"] if "filter" in f]
+        top_n = [f for f in visual_by_title("Filter Lab", "Filter - Top N")["filterConfig"]["filters"] if "filter" in f]
         self.assertEqual(top_n[0]["type"], "TopN")
-        relative = [f for f in _visual("Filter Lab", "Filter - Relative Date")["filterConfig"]["filters"] if "filter" in f]
+        relative = [f for f in visual_by_title("Filter Lab", "Filter - Relative Date")["filterConfig"]["filters"] if "filter" in f]
         self.assertEqual(relative[0]["type"], "RelativeDate")
         self.assertIn("Between", relative[0]["filter"]["Where"][0]["Condition"])
 
     # --- #33 / #54 card -----------------------------------------------------
 
     def test_card_per_series_and_reference_label(self) -> None:
-        card = _visual("Overview", "Delivery KPIs")
+        card = visual_by_title("Overview", "Delivery KPIs")
         self.assertEqual(card["visual"]["visualType"], "cardVisual")
-        font_sizes = {e["selector"]["metadata"]: _literal(e["properties"]["fontSize"]) for e in _objects(card, "value")}
+        font_sizes = {e["selector"]["metadata"]: literal_value(e["properties"]["fontSize"]) for e in visual_objects(card, "value")}
         self.assertEqual(font_sizes, {
             "Measures Table.Task Count": "28D",
             "Measures Table.Completion %": "24D",
             "Measures Table.Total Hours": "24D",
             "Measures Table.Expense Amount": "20D",
         })
-        self.assertEqual(len(_objects(card, "accentBar")), 4)
-        callout = {json.dumps(e["selector"], sort_keys=True) for e in _objects(card, "cardCalloutArea")}
+        self.assertEqual(len(visual_objects(card, "accentBar")), 4)
+        callout = {json.dumps(e["selector"], sort_keys=True) for e in visual_objects(card, "cardCalloutArea")}
         self.assertEqual(callout, {'{"metadata": "Measures Table.Task Count"}', '{"id": "default"}'})
-        reference = _objects(card, "referenceLabel")[0]
+        reference = visual_objects(card, "referenceLabel")[0]
         self.assertEqual(reference["properties"]["value"]["expr"]["Measure"]["Property"], "Open Tasks")
         self.assertEqual(reference["selector"]["metadata"], "Measures Table.Task Count")
         self.assertTrue(reference["selector"]["id"].startswith("field-"))
         card_count = sum(
-            1 for page in EXPECTED_PAGES for v in _visuals(page) if v["visual"]["visualType"] == "cardVisual"
+            1 for page in EXPECTED_PAGES for v in page_visuals(page) if v["visual"]["visualType"] == "cardVisual"
         )
         self.assertEqual(card_count, 4)
 
     # --- #29 / #49 theme and resources ------------------------------------------
 
     def test_theme_and_image_resources(self) -> None:
-        report = _read_json(_report_dir() / "report.json")
+        report = read_json(report_definition() / "report.json")
         custom = report["themeCollection"]["customTheme"]
         self.assertRegex(custom["name"], r"^Desktop_Shapes_Theme\d+\.json$")
         registered = next(p for p in report["resourcePackages"] if p["name"] == "RegisteredResources")
@@ -471,24 +432,24 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         self.assertRegex(types["Image"], r"^Team_Logo\d+\.png$")
 
         resources = SHAPES_DIR / "04-desktop-shapes.Report" / "StaticResources" / "RegisteredResources"
-        theme = _read_json(resources / custom["name"])
+        theme = read_json(resources / custom["name"])
         self.assertEqual(set(theme["textClasses"]), {"label", "title", "callout", "header"})
         self.assertEqual(theme["textClasses"]["callout"], {"fontSize": 30, "color": "#118DFF"})
 
-        image = _objects(_visual("Overview", "Team Logo Image"), "image")[0]["properties"]["sourceFile"]["image"]
-        self.assertEqual(_literal(image["name"]), "'Team Logo.png'")
+        image = visual_objects(visual_by_title("Overview", "Team Logo Image"), "image")[0]["properties"]["sourceFile"]["image"]
+        self.assertEqual(literal_value(image["name"]), "'Team Logo.png'")
         self.assertEqual(image["url"]["expr"]["ResourcePackageItem"]["ItemName"], types["Image"])
 
     # --- bookmarks ------------------------------------------------------------
 
     def test_bookmarks(self) -> None:
-        folder = _report_dir() / "bookmarks"
-        meta = _read_json(folder / "bookmarks.json")
+        folder = report_definition() / "bookmarks"
+        meta = read_json(folder / "bookmarks.json")
         group = next(item for item in meta["items"] if "children" in item)
         self.assertEqual(group["displayName"], "Task Board Views")
         names = {}
         for path in folder.glob("*.bookmark.json"):
-            bookmark = _read_json(path)
+            bookmark = read_json(path)
             names[bookmark["displayName"]] = bookmark
         self.assertEqual(
             set(names), {"Task Board - All Statuses", "Task Board - Blocked Only", "Overview - Hide Logo"}
@@ -508,18 +469,18 @@ class DesktopShapesFixtureTests(unittest.TestCase):
         self.assertIn("\tcolumn 'Person Name'", person)
         self.assertIn('Table.RenameColumns(#"Changed Type",{{"PersonName", "Person Name"}})', person)
 
-        people = _visual("Task Board", "People Hours", RENAMED_DIR)
+        people = visual_by_title("Task Board", "People Hours", RENAMED_DIR)
         refs = {p["queryRef"]: p["field"] for p in people["visual"]["query"]["queryState"]["Values"]["projections"]}
         # queryRef keeps the old name; the field expression gets the new one.
         self.assertEqual(refs["Measures Table.Total Hours"]["Measure"]["Property"], "Hours Logged")
         self.assertEqual(refs["Person.PersonName"]["Column"]["Property"], "Person Name")
 
-        card = _visual("Overview", "Delivery KPIs", RENAMED_DIR)
-        selectors = {e["selector"]["metadata"] for e in _objects(card, "accentBar")}
+        card = visual_by_title("Overview", "Delivery KPIs", RENAMED_DIR)
+        selectors = {e["selector"]["metadata"] for e in visual_objects(card, "accentBar")}
         self.assertIn("Measures Table.Total Hours", selectors)
 
         for page in EXPECTED_PAGES:
-            for visual in _visuals(page, RENAMED_DIR):
+            for visual in page_visuals(page, RENAMED_DIR):
                 text = json.dumps(visual)
                 self.assertNotIn('"Property": "Total Hours"', text)
                 self.assertNotIn('"Property": "PersonName"', text)

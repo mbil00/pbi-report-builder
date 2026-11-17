@@ -31,8 +31,7 @@ from pbi.slicer_state import (
     parse_sync_spec,
     without_selection_props,
 )
-from tests.test_data_colors import _title_of
-from tests.test_desktop_shapes_fixture import SHAPES_DIR, SHAPES_PBIP, _objects, _visual
+from tests.support import SHAPES_DIR, SHAPES_PBIP, visual_by_title, visual_objects, visual_title
 
 # (page, title, YAML spec that rebuilds what Desktop wrote)
 DESKTOP_SELECTIONS = [
@@ -64,7 +63,7 @@ class SlicerStateDesktopTests(unittest.TestCase):
 
     def _find(self, page: str, title: str):
         project = Project.find(self.pbip)
-        matches = [v for v in project.get_visuals(project.find_page(page)) if _title_of(v.data) == title]
+        matches = [v for v in project.get_visuals(project.find_page(page)) if visual_title(v.data) == title]
         self.assertEqual(len(matches), 1, title)
         return project, matches[0]
 
@@ -102,10 +101,10 @@ class SlicerStateDesktopTests(unittest.TestCase):
                 self.assertEqual(self._find(page, title)[1].data["visual"]["syncGroup"], DESKTOP_GROUP)
         for page, title, _spec in DESKTOP_SELECTIONS:
             _project, visual = self._find(page, title)
-            desktop = _visual(page, title)
+            desktop = visual_by_title(page, title)
             with self.subTest(visual=title):
                 for name in ("general", "data", "selection"):
-                    self.assertEqual(visual.data["visual"]["objects"].get(name, []), _objects(desktop, name), name)
+                    self.assertEqual(visual.data["visual"]["objects"].get(name, []), visual_objects(desktop, name), name)
 
     def test_apply_writes_desktop_shapes(self) -> None:
         self._strip()
@@ -227,7 +226,7 @@ class SlicerStateDesktopTests(unittest.TestCase):
         ]}]})
         _project, team = self._find("Task Board", "Team Slicer")
         self.assertEqual(export_slicer_selection(team.data), (False, None))
-        self.assertNotIn("isInvertedSelectionMode", _objects(team.data, "data")[0]["properties"])
+        self.assertNotIn("isInvertedSelectionMode", visual_objects(team.data, "data")[0]["properties"])
         self.assertNotIn("syncGroup", self._find("Task Board", "Portfolio Slicer")[1].data["visual"])
 
         _project, status = self._find("Task Board", "Status Slicer")
@@ -263,7 +262,7 @@ class SlicerStateDesktopTests(unittest.TestCase):
                 spec = export_visual_spec(project, visual)
                 spec.pop("id")
                 stamped = create_visual_from_spec(project, project.find_page("QA Hidden"), spec)
-                desktop = _visual(page, title)
+                desktop = visual_by_title(page, title)
                 self.assertEqual(stamped.data["visual"].get("syncGroup"), desktop["visual"].get("syncGroup"))
                 self.assertEqual(export_slicer_selection(stamped.data), export_slicer_selection(desktop))
 
