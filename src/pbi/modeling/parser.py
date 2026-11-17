@@ -32,6 +32,16 @@ _TMDL_PROPERTY_NAMES = frozenset({
 })
 
 
+def _is_changed_property(stripped: str) -> bool:
+    """Return True for a ``changedProperty = X`` metadata line.
+
+    Desktop writes these under a table or one of its members to record which
+    property the user changed. They are object metadata, never DAX.
+    """
+    keyword, sep, _ = stripped.partition("=")
+    return bool(sep) and keyword.strip() == "changedProperty"
+
+
 def _parse_tmdl_name(text: str) -> str:
     """Parse a TMDL name, handling quoted and unquoted identifiers."""
     text = text.strip()
@@ -311,7 +321,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 if eq_pos >= 0:
                     current_partition_type = rest[eq_pos + 1 :].strip()
                 continue
-            if stripped.startswith("annotation "):
+            if stripped.startswith("annotation ") or _is_changed_property(stripped):
                 _flush()
                 current_type = None
                 continue
@@ -356,6 +366,8 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_props["isKey"] = "true"
             elif stripped.startswith(("annotation ", "variation ")):
                 pass  # skip nested blocks
+            elif _is_changed_property(stripped):
+                pass  # member metadata, not expression continuation
             elif ":" in stripped and not stripped.startswith("```"):
                 key = stripped.partition(":")[0].strip()
                 if key in _TMDL_PROPERTY_NAMES:
