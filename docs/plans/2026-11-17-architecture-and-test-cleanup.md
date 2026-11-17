@@ -43,8 +43,8 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 | 11 | B8 `diff` disagrees with `apply` | #80 | [x] #119 (8555d13) |
 | 12 | B9 field parameters in a guessed shape | #81 | [x] #121 (db66772) |
 | 13 | T4a delete harness-covered tests: apply | #85 | [x] #123 (c023ced) |
-| 14 | T4b … model | #85 | [x] #124 |
-| 15 | T4c … visual/CLI | #85 | [ ] |
+| 14 | T4b … model | #85 | [x] #124 (ddfff49) |
+| 15 | T4c … visual/CLI | #85 | [x] #127 |
 | 16 | T4d … themes | #85 | [ ] |
 | 17 | T4e … misc | #85 | [ ] |
 

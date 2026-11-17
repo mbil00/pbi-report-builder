@@ -461,6 +461,13 @@ class RealReportFixtureTests(unittest.TestCase):
             )
             self.assertIsNone(get_property(nav_focus_online.data, "action.bookmark", VISUAL_PROPERTIES))
 
+            get_result = runner.invoke(
+                app,
+                ["nav", "action", "get", page, "navToRegional", "--project", str(pbip)],
+            )
+            self.assertEqual(get_result.exit_code, 0, get_result.stdout)
+            self.assertRegex(get_result.stdout, rf"Bookmark +{hide_slicers['name']}")
+
             clear_result = runner.invoke(
                 app,
                 ["nav", "action", "clear", page, "navFocusOnline", "--force", "--project", str(pbip)],
@@ -544,12 +551,13 @@ class RealReportFixtureTests(unittest.TestCase):
                 ["nav", "tooltip", "get", "Executive Overview", "revenueByMonth", "--project", str(pbip)],
             )
             self.assertEqual(get_tooltip_result.exit_code, 0, get_tooltip_result.stdout)
-            self.assertIn("ReportPage", get_tooltip_result.stdout)
 
             reloaded = Project.find(pbip)
             overview = reloaded.find_page("Executive Overview")
             product_detail = reloaded.find_page("Product Detail")
             tooltip_page = reloaded.find_page("Tooltip - Order Context")
+            for row in (r"Show +True", r"Type +ReportPage", rf"Section +{tooltip_page.name}"):
+                self.assertRegex(get_tooltip_result.stdout, row)
 
             nav_to_product = reloaded.find_visual(overview, "navToProduct")
             self.assertEqual(get_property(nav_to_product.data, "action.type", VISUAL_PROPERTIES), "Drillthrough")

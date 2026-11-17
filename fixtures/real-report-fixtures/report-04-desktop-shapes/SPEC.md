@@ -140,7 +140,7 @@ About 45 visuals in total. Saved slicer state on `Task Board`: Priority `High`; 
 - **Find visuals by title text**, never by visual name: Desktop assigns random 20-character IDs. Every visual has a unique title text per page; on text boxes, images, buttons and slicers the title is switched off but the text is still saved.
 - Don't assert on positions, z-order, IDs, lineage tags or the Desktop version strings; they're incidental.
 - Assert on shapes: the property structure, literal encodings and which keys are present or absent. That is what the fixture is for.
-- `tests/test_desktop_shapes_fixture.py` holds the shape tests; they skip cleanly if the Desktop output is absent.
+- `tests/test_desktop_shapes_fixture.py` checks that the build inputs regenerate byte-identically. The fixture harness (`tests/test_fixture_harness.py`) runs the CLI over the Desktop output, and tests such as `test_desktop_literal_writes.py`, `test_data_colors.py` and `test_slicer_state.py` compare CLI writes with it.
 - When Desktop's output disagrees with an issue's description, the fixture wins: record that on the issue.
 
 ## Rename Snapshot (#55)
