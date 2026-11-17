@@ -3,171 +3,65 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import tempfile
-import textwrap
-import unittest
 from pathlib import Path
 
 from pbi.model import build_tmdl_trace, format_tmdl_trace_report
+from tests.support import FIXTURES
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _write(path: Path, content: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(content).strip() + "\n", encoding="utf-8")
-    return path
+def test_tmdl_trace_indexes_and_reports_a_fixture_model(tmp_path: Path) -> None:
+    # report-03 is the only fixture with roles and perspectives; the trace only reads it.
+    root = FIXTURES["report-03-authoring-parity-lab"]
+    trace = build_tmdl_trace(root)
 
+    meta = trace["meta"]
+    assert (
+        meta["tableCount"],
+        meta["relationshipCount"],
+        meta["roleCount"],
+        meta["perspectiveCount"],
+        meta["annotationCount"],
+    ) == (10, 14, 3, 3, 4)
 
-def _make_model(root: Path) -> Path:
-    definition = root / "Sample.SemanticModel" / "definition"
-    _write(
-        definition / "model.tmdl",
-        """
-        model Model
-            annotation __PBI_TimeIntelligenceEnabled = "1"
-            annotation PBI_ProTooling = ["DevMode"]
-        """,
+    refs = trace["refs"]
+    measure = refs["measure:GL_Actuals.Actual Amount"]
+    assert measure["path"].endswith("GL_Actuals.tmdl")
+    assert measure["table"] == "GL_Actuals"
+    assert "measure 'Actual Amount' = SUM ( GL_Actuals[Amount] )" in measure["snippet"]
+
+    relationship = refs["relationship:Forecast.AccountKey->Account.AccountKey"]
+    assert (relationship["kind"], relationship["fromTable"], relationship["toTable"]) == (
+        "relationship",
+        "Forecast",
+        "Account",
     )
-    _write(
-        definition / "tables" / "Sales.tmdl",
-        """
-        table Sales
-            column Region
-                dataType: string
-            column Year
-                dataType: int64
-            calculatedColumn Bucket = IF ( Sales[Revenue] > 100, "High", "Low" )
-                dataType: string
-            measure Revenue = SUM ( Sales[Amount] )
-                formatString: "$#,0"
-            hierarchy Calendar
-                level Year
-                    column: Year
-            partition Sales = m
-                mode: import
-                source =
-                    let
-                        Source = 1
-                    in
-                        Source
-        """,
+    assert "fromColumn: Forecast.AccountKey" in relationship["snippet"]
+    assert "__PBI_TimeIntelligenceEnabled" in refs["annotation:__PBI_TimeIntelligenceEnabled"]["snippet"]
+
+    report = format_tmdl_trace_report(trace, "measure:GL_Actuals.Actual Amount")
+    assert "Ref: measure:GL_Actuals.Actual Amount" in report
+    assert "Kind: measure" in report
+    assert "Path:" in report
+    assert "measure 'Actual Amount' = SUM" in report
+
+    out_path = tmp_path / "tmdl.trace.json"
+    subprocess.run(
+        [sys.executable, "scripts/extract_tmdl_trace.py", "--project-root", str(root), "--out", str(out_path)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
-    _write(
-        definition / "tables" / "Customers.tmdl",
-        """
-        table Customers
-            column CustomerID
-                dataType: int64
-        """,
+    assert "measure:GL_Actuals.Actual Amount" in json.loads(out_path.read_text(encoding="utf-8"))["refs"]
+
+    result = subprocess.run(
+        [sys.executable, "scripts/inspect_tmdl_trace.py", "--project-root", str(root), "--ref", "role:Finance Readers"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
-    _write(
-        definition / "relationships.tmdl",
-        """
-        relationship rel-1
-            fromColumn: Sales.Region
-            toColumn: Customers.CustomerID
-            isActive: true
-        """,
-    )
-    _write(
-        definition / "roles" / "Finance Readers.tmdl",
-        """
-        role 'Finance Readers'
-            modelPermission: read
-            tablePermission Sales = Sales[Region] = "EU"
-            member finance@example.com = user
-                identityProvider = aad
-        """,
-    )
-    _write(
-        definition / "perspectives" / "Exec View.tmdl",
-        """
-        perspective 'Exec View'
-            perspectiveTable Sales
-                perspectiveColumn Region
-                perspectiveMeasure Revenue
-                perspectiveHierarchy Calendar
-        """,
-    )
-    return root
-
-
-class TmdlTraceTests(unittest.TestCase):
-    def test_build_tmdl_trace_indexes_model_entities(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _make_model(Path(tmp))
-            trace = build_tmdl_trace(root)
-
-            meta = trace["meta"]
-            self.assertEqual(meta["tableCount"], 2)
-            self.assertEqual(meta["relationshipCount"], 1)
-            self.assertEqual(meta["roleCount"], 1)
-            self.assertEqual(meta["perspectiveCount"], 1)
-            self.assertEqual(meta["annotationCount"], 2)
-
-            revenue = trace["refs"]["measure:Sales.Revenue"]
-            self.assertTrue(revenue["path"].endswith("Sales.tmdl"))
-            self.assertIn("measure Revenue", revenue["snippet"])
-            self.assertEqual(revenue["table"], "Sales")
-
-            relationship = trace["refs"]["relationship:Sales.Region->Customers.CustomerID"]
-            self.assertEqual(relationship["kind"], "relationship")
-            self.assertEqual(relationship["fromTable"], "Sales")
-            self.assertEqual(relationship["toTable"], "Customers")
-            self.assertIn("fromColumn: Sales.Region", relationship["snippet"])
-
-            annotation = trace["refs"]["annotation:__PBI_TimeIntelligenceEnabled"]
-            self.assertIn("__PBI_TimeIntelligenceEnabled", annotation["snippet"])
-
-    def test_format_report_includes_location_and_snippet(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _make_model(Path(tmp))
-            trace = build_tmdl_trace(root)
-            report = format_tmdl_trace_report(trace, "measure:Sales.Revenue")
-            self.assertIn("Ref: measure:Sales.Revenue", report)
-            self.assertIn("Kind: measure", report)
-            self.assertIn("Path:", report)
-            self.assertIn("measure Revenue = SUM", report)
-
-    def test_scripts_extract_and_inspect_trace(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _make_model(Path(tmp))
-            out_path = root / "tmdl.trace.json"
-
-            subprocess.run(
-                [
-                    sys.executable,
-                    "scripts/extract_tmdl_trace.py",
-                    "--project-root",
-                    str(root),
-                    "--out",
-                    str(out_path),
-                ],
-                cwd=Path(__file__).resolve().parents[1],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-
-            manifest = json.loads(out_path.read_text(encoding="utf-8"))
-            self.assertIn("measure:Sales.Revenue", manifest["refs"])
-
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "scripts/inspect_tmdl_trace.py",
-                    "--project-root",
-                    str(root),
-                    "--ref",
-                    "role:Finance Readers",
-                ],
-                cwd=Path(__file__).resolve().parents[1],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            self.assertIn("Ref: role:Finance Readers", result.stdout)
-            self.assertIn("role 'Finance Readers'", result.stdout)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert "Ref: role:Finance Readers" in result.stdout
+    assert "role 'Finance Readers'" in result.stdout

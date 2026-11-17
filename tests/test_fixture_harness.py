@@ -308,8 +308,10 @@ def test_model_roundtrip_is_noop(fixture_copy: Callable[[str], Path], name: str,
     spec = tmp_path / "model.yaml"
     run_ok(root, "model", "export", "-o", spec)
     before = snapshot(root)
-    run_ok(root, "model", "apply", spec)
+    result = run_ok(root, "model", "apply", spec)
     assert_unchanged(root, before, "model export -> model apply")
+    # Byte equality alone misses an apply that reports changes it didn't make.
+    assert result.output.strip() == "No changes applied.", result.output
 
 
 @pytest.mark.parametrize("name", ["report-04-desktop-shapes", "report-04-desktop-shapes-renamed"])
