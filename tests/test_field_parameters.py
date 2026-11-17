@@ -388,3 +388,63 @@ def test_column_properties_go_before_desktops_nested_blocks(shapes: Path) -> Non
     table = SemanticModel.load(shapes).find_table("Metric Selector")
     assert table.find_column("Metric Selector Fields").display_folder == "Pickers"
     assert field_parameter_fields(table) == DESKTOP_ROWS
+
+
+# --- Export only what applies back unchanged ---------------------------------
+
+
+def _model_files(project: Path) -> dict[Path, bytes]:
+    return {path: path.read_bytes() for path in sorted(_tables(project).parent.rglob("*.tmdl"))}
+
+
+def _assert_export_applies_unchanged(project: Path) -> dict:
+    before = _model_files(project)
+    exported = export_model_yaml(project)
+    result = apply_model_yaml(project, exported)
+    assert result.errors == []
+    assert not result.has_changes
+    assert _model_files(project) == before
+    return yaml.safe_load(exported)
+
+
+def test_dotted_table_names_resolve_and_round_trip(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    write_model_table(tmp_path, "Sales.Data.tmdl", "table 'Sales.Data'\n\tmeasure Revenue = 1\n")
+    write_model_table(tmp_path, "Sales.tmdl", "table Sales\n\tmeasure Margin = 2\n")
+
+    create_field_parameter(tmp_path, "Picker", ["Sales.Data.Revenue", "sales.margin"], None)
+
+    table = SemanticModel.load(tmp_path).find_table("Picker")
+    assert field_parameter_fields(table) == [
+        FieldParameterField("Revenue", "Sales.Data", "Revenue"),
+        FieldParameterField("Margin", "Sales", "Margin"),
+    ]
+    exported = _assert_export_applies_unchanged(tmp_path)
+    assert exported["fieldParameters"]["Picker"]["fields"][0] == {"field": "Sales.Data.Revenue", "label": "Revenue"}
+
+
+def test_a_ref_two_tables_could_own_is_refused(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    write_model_table(tmp_path, "Sales.Data.tmdl", "table 'Sales.Data'\n\tmeasure Revenue = 1\n")
+    write_model_table(tmp_path, "Sales.tmdl", "table Sales\n\tmeasure 'Data.Revenue' = 2\n")
+    with pytest.raises(ValueError, match="ambiguous"):
+        create_field_parameter(tmp_path, "Picker", ["Sales.Data.Revenue"], None)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (b'("Task Count", ', b'("Task\r\n\t\t\t\t    Count", '),  # a multi-line label
+        (b"[Task Count]", b"[Gone]"),  # a field the model doesn't have
+        (b"'Measures Table'[Task Count]", b"'measures table'[task count]"),  # other casing
+    ],
+)
+def test_rows_that_would_not_apply_back_export_as_a_table(shapes: Path, old: bytes, new: bytes) -> None:
+    path = _tables(shapes) / "Metric Selector.tmdl"
+    data = path.read_bytes()
+    assert data.count(old) == 1
+    path.write_bytes(data.replace(old, new))
+
+    exported = _assert_export_applies_unchanged(shapes)
+    assert "fieldParameters" not in exported
+    assert exported["partitions"]["Metric Selector"][0]["sourceType"] == "calculated"

@@ -13,7 +13,7 @@ from pbi.modeling.desktop_metadata import (
     normalize_summarize_by,
     normalize_table_data_category,
 )
-from pbi.modeling.writes_field_parameters import field_parameter_fields
+from pbi.modeling.writes_field_parameters import exportable_field_parameter_fields
 
 
 def export_model_yaml(
@@ -56,9 +56,9 @@ def export_model_yaml(
     field_param_tables: set[str] = set()
     field_params_section: dict = {}
     for table in loaded_model.tables:
-        # A field parameter whose DAX this can't read in full stays an
-        # ordinary table below, so nothing about it is lost.
-        fp_fields = field_parameter_fields(table)
+        # A field parameter whose rows wouldn't apply back unchanged stays
+        # an ordinary table below, so nothing about it is lost.
+        fp_fields = exportable_field_parameter_fields(loaded_model, table)
         if fp_fields:
             field_param_tables.add(table.name)
             field_params_section[table.name] = {

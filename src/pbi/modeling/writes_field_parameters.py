@@ -140,27 +140,73 @@ def resolve_field_parameter_fields(
 
     resolved: list[FieldParameterField] = []
     for i, field_ref in enumerate(fields):
-        dot = field_ref.find(".")
-        if dot == -1:
-            raise ValueError(f"Field must be Table.Field format: {field_ref}")
-        table_name = field_ref[:dot]
-        field_name = field_ref[dot + 1:]
-
-        try:
-            sem_table = model.find_table(table_name)
-        except ValueError as e:
-            raise ValueError(f"Field parameter: {e}") from e
-
-        names = [col.name for col in sem_table.columns] + [meas.name for meas in sem_table.measures]
-        match = next((name for name in names if name.lower() == field_name.lower()), None)
-        if match is None:
-            raise ValueError(f'Field "{field_ref}" not found in model.')
-
+        sem_table, match = _resolve_field_ref(model, field_ref)
         label = labels[i] if labels and labels[i] is not None else match
         if "\n" in label or "\r" in label:
             raise ValueError(f"Label for {field_ref} must be a single line: {label!r}")
         resolved.append(FieldParameterField(label=label, table=sem_table.name, field=match))
     return resolved
+
+
+def _field_name(table: SemanticTable, name: str) -> str | None:
+    """The column or measure of ``table`` called ``name`` (case-insensitive)."""
+    names = [col.name for col in table.columns] + [meas.name for meas in table.measures]
+    return next((item for item in names if item.lower() == name.lower()), None)
+
+
+def _resolve_field_ref(model: SemanticModel, field_ref: str) -> tuple[SemanticTable, str]:
+    """Split ``Table.Field`` where a table name may itself contain dots.
+
+    A split whose table name matches exactly and whose rest names one of its
+    fields wins (``Sales.Data.Revenue`` -> ``'Sales.Data'[Revenue]``). Without
+    one, the ref splits at the first dot and the table lookup may be partial.
+    """
+    if "." not in field_ref:
+        raise ValueError(f"Field must be Table.Field format: {field_ref}")
+    exact = []
+    for table in model.tables:
+        prefix = table.name + "."
+        if len(field_ref) > len(prefix) and field_ref[: len(prefix)].lower() == prefix.lower():
+            name = _field_name(table, field_ref[len(prefix):])
+            if name is not None:
+                exact.append((table, name))
+    if len(exact) > 1:
+        options = ", ".join(f"'{table.name}'[{name}]" for table, name in exact)
+        raise ValueError(f'Field "{field_ref}" is ambiguous: {options}')
+    if exact:
+        return exact[0]
+
+    table_name, _, field_name = field_ref.partition(".")
+    try:
+        sem_table = model.find_table(table_name)
+    except ValueError as e:
+        raise ValueError(f"Field parameter: {e}") from e
+    name = _field_name(sem_table, field_name)
+    if name is None:
+        raise ValueError(f'Field "{field_ref}" not found in model.')
+    return sem_table, name
+
+
+def exportable_field_parameter_fields(
+    model: SemanticModel, table: SemanticTable
+) -> list[FieldParameterField] | None:
+    """The rows to export under ``fieldParameters:``, or None to export the table as is.
+
+    Rows are listed only when applying them back is a no-op: every label is
+    one line and every ``Table.Field`` ref resolves to the field it came from.
+    Otherwise (a removed field, other casing, a multi-line label) the table
+    round-trips through ``columns:`` / ``partitions:`` like any other.
+    """
+    rows = field_parameter_fields(table)
+    if not rows:
+        return None
+    try:
+        resolved = resolve_field_parameter_fields(
+            model, [row.ref for row in rows], [row.label for row in rows]
+        )
+    except ValueError:
+        return None
+    return rows if resolved == rows else None
 
 
 def create_field_parameter(
