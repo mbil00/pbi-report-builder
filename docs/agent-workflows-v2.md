@@ -94,6 +94,8 @@ pbi apply sales.yaml --dry-run          # validate without writing
 pbi apply sales.yaml                    # apply changes
 ```
 
+`diff` runs the real apply on a temporary copy of the project. It lists every file apply would write, with the JSON paths that change, and exits 1 with apply's errors when apply would fail. "No differences found" means apply would change nothing.
+
 ### 4. Verify
 
 ```bash

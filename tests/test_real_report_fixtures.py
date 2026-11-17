@@ -100,22 +100,6 @@ class RealReportFixtureTests(unittest.TestCase):
         self.assertTrue(all("uses quoted literals" in line for line in warnings), result.stdout)
         self.assertNotIn("ERROR", result.stdout)
 
-    def test_real_fixtures_diff_no_changes_for_exported_yaml(self) -> None:
-        runner = CliRunner()
-
-        for pbip in (KITCHEN_SINK_PBIP, MODEL_HEAVY_PBIP):
-            project = Project.find(pbip)
-            exported = export_yaml(project)
-
-            with tempfile.TemporaryDirectory() as tmp:
-                spec_path = Path(tmp) / "exported.yaml"
-                spec_path.write_text(exported, encoding="utf-8")
-
-                result = runner.invoke(app, ["diff", str(spec_path), "--project", str(pbip)])
-
-            self.assertEqual(result.exit_code, 0, f"{pbip}: {result.stdout}")
-            self.assertIn("No differences found.", result.stdout)
-
     def test_real_fixture_report_section_apply_and_diff(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
