@@ -966,11 +966,14 @@ class _ModelNames:
 
     fields: dict[str, set[str]]
     hierarchies: dict[str, dict[str, set[str]]]
+    # (table, column) -> variation name -> its default hierarchy table ("" when unset)
+    variations: dict[tuple[str, str], dict[str, str]]
 
     @classmethod
     def build(cls, model: SemanticModel, project: Project) -> _ModelNames:
         fields: dict[str, set[str]] = {}
         hierarchies: dict[str, dict[str, set[str]]] = {}
+        variations: dict[tuple[str, str], dict[str, str]] = {}
         for table in model.tables:
             key = table.name.lower()
             fields[key] = {column.name.lower() for column in table.columns}
@@ -979,12 +982,18 @@ class _ModelNames:
                 hierarchy.name.lower(): {level.name.lower() for level in hierarchy.levels}
                 for hierarchy in table.hierarchies
             }
+            for column in table.columns:
+                if column.variations:
+                    variations[(key, column.name.lower())] = {
+                        variation.name.lower(): variation.default_hierarchy_table
+                        for variation in column.variations
+                    }
         # Report-level measures (definition/reportExtensions.json) live outside
         # the model, on a model table or on an entity of their own.
         for entity, measures in _report_extension_measures(project).items():
             fields.setdefault(entity.lower(), set()).update(m.lower() for m in measures)
             hierarchies.setdefault(entity.lower(), {})
-        return cls(fields, hierarchies)
+        return cls(fields, hierarchies, variations)
 
     def table_problem(self, entity: str) -> str | None:
         if entity.lower() not in self.fields:
@@ -1009,6 +1018,25 @@ class _ModelNames:
         if isinstance(level, str) and level.lower() not in levels:
             return f'level "{level}" of hierarchy "{entity}.{hierarchy}"'
         return None
+
+    def variation_level_problem(
+        self,
+        entity: str,
+        column: object,
+        variation: object,
+        hierarchy: object,
+        level: object,
+    ) -> str | None:
+        """Check a date column's variation and the hierarchy level it points to."""
+        problem = self.field_problem(entity, column)
+        if problem or not isinstance(column, str) or not isinstance(variation, str):
+            return problem
+        target = self.variations.get((entity.lower(), column.lower()), {}).get(variation.lower())
+        if target is None:
+            return f'variation "{variation}" of column "{entity}.{column}"'
+        if not target:
+            return None  # No default hierarchy: the target table is unknown
+        return self.level_problem(target, hierarchy, level)
 
 
 def _report_extension_measures(project: Project) -> dict[str, list[str]]:
@@ -1064,11 +1092,24 @@ def _field_ref_problems(node: object, names: _ModelNames) -> list[str]:
             expression = value.get("Expression")
             hierarchy = expression.get("Hierarchy") if isinstance(expression, dict) else None
             if isinstance(hierarchy, dict):
-                entity = _source_entity(hierarchy.get("Expression"))
-                if entity is not None:
-                    problem = names.level_problem(
-                        entity, hierarchy.get("Hierarchy"), value.get("Level")
-                    )
+                source = hierarchy.get("Expression")
+                variation = source.get("PropertyVariationSource") if isinstance(source, dict) else None
+                if isinstance(variation, dict):
+                    entity = _source_entity(variation.get("Expression"))
+                    if entity is not None:
+                        problem = names.variation_level_problem(
+                            entity,
+                            variation.get("Property"),
+                            variation.get("Name"),
+                            hierarchy.get("Hierarchy"),
+                            value.get("Level"),
+                        )
+                else:
+                    entity = _source_entity(source)
+                    if entity is not None:
+                        problem = names.level_problem(
+                            entity, hierarchy.get("Hierarchy"), value.get("Level")
+                        )
         elif key == "SourceRef" and isinstance(value.get("Entity"), str):
             entity = value["Entity"]
             problem = names.table_problem(entity)

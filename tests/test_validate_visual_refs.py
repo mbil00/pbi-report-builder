@@ -192,6 +192,51 @@ def test_validate_accepts_report_extension_measures(fixture_copy: Callable[[str]
     assert _errors(root) == []
 
 
+# Desktop's auto date/time binding in sample-report: Date[Date] variation
+# "Variation" -> LocalDateTable_... hierarchy "Date Hierarchy", level Year.
+VARIATION_VISUAL = "dcf7bcc8185a099d336e"
+
+
+def _edit_variation_level(**changes: str) -> Callable[[dict], None]:
+    def edit(data: dict) -> None:
+        level = data["visual"]["query"]["queryState"]["Values"]["projections"][0]["field"]["HierarchyLevel"]
+        hierarchy = level["Expression"]["Hierarchy"]
+        variation = hierarchy["Expression"]["PropertyVariationSource"]
+        if "level" in changes:
+            level["Level"] = changes["level"]
+        if "hierarchy" in changes:
+            hierarchy["Hierarchy"] = changes["hierarchy"]
+        if "variation" in changes:
+            variation["Name"] = changes["variation"]
+        if "column" in changes:
+            variation["Property"] = changes["column"]
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("changes", "problem"),
+    [
+        pytest.param({"level": "Week"}, 'level "Week" of hierarchy "LocalDateTable_6809f789-ca23-4187-a37b-4db3392ec26d.Date Hierarchy"', id="level"),
+        pytest.param({"hierarchy": "Fiscal"}, 'hierarchy "LocalDateTable_6809f789-ca23-4187-a37b-4db3392ec26d.Fiscal"', id="hierarchy"),
+        pytest.param({"variation": "Other"}, 'variation "Other" of column "Date.Date"', id="variation"),
+        pytest.param({"column": "Day"}, 'field "Date.Day"', id="column"),
+    ],
+)
+def test_validate_flags_bad_date_variation_levels(
+    fixture_copy: Callable[[str], Path], changes: dict[str, str], problem: str
+) -> None:
+    root = fixture_copy("sample-report")
+    path = next(root.glob(f"*.Report/definition/pages/*/visuals/{VARIATION_VISUAL}/visual.json"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    _edit_variation_level(**changes)(data)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    errors = _errors(root)
+
+    assert errors == [f'Visual "{VARIATION_VISUAL}" binding "Values" references {problem}, which is not in the semantic model']
+
+
 # --- Roles ---------------------------------------------------------------------------
 
 
