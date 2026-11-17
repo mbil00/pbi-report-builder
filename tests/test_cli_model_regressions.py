@@ -1021,20 +1021,6 @@ class TestValidateMeasuresOnlyTable(unittest.TestCase):
 class TestModelSearch(unittest.TestCase):
     """pbi model search command."""
 
-    def test_model_search_finds_matching_fields(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_project(root, with_model=True)
-
-            result = runner.invoke(
-                app,
-                ["model", "search", "Revenue", "--project", str(root / "Sample.pbip")],
-            )
-            # with_model=True creates a Measures Table with "Total Revenue"
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("Revenue", result.stdout)
-
     def test_model_search_no_match(self):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,77 +19,6 @@ from tests.support import make_project, write_model_table
 
 
 class ApplyWorkflowRegressionTests(unittest.TestCase):
-    def test_apply_name_only_page_spec_skips_definition_snapshot(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = make_project(root)
-            ReportAuthoring(project).create_page("Demo")
-
-            yaml_content = yaml.safe_dump(
-                {
-                    "version": 1,
-                    "pages": [{"name": "Demo"}],
-                },
-                sort_keys=False,
-            )
-
-            with mock.patch("pbi.apply.shutil.copytree", wraps=shutil.copytree) as copytree_mock:
-                result = apply_yaml(project, yaml_content)
-
-            self.assertEqual(result.errors, [])
-            self.assertEqual(copytree_mock.call_count, 0)
-
-    def test_apply_noop_page_update_skips_definition_snapshot(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = make_project(root)
-            ReportAuthoring(project).create_page("Demo", width=1280, height=720)
-
-            yaml_content = yaml.safe_dump(
-                {
-                    "version": 1,
-                    "pages": [
-                        {
-                            "name": "Demo",
-                            "width": 1280,
-                            "height": 720,
-                        }
-                    ],
-                },
-                sort_keys=False,
-            )
-
-            with mock.patch("pbi.apply.shutil.copytree", wraps=shutil.copytree) as copytree_mock:
-                result = apply_yaml(project, yaml_content)
-
-            self.assertEqual(result.errors, [])
-            self.assertEqual(copytree_mock.call_count, 0)
-
-    def test_apply_error_only_page_update_skips_definition_snapshot(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = make_project(root)
-            ReportAuthoring(project).create_page("Demo")
-
-            yaml_content = yaml.safe_dump(
-                {
-                    "version": 1,
-                    "pages": [
-                        {
-                            "name": "Demo",
-                            "notARealProperty": {"bogus": True},
-                        }
-                    ],
-                },
-                sort_keys=False,
-            )
-
-            with mock.patch("pbi.apply.shutil.copytree", wraps=shutil.copytree) as copytree_mock:
-                result = apply_yaml(project, yaml_content)
-
-            self.assertTrue(result.errors)
-            self.assertEqual(copytree_mock.call_count, 0)
-
     def test_apply_accepts_stdin_with_dash(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:

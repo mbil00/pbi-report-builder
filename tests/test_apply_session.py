@@ -141,23 +141,6 @@ class SaveVisualLeafSeamTests(unittest.TestCase):
         self.assertFalse(wrote)
         self.assertEqual(session.calls, [])
 
-    def test_save_visual_does_not_call_ensure_snapshot_at_leaf(self) -> None:
-        # Migrated leaf paths must not manage rollback protection directly.
-        # The session method absorbs journaling internally; the leaf only
-        # records ``save_visual``.
-        baseline = {"name": "v1"}
-        visual = self._make_visual(data={**baseline, "tooltip": {"show": True}})
-        session = FakePbirWriteSession()
-
-        save_visual_if_changed(
-            project=None,  # type: ignore[arg-type]
-            visual=visual,
-            original_data=baseline,
-            session=session,
-        )
-
-        self.assertNotIn("ensure_snapshot", session.call_names())
-
 
 class SavePageLeafSeamTests(unittest.TestCase):
     """Apply leaf paths that persist a Page go through ``session.save_page``.
@@ -201,23 +184,6 @@ class SavePageLeafSeamTests(unittest.TestCase):
 
         self.assertFalse(wrote)
         self.assertEqual(session.calls, [])
-
-    def test_save_page_does_not_call_ensure_snapshot_at_leaf(self) -> None:
-        # Migrated leaf paths must not manage rollback protection directly.
-        # The session method absorbs journaling internally; the leaf only
-        # records ``save_page``.
-        baseline = {"displayName": "Page 1"}
-        page = self._make_page(data={**baseline, "visibility": "HiddenInViewMode"})
-        session = FakePbirWriteSession()
-
-        save_page_if_changed(
-            project=None,  # type: ignore[arg-type]
-            page=page,
-            original_data=baseline,
-            session=session,
-        )
-
-        self.assertNotIn("ensure_snapshot", session.call_names())
 
 
 class _StubbedPbirWriteSession(FakePbirWriteSession):
@@ -360,7 +326,6 @@ class StructuralLeafSeamTests(unittest.TestCase):
         self.assertEqual(names[0], "create_visual")
         # The eager save persists the name override before further mutation.
         self.assertIn("save_visual", names)
-        self.assertNotIn("ensure_snapshot", names)
 
     def test_delete_visual_routes_through_session_on_type_conversion(self) -> None:
         # An existing card visual is replaced with a line chart. The migrated
@@ -400,7 +365,6 @@ class StructuralLeafSeamTests(unittest.TestCase):
         self.assertEqual(names[2], "save_visual")
         # The two delete/create entries each carry their target object.
         self.assertIs(session.calls[0][1], existing)
-        self.assertNotIn("ensure_snapshot", names)
 
     def test_create_group_container_routes_through_session(self) -> None:
         page = self._make_page()
@@ -424,7 +388,6 @@ class StructuralLeafSeamTests(unittest.TestCase):
 
         names = session.call_names()
         self.assertEqual(names[0], "create_group_container")
-        self.assertNotIn("ensure_snapshot", names)
 
     def test_create_page_routes_through_session(self) -> None:
         # Drive the apply_page leaf path for a brand-new page. The page
@@ -456,7 +419,6 @@ class StructuralLeafSeamTests(unittest.TestCase):
         names = session.call_names()
         self.assertEqual(names[0], "create_page")
         self.assertEqual(session.calls[0][1], "Demo")
-        self.assertNotIn("ensure_snapshot", names)
         self.assertIn("Demo", result.pages_created)
 
 

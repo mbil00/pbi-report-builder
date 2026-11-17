@@ -21,9 +21,9 @@ class FakePbirWriteSession:
 
     Each method appends a ``(method_name, args_tuple)`` entry to ``calls`` so
     apply-leaf tests can assert the call sequence. The lifecycle hooks
-    (``begin``/``commit``/``rollback``/``cleanup``) and the legacy
-    ``ensure_snapshot`` / ``get_model`` accessors are also recorded so the
-    fake can stand in wherever ``PbirApplySession`` would.
+    (``begin``/``commit``/``rollback``/``cleanup``) are also recorded, and
+    ``get_model`` returns ``model``, so the fake can stand in wherever
+    ``PbirApplySession`` would.
 
     ``create_*`` methods that would normally return a ``Page`` / ``Visual``
     return ``None``; tests that exercise those code paths must override the
@@ -49,9 +49,6 @@ class FakePbirWriteSession:
         self.calls.append(("cleanup",))
 
     # PbirApplySession-shaped accessors retained on the concrete adapter -----
-
-    def ensure_snapshot(self, project: Any | None = None) -> None:
-        self.calls.append(("ensure_snapshot",))
 
     def get_model(self, project: Any | None = None) -> Any:
         return self.model

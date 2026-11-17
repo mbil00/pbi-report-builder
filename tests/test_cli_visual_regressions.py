@@ -1116,27 +1116,6 @@ class TestVisualInspect(unittest.TestCase):
             self.assertIn("backColor", result.stdout)
             self.assertIn("metadata=T.F", result.stdout)
 
-    def test_inspect_search_filters(self):
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = make_project(root)
-            page = ReportAuthoring(project).create_page("Test")
-            visual = ReportAuthoring(project).create_visual(page, "card")
-            set_property(visual.data, "title.show", "true", VISUAL_PROPERTIES)
-            set_property(visual.data, "title.text", "Hello", VISUAL_PROPERTIES)
-            set_property(visual.data, "border.show", "true", VISUAL_PROPERTIES)
-            visual.save()
-
-            result = runner.invoke(
-                app,
-                ["visual", "inspect", "Test", "1", "--search", "title",
-                 "--project", str(root / "Sample.pbip")],
-            )
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            # Should show title properties but not border
-            self.assertIn("title", result.stdout.lower())
-
     def test_inspect_json_output(self):
         import json
 

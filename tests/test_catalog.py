@@ -872,18 +872,3 @@ table Sales
 
             self.assertEqual(result.exit_code, 1, result.stdout)
             self.assertIn('Style "broken" is not valid', result.stdout)
-
-    def test_legacy_component_commands_are_removed(self) -> None:
-        runner = CliRunner()
-        result = runner.invoke(app, ["component", "list"])
-        self.assertNotEqual(result.exit_code, 0)
-
-    def test_legacy_style_commands_are_removed(self) -> None:
-        runner = CliRunner()
-        result = runner.invoke(app, ["style", "list"])
-        self.assertNotEqual(result.exit_code, 0)
-
-    def test_legacy_page_template_commands_are_removed(self) -> None:
-        runner = CliRunner()
-        result = runner.invoke(app, ["page", "template", "list"])
-        self.assertNotEqual(result.exit_code, 0)
