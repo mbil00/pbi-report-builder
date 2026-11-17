@@ -82,13 +82,19 @@ def set_partition(
         mode=mode or partition.mode,
         path=table.definition_path,
     )
+    if _partition_state(updated) == _partition_state(partition):
+        return table.name, partition.name, False
+
     lines = _get_tmdl_lines(table.definition_path, edit_session)
     start, end = _find_partition_block(lines, partition.name)
-    block = _render_partition_block(updated)
-    if lines[start:end] == block:
-        return table.name, partition.name, False
-    lines[start:end] = block
-    _commit_tmdl_lines(table.definition_path, _collapse_blank_lines(lines), dry_run=dry_run, session=edit_session)
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1  # the blank line(s) after the block belong to the file layout
+    lines[start:end] = _rewrite_partition_block(lines[start:end], partition, updated)
+    _commit_tmdl_lines(table.definition_path, lines, dry_run=dry_run, session=edit_session)
+    if not dry_run:
+        partition.source_type = updated.source_type
+        partition.mode = updated.mode
+        partition.source_expression = updated.source_expression
     return table.name, partition.name, True
 
 
@@ -183,18 +189,64 @@ def _partition_insert_index(lines: list[str]) -> int:
 
 
 def _render_partition_block(partition: Partition) -> list[str]:
-    lines = [
+    return [
         f"\tpartition {_format_tmdl_name(partition.name)} = {partition.source_type}",
         f"\t\tmode: {partition.mode}",
+        *_render_partition_source(partition.source_expression),
     ]
-    source_lines = partition.source_expression.splitlines()
+
+
+def _render_partition_source(expression: str) -> list[str]:
+    source_lines = expression.splitlines()
     if len(source_lines) <= 1:
-        lines.append(f"\t\tsource = {source_lines[0].strip()}")
-    else:
-        lines.append("\t\tsource =")
-        for line in source_lines:
-            lines.append(f"\t\t\t\t{line.rstrip()}")
-    return lines
+        return [f"\t\tsource = {source_lines[0].strip()}"]
+    return ["\t\tsource =", *(f"\t\t\t\t{line.rstrip()}" for line in source_lines)]
+
+
+def _partition_state(partition: Partition) -> tuple[str, str, str]:
+    return partition.source_type, partition.mode, partition.source_expression
+
+
+def _rewrite_partition_block(block: list[str], current: Partition, updated: Partition) -> list[str]:
+    """Rewrite only the parts of a partition block whose value changed.
+
+    The header's name stays as written (Desktop leaves names such as
+    ``LocalDateTable_<guid>`` unquoted), and lines this writer doesn't model
+    (``queryGroup:``, annotations, ...) are kept.
+    """
+    block = list(block)
+    if updated.source_type != current.source_type:
+        head, sep, _ = block[0].rpartition("=")
+        block[0] = f"{head}= {updated.source_type}" if sep else f"{block[0].rstrip()} = {updated.source_type}"
+
+    if updated.source_expression != current.source_expression:
+        source = _render_partition_source(updated.source_expression)
+        idx = _partition_property_index(block, "source =")
+        if idx is None:
+            block.extend(source)
+        else:
+            end = idx + 1
+            while end < len(block) and (not block[end].strip() or _indent_level(block[end]) >= 3):
+                end += 1
+            while end > idx + 1 and not block[end - 1].strip():
+                end -= 1
+            block[idx:end] = source
+
+    if updated.mode != current.mode:
+        mode = f"\t\tmode: {updated.mode}"
+        idx = _partition_property_index(block, "mode:")
+        if idx is None:
+            block.insert(1, mode)
+        else:
+            block[idx] = mode
+    return block
+
+
+def _partition_property_index(block: list[str], prefix: str) -> int | None:
+    for idx, line in enumerate(block[1:], start=1):
+        if _indent_level(line) == 2 and line.strip().startswith(prefix):
+            return idx
+    return None
 
 
 def _parse_partition_name(rest: str) -> str:

@@ -17,7 +17,7 @@ from .desktop_metadata import (
     normalize_summarize_by,
     normalize_table_data_category,
 )
-from .parser import _TMDL_PROPERTY_NAMES, _is_changed_property, _parse_tmdl_name
+from .parser import _TMDL_PROPERTY_NAMES, _is_changed_property, _parse_member_property_value, _parse_tmdl_name
 from .schema import SemanticModel
 
 
@@ -801,7 +801,10 @@ def _update_member_property(
     replacement = f"\t\t{property_name}: {_format_tmdl_property_value(property_name, property_value)}"
     for idx in range(start + 1, end):
         if lines[idx].strip().startswith(f"{property_name}:"):
-            if lines[idx] == replacement:
+            existing = _parse_member_property_value(property_name, lines[idx].partition(":")[2])
+            if _canonical_member_property_value(property_name, existing) == property_value:
+                # Same value, maybe spelled differently (Desktop's
+                # ``uncategorized``): keep the line as written.
                 return False
             lines[idx] = replacement
             _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
@@ -811,6 +814,17 @@ def _update_member_property(
     lines.insert(insert_at, replacement)
     _commit_tmdl_lines(path, lines, dry_run=dry_run, session=edit_session)
     return True
+
+
+def _canonical_member_property_value(property_name: str, value: str) -> str:
+    """Return ``value`` as ``_normalize_member_property_value`` would write it."""
+    normalizer = {"summarizeBy": normalize_summarize_by, "dataCategory": normalize_data_category}.get(property_name)
+    if normalizer is None:
+        return value
+    try:
+        return normalizer(value)
+    except ValueError:
+        return value
 
 
 def _update_member_description(

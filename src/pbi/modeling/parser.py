@@ -239,6 +239,11 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         current_partition_source_inline = ""
         partition_source_block = False
 
+    # Indent of the member-level ``variation`` / ``annotation`` block being
+    # skipped: its child lines (``isDefault``, ``relationship: ...``) are not
+    # DAX and not member properties.
+    nested_block_indent: int | None = None
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
@@ -254,6 +259,11 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
             else:
                 break
         indent = int(indent)
+
+        if nested_block_indent is not None:
+            if indent > nested_block_indent:
+                continue
+            nested_block_indent = None
 
         if stripped.startswith("///"):
             # A description sits directly above a table (indent 0) or a table
@@ -366,8 +376,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_props["isHidden"] = "true"
             elif stripped == "isKey":
                 current_props["isKey"] = "true"
-            elif stripped.startswith(("annotation ", "variation ")):
-                pass  # skip nested blocks
+            elif indent == 2 and stripped.startswith(("annotation ", "variation ")):
+                # A nested block at property indent: skip it and its children.
+                # Deeper, the same text is part of a multi-line DAX body.
+                nested_block_indent = indent
             elif indent == 2 and _is_changed_property(stripped):
                 # Member metadata at property indent. A multi-line DAX body
                 # sits one level deeper, where the same text is a comparison.
