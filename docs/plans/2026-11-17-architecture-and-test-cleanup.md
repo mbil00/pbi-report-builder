@@ -39,8 +39,8 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 | 7 | B4 hierarchy-level bindings don't round-trip | #69 | [x] #111 (337a63a) |
 | 8 | B5 `legend.position: TopRight` rejected | #77 | [x] #114 (c1d65af) |
 | 9 | B6 report-02 card roles and corrupt sort ref | #78 | [x] #116 (8133c0b) |
-| 10 | B7 report-03 apply rewrites 14 files | #79 | [x] #117 |
-| 11 | B8 `diff` disagrees with `apply` | #80 | [ ] |
+| 10 | B7 report-03 apply rewrites 14 files | #79 | [x] #117 (9fa7161) |
+| 11 | B8 `diff` disagrees with `apply` | #80 | [x] #119 |
 | 12 | B9 field parameters in a guessed shape | #81 | [ ] |
 | 13 | T4a delete harness-covered tests: apply | #85 | [ ] |
 | 14 | T4b … model | #85 | [ ] |
