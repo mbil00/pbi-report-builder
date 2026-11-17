@@ -448,3 +448,18 @@ def test_rows_that_would_not_apply_back_export_as_a_table(shapes: Path, old: byt
     exported = _assert_export_applies_unchanged(shapes)
     assert "fieldParameters" not in exported
     assert exported["partitions"]["Metric Selector"][0]["sourceType"] == "calculated"
+
+
+def test_create_reports_the_resolved_labels_and_kinds(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    write_model_table(tmp_path, "Sales.Data.tmdl", "table 'Sales.Data'\n\tmeasure Revenue = 1\n")
+    write_model_table(tmp_path, "Sales.tmdl", "table Sales\n\tcolumn Region\n\t\tdataType: string\n")
+
+    result = cli("model", "field-parameter", "create", "Picker", "Sales.Data.Revenue", "sales.region",
+                 project=tmp_path)
+    assert result.exit_code == 0, result.output
+    rows = [line.split() for line in result.output.splitlines() if "->" in line]
+    assert rows == [
+        ["Revenue", "->", "Sales.Data.Revenue", "(measure)"],
+        ["Region", "->", "Sales.Region", "(column)"],
+    ]

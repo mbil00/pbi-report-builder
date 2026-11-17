@@ -19,7 +19,10 @@ def create_field_parameter_cmd(
     project: ProjectOpt = None,
 ) -> None:
     """Create a field parameter table from model fields."""
-    from pbi.model import create_field_parameter
+    from pbi.modeling.writes_field_parameters import (
+        create_field_parameter,
+        resolve_field_parameter_fields,
+    )
 
     proj, model = get_model(project)
     prefix = "[dim](dry run)[/dim] " if dry_run else ""
@@ -40,29 +43,14 @@ def create_field_parameter_cmd(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    # Resolve display info for output
-    display_labels = effective_labels if effective_labels else [f.split(".", 1)[1] if "." in f else f for f in fields]
-    field_types = []
-    for field_ref in fields:
-        dot = field_ref.find(".")
-        if dot == -1:
-            field_types.append("field")
-            continue
-        table_name = field_ref[:dot]
-        field_name = field_ref[dot + 1:]
-        ftype = "column"
-        try:
-            sem_table = model.find_table(table_name)
-            for m in sem_table.measures:
-                if m.name.lower() == field_name.lower():
-                    ftype = "measure"
-                    break
-        except ValueError:
-            pass
-        field_types.append(ftype)
+    rows = resolve_field_parameter_fields(model, fields, effective_labels)
+    measures = {
+        (table.name, measure.name) for table in model.tables for measure in table.measures
+    }
 
     console.print(f'{prefix}Created field parameter "[cyan]{param_name}[/cyan]" with {len(fields)} fields')
-    for label, field_ref, ftype in zip(display_labels, fields, field_types):
-        console.print(f"  [cyan]{label:<16}[/cyan] [dim]->[/dim] {field_ref} [dim]({ftype})[/dim]")
+    for row in rows:
+        kind = "measure" if (row.table, row.field) in measures else "column"
+        console.print(f"  [cyan]{row.label:<16}[/cyan] [dim]->[/dim] {row.ref} [dim]({kind})[/dim]")
     console.print()
     console.print(f'[dim]Bind to a slicer:[/dim] pbi visual bind "Page" slicer Values "{param_name}.{param_name}"')
