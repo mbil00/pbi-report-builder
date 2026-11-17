@@ -1,5 +1,7 @@
 """Tests for the HTML render module."""
 
+import pytest
+
 from pbi.render import (
     _hex_to_rgba,
     _resolve_color,
@@ -10,6 +12,7 @@ from pbi.render import (
     render_page_html,
 )
 from pbi.project import Project
+from tests.support import KITCHEN_SINK_DIR, SHAPES_DIR
 
 
 def test_hex_to_rgba():
@@ -20,16 +23,6 @@ def test_hex_to_rgba():
 
 def test_resolve_color_hex_string():
     assert _resolve_color("#FF0000") == "#FF0000"
-
-
-def test_resolve_color_solid_wrapper():
-    raw = {"solid": {"color": "#00FF00"}}
-    assert _resolve_color(raw) == "#00FF00"
-
-
-def test_resolve_color_expr_literal():
-    raw = {"expr": {"Literal": {"Value": "'#0000FF'"}}}
-    assert _resolve_color(raw) == "#0000FF"
 
 
 def test_resolve_color_theme_data():
@@ -93,42 +86,6 @@ def test_render_textbox_empty():
     assert _render_textbox_content({}) == ""
 
 
-def test_build_group_offsets_no_groups():
-    """Visuals without groups get zero offsets."""
-    from pbi.project import Visual
-    from pathlib import Path
-
-    v = Visual(folder=Path("/fake/v1"), data={"name": "v1"})
-    offsets = _build_group_offsets([v])
-    assert offsets["v1"] == (0.0, 0.0, 0)
-
-
-def test_build_group_offsets_with_group():
-    """Child visuals get parent group position as offset."""
-    from pbi.project import Visual
-    from pathlib import Path
-
-    group = Visual(
-        folder=Path("/fake/g1"),
-        data={
-            "name": "g1",
-            "position": {"x": 100, "y": 200, "z": 5000},
-            "visualGroup": {"displayName": "Group 1"},
-        },
-    )
-    child = Visual(
-        folder=Path("/fake/c1"),
-        data={
-            "name": "c1",
-            "position": {"x": 10, "y": 20, "z": 100},
-            "parentGroupName": "g1",
-        },
-    )
-    offsets = _build_group_offsets([group, child])
-    assert offsets["c1"] == (100.0, 200.0, 5000)
-    assert offsets["g1"] == (0.0, 0.0, 0)
-
-
 def test_build_group_offsets_nested():
     """Nested groups accumulate offsets."""
     from pbi.project import Visual
@@ -164,13 +121,43 @@ def test_build_group_offsets_nested():
     assert offsets["leaf"] == (150.0, 150.0, 3000)
 
 
-def test_render_page_html_sample():
-    """Smoke test: render a page from the sample report."""
-    proj = Project.find("fixtures/sample-report")
-    pages = proj.get_pages()
-    assert len(pages) > 0
+def _visual_html(page_html: str, name: str) -> str:
+    """Return the one rendered element for visual ``name``."""
+    [element] = [chunk for chunk in page_html.split("\n\n") if f'data-name="{name}"' in chunk]
+    return element
 
-    html = render_page_html(proj, pages[0])
-    assert "<!DOCTYPE html>" in html
-    assert pages[0].display_name in html
-    assert "page-canvas" in html
+
+def test_render_page_html_desktop_fixtures():
+    """Named facts from rendering Desktop-saved pages (read in place; render writes nothing)."""
+    kitchen = Project.find(KITCHEN_SINK_DIR)
+    page_html = render_page_html(kitchen, kitchen.find_page("Executive Overview"))
+    assert page_html.startswith("<!DOCTYPE html>")
+    assert "<title>Executive Overview</title>" in page_html
+    assert '<div class="page-canvas">' in page_html
+    # Page and visual backgrounds: a solid wrapper around an expr Literal.
+    assert "background: #F5F6FA;" in page_html
+    assert "background-color:#0078D4" in _visual_html(page_html, "navToProduct")
+    # A visual outside any group is drawn at its own position; group containers aren't drawn.
+    assert "left:16.0px;top:12.0px;width:500.0px;height:48.0px;z-index:1000;" in _visual_html(page_html, "heroTitle")
+    assert 'data-name="Navigation"' not in page_html
+
+    shapes = Project.find(SHAPES_DIR)
+    page_html = render_page_html(shapes, shapes.find_page("Overview"))
+    heading = _visual_html(page_html, "7d88e913cd74e62b0c83")
+    assert (
+        "<span style=\"font-family:'Georgia',sans-serif;font-size:24pt;font-weight:bold;color:#1f3a5f\">"
+        "Delivery Overview</span>"
+    ) in heading
+    assert (
+        '<span style="font-size:12pt;font-weight:bold;font-style:italic;color:#d64550">2024-2025</span>'
+    ) in heading
+    # Runs without a text style are plain text.
+    assert '<p style="margin:0">Open the project handbook</p>' in _visual_html(page_html, "0edca500e000b9be8bca")
+
+
+@pytest.mark.xfail(strict=True, reason="#129: grouped visuals are drawn offset by their group's position")
+def test_render_draws_grouped_visuals_at_their_page_position():
+    kitchen = Project.find(KITCHEN_SINK_DIR)
+    page_html = render_page_html(kitchen, kitchen.find_page("Executive Overview"))
+    # navToProduct is at x=660, y=540 in its visual.json, inside the Navigation group at the same point.
+    assert "left:660.0px;top:540.0px;" in _visual_html(page_html, "navToProduct")
