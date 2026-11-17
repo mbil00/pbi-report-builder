@@ -35,7 +35,7 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 | 3 | T3 fixture harness with strict xfails | #84 | [x] #105 (fa6b3f7) |
 | 4 | B1 `changedProperty` pulled into calculated-column DAX | #75 | [x] #106 (30649d0) |
 | 5 | B2 model export → apply rewrites unchanged TMDL | #76 | [x] #107 (309c0de) |
-| 6 | B3 apply crashes on Aggregation bindings | #73 | [ ] |
+| 6 | B3 apply crashes on Aggregation bindings | #73 | [x] #110 |
 | 7 | B4 hierarchy-level bindings don't round-trip | #69 | [ ] |
 | 8 | B5 `legend.position: TopRight` rejected | #77 | [ ] |
 | 9 | B6 report-02 card roles and corrupt sort ref | #78 | [ ] |
