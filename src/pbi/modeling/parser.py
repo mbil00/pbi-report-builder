@@ -150,6 +150,9 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
     # ``variation`` blocks of the current column, and the one being read.
     current_variations: list[ColumnVariation] = []
     current_variation: ColumnVariation | None = None
+    # ``extendedProperty`` blocks of the current column: name -> JSON lines.
+    current_extended: dict[str, list[str]] = {}
+    current_extended_lines: list[str] | None = None
 
     # Hierarchy parsing state
     current_levels: list[HierarchyLevel] = []
@@ -171,7 +174,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
 
     def _flush() -> None:
         nonlocal current_type, current_name, current_props, current_expr
-        nonlocal current_levels, current_variations
+        nonlocal current_levels, current_variations, current_extended
         nonlocal current_partition_type, current_partition_source, current_partition_source_inline, partition_source_block
         if current_type == "column" and table_name:
             columns.append(
@@ -193,6 +196,9 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     data_category=current_props.get("dataCategory", ""),
                     is_key="isKey" in current_props,
                     variations=list(current_variations),
+                    extended_properties={
+                        name: "\n".join(value) for name, value in current_extended.items()
+                    },
                 )
             )
         elif current_type == "measure" and table_name:
@@ -240,6 +246,7 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
         current_props = {}
         current_expr = ""
         current_variations = []
+        current_extended = {}
         current_partition_type = ""
         current_partition_source = []
         current_partition_source_inline = ""
@@ -280,9 +287,12 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                     else:
                         current_variation.default_hierarchy_table = table
                         current_variation.default_hierarchy = hierarchy
+                if current_extended_lines is not None:
+                    current_extended_lines.append(stripped)
                 continue
             nested_block_indent = None
             current_variation = None
+            current_extended_lines = None
 
         if stripped.startswith("///"):
             # A description sits directly above a table (indent 0) or a table
@@ -395,7 +405,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_props["isHidden"] = "true"
             elif stripped == "isKey":
                 current_props["isKey"] = "true"
-            elif indent == 2 and stripped.startswith(("annotation ", "variation ")):
+            elif indent == 2 and (
+                stripped.startswith(("annotation ", "variation ", "extendedProperty "))
+                or stripped == "relatedColumnDetails"
+            ):
                 # A nested block at property indent: skip it and its children.
                 # Deeper, the same text is part of a multi-line DAX body.
                 nested_block_indent = indent
@@ -404,6 +417,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                         name=_parse_tmdl_name(stripped[len("variation "):])
                     )
                     current_variations.append(current_variation)
+                elif current_type == "column" and stripped.startswith("extendedProperty "):
+                    name, _, value = stripped[len("extendedProperty "):].partition("=")
+                    current_extended_lines = [value.strip()] if value.strip() else []
+                    current_extended[_parse_tmdl_name(name.strip())] = current_extended_lines
             elif indent == 2 and _is_changed_property(stripped):
                 # Member metadata at property indent. A multi-line DAX body
                 # sits one level deeper, where the same text is a comparison.

@@ -1064,8 +1064,23 @@ def _delete_block(lines: list[str], start: int, end: int) -> None:
         lines.insert(start, "")
 
 
+def _is_member_child_block(line: str) -> bool:
+    """True for the start of a nested block inside a column/measure.
+
+    ``annotation`` and ``variation`` blocks, and Desktop's
+    ``extendedProperty`` / ``relatedColumnDetails`` blocks at property indent
+    (a field parameter's columns carry both). Member properties go before them.
+    """
+    stripped = line.strip()
+    if stripped.startswith(("annotation ", "variation ")):
+        return True
+    return _indent_level(line) == 2 and (
+        stripped.startswith("extendedProperty ") or stripped == "relatedColumnDetails"
+    )
+
+
 def _block_property_insert_index(lines: list[str], start: int, end: int) -> int:
-    """Choose an insertion point within a member block before annotations/variations."""
+    """Choose an insertion point within a member block before its nested blocks."""
     blank_before_body: int | None = None
     for idx in range(start + 1, end):
         stripped = lines[idx].strip()
@@ -1075,7 +1090,7 @@ def _block_property_insert_index(lines: list[str], start: int, end: int) -> int:
             continue
         if _indent_level(lines[idx]) < 2:
             continue
-        if stripped.startswith(("annotation ", "variation ")):
+        if _is_member_child_block(lines[idx]):
             return blank_before_body if blank_before_body is not None else idx
         blank_before_body = None
     if blank_before_body is not None:
@@ -1481,7 +1496,7 @@ def _measure_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if _indent_level(lines[idx]) < 2:
             continue
-        if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
+        if stripped == "isHidden" or _is_member_child_block(lines[idx]):
             return idx
         if _indent_level(lines[idx]) == 2 and _is_changed_property(stripped):
             return idx
@@ -1553,7 +1568,7 @@ def _column_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if _indent_level(lines[idx]) < 2:
             continue
-        if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
+        if stripped == "isHidden" or _is_member_child_block(lines[idx]):
             return idx
         if _indent_level(lines[idx]) == 2 and _is_changed_property(stripped):
             return idx
