@@ -54,7 +54,7 @@ FIXTURE_NAMES = list(FIXTURES)
 # --- Known failures (fixture name -> issue) -----------------------------------
 
 KNOWN_REPORT_ROUNDTRIP = {
-    "report-01-kitchen-sink": "#77",
+    "report-01-kitchen-sink": "#108, #113",
     "report-02-model-heavy": "#78",
     "report-03-authoring-parity-lab": "#79",
     "report-04-desktop-shapes": "#108",

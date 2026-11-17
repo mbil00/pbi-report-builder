@@ -130,7 +130,7 @@ Bar, column, line, area, combo, pie, donut, scatter, waterfall, ribbon, funnel, 
 | Property | Type | Description |
 |----------|------|-------------|
 | `legend.show` | boolean | Show legend |
-| `legend.position` | enum | `Top`, `Bottom`, `Left`, `Right`, `TopCenter`, `BottomCenter` |
+| `legend.position` | enum | `Top`, `TopCenter`, `TopRight`, `Left`, `Right`, `LeftCenter`, `RightCenter`, `Bottom`, `BottomCenter`, `BottomRight` |
 | `legend.color` | color | Legend text color |
 | `legend.fontSize` | number | Legend font size |
 | `legend.fontFamily` | string | Legend font family |

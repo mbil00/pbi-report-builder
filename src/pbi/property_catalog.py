@@ -377,7 +377,11 @@ VISUAL_PROPERTIES: dict[str, PropertyDef] = {
     "legend.position": PropertyDef(
         None, "enum", "Legend position",
         container_key="legend", container_prop="position", objects_path="objects",
-        enum_values=("Top", "Bottom", "Left", "Right", "TopCenter", "BottomCenter", "LeftCenter", "RightCenter"),
+        # Desktop's ten positions, in the order of the extracted capability schema.
+        enum_values=(
+            "Top", "TopCenter", "TopRight", "Left", "Right",
+            "LeftCenter", "RightCenter", "Bottom", "BottomCenter", "BottomRight",
+        ),
     ),
     "legend.color": PropertyDef(
         None, "color", "Legend text color",
