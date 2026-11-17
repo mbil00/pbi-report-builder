@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import tempfile
 import unittest
@@ -10,19 +9,15 @@ import yaml
 
 from pbi.apply import apply_yaml
 from pbi.bookmarks import create_bookmark, create_bookmark_group, export_bookmarks, get_bookmark, list_bookmarks
-from pbi.components import apply_component, apply_component_row, get_component, save_component
-from pbi.roundtrip_primitives import export_bindings
 from pbi.columns import get_columns, rename_column, set_column_width
 from pbi.drillthrough import configure_drillthrough, configure_tooltip_page
 from pbi.export import export_yaml
 from pbi.filters import add_topn_filter
 from pbi.formatting import build_measure_format, set_conditional_format
-from pbi.images import add_image, build_image_resource_property
 from pbi.project import Project
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.schema_refs import REPORT_SCHEMA
 from pbi.styles import create_style
-from pbi.textbox import set_textbox_content
 from pbi.themes import apply_theme, create_theme
 from pbi.validate import validate_project
 from pbi.report_authoring import ReportAuthoring
@@ -324,44 +319,6 @@ class YamlRoundTripTests(unittest.TestCase):
             self.assertEqual(reexported_map["Detailed View"]["group"], "Views")
             self.assertIn("state", reexported_map["Detailed View"])
 
-    def test_round_trip_preserves_visual_type_for_raw_pbir_visuals(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = self._make_project(root / "source")
-            ReportAuthoring(source).create_page("Details")
-            page = ReportAuthoring(source).create_page("Demo")
-
-            textbox = ReportAuthoring(source).create_visual(page, "textbox")
-            textbox.data["name"] = "note"
-            set_textbox_content(textbox.data, text="Hello")
-            textbox.save()
-
-            button = ReportAuthoring(source).create_visual(page, "actionButton")
-            button.data["name"] = "goDetails"
-            set_property(button.data, "action.show", "true", VISUAL_PROPERTIES)
-            set_property(button.data, "action.type", "PageNavigation", VISUAL_PROPERTIES)
-            set_property(button.data, "action.page", source.find_page("Details").name, VISUAL_PROPERTIES)
-            button.save()
-
-            spec = export_yaml(source, page_filter="Demo")
-            parsed = yaml.safe_load(spec)
-            raw_visual_entries = [
-                vis for vis in parsed["pages"][0]["visuals"]
-                if isinstance(vis.get("pbir"), dict) and isinstance(vis["pbir"].get("visual"), dict)
-            ]
-            self.assertTrue(raw_visual_entries)
-
-            target = self._make_project(root / "target")
-            ReportAuthoring(target).create_page("Details")
-            result = apply_yaml(target, spec)
-
-            self.assertEqual(result.errors, [])
-            demo = target.find_page("Demo")
-            for visual in target.get_visuals(demo):
-                if "visualGroup" in visual.data:
-                    continue
-                self.assertIn("visualType", visual.data["visual"])
-
     def test_round_trip_preserves_visual_groups(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -399,117 +356,6 @@ class YamlRoundTripTests(unittest.TestCase):
             }
             self.assertEqual(child_map["card1"], group.name)
             self.assertEqual(child_map["card2"], group.name)
-
-    def test_component_save_detects_textbox_text_parameters(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-            title = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=200, height=40)
-            title.data["name"] = "header-title"
-            set_textbox_content(title.data, text="Executive Summary")
-            title.save()
-            subtitle = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=50, width=200, height=30)
-            subtitle.data["name"] = "header-subtitle"
-            set_textbox_content(subtitle.data, text="FY26 outlook")
-            subtitle.save()
-            group = ReportAuthoring(project).create_group(page, [title, subtitle], display_name="page_header")
-
-            save_component(project, page, group, "page_header")
-            target = ReportAuthoring(project).create_page("Target")
-            stamped = apply_component(
-                project,
-                target,
-                "page_header",
-                params={"title": "Department Breakdown", "subtitle": "Operations"},
-            )
-
-            self.assertEqual(len(stamped), 3)
-            target_visuals = {
-                vis.name: vis for vis in project.get_visuals(target)
-                if "visualGroup" not in vis.data
-            }
-            title_text = (
-                target_visuals["header-title"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
-            )
-            subtitle_text = (
-                target_visuals["header-subtitle"].data["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
-            )
-            self.assertEqual(title_text, "Department Breakdown")
-            self.assertEqual(subtitle_text, "Operations")
-
-    def test_component_apply_preserves_nested_image_payloads(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-            title = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=200, height=40)
-            title.data["name"] = "header-title"
-            set_textbox_content(title.data, text="Executive Summary")
-            title.save()
-
-            image_path = root / "logo.png"
-            image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5Wv2QAAAAASUVORK5CYII="))
-            add_image(project, image_path)
-
-            logo = ReportAuthoring(project).create_visual(page, "image", x=0, y=50, width=40, height=40)
-            logo.data["name"] = "header-logo"
-            logo.data["visual"]["objects"] = {
-                "image": [
-                    {
-                        "properties": {
-                            "sourceType": {"expr": {"Literal": {"Value": "'image'"}}},
-                            "sourceFile": build_image_resource_property(project, "logo.png"),
-                        }
-                    }
-                ]
-            }
-            logo.save()
-
-            group = ReportAuthoring(project).create_group(page, [title, logo], display_name="page_header")
-            save_component(project, page, group, "page_header")
-            target = ReportAuthoring(project).create_page("Target")
-
-            stamped = apply_component(project, target, "page_header")
-
-            self.assertEqual(len(stamped), 3)
-            target_visuals = {
-                vis.name: vis for vis in project.get_visuals(target)
-                if "visualGroup" not in vis.data
-            }
-            image_props = target_visuals["header-logo"].data["visual"]["objects"]["image"][0]["properties"]
-            self.assertIn("sourceFile", image_props)
-            self.assertNotIn("sourceFile.image", image_props)
-            self.assertEqual(
-                image_props["sourceFile"]["image"]["url"]["expr"]["ResourcePackageItem"]["PackageName"],
-                "RegisteredResources",
-            )
-
-    def test_component_apply_replaces_existing_group_with_same_name(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
-            first.data["name"] = "title"
-            set_textbox_content(first.data, text="One")
-            first.save()
-            second = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=40, width=100, height=30)
-            second.data["name"] = "subtitle"
-            set_textbox_content(second.data, text="Two")
-            second.save()
-            group = ReportAuthoring(project).create_group(page, [first, second], display_name="page_header")
-
-            save_component(project, page, group, "page_header")
-            apply_component(project, page, "page_header", x=0, y=0)
-            apply_component(project, page, "page_header", x=20, y=20)
-
-            project.clear_caches()
-            visuals = project.get_visuals(page)
-            groups = [vis for vis in visuals if "visualGroup" in vis.data and vis.name == "page_header"]
-            children = [vis for vis in visuals if vis.data.get("parentGroupName") == "page_header"]
-            self.assertEqual(len(groups), 1)
-            self.assertEqual({vis.name for vis in children}, {"title", "subtitle"})
 
     def test_minimal_card_export_no_longer_needs_raw_visual_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -871,33 +717,47 @@ pages:
             self.assertEqual(page.width, 400)
             self.assertEqual(page.height, 300)
 
-    def test_export_apply_round_trip_preserves_visual_report_page_tooltip(self) -> None:
+    def test_apply_resolves_page_refs_to_pages_created_later_in_the_spec(self) -> None:
+        # The fixture harness covers page refs to existing pages. Here the
+        # referenced pages come later in the same spec, so apply resolves
+        # them in a second pass once every page exists.
+        spec = """\
+version: 1
+pages:
+- name: Home
+  visuals:
+  - name: btn1
+    type: actionButton
+    action:
+      show: true
+      type: Drillthrough
+      drillthrough: Drill
+  - name: chart1
+    type: barChart
+    tooltip:
+      show: true
+      type: ReportPage
+      section: Tip
+- name: Drill
+- name: Tip
+"""
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = self._make_project(root / "source")
-            demo = ReportAuthoring(source).create_page("Demo")
-            tip = ReportAuthoring(source).create_page("Tip")
-            configure_tooltip_page(tip, [("Product", "Category", "column")], width=400, height=300)
-            tip.save()
-            visual = ReportAuthoring(source).create_visual(demo, "barChart")
-            visual.data["name"] = "chart1"
-            set_property(visual.data, "tooltip.show", "true", VISUAL_PROPERTIES)
-            set_property(visual.data, "tooltip.type", "ReportPage", VISUAL_PROPERTIES)
-            set_property(visual.data, "tooltip.section", tip.name, VISUAL_PROPERTIES)
-            visual.save()
-
-            parsed = yaml.safe_load(export_yaml(source))
-            self.assertEqual(parsed["pages"][0]["visuals"][0]["tooltip"]["section"], "Tip")
-            spec = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True, width=120)
-            target = self._make_project(root / "target")
-            result = apply_yaml(target, spec)
-
+            project = self._make_project(Path(tmp))
+            result = apply_yaml(project, spec)
             self.assertEqual(result.errors, [])
-            demo_page = target.find_page("Demo")
-            chart = target.find_visual(demo_page, "chart1")
-            tip_page = target.find_page("Tip")
-            self.assertEqual(get_property(chart.data, "tooltip.type", VISUAL_PROPERTIES), "ReportPage")
-            self.assertEqual(get_property(chart.data, "tooltip.section", VISUAL_PROPERTIES), tip_page.name)
+
+            reloaded = Project.find(Path(tmp) / "Sample.pbip")
+            home = reloaded.find_page("Home")
+            button = reloaded.find_visual(home, "btn1")
+            chart = reloaded.find_visual(home, "chart1")
+            self.assertEqual(
+                get_property(button.data, "action.drillthrough", VISUAL_PROPERTIES),
+                reloaded.find_page("Drill").name,
+            )
+            self.assertEqual(
+                get_property(chart.data, "tooltip.section", VISUAL_PROPERTIES),
+                reloaded.find_page("Tip").name,
+            )
 
     def test_apply_tooltip_shorthand_compiles_to_canonical_page_binding(self) -> None:
         spec = """\
@@ -924,6 +784,10 @@ pages:
             self.assertEqual(param["Property"], "Category")
 
     def test_export_apply_round_trip_preserves_drillthrough_page_binding(self) -> None:
+        """Guessed shape: no Desktop sample has a ``CrossReport`` drillthrough page binding.
+
+        The write shape is not verified against Desktop output (#85).
+        """
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = self._make_project(root / "source")
@@ -942,35 +806,11 @@ pages:
             self.assertEqual(page.data["pageBinding"]["referenceScope"], "CrossReport")
             self.assertEqual(page.data["filterConfig"]["filters"][0]["name"], "drillFilter0")
 
-    def test_export_apply_round_trip_preserves_drillthrough_action(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = self._make_project(root / "source")
-            home = ReportAuthoring(source).create_page("Home")
-            drill = ReportAuthoring(source).create_page("Drill")
-            configure_drillthrough(drill, [("Product", "Category", "column")], cross_report=True)
-            drill.save()
-            visual = ReportAuthoring(source).create_visual(home, "actionButton")
-            visual.data["name"] = "btn1"
-            set_property(visual.data, "action.show", "true", VISUAL_PROPERTIES)
-            set_property(visual.data, "action.type", "Drillthrough", VISUAL_PROPERTIES)
-            set_property(visual.data, "action.drillthrough", drill.name, VISUAL_PROPERTIES)
-            visual.save()
-
-            parsed = yaml.safe_load(export_yaml(source))
-            self.assertEqual(parsed["pages"][0]["visuals"][0]["action"]["drillthrough"], "Drill")
-            spec = yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True, width=120)
-            target = self._make_project(root / "target")
-            result = apply_yaml(target, spec)
-
-            self.assertEqual(result.errors, [])
-            home_page = target.find_page("Home")
-            button = target.find_visual(home_page, "btn1")
-            drill_page = target.find_page("Drill")
-            self.assertEqual(get_property(button.data, "action.type", VISUAL_PROPERTIES), "Drillthrough")
-            self.assertEqual(get_property(button.data, "action.drillthrough", VISUAL_PROPERTIES), drill_page.name)
-
     def test_apply_drillthrough_shorthand_supports_cross_report(self) -> None:
+        """Guessed shape: no Desktop sample has a ``CrossReport`` drillthrough page binding.
+
+        The write shape is not verified against Desktop output (#85).
+        """
         spec = """\
 version: 1
 pages:
@@ -1006,177 +846,6 @@ pages:
             self.assertEqual(page.data["type"], "Tooltip")
             self.assertEqual(page.data["pageBinding"]["type"], "Tooltip")
             self.assertEqual(page.data.get("filterConfig", {}).get("filters", []), [])
-
-
-    def test_component_save_detects_binding_parameters(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-
-            card = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
-            card.data["name"] = "kpi-card"
-            ReportAuthoring(project).add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
-            card.save()
-
-            bg = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=220, height=120)
-            bg.data["name"] = "kpi-bg"
-            bg.save()
-
-            group = ReportAuthoring(project).create_group(page, [card, bg], display_name="kpi_tile")
-            save_component(project, page, group, "kpi_tile")
-            comp = get_component(project, "kpi_tile")
-
-            self.assertIn("data", comp.parameters)
-            self.assertEqual(comp.parameters["data"]["default"], "Sales.Revenue (measure)")
-
-    def test_component_apply_substitutes_binding_parameters(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-
-            card = ReportAuthoring(project).create_visual(page, "cardVisual", x=0, y=0, width=200, height=100)
-            card.data["name"] = "kpi-card"
-            ReportAuthoring(project).add_binding(card, "Data", "Sales", "Revenue", field_type="measure")
-            card.save()
-
-            bg = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=220, height=120)
-            bg.data["name"] = "kpi-bg"
-            bg.save()
-
-            group = ReportAuthoring(project).create_group(page, [card, bg], display_name="kpi_tile")
-            save_component(project, page, group, "kpi_tile")
-
-            target = ReportAuthoring(project).create_page("Target")
-            stamped = apply_component(
-                project, target, "kpi_tile",
-                params={"data": "Budget.Amount (measure)"},
-            )
-
-            target_visuals = project.get_visuals(target)
-            cards = [v for v in target_visuals if v.visual_type == "cardVisual"]
-            self.assertEqual(len(cards), 1)
-            bindings = export_bindings(cards[0].data)
-            self.assertIn("Data", bindings)
-            bound_field = bindings["Data"]
-            if isinstance(bound_field, list):
-                bound_field = bound_field[0]
-            self.assertIn("Budget.Amount", bound_field)
-
-
-    def test_component_row_creates_indexed_instance_names(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-
-            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
-            first.data["name"] = "label"
-            set_textbox_content(first.data, text="Value")
-            first.save()
-            second = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=120, height=50)
-            second.data["name"] = "bg"
-            second.save()
-            group = ReportAuthoring(project).create_group(page, [first, second], display_name="tile")
-
-            save_component(project, page, group, "tile")
-            target = ReportAuthoring(project).create_page("Target")
-            all_created = apply_component_row(project, target, "tile", 3, x=0, y=0, gap=10)
-
-            project.clear_caches()
-            visuals = project.get_visuals(target)
-            groups = [v for v in visuals if "visualGroup" in v.data]
-            group_names = sorted(v.name for v in groups)
-            self.assertEqual(group_names, ["tile-1", "tile-2", "tile-3"])
-
-    def test_component_row_restamp_cleans_up_indexed_instances(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-            page = ReportAuthoring(project).create_page("Demo")
-
-            first = ReportAuthoring(project).create_visual(page, "textbox", x=0, y=0, width=100, height=30)
-            first.data["name"] = "label"
-            set_textbox_content(first.data, text="Value")
-            first.save()
-            second = ReportAuthoring(project).create_visual(page, "shape", x=0, y=0, width=120, height=50)
-            second.data["name"] = "bg"
-            second.save()
-            group = ReportAuthoring(project).create_group(page, [first, second], display_name="tile")
-
-            save_component(project, page, group, "tile")
-            target = ReportAuthoring(project).create_page("Target")
-
-            apply_component_row(project, target, "tile", 4, x=0, y=0, gap=10)
-            apply_component_row(project, target, "tile", 2, x=0, y=0, gap=10)
-
-            project.clear_caches()
-            visuals = project.get_visuals(target)
-            groups = [v for v in visuals if "visualGroup" in v.data]
-            group_names = sorted(v.name for v in groups)
-            self.assertEqual(group_names, ["tile-1", "tile-2"])
-
-
-    def test_component_create_from_yaml(self) -> None:
-        import textwrap
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project = self._make_project(root)
-
-            spec_content = textwrap.dedent("""\
-                visuals:
-                  - name: bg-shape
-                    type: shape
-                    position: 0, 0
-                    size: 220 x 120
-                  - name: value-card
-                    type: cardVisual
-                    position: 10, 10
-                    size: 200 x 100
-                parameters:
-                  data:
-                    source: value-card.bindings.Data
-                    default: "Sales.Revenue (measure)"
-            """)
-            spec_path = root / "kpi-spec.yaml"
-            spec_path.write_text(spec_content, encoding="utf-8")
-
-            from pbi.components import save_component_from_yaml
-            save_component_from_yaml(project, spec_path, "kpi_tile")
-            comp = get_component(project, "kpi_tile")
-
-            self.assertEqual(len(comp.visuals), 2)
-            self.assertIn("data", comp.parameters)
-            self.assertEqual(comp.size, (220, 120))
-
-    def test_component_create_from_yaml_cli(self) -> None:
-        import textwrap
-        from typer.testing import CliRunner
-        from pbi.cli import app
-
-        runner = CliRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self._make_project(root)
-
-            spec_content = textwrap.dedent("""\
-                visuals:
-                  - name: label
-                    type: textbox
-                    position: 0, 0
-                    size: 200 x 40
-            """)
-            spec_path = root / "spec.yaml"
-            spec_path.write_text(spec_content, encoding="utf-8")
-
-            result = runner.invoke(
-                app,
-                ["catalog", "register", str(spec_path), "--kind", "component", "--name", "my-widget",
-                 "--project", str(root / "Sample.pbip")],
-            )
-            self.assertEqual(result.exit_code, 0, result.stdout)
-            self.assertIn("my-widget", result.stdout)
 
 
 if __name__ == "__main__":

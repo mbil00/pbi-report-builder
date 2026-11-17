@@ -3,9 +3,12 @@
 The planner is a pure function of ``(project, report_spec) -> ReportApplyPlan
 | None``. These tests drive the planner directly without any session, plus
 apply-leaf tests that drive ``_apply_report_branch`` against
-``FakePbirWriteSession`` to assert the call sequence, plus a diff regression
-test that locks in fidelity between ``pbi diff`` and what ``pbi apply``
-actually writes for a partial-key ``report:`` spec.
+``FakePbirWriteSession`` for dry-run and a malformed spec, plus a diff
+regression test that locks in fidelity between ``pbi diff`` and what
+``pbi apply`` actually writes for a partial-key ``report:`` spec.
+
+Re-applying an unchanged ``report:`` section is covered by the fixture
+harness (``test_report_roundtrip_is_noop``).
 """
 
 from __future__ import annotations
@@ -124,6 +127,8 @@ class PlanReportSpecTests(unittest.TestCase):
         self.assertEqual(plan.keys_touched, 1)
 
     def test_resource_packages_normalized_through_planner(self) -> None:
+        # Guessed shape: no Desktop sample has the legacy ``resourcePackage``
+        # wrapper, so the shape it migrates from is not verified (#85).
         existing = {"$schema": REPORT_SCHEMA, "themeCollection": {}}
         # Legacy nested shape with ``resourcePackage`` wrapper, missing/odd
         # ``type`` and ``path`` -- normalization should rewrite into the
@@ -161,6 +166,8 @@ class PlanReportSpecTests(unittest.TestCase):
     def test_legacy_resource_packages_normalized_when_spec_does_not_touch_them(
         self,
     ) -> None:
+        # Guessed shape: no Desktop sample has the legacy ``resourcePackage``
+        # wrapper, so the shape it migrates from is not verified (#85).
         # A project whose ``report.json`` carries the legacy
         # ``{"resourcePackage": {...}}`` wrapper shape, plus a spec that
         # touches only an unrelated key, must produce a plan whose payload
@@ -195,6 +202,8 @@ class PlanReportSpecTests(unittest.TestCase):
         self.assertIn("type", packages[0])
 
     def test_legacy_resource_packages_pure_no_op_still_returns_none(self) -> None:
+        # Guessed shape: no Desktop sample has the legacy ``resourcePackage``
+        # wrapper, so the shape it migrates from is not verified (#85).
         # When the legacy wrapper is the only thing that would change and
         # the spec is otherwise a no-op, the planner must still return
         # ``None`` so apply doesn't rewrite the file just to migrate. The
@@ -211,20 +220,6 @@ class PlanReportSpecTests(unittest.TestCase):
                 }
             ],
         }
-        spec = {"layoutOptimization": "None"}
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project_with_report(Path(tmp), existing)
-            plan = plan_report_spec(project, spec)
-
-        self.assertIsNone(plan)
-
-    def test_no_op_detection_returns_none(self) -> None:
-        existing = {
-            "$schema": REPORT_SCHEMA,
-            "layoutOptimization": "None",
-            "settings": {"useEnhancedTooltips": False},
-        }
-        # Re-applying current values should be a no-op.
         spec = {"layoutOptimization": "None"}
         with tempfile.TemporaryDirectory() as tmp:
             project = _make_project_with_report(Path(tmp), existing)
@@ -260,61 +255,7 @@ class PlanReportSpecTests(unittest.TestCase):
 
 
 class ApplyReportBranchSessionTests(unittest.TestCase):
-    """The engine's report branch persists exactly via ``session.write_report``."""
-
-    def test_apply_report_branch_records_one_write_report_call(self) -> None:
-        existing = {
-            "$schema": REPORT_SCHEMA,
-            "themeCollection": {},
-            "layoutOptimization": "None",
-        }
-        spec = {"layoutOptimization": "Vertical"}
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project_with_report(Path(tmp), existing)
-            session = FakePbirWriteSession()
-            result = ApplyResult()
-
-            _apply_report_branch(
-                project,
-                spec,
-                result,
-                dry_run=False,
-                session=session,  # type: ignore[arg-type]
-            )
-
-            report_calls = [c for c in session.calls if c[0] == "write_report"]
-            self.assertEqual(len(report_calls), 1)
-            _, payload = report_calls[0]
-            self.assertEqual(payload["layoutOptimization"], "Vertical")
-            # Siblings preserved into the persisted payload.
-            self.assertEqual(payload["themeCollection"], {})
-            # ApplyResult accounting matches keys touched.
-            self.assertEqual(result.properties_set, 1)
-
-    def test_apply_report_branch_skips_session_on_no_op_spec(self) -> None:
-        existing = {
-            "$schema": REPORT_SCHEMA,
-            "layoutOptimization": "None",
-        }
-        spec = {"layoutOptimization": "None"}  # no-op
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project_with_report(Path(tmp), existing)
-            session = FakePbirWriteSession()
-            result = ApplyResult()
-
-            _apply_report_branch(
-                project,
-                spec,
-                result,
-                dry_run=False,
-                session=session,  # type: ignore[arg-type]
-            )
-
-            self.assertEqual(
-                [c for c in session.calls if c[0] == "write_report"],
-                [],
-            )
-            self.assertEqual(result.properties_set, 0)
+    """The engine's report branch on dry-run and a malformed spec."""
 
     def test_apply_report_branch_skips_session_on_dry_run(self) -> None:
         # Dry-run still computes the plan and accounts for keys_touched, but

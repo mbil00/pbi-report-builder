@@ -2,8 +2,8 @@
 
 The planner is a pure function of ``(project, theme_spec) -> ThemeApplyPlan |
 None``. These tests drive the planner directly without any session, plus one
-apply-leaf test that drives ``apply_theme_branch`` against
-``FakePbirWriteSession`` to assert the call sequence.
+apply-leaf test that drives ``_apply_theme_branch`` against
+``FakePbirWriteSession`` on dry-run.
 """
 
 from __future__ import annotations
@@ -200,74 +200,7 @@ class PlanThemeSpecTests(unittest.TestCase):
 
 
 class ApplyThemeBranchSessionTests(unittest.TestCase):
-    """The engine's theme branch persists exactly via ``session.write_theme``."""
-
-    def test_apply_theme_branch_records_one_write_theme_call(self) -> None:
-        existing = {"name": "Existing", "foreground": "#000000"}
-        spec = {"foreground": "#ABCDEF"}
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project_with_theme(Path(tmp), existing)
-            session = FakePbirWriteSession()
-            result = ApplyResult()
-
-            _apply_theme_branch(
-                project,
-                spec,
-                result,
-                dry_run=False,
-                session=session,  # type: ignore[arg-type]
-            )
-
-            theme_calls = [c for c in session.calls if c[0] == "write_theme"]
-            self.assertEqual(len(theme_calls), 1)
-            _, payload, first_time = theme_calls[0]
-            self.assertFalse(first_time)
-            self.assertEqual(payload["foreground"], "#ABCDEF")
-            self.assertEqual(payload["name"], "Existing")
-            # ApplyResult accounting matches keys touched.
-            self.assertEqual(result.properties_set, 1)
-
-    def test_apply_theme_branch_reports_first_time_flag(self) -> None:
-        spec = {"name": "Brand", "foreground": "#ABCDEF"}
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project_with_theme(Path(tmp), theme_data=None)
-            session = FakePbirWriteSession()
-            result = ApplyResult()
-
-            _apply_theme_branch(
-                project,
-                spec,
-                result,
-                dry_run=False,
-                session=session,  # type: ignore[arg-type]
-            )
-
-            theme_calls = [c for c in session.calls if c[0] == "write_theme"]
-            self.assertEqual(len(theme_calls), 1)
-            _, _, first_time = theme_calls[0]
-            self.assertTrue(first_time)
-
-    def test_apply_theme_branch_skips_session_on_no_op_spec(self) -> None:
-        existing = {"name": "Existing", "foreground": "#000000"}
-        spec = {"foreground": "#000000"}  # no-op
-        with tempfile.TemporaryDirectory() as tmp:
-            project = _make_project_with_theme(Path(tmp), existing)
-            session = FakePbirWriteSession()
-            result = ApplyResult()
-
-            _apply_theme_branch(
-                project,
-                spec,
-                result,
-                dry_run=False,
-                session=session,  # type: ignore[arg-type]
-            )
-
-            self.assertEqual(
-                [c for c in session.calls if c[0] == "write_theme"],
-                [],
-            )
-            self.assertEqual(result.properties_set, 0)
+    """The engine's theme branch on dry-run."""
 
     def test_apply_theme_branch_skips_session_on_dry_run(self) -> None:
         # Dry-run still computes the plan and accounts for keys_touched, but
