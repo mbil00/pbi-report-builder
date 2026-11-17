@@ -104,8 +104,60 @@ def test_diff_lists_files_a_new_visual_would_add(tmp_path: Path) -> None:
     assert diff.exit_code == 0, diff.output
     assert "+ New page: Demo" in diff.output
     assert "+ Sample.Report/definition/pages/pages.json" in diff.output
+    # Apply picks new folder IDs at random, so the trial's IDs are hidden.
+    assert "+ Sample.Report/definition/pages/<new>/page.json" in diff.output
+    assert "+ Sample.Report/definition/pages/<new>/visuals/<new>/visual.json" in diff.output
     assert diff.output.count("/visual.json") == 1
     assert not (project.definition_folder / "pages").exists()
+
+
+def test_diff_keeps_existing_folder_ids_in_added_paths(
+    fixture_copy: Callable[[str], Path], tmp_path: Path
+) -> None:
+    root = fixture_copy("report-02-model-heavy")
+    spec = _exported(root)
+    spec["pages"][0]["visuals"].append({"name": "box", "type": "shape"})
+    page_folder = Project.find(pbip_path(root)).find_page(spec["pages"][0]["name"]).folder.name
+
+    diff = cli("diff", _write(tmp_path / "add.yaml", spec), project=root)
+
+    assert diff.exit_code == 0, diff.output
+    assert f"/pages/{page_folder}/visuals/<new>/visual.json" in diff.output
+
+
+def _symlink_dir(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlinks are not available")
+
+
+def test_diff_follows_a_symlinked_report_artifact(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    (tmp_path / "Sample.Report").rename(tmp_path / "report-files")
+    _symlink_dir(tmp_path / "Sample.Report", Path("report-files"))
+    spec_file = _write(tmp_path / "empty.yaml", {"pages": []})
+
+    diff = cli("diff", spec_file, project=tmp_path)
+
+    assert diff.exit_code == 0, diff.output
+    assert "No differences found" in diff.output
+
+
+def test_diff_follows_symlinked_resource_folders(tmp_path: Path) -> None:
+    project = make_project(tmp_path)
+    shared = tmp_path / "shared-assets"
+    shared.mkdir()
+    (shared / "logo.png").write_bytes(b"png")
+    resources = project.report_folder / "StaticResources"
+    resources.mkdir()
+    _symlink_dir(resources / "RegisteredResources", shared)
+    spec_file = _write(tmp_path / "empty.yaml", {"pages": []})
+
+    diff = cli("diff", spec_file, project=project)
+
+    assert diff.exit_code == 0, diff.output
+    assert "No differences found" in diff.output
 
 
 def test_diff_resolves_project_styles(tmp_path: Path) -> None:

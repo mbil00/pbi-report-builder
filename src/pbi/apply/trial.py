@@ -11,6 +11,7 @@ from __future__ import annotations
 import filecmp
 import json
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -27,6 +28,9 @@ _SIDECAR_PREFIX = ".pbi-"
 # Desktop's per-user cache folder (it can hold a large ``cache.abf``); apply
 # never reads it.
 _IGNORED = shutil.ignore_patterns(".pbi")
+# Apply names a new page, visual, group or bookmark with a random 20-hex ID,
+# so the trial's ID won't be the one a real apply picks.
+_GENERATED_ID = re.compile(r"^[0-9a-f]{20}(?=$|\.)")
 
 
 @dataclass(frozen=True)
@@ -67,7 +71,16 @@ def trial_apply(
             else:
                 shutil.copy2(source, target)
 
-        trial = Project.find(copy_root / project.pbip_file.name)
+        # Point the copy at the folders already resolved for ``project``:
+        # re-discovering it from the copied .pbip would miss a report
+        # artifact reached through a symlink.
+        report_folder = copy_root / project.report_folder.relative_to(project.root)
+        trial = Project(
+            root=copy_root,
+            pbip_file=copy_root / project.pbip_file.name,
+            report_folder=report_folder,
+            definition_folder=report_folder / project.definition_folder.name,
+        )
         result = apply_yaml(trial, yaml_content, page_filter=page_filter)
         changes: list[FileChange] = []
         for source in _copied_paths(project):
@@ -97,7 +110,7 @@ def _compare(before: Path, after: Path, rel: Path) -> list[FileChange]:
     before_files = _files_under(before)
     after_files = _files_under(after) if after.is_dir() else set()
     changes = [
-        FileChange((rel / name).as_posix(), "added")
+        FileChange(_added_path(before, rel, name), "added")
         for name in sorted(after_files - before_files)
     ]
     changes.extend(
@@ -112,11 +125,23 @@ def _compare(before: Path, after: Path, rel: Path) -> list[FileChange]:
 
 def _files_under(root: Path) -> set[Path]:
     files: set[Path] = set()
-    for dirpath, dirnames, filenames in os.walk(root):
+    # Follow directory symlinks, as the trial copy does (``copytree`` copies
+    # what a link points to).
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
         dirnames[:] = [name for name in dirnames if name != ".pbi"]
         base = Path(dirpath).relative_to(root)
         files.update(base / name for name in filenames)
     return files
+
+
+def _added_path(before: Path, rel: Path, name: Path) -> str:
+    """Show an added file's path with each new generated folder or file ID as ``<new>``."""
+    parts: list[str] = []
+    existing = True
+    for part in name.parts:
+        existing = existing and (before.joinpath(*name.parts[: len(parts) + 1])).exists()
+        parts.append(part if existing else _GENERATED_ID.sub("<new>", part))
+    return (rel / Path(*parts)).as_posix()
 
 
 def _same_file(before: Path, after: Path) -> bool:
