@@ -30,7 +30,7 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 
 | # | Unit | Issue | State |
 |---|---|---|---|
-| 1 | T1 conftest and shared fixture-copy support | #82 | [ ] |
+| 1 | T1 conftest and shared fixture-copy support | #82 | [x] #98 |
 | 2 | T2 delete dead, unfailable and fully duplicated tests | #83 | [ ] |
 | 3 | T3 fixture harness with strict xfails | #84 | [ ] |
 | 4 | B1 `changedProperty` pulled into calculated-column DAX | #75 | [ ] |
