@@ -135,6 +135,10 @@ def existing_bound_fields(project, visual) -> list[BoundField]:
     """Resolve existing visual bindings into BoundField records."""
     existing: list[BoundField] = []
     for role, entity, prop, field_type in get_bindings(visual):
+        # An Aggregation projection (e.g. Sum of a column) wraps a Column or
+        # Measure ref; resolve it through the model like an unmarked field.
+        if field_type == "aggregation":
+            field_type = "auto"
         resolved_entity, resolved_prop, resolved_field_type, data_type = resolve_field_info(
             project,
             f"{entity}.{prop}",
