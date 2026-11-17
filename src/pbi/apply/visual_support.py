@@ -15,7 +15,7 @@ from pbi.properties import (
 )
 from pbi.roundtrip_primitives import iter_nested_property_assignments
 from pbi.styles import StylePreset, get_style
-from pbi.textbox import set_textbox_content
+from pbi.textbox import set_textbox_content, textbox_content_matches
 
 
 def record_schema_warnings(
@@ -108,6 +108,8 @@ def apply_textbox_content(
     style = vis_spec.get("textStyle", {})
     if not isinstance(style, dict):
         style = {}
+    if textbox_content_matches(visual.data, text=text, style_updates=style):
+        return
     set_textbox_content(visual.data, text=text, style_updates=style)
     result.properties_set += 1
 

@@ -12,6 +12,7 @@ import json
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from pbi.project import Project, Page, Visual, _read_json, _write_json
 from pbi.schema_refs import BOOKMARK_SCHEMA, BOOKMARKS_METADATA_SCHEMA
@@ -614,50 +615,115 @@ def reconcile_bookmark_groups(
         if isinstance(bookmark_name, str) and bookmark_name:
             id_by_display[display_name] = bookmark_name
 
-    targeted_ids = set(id_by_display.values())
-    preserved_items: list[dict] = []
-    for item in meta.get("items", []):
+    placements = [
+        (id_by_display[display_name], group_name)
+        for display_name, group_name in bookmarks
+        if display_name in id_by_display
+    ]
+    meta["items"] = reconciled_bookmark_items(meta.get("items", []), placements)
+    _save_meta(project, meta)
+
+
+def reconciled_bookmark_items(
+    items: list[Any],
+    placements: list[tuple[str, str | None]],
+) -> list[dict]:
+    """Return bookmarks.json ``items`` with each ``(bookmark id, group)`` placement applied.
+
+    Placed bookmarks keep the slot they held, so placing every bookmark where
+    it already is gives back the same items in the same order:
+
+    - a standalone bookmark that stays standalone keeps its item;
+    - a group keeps its position and id, and its placed children follow its
+      unplaced ones in placement order;
+    - a bookmark that moves into a group that doesn't exist yet puts the new
+      group where the bookmark was, and one that leaves a group goes right
+      after it;
+    - bookmarks not in ``items`` yet go at the end, in placement order.
+
+    Items for bookmarks not in ``placements`` are kept as they are. A group
+    left with no children is dropped, and a group made only of one placed
+    bookmark is written as that standalone bookmark.
+    """
+    placed_ids = {bookmark_id for bookmark_id, _group in placements}
+    result: list[dict] = []
+    slot_of: dict[str, dict] = {}
+    groups: dict[str, dict] = {}
+    kept_children: dict[int, int] = {}
+    open_slots: set[int] = set()
+
+    for item in items:
         if not isinstance(item, dict):
             continue
-        if "children" in item:
-            children = [child for child in item.get("children", []) if isinstance(child, str) and child not in targeted_ids]
-            if not children:
-                continue
-            updated = dict(item)
-            updated["children"] = children
-            preserved_items.append(updated)
+        children = item.get("children")
+        if isinstance(children, list):
+            kept = [child for child in children if not (isinstance(child, str) and child in placed_ids)]
+            group = {**item, "children": kept}
+            result.append(group)
+            kept_children[id(group)] = len(kept)
+            for child in children:
+                if isinstance(child, str) and child in placed_ids:
+                    slot_of[child] = group
+            display = item.get("displayName") or item.get("name")
+            if isinstance(display, str):
+                groups.setdefault(display.lower(), group)
             continue
         name = item.get("name")
-        if isinstance(name, str) and name not in targeted_ids:
-            preserved_items.append(item)
+        result.append(item)
+        if isinstance(name, str) and name in placed_ids:
+            slot_of[name] = item
+            open_slots.add(id(item))
 
-    grouped_children: dict[str, list[str]] = {}
-    grouped_order: list[str] = []
-    for display_name, group_name in bookmarks:
-        bookmark_id = id_by_display.get(display_name)
-        if bookmark_id is None:
-            continue
+    last_after: dict[int, dict] = {}
+
+    def place_after(slot: dict | None, new_item: dict) -> None:
+        """Insert after ``slot`` and after anything already placed there; append without one."""
+        anchor = last_after.get(id(slot), slot) if slot is not None else None
+        index = next((i for i, candidate in enumerate(result) if candidate is anchor), None)
+        if index is None:
+            result.append(new_item)
+            return
+        result.insert(index + 1, new_item)
+        last_after[id(slot)] = new_item
+
+    def take_open_slot(slot: dict | None, new_item: dict | None) -> bool:
+        """Put ``new_item`` in place of the bookmark's own standalone slot, if it is still open."""
+        if slot is None or id(slot) not in open_slots:
+            return False
+        open_slots.discard(id(slot))
+        if new_item is not None and new_item is not slot:
+            result[next(i for i, candidate in enumerate(result) if candidate is slot)] = new_item
+        return True
+
+    for bookmark_id, group_name in placements:
+        slot = slot_of.get(bookmark_id)
         if not group_name:
-            preserved_items.append({"name": bookmark_id})
+            if not take_open_slot(slot, slot):
+                place_after(slot, {"name": bookmark_id})
             continue
-        if group_name not in grouped_children:
-            grouped_children[group_name] = []
-            grouped_order.append(group_name)
-        grouped_children[group_name].append(bookmark_id)
 
-    for group_name in grouped_order:
-        children = grouped_children[group_name]
-        if len(children) == 1:
-            preserved_items.append({"name": children[0]})
+        group = groups.get(group_name.lower())
+        if group is None:
+            group = {"name": secrets.token_hex(10), "displayName": group_name, "children": []}
+            groups[group_name.lower()] = group
+            kept_children[id(group)] = 0
+            if not take_open_slot(slot, group):
+                place_after(slot, group)
+        group["children"].append(bookmark_id)
+
+    reconciled: list[dict] = []
+    for item in result:
+        if id(item) in open_slots:
             continue
-        preserved_items.append({
-            "name": _existing_group_id(meta, group_name) or secrets.token_hex(10),
-            "displayName": group_name,
-            "children": children,
-        })
-
-    meta["items"] = preserved_items
-    _save_meta(project, meta)
+        children = item.get("children")
+        if isinstance(children, list):
+            if not children:
+                continue
+            if len(children) == 1 and kept_children.get(id(item), 0) == 0:
+                reconciled.append({"name": children[0]})
+                continue
+        reconciled.append(item)
+    return reconciled
 
 
 def create_bookmark_group(
@@ -1045,20 +1111,6 @@ def _bookmark_group_lookup(meta: dict) -> dict[str, str]:
             if isinstance(child, str):
                 result[child] = display_name
     return result
-
-
-def _existing_group_id(meta: dict, display_name: str) -> str | None:
-    """Return an existing bookmark-group identifier by display name."""
-    lowered = display_name.lower()
-    for item in meta.get("items", []):
-        if not isinstance(item, dict) or not isinstance(item.get("children"), list):
-            continue
-        display = item.get("displayName") or item.get("name")
-        if isinstance(display, str) and display.lower() == lowered:
-            name = item.get("name")
-            if isinstance(name, str) and name:
-                return name
-    return None
 
 
 def _standalone_bookmark_names(meta: dict) -> set[str]:

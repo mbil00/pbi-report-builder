@@ -7,6 +7,7 @@ import re
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from pbi.lookup import find_page_by_identifier, find_visual_by_identifier
 
@@ -329,6 +330,14 @@ def _read_json(path: Path) -> dict:
 
 
 def _write_json(path: Path, data: dict, *, pretty: bool | None = None) -> None:
+    """Write ``data`` as JSON, leaving the file alone when its content is unchanged.
+
+    A file whose parsed content (values, types and key order) already equals
+    ``data`` keeps its bytes, so Desktop's float text, indentation and missing
+    trailing newline survive a write that changes nothing.
+    """
+    if _json_file_holds(path, data):
+        return
     with open(path, "w", encoding="utf-8", newline="\r\n") as f:
         if pretty is None:
             pretty = _JSON_PRETTY.get()
@@ -343,6 +352,22 @@ def _write_json(path: Path, data: dict, *, pretty: bool | None = None) -> None:
                 separators=(",", ":"),
             )
         f.write("\n")
+
+
+def _json_file_holds(path: Path, data: Any) -> bool:
+    """True when ``path`` already holds ``data``: same values, types and key order."""
+    try:
+        existing = json.loads(path.read_bytes().decode("utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    try:
+        return _ordered_json(existing) == _ordered_json(data)
+    except (TypeError, ValueError):
+        return False
+
+
+def _ordered_json(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False, check_circular=False, separators=(",", ":"))
 
 
 def _resolve_within_root(root: Path, raw_path: str, *, label: str) -> Path:

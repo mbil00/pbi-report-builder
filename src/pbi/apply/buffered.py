@@ -342,7 +342,7 @@ class BufferedPbirApplySession:
     def reconcile_bookmark_groups(
         self, groups: list[tuple[str, str | None]]
     ) -> None:
-        from pbi.bookmarks import _existing_group_id, _load_meta, _meta_path, _normalize_meta
+        from pbi.bookmarks import _load_meta, _meta_path, _normalize_meta, reconciled_bookmark_items
 
         meta_path = _meta_path(self.project)
         if meta_path in self.dirty_json:
@@ -356,55 +356,10 @@ class BufferedPbirApplySession:
                 raise FileNotFoundError(f'Bookmark "{display_name}" not found')
             id_by_display[display_name] = bookmark_name
 
-        targeted_ids = set(id_by_display.values())
-        preserved_items: list[dict[str, Any]] = []
-        for item in meta.get("items", []):
-            if not isinstance(item, dict):
-                continue
-            if "children" in item:
-                children = [
-                    child
-                    for child in item.get("children", [])
-                    if isinstance(child, str) and child not in targeted_ids
-                ]
-                if not children:
-                    continue
-                updated = dict(item)
-                updated["children"] = children
-                preserved_items.append(updated)
-                continue
-            name = item.get("name")
-            if isinstance(name, str) and name not in targeted_ids:
-                preserved_items.append(item)
-
-        grouped_children: dict[str, list[str]] = {}
-        grouped_order: list[str] = []
-        for display_name, group_name in groups:
-            bookmark_id = id_by_display.get(display_name)
-            if bookmark_id is None:
-                continue
-            if not group_name:
-                preserved_items.append({"name": bookmark_id})
-                continue
-            if group_name not in grouped_children:
-                grouped_children[group_name] = []
-                grouped_order.append(group_name)
-            grouped_children[group_name].append(bookmark_id)
-
-        for group_name in grouped_order:
-            children = grouped_children[group_name]
-            if len(children) == 1:
-                preserved_items.append({"name": children[0]})
-                continue
-            preserved_items.append(
-                {
-                    "name": _existing_group_id(meta, group_name) or secrets.token_hex(10),
-                    "displayName": group_name,
-                    "children": children,
-                }
-            )
-
-        meta["items"] = preserved_items
+        placements = [
+            (id_by_display[display_name], group_name) for display_name, group_name in groups
+        ]
+        meta["items"] = reconciled_bookmark_items(meta.get("items", []), placements)
         self.created_dirs.add(meta_path.parent)
         self.dirty_json[meta_path] = meta
 

@@ -73,6 +73,39 @@ def set_textbox_content(
     objects.pop("paragraph", None)
 
 
+def textbox_content_matches(
+    visual_data: dict,
+    *,
+    text: str,
+    style_updates: dict[str, Any] | None = None,
+) -> bool:
+    """True when the textbox already shows ``text`` with every style in ``style_updates``.
+
+    Compares what ``extract_textbox_spec`` reads back, so an unedited
+    export -> apply leaves the visual's paragraphs and runs as they are.
+    """
+    spec = extract_textbox_spec(visual_data) or {}
+    if spec.get("text", "") != str(text):
+        return False
+    current = spec.get("textStyle", {})
+    for key, value in (style_updates or {}).items():
+        if key == "fontSize":
+            if normalize_font_size(value) != current.get("fontSize"):
+                return False
+        elif key in {"bold", "italic"}:
+            if bool(value) != bool(current.get(key, False)):
+                return False
+        elif key == "fontColor":
+            if str(value).strip().lower() != str(current.get("fontColor", "")).lower():
+                return False
+        elif key == "fontFamily":
+            if str(value).strip() != current.get("fontFamily", ""):
+                return False
+        else:
+            return False
+    return True
+
+
 def textbox_text(visual_data: dict) -> str | None:
     """Return textbox body text if present."""
     spec = extract_textbox_spec(visual_data)

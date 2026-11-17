@@ -130,7 +130,9 @@ def _prune_unbound_query_metadata(visual: Visual) -> None:
         if projection.get("queryRef")
     }
 
-    objects = visual.data.setdefault("visual", {}).setdefault("objects", {})
+    objects = visual.data.get("visual", {}).get("objects")
+    if not isinstance(objects, dict):
+        return
     for object_name, entries in list(objects.items()):
         if not isinstance(entries, list):
             continue
