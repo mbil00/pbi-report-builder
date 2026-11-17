@@ -732,7 +732,7 @@ def validate(
     strict: Annotated[bool, typer.Option("--strict", help="Fail on warnings as well as errors.")] = False,
     errors_only: Annotated[bool, typer.Option("--errors-only", help="Only print errors; suppress warnings in output.")] = False,
     no_layout: Annotated[bool, typer.Option("--no-layout", help="Skip layout warnings such as overlaps and out-of-bounds visuals.")] = False,
-    no_model: Annotated[bool, typer.Option("--no-model", help="Skip semantic-model relationship checks.")] = False,
+    no_model: Annotated[bool, typer.Option("--no-model", help="Skip semantic-model checks (relationship paths, binding and sort refs).")] = False,
     max_warnings: Annotated[Optional[int], typer.Option("--max-warnings", help="Maximum number of warnings to print (exit behavior is unchanged).")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output validation issues as JSON.")] = False,
     ignore_schema_warnings: Annotated[

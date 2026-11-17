@@ -543,4 +543,4 @@ pbi render "Overview" -o page.html   # HTML mockup of page layout
 pbi capabilities                 # show what the CLI supports vs PBIR spec
 ```
 
-`pbi validate` checks JSON structure, page order, visual interactions, bookmarks, layout issues (overlaps, out-of-bounds), relationship gaps, and validates visual objects/properties against the PBI Desktop schema.
+`pbi validate` checks JSON structure, page order, visual interactions, bookmarks, layout issues (overlaps, out-of-bounds), relationship gaps, and validates visual objects/properties against the PBI Desktop schema. It reports an error for a data role the visual type doesn't have, and for a binding or sort that names a table, field, hierarchy or level missing from the semantic model (`--no-model` skips the model checks).
