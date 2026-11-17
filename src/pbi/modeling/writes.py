@@ -1469,7 +1469,7 @@ def _measure_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
             return idx
-        if _is_changed_property(stripped):
+        if _indent_level(lines[idx]) == 2 and _is_changed_property(stripped):
             return idx
         if ":" in stripped:
             key = stripped.partition(":")[0].strip()
@@ -1541,7 +1541,7 @@ def _column_property_start(lines: list[str], start: int, end: int) -> int:
             continue
         if stripped == "isHidden" or stripped.startswith(("annotation ", "variation ")):
             return idx
-        if _is_changed_property(stripped):
+        if _indent_level(lines[idx]) == 2 and _is_changed_property(stripped):
             return idx
         if ":" in stripped:
             key = stripped.partition(":")[0].strip()

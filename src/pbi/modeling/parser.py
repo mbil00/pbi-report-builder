@@ -36,7 +36,9 @@ def _is_changed_property(stripped: str) -> bool:
     """Return True for a ``changedProperty = X`` metadata line.
 
     Desktop writes these under a table or one of its members to record which
-    property the user changed. They are object metadata, never DAX.
+    property the user changed. They are object metadata, never DAX, but only
+    at the object's property indent: callers check the indent, because a DAX
+    body line one level deeper can read ``changedProperty = 1`` too.
     """
     keyword, sep, _ = stripped.partition("=")
     return bool(sep) and keyword.strip() == "changedProperty"
@@ -366,8 +368,10 @@ def _parse_table_tmdl(path: Path) -> SemanticTable | None:
                 current_props["isKey"] = "true"
             elif stripped.startswith(("annotation ", "variation ")):
                 pass  # skip nested blocks
-            elif _is_changed_property(stripped):
-                pass  # member metadata, not expression continuation
+            elif indent == 2 and _is_changed_property(stripped):
+                # Member metadata at property indent. A multi-line DAX body
+                # sits one level deeper, where the same text is a comparison.
+                pass
             elif ":" in stripped and not stripped.startswith("```"):
                 key = stripped.partition(":")[0].strip()
                 if key in _TMDL_PROPERTY_NAMES:
