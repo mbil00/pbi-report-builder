@@ -46,7 +46,7 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 | 14 | T4b … model | #85 | [x] #124 (ddfff49) |
 | 15 | T4c … visual/CLI | #85 | [x] #127 (370ff21) |
 | 16 | T4d … themes | #85 | [x] #128 (cf57e5e) |
-| 17 | T4e … misc | #85 | [ ] |
+| 17 | T4e … misc | #85 | [x] #132 |
 
 Each B unit runs the harness, removes the xfails its fix resolves, and leaves any xfails it
 doesn't resolve. If a fix turns up a further round-trip bug, file an issue and add it as an
