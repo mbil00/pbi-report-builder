@@ -13,11 +13,8 @@ from pbi.apply.buffered import BufferedPbirApplySession
 from pbi.project import Project, _write_json
 from pbi.validate import ValidationIssue
 from pbi.themes import get_theme_data
-from tests.apply_parity_support import (
-    assert_apply_results_equivalent,
-    assert_project_trees_equivalent,
-)
-from tests.cli_regressions_support import make_project
+from tests.apply_parity_support import assert_apply_results_equivalent
+from tests.support import assert_project_trees_equivalent, make_project
 
 
 def _capture_tree(root: Path) -> dict[str, bytes | None]:

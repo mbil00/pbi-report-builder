@@ -13,7 +13,7 @@ from pbi.cli import app
 from pbi.project import Project, _read_json, _write_json
 from pbi.properties import VISUAL_PROPERTIES, _property_alias_map
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class ProjectCachingRegressionTests(unittest.TestCase):

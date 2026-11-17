@@ -22,7 +22,7 @@ from pbi.styles import (
 )
 from pbi.templates import apply_template, save_template
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class TemplateRegressionTests(unittest.TestCase):

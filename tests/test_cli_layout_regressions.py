@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from pbi.apply import apply_yaml
 from pbi.cli import app
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class TestCalcCommands(unittest.TestCase):

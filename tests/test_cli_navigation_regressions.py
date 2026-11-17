@@ -22,7 +22,7 @@ from pbi.interactions import get_interactions, set_interaction
 from pbi.project import Project, _write_json
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class BookmarkInteractionRegressionTests(unittest.TestCase):

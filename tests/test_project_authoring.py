@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pbi.project import _read_json, _write_json
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 def test_page_authoring_helpers_preserve_order_and_active_page() -> None:

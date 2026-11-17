@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from pbi.apply import apply_yaml
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import make_project, write_model_table
 
 
 SALES_MODEL = """

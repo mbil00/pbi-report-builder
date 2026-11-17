@@ -20,12 +20,10 @@ from pbi.properties import PAGE_PROPERTIES, VISUAL_PROPERTIES, get_property
 from pbi.project import Project
 from pbi.themes import create_theme
 from pbi.report_authoring import ReportAuthoring
+from tests.support import KITCHEN_SINK_DIR, MODEL_HEAVY_DIR
 
 
-FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "real-report-fixtures"
-KITCHEN_SINK_DIR = FIXTURE_ROOT / "report-01-kitchen-sink"
 KITCHEN_SINK_PBIP = KITCHEN_SINK_DIR / "01-kitchen-sink.pbip"
-MODEL_HEAVY_DIR = FIXTURE_ROOT / "report-02-model-heavy"
 MODEL_HEAVY_PBIP = MODEL_HEAVY_DIR / "02-model-heavy.pbip"
 PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n"

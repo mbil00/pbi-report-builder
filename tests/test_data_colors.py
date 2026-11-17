@@ -22,7 +22,7 @@ from pbi.data_colors import apply_series_colors, export_series_colors
 from pbi.project import Project
 from pbi.roundtrip_primitives import export_object_properties, prune_visual_pbir
 from pbi.properties import VISUAL_PROPERTIES, get_property, set_property
-from tests.test_desktop_shapes_fixture import RENAMED_DIR, SHAPES_DIR, SHAPES_PBIP, _objects, _visual
+from tests.support import RENAMED_DIR, SHAPES_DIR, SHAPES_PBIP, visual_by_title, visual_objects, visual_title
 
 # (page, title, seriesColors spec in the order Desktop wrote the entries)
 DESKTOP_CASES = [
@@ -49,14 +49,6 @@ THEME_SCOPED_ENTRY = {
 DEFAULT_ENTRY = {"properties": {"defaultColor": {"solid": {"color": {"expr": {"Literal": {"Value": "'#222222'"}}}}}}}
 
 
-def _title_of(visual_data: dict) -> str | None:
-    for entry in visual_data.get("visual", {}).get("visualContainerObjects", {}).get("title", []):
-        raw = entry.get("properties", {}).get("text", {}).get("expr", {}).get("Literal", {}).get("Value")
-        if isinstance(raw, str):
-            return raw.strip("'")
-    return None
-
-
 @unittest.skipUnless(SHAPES_PBIP.exists(), "report-04 Desktop output not built yet (see BUILD-CHECKLIST.md)")
 class SeriesColorsDesktopTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -77,7 +69,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
     def _find(self, page: str, title: str):
         project = Project.find(self.pbip)
         page_obj = project.find_page(page)
-        matches = [v for v in project.get_visuals(page_obj) if _title_of(v.data) == title]
+        matches = [v for v in project.get_visuals(page_obj) if visual_title(v.data) == title]
         self.assertEqual(len(matches), 1, title)
         return project, matches[0]
 
@@ -109,7 +101,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
             with self.subTest(visual=title):
                 self.assertEqual(
                     visual.data["visual"]["objects"]["dataPoint"],
-                    _objects(_visual(page, title), "dataPoint"),
+                    visual_objects(visual_by_title(page, title), "dataPoint"),
                 )
 
     def test_apply_writes_desktop_shapes(self) -> None:
@@ -173,7 +165,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
                 copy_visual = create_visual_from_spec(project, project.find_page("QA Hidden"), spec)
                 self.assertEqual(
                     copy_visual.data["visual"]["objects"]["dataPoint"],
-                    _objects(_visual(page, title), "dataPoint"),
+                    visual_objects(visual_by_title(page, title), "dataPoint"),
                 )
 
     def test_diff_after_apply_shows_no_changes(self) -> None:
@@ -225,7 +217,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
 
         shutil.rmtree(self.root / "04-desktop-shapes.SemanticModel")
         page, title = "Chart Gallery", "Hours by Measure Series"
-        desktop = _objects(_visual(page, title), "dataPoint")
+        desktop = visual_objects(visual_by_title(page, title), "dataPoint")
         project, visual = self._find(page, title)
         exported = export_visual_spec(project, visual)
         self.assertEqual(exported["seriesColors"], {"Measures Table.Estimate Hours": "#A0C4FF"})
@@ -266,7 +258,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
         pbip = root / "04-desktop-shapes.pbip"
         project = Project.find(pbip)
         page = project.find_page("Chart Gallery")
-        visual = next(v for v in project.get_visuals(page) if _title_of(v.data) == "Hours by Team")
+        visual = next(v for v in project.get_visuals(page) if visual_title(v.data) == "Hours by Team")
         projection = visual.data["visual"]["query"]["queryState"]["Y"]["projections"][0]
         self.assertEqual(projection["field"]["Measure"]["Property"], "Hours Logged")
         self.assertEqual(projection["queryRef"], "Measures Table.Total Hours")
@@ -281,7 +273,7 @@ class SeriesColorsDesktopTests(unittest.TestCase):
         self.assertNotIn("isn't bound", result.stdout)
         project = Project.find(pbip)
         page = project.find_page("Chart Gallery")
-        visual = next(v for v in project.get_visuals(page) if _title_of(v.data) == "Hours by Team")
+        visual = next(v for v in project.get_visuals(page) if visual_title(v.data) == "Hours by Team")
         selectors = [e.get("selector") for e in visual.data["visual"]["objects"]["dataPoint"]]
         self.assertIn({"metadata": "Measures Table.Total Hours"}, selectors)
 

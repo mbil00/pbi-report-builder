@@ -11,7 +11,6 @@ from typer.testing import CliRunner
 
 from pbi.cli import app
 from pbi.formatting import GradientStop, build_gradient_format, build_rules_format
-from pbi.schema_refs import REPORT_SCHEMA
 from pbi.theme_formatting import get_theme_conditional_formats
 from pbi.report_authoring import ReportAuthoring
 from pbi.themes import (
@@ -47,57 +46,7 @@ from pbi.themes import (
     set_visual_style_property,
     set_visual_style_value,
 )
-
-
-def _scaffold_project(root: Path, *, theme_data: dict | None = None) -> Path:
-    """Create a minimal PBIP project. Optionally apply a custom theme."""
-    pbip_path = root / "Test.pbip"
-    report_folder = root / "Test.Report"
-    definition = report_folder / "definition"
-    definition.mkdir(parents=True)
-
-    pbip_path.write_text(
-        json.dumps({"artifacts": [{"report": {"path": "Test.Report"}}]}) + "\n",
-        encoding="utf-8",
-    )
-
-    report: dict = {
-        "$schema": REPORT_SCHEMA,
-        "themeCollection": {
-            "baseTheme": {
-                "name": "CY26SU02",
-                "reportVersionAtImport": {"visual": "2.6.0", "report": "3.1.0", "page": "2.3.0"},
-                "type": "SharedResources",
-            },
-        },
-    }
-
-    if theme_data:
-        theme_name = theme_data.get("name", "TestTheme")
-        resources_dir = report_folder / "StaticResources" / "RegisteredResources"
-        resources_dir.mkdir(parents=True)
-        theme_file = resources_dir / f"{theme_name}.json"
-        theme_file.write_text(
-            json.dumps(theme_data, indent=2), encoding="utf-8",
-        )
-        report["themeCollection"]["customTheme"] = {
-            "name": theme_name,
-            "reportVersionAtImport": {"visual": "2.6.0", "report": "3.1.0", "page": "2.3.0"},
-            "type": "RegisteredResources",
-        }
-        report["resourcePackages"] = [
-            {
-                "name": "RegisteredResources",
-                "type": "RegisteredResources",
-                "items": [{"type": "CustomTheme", "name": f"{theme_name}.json", "path": f"{theme_name}.json"}],
-            }
-        ]
-
-    (definition / "report.json").write_text(
-        json.dumps(report, indent=2) + "\n", encoding="utf-8",
-    )
-
-    return pbip_path
+from tests.support import make_themed_project
 
 
 class TestValidateHexColor(unittest.TestCase):
@@ -251,7 +200,7 @@ class TestThemeCreateCommand(unittest.TestCase):
     def test_create_and_apply(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, [
                 "theme", "create", "MyBrand",
                 "--foreground=#222222",
@@ -280,7 +229,7 @@ class TestThemeGetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme", foreground="#333333", accent="#0078D4")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, ["theme", "get", "-p", str(pbip)])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("#333333", result.stdout)
@@ -290,7 +239,7 @@ class TestThemeGetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme", foreground="#444444")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, ["theme", "get", "foreground", "-p", str(pbip)])
             self.assertEqual(result.exit_code, 0, result.stdout)
             self.assertIn("#444444", result.stdout)
@@ -299,7 +248,7 @@ class TestThemeGetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, ["theme", "get", "--raw", "-p", str(pbip)])
             self.assertEqual(result.exit_code, 0, result.stdout)
             parsed = json.loads(result.stdout)
@@ -308,7 +257,7 @@ class TestThemeGetCommand(unittest.TestCase):
     def test_no_theme_errors(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, ["theme", "get", "-p", str(pbip)])
             self.assertNotEqual(result.exit_code, 0)
             self.assertIn("No custom theme", result.stdout)
@@ -319,7 +268,7 @@ class TestThemeSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme", foreground="#333333")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             result = runner.invoke(app, [
                 "theme", "set", "foreground=#111111", "-p", str(pbip),
@@ -336,7 +285,7 @@ class TestThemeSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             result = runner.invoke(app, [
                 "theme", "set", "dataColors=#FF0000,#00FF00", "-p", str(pbip),
@@ -352,7 +301,7 @@ class TestThemeSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             result = runner.invoke(app, [
                 "theme", "set", "textClasses.title.fontSize=16", "-p", str(pbip),
@@ -368,7 +317,7 @@ class TestThemeSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             result = runner.invoke(app, [
                 "theme", "set", "foreground=#111111", "-p", str(pbip),
@@ -380,7 +329,7 @@ class TestThemeSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             result = runner.invoke(app, [
                 "theme", "set", "foreground=#111111", "--no-cascade", "-p", str(pbip),
@@ -392,7 +341,7 @@ class TestThemeSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             result = runner.invoke(app, [
                 "theme", "set", "foreground=red", "-p", str(pbip),
@@ -403,7 +352,7 @@ class TestThemeSetCommand(unittest.TestCase):
     def test_no_theme_errors(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, [
                 "theme", "set", "foreground=#111111", "-p", str(pbip),
             ])
@@ -427,7 +376,7 @@ class TestThemePropertiesCommand(unittest.TestCase):
 class TestSaveThemePreset(unittest.TestCase):
     def test_save_project_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             data = create_theme("Brand")
@@ -452,7 +401,7 @@ class TestSaveThemePreset(unittest.TestCase):
 
     def test_save_refuses_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             data = create_theme("Brand")
@@ -462,7 +411,7 @@ class TestSaveThemePreset(unittest.TestCase):
 
     def test_save_overwrite_with_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             data = create_theme("Brand")
@@ -474,7 +423,7 @@ class TestSaveThemePreset(unittest.TestCase):
 class TestGetThemePreset(unittest.TestCase):
     def test_get_project_preset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             data = create_theme("Brand", foreground="#111111")
@@ -486,7 +435,7 @@ class TestGetThemePreset(unittest.TestCase):
 
     def test_get_not_found(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             with self.assertRaises(FileNotFoundError):
@@ -494,7 +443,7 @@ class TestGetThemePreset(unittest.TestCase):
 
     def test_get_falls_back_to_global(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             data = create_theme("GlobalTheme")
@@ -513,7 +462,7 @@ class TestGetThemePreset(unittest.TestCase):
 class TestListThemePresets(unittest.TestCase):
     def test_list_merges_scopes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
 
@@ -534,7 +483,7 @@ class TestListThemePresets(unittest.TestCase):
 
     def test_list_project_shadows_global(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
 
@@ -554,7 +503,7 @@ class TestListThemePresets(unittest.TestCase):
 
     def test_list_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             import pbi.themes as themes_mod
@@ -569,7 +518,7 @@ class TestListThemePresets(unittest.TestCase):
 class TestDeleteThemePreset(unittest.TestCase):
     def test_delete_existing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             save_theme_preset(proj, "doomed", create_theme("D"))
@@ -579,7 +528,7 @@ class TestDeleteThemePreset(unittest.TestCase):
 
     def test_delete_missing_returns_false(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
             self.assertFalse(delete_theme_preset(proj, "nonexistent"))
@@ -588,7 +537,7 @@ class TestDeleteThemePreset(unittest.TestCase):
 class TestCloneThemePreset(unittest.TestCase):
     def test_clone_to_global(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
 
@@ -608,7 +557,7 @@ class TestCloneThemePreset(unittest.TestCase):
 
     def test_clone_to_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             from pbi.project import Project
             proj = Project.find(pbip)
 
@@ -650,7 +599,7 @@ class TestThemeSaveCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Active", foreground="#222222")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             # Save
             result = runner.invoke(app, [
@@ -666,7 +615,7 @@ class TestThemeSaveCommand(unittest.TestCase):
     def test_save_no_theme_errors(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, [
                 "theme", "save", "test", "-p", str(pbip),
             ])
@@ -680,7 +629,7 @@ class TestThemeLoadCommand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             # Create an initial theme so we can save it
             theme_data = create_theme("Initial", foreground="#111111")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             # Save as preset
             runner.invoke(app, ["theme", "save", "saved-theme", "-p", str(pbip)])
@@ -703,7 +652,7 @@ class TestThemeLoadCommand(unittest.TestCase):
     def test_load_not_found_errors(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, [
                 "theme", "load", "nonexistent", "-p", str(pbip),
             ])
@@ -716,7 +665,7 @@ class TestThemePresetListCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Active")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
 
             runner.invoke(app, ["theme", "save", "brand-a", "-p", str(pbip)])
             runner.invoke(app, ["theme", "save", "brand-b", "-p", str(pbip)])
@@ -731,7 +680,7 @@ class TestThemePresetListCommand(unittest.TestCase):
     def test_list_empty(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, [
                 "theme", "preset", "list", "-p", str(pbip),
             ])
@@ -744,7 +693,7 @@ class TestThemePresetGetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Active", foreground="#333333")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             runner.invoke(app, ["theme", "save", "my-theme", "-p", str(pbip)])
 
             result = runner.invoke(app, [
@@ -760,7 +709,7 @@ class TestThemePresetDeleteCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Active")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             runner.invoke(app, ["theme", "save", "doomed", "-p", str(pbip)])
 
             result = runner.invoke(app, [
@@ -780,7 +729,7 @@ class TestThemePresetCloneCommand(unittest.TestCase):
     def test_clone_requires_direction(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, [
                 "theme", "preset", "clone", "x", "-p", str(pbip),
             ])
@@ -1007,7 +956,7 @@ def _scaffold_with_visual_styles(root: Path) -> Path:
             "legend": [{"show": True, "position": "RightCenter"}],
         }},
     }
-    return _scaffold_project(root, theme_data=theme_data)
+    return make_themed_project(root, theme_data=theme_data)
 
 
 class TestThemeStyleListCommand(unittest.TestCase):
@@ -1023,7 +972,7 @@ class TestThemeStyleListCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Plain")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, ["theme", "style", "list", "-p", str(pbip)])
             self.assertEqual(result.exit_code, 0)
             self.assertIn("No visual style", result.stdout)
@@ -1038,7 +987,7 @@ class TestThemeStyleListCommand(unittest.TestCase):
                     "Series": {"legend": [{"show": False}]},
                 }
             }
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, ["theme", "style", "list", "--json", "-p", str(pbip)])
             self.assertEqual(result.exit_code, 0, result.stdout)
             parsed = json.loads(result.stdout)
@@ -1083,7 +1032,7 @@ class TestThemeStyleGetCommand(unittest.TestCase):
                     "Series": {"legend": [{"show": False}]},
                 }
             }
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(
                 app,
                 ["theme", "style", "get", "columnChart", "--role", "Series", "-p", str(pbip)],
@@ -1098,7 +1047,7 @@ class TestThemeStyleSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Test")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, [
                 "theme", "style", "set", "columnChart",
                 "legend.show=true", "legend.position=RightCenter",
@@ -1115,7 +1064,7 @@ class TestThemeStyleSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Test")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, [
                 "theme", "style", "set", "*",
                 "background.show=true",
@@ -1127,7 +1076,7 @@ class TestThemeStyleSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Test")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(app, [
                 "theme", "style", "set", "*",
                 "filterCard.border[Applied]=true",
@@ -1139,7 +1088,7 @@ class TestThemeStyleSetCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             theme_data = create_theme("Test")
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(
                 app,
                 [
@@ -1206,7 +1155,7 @@ class TestThemeFormatCommand(unittest.TestCase):
     def test_measure_get_set_clear(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp), theme_data=create_theme("Theme CF"))
+            pbip = make_themed_project(Path(tmp), theme_data=create_theme("Theme CF"))
 
             set_result = runner.invoke(
                 app,
@@ -1289,7 +1238,7 @@ class TestThemeStyleDeleteCommand(unittest.TestCase):
                     "Series": {"legend": [{"show": False}]},
                 }
             }
-            pbip = _scaffold_project(Path(tmp), theme_data=theme_data)
+            pbip = make_themed_project(Path(tmp), theme_data=theme_data)
             result = runner.invoke(
                 app,
                 ["theme", "style", "delete", "columnChart", "--role", "Series", "--force", "-p", str(pbip)],
@@ -1324,7 +1273,7 @@ def _scaffold_audit_project(root: Path) -> Path:
         }},
     }
 
-    pbip = _scaffold_project(root, theme_data=theme_data)
+    pbip = make_themed_project(root, theme_data=theme_data)
     proj = Project.find(pbip)
     page = ReportAuthoring(proj).create_page("Dashboard")
 
@@ -1485,7 +1434,7 @@ class TestThemeAuditCommand(unittest.TestCase):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
             # Project without custom theme
-            pbip = _scaffold_project(Path(tmp))
+            pbip = make_themed_project(Path(tmp))
             result = runner.invoke(app, ["theme", "audit", "-p", str(pbip)])
             self.assertEqual(result.exit_code, 1)
 
@@ -1497,7 +1446,7 @@ class TestThemeDiffCommand(unittest.TestCase):
     def test_diff_reports_theme_section_changes(self) -> None:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            pbip = _scaffold_project(Path(tmp), theme_data=create_theme("Test"))
+            pbip = make_themed_project(Path(tmp), theme_data=create_theme("Test"))
             diff_spec = {
                 "version": 1,
                 "pages": [],
@@ -1538,7 +1487,7 @@ class TestThemeDiffCommand(unittest.TestCase):
             existing = create_theme("Existing")
             existing["foreground"] = "#000000"
             existing["dataColors"] = ["#111111", "#222222"]
-            pbip = _scaffold_project(Path(tmp), theme_data=existing)
+            pbip = make_themed_project(Path(tmp), theme_data=existing)
 
             # Partial spec: replace foreground, remove dataColors via null.
             partial_spec = {
@@ -1701,7 +1650,7 @@ class TestSaveThemeDataRepairsPath(unittest.TestCase):
 
             root = Path(tmp)
             theme_data = create_theme("TestTheme")
-            pbip = _scaffold_project(root, theme_data=theme_data)
+            pbip = make_themed_project(root, theme_data=theme_data)
 
             # Corrupt both name and path in report.json
             report_path = root / "Test.Report" / "definition" / "report.json"

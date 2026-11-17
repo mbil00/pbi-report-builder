@@ -21,7 +21,7 @@ from pbi.model import SemanticModel
 from pbi.project import Project
 from pbi.textbox import set_textbox_content
 from pbi.validate import _validate_textbox_runs
-from tests.test_desktop_shapes_fixture import SHAPES_DIR, SHAPES_PBIP, _objects, _visual, _visuals
+from tests.support import SHAPES_DIR, SHAPES_PBIP, page_visuals, visual_by_title, visual_objects
 
 OPERATORS = {1: "greater-than", 2: "greater-than-or-equal"}
 
@@ -69,17 +69,17 @@ class DesktopLiteralWriteTests(unittest.TestCase):
             "text.bold=true",
         )
         written = _first_run_paragraphs(self._qa_visual("header"))[0]["textRuns"][0]
-        desktop = _first_run_paragraphs(_visual("Overview", "Overview Header"))[0]["textRuns"][0]
+        desktop = _first_run_paragraphs(visual_by_title("Overview", "Overview Header"))[0]["textRuns"][0]
         self.assertEqual(written, desktop)
 
     def test_italic_run_and_unstyled_run_match_desktop(self) -> None:
         self._invoke("visual", "create", "QA Hidden", "textbox", "--name", "note", "--text", "Hidden page for fixture QA.")
-        desktop_note = _objects(_visual("QA Hidden", "QA Note"), "general")[0]["properties"]["paragraphs"]
+        desktop_note = visual_objects(visual_by_title("QA Hidden", "QA Note"), "general")[0]["properties"]["paragraphs"]
         self.assertEqual(_first_run_paragraphs(self._qa_visual("note")), desktop_note)
 
         self._invoke("visual", "set", "QA Hidden", "note", "text.italic=true", "text.fontColor=#D64550")
         style = _first_run_paragraphs(self._qa_visual("note"))[0]["textRuns"][0]["textStyle"]
-        desktop_italic = _first_run_paragraphs(_visual("Overview", "Overview Header"))[1]["textRuns"][1]["textStyle"]
+        desktop_italic = _first_run_paragraphs(visual_by_title("Overview", "Overview Header"))[1]["textRuns"][1]["textStyle"]
         self.assertEqual(style["fontStyle"], desktop_italic["fontStyle"])
         self.assertEqual(style["color"], desktop_italic["color"])
 
@@ -143,7 +143,7 @@ class DesktopLiteralWriteTests(unittest.TestCase):
 
     def test_desktop_textboxes_pass_validation(self) -> None:
         for page in ("Overview", "QA Hidden"):
-            for visual in _visuals(page):
+            for visual in page_visuals(page):
                 with self.subTest(page=page, visual=visual["name"]):
                     self.assertEqual(_validate_textbox_runs(visual["visual"], "v.json"), [])
 
@@ -151,7 +151,7 @@ class DesktopLiteralWriteTests(unittest.TestCase):
 
     def test_measure_and_column_filter_literals_match_desktop(self) -> None:
         cases = []
-        for visual in _visuals("Filter Lab"):
+        for visual in page_visuals("Filter Lab"):
             for desktop_filter in visual.get("filterConfig", {}).get("filters", []):
                 if desktop_filter.get("type") != "Advanced" or "filter" not in desktop_filter:
                     continue

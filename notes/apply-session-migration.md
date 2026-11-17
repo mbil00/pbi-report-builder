@@ -80,7 +80,7 @@ Parity comparison decision:
 - compare non-JSON files byte-for-byte;
 - normalize only known irrelevant/generated differences if they appear in real fixtures.
 
-Existing test support already has `tests/cli_regressions_support.py::make_project` and many apply specs in `tests/test_cli_apply_regressions.py`. These can seed parity fixtures before adding larger fixture-based comparisons.
+Existing test support already has `tests/support.py::make_project` and many apply specs in `tests/test_cli_apply_regressions.py`. These can seed parity fixtures before adding larger fixture-based comparisons.
 
 ## Implementation implications
 

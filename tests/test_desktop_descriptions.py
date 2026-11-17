@@ -20,7 +20,7 @@ from pbi.cli import app
 from pbi.model import SemanticModel
 from pbi.model_apply import apply_model_yaml
 from pbi.model_export import export_model_yaml
-from tests.test_desktop_shapes_fixture import SHAPES_DIR, SHAPES_PBIP
+from tests.support import SHAPES_DIR, SHAPES_PBIP, make_project, write_model_table
 
 TABLES = Path("04-desktop-shapes.SemanticModel") / "definition" / "tables"
 
@@ -216,12 +216,10 @@ class LegacyDescriptionPropertyTests(unittest.TestCase):
     """The invalid ``description:`` property form is read, and replaced on write."""
 
     def test_set_description_replaces_legacy_property(self) -> None:
-        from tests.test_model_extensions import _make_project, _write_table
-
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            _make_project(root)
-            path = _write_table(root, "Sales.tmdl", """
+            make_project(root)
+            path = write_model_table(root, "Sales.tmdl", """
 table Sales
 \tmeasure Revenue = SUM(Sales[Amount])
 \t\tdescription: Old text

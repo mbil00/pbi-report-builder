@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from pbi.cli import app
 from pbi.report_authoring import ReportAuthoring
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import make_project, write_model_table
 
 
 SALES_MODEL = """

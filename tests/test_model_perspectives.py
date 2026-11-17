@@ -14,11 +14,9 @@ from pbi.model import SemanticModel, create_perspective, set_perspective
 from pbi.model_apply import apply_model_yaml
 from pbi.model_export import export_model_yaml
 from pbi.modeling import PerspectiveMemberSpec
-from tests.cli_regressions_support import make_project, write_model_table
+from tests.support import MODEL_HEAVY_DIR, make_project, write_model_table
 
 
-FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "real-report-fixtures"
-MODEL_HEAVY_DIR = FIXTURE_ROOT / "report-02-model-heavy"
 MODEL_HEAVY_PBIP = MODEL_HEAVY_DIR / "02-model-heavy.pbip"
 
 

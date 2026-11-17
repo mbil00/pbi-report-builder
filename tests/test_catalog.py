@@ -25,7 +25,7 @@ from pbi.visual_templates import (
     list_visual_templates,
     register_visual_template,
 )
-from tests.cli_regressions_support import make_project
+from tests.support import make_project
 
 
 class CatalogTests(unittest.TestCase):
@@ -125,7 +125,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_visual_template_binds_measures_correctly_with_model(self) -> None:
         """Measures resolved via the semantic model use the Measure discriminator."""
-        from tests.cli_regressions_support import write_model_table
+        from tests.support import write_model_table
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -398,7 +398,7 @@ class CatalogCliTests(unittest.TestCase):
 
     def test_catalog_apply_warns_on_missing_model_field(self) -> None:
         """catalog apply warns when a binding references a field not in the model."""
-        from tests.cli_regressions_support import write_model_table
+        from tests.support import write_model_table
 
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
