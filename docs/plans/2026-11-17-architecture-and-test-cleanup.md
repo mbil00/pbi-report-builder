@@ -63,7 +63,7 @@ and skipped. The relay stops after R6, then cuts the release (expected v0.11.0).
 
 | # | Unit | Issues | Branch | State |
 |---|---|---|---|---|
-| R1 | apply accepts Desktop-saved cardVisual `Rows` role and keyDriversVisual sort | #109 | fix/apply-desktop-roles-sort | [ ] |
+| R1 | apply accepts Desktop-saved cardVisual `Rows` role and keyDriversVisual sort | #109 | fix/apply-desktop-roles-sort | [x] #133 |
 | R2 | visual content survives: Desktop's empty `{}`/`[]` (`expansionStates[].root`, smart narrative `defaultCase.textRuns`), shape `fill` duplicate `{"metadata":"default"}` entry, `queryState.Y.fieldParameters` dropped | #108 | fix/apply-keep-visual-content | [ ] |
 | R3 | filters survive: names kept (no `Filter_<hash>`), no added `isHiddenInViewMode`/`isLockedInViewMode`/`howCreated`, `RelativeTime` not rewritten as `RelativeDate` | #108 | fix/apply-keep-filters | [ ] |
 | R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [ ] |
