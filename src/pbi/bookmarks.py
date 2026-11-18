@@ -951,7 +951,12 @@ def _build_bookmark_options(
         options["applyOnlyToTargetVisuals"] = True
         options["targetVisualNames"] = list(target_visuals)
     if options_patch:
-        _deep_merge(options, copy.deepcopy(options_patch))
+        patch = copy.deepcopy(options_patch)
+        if target_visuals:
+            # An explicit target wins over a remembered selection carried in options.
+            patch.pop("applyOnlyToTargetVisuals", None)
+            patch.pop("targetVisualNames", None)
+        _deep_merge(options, patch)
     return options
 
 

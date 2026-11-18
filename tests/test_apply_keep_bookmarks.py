@@ -108,3 +108,23 @@ def test_edited_bookmark_keeps_desktop_schema_filters_and_order(
     assert list(result["explorationState"]) == list(source["explorationState"])
     assert result["explorationState"]["filters"] == source["explorationState"]["filters"]
     assert result["options"] == {**source["options"], "suppressDisplay": True}
+
+
+def test_added_target_replaces_remembered_selection(
+    fixture_copy: Callable[[str], Path], tmp_path: Path
+) -> None:
+    # Adding `target:` to an exported all-visuals bookmark must scope it to the
+    # new list, not the targetVisualNames Desktop remembered under options.
+    root = fixture_copy(SHAPES)
+    spec = _export_page(root, tmp_path, "Task Board")
+    data = yaml.safe_load(spec.read_text(encoding="utf-8"))
+    entry = next(item for item in data["bookmarks"] if item["name"] == "Task Board - All Statuses")
+    entry["target"] = ["731eaccec02d78d52c10"]
+    spec.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+    _apply(root, spec)
+
+    options = read_json(_bookmark_file(root, "7eeb969d0757059a1b90"))["options"]
+    assert options["applyOnlyToTargetVisuals"] is True
+    assert options["targetVisualNames"] == ["731eaccec02d78d52c10"]
+    assert options["preserveNewVisualVisibility"] is True
