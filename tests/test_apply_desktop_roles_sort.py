@@ -152,3 +152,19 @@ def test_create_card_binds_rows_but_does_not_scaffold_it(fixture_copy: Callable[
     }
     assert states["with-rows"]["Rows"] == desktop_rows
     assert "Rows" not in states["plain"]
+
+
+def test_apply_keeps_card_aggregation_under_an_abbreviated_table_name(
+    fixture_copy: Callable[[str], Path], tmp_path: Path
+) -> None:
+    root = fixture_copy(FIXTURE)
+    card_bytes = _visual_path(root, CARD).read_bytes()
+    spec = _export_page(root, tmp_path)
+    text = spec.read_text(encoding="utf-8")
+    assert "Tooltips: Sales.SaleID" in text
+    spec.write_text(text.replace("Tooltips: Sales.SaleID", "Tooltips: Sal.SaleID"), encoding="utf-8")
+
+    applied = cli("apply", spec, project=root)
+
+    assert applied.exit_code == 0, applied.output
+    assert _visual_path(root, CARD).read_bytes() == card_bytes

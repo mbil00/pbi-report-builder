@@ -322,6 +322,12 @@ def match_existing_projection(
         existing_query = projection.get("queryRef", "")
         if isinstance(existing_field, str) and existing_field.lower() == target_field:
             return existing_projections.pop(index)
+        # The resolved field, so `Sal.SaleID` still finds `Min(Sales.SaleID)`.
+        if (
+            isinstance(existing_field, str)
+            and existing_field.removesuffix(" (measure)").lower() == target_query
+        ):
+            return existing_projections.pop(index)
         if isinstance(existing_query, str) and existing_query.lower() == target_query:
             return existing_projections.pop(index)
     return None
