@@ -90,3 +90,9 @@ bookmarks:
   options:
     customFlag: true
 ```
+
+`target:` means the bookmark applies only to those visuals (`applyOnlyToTargetVisuals`).
+A Desktop bookmark scoped to all visuals can still list `targetVisualNames`; export
+keeps that list under `options:` so apply does not narrow the scope. Bookmark-level
+state next to `sections` (`filters`, `objects`) round-trips under `state:`, and
+applying onto an existing bookmark keeps its `$schema` version and key order.

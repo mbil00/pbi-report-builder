@@ -23,6 +23,7 @@ from pbi.bookmarks import (
     _bookmarks_dir,
     _build_bookmark_options,
     _build_exploration_state,
+    keep_existing_layout,
     normalize_bookmark_state,
 )
 from pbi.project import Project, _read_json
@@ -137,6 +138,7 @@ def plan_bookmarks_spec(
             continue
 
         display_name = str(name)
+        existing: dict | None = None
         planned_index = planned_by_display.get(display_name)
         if planned_index is not None:
             if planned_pages.get(display_name) != page.name:
@@ -152,6 +154,8 @@ def plan_bookmarks_spec(
                 continue
             planned = operations[planned_index]
             file_path = planned.file_path
+            same_name = existing_by_display.get(display_name, [])
+            existing = same_name[0][0] if len(same_name) == 1 else None
             bookmark_id = planned.payload.get("name")
             if not isinstance(bookmark_id, str) or not bookmark_id:
                 bookmark_id = secrets.token_hex(10)
@@ -209,6 +213,8 @@ def plan_bookmarks_spec(
         )
         if bookmark_options:
             payload["options"] = bookmark_options
+        if existing is not None:
+            payload = keep_existing_layout(payload, existing)
 
         persist = BookmarkPersist(
             payload=payload,

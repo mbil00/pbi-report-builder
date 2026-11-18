@@ -546,7 +546,7 @@ def export_bookmarks(project: Project, *, page: Page | None = None) -> list[dict
             entry["group"] = group_lookup[data.get("name", "")]
 
         options = data.get("options", {})
-        if options.get("targetVisualNames"):
+        if _exports_as_target(options):
             entry["target"] = list(options["targetVisualNames"])
         if options.get("suppressData"):
             entry["captureData"] = False
@@ -951,13 +951,31 @@ def _build_bookmark_options(
         options["applyOnlyToTargetVisuals"] = True
         options["targetVisualNames"] = list(target_visuals)
     if options_patch:
-        _deep_merge(options, copy.deepcopy(options_patch))
+        patch = copy.deepcopy(options_patch)
+        if target_visuals:
+            # An explicit target wins over a remembered selection carried in options.
+            patch.pop("applyOnlyToTargetVisuals", None)
+            patch.pop("targetVisualNames", None)
+        _deep_merge(options, patch)
     return options
+
+
+def _exports_as_target(options: dict) -> bool:
+    """Whether ``options`` export as ``target:``, which apply writes back as selected-visuals scope.
+
+    Desktop keeps ``targetVisualNames`` (sometimes empty) on a bookmark whose
+    scope is all visuals; only ``applyOnlyToTargetVisuals: true`` makes it
+    apply to the targets. Anything else stays in the ``options:`` passthrough.
+    """
+    return bool(options.get("applyOnlyToTargetVisuals") and options.get("targetVisualNames"))
 
 
 def _export_bookmark_options(options: dict) -> dict:
     extra = copy.deepcopy(options)
-    for key in ("suppressActiveSection", "suppressData", "suppressDisplay", "applyOnlyToTargetVisuals", "targetVisualNames"):
+    keys = ["suppressActiveSection", "suppressData", "suppressDisplay"]
+    if _exports_as_target(options):
+        keys += ["applyOnlyToTargetVisuals", "targetVisualNames"]
+    for key in keys:
         extra.pop(key, None)
     return extra
 
@@ -976,6 +994,11 @@ def _export_bookmark_state(
     version = exploration.get("version")
     if version not in (None, "2.1"):
         state["version"] = version
+    # Bookmark-level state Desktop saves next to ``sections`` (``filters``,
+    # ``objects``, even when empty) travels verbatim.
+    for key, value in exploration.items():
+        if key not in ("version", "activeSection", "sections"):
+            state[key] = copy.deepcopy(value)
     sections = exploration.get("sections", {})
     if not isinstance(sections, dict):
         return state or None
@@ -1018,6 +1041,27 @@ def _is_hidden_only_container(visual_state: dict) -> bool:
             "display": {"mode": "hidden"},
         }
     }
+
+
+def keep_existing_layout(payload: dict, existing: dict) -> dict:
+    """Return ``payload`` with ``existing``'s ``$schema`` and dict key order.
+
+    Apply rebuilds a bookmark from its spec; on an existing bookmark this keeps
+    the file's schema version and the order Desktop wrote its keys in, so an
+    unedited bookmark is rewritten byte for byte. New keys go last.
+    """
+    result = _order_like(payload, existing)
+    if isinstance(existing.get("$schema"), str):
+        result["$schema"] = existing["$schema"]
+    return result
+
+
+def _order_like(value: Any, reference: Any) -> Any:
+    if not isinstance(value, dict) or not isinstance(reference, dict):
+        return value
+    keys = [key for key in reference if key in value]
+    keys += [key for key in value if key not in reference]
+    return {key: _order_like(value[key], reference.get(key)) for key in keys}
 
 
 def _deep_merge(target: dict, patch: dict) -> None:
