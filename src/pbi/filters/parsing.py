@@ -7,7 +7,7 @@ from .expressions import (
     _parse_date_add,
     _time_unit_name,
 )
-from .types import DATE_UNIT_CODES, FilterInfo
+from .types import DATE_UNIT_CODES, TIME_UNIT_CODES, FilterInfo
 
 
 def get_filter_config(data: dict) -> dict:
@@ -280,6 +280,20 @@ def _extract_topn_summary(filter_data: dict) -> str | None:
     return summary
 
 
+def _relative_time_unit_name(unit_code: int | None) -> str | None:
+    """Name a ``RelativeTime`` unit ``pbi`` can write, or None.
+
+    Desktop also saves ``RelativeTime`` filters with other unit codes
+    (sample-report has ``TimeUnit`` 6). Read as a date unit they would be
+    re-authored as a ``RelativeDate`` filter that means something else, so
+    they stay unrecognised and export keeps them as ``raw``.
+    """
+    for name, code in TIME_UNIT_CODES.items():
+        if code == unit_code:
+            return name
+    return None
+
+
 def _extract_relative_summary(filter_obj: dict) -> str | None:
     """Extract a short display summary for schema-backed relative filters."""
     filter_type = filter_obj.get("type")
@@ -314,13 +328,13 @@ def _extract_relative_summary(filter_obj: dict) -> str | None:
             if _is_now_expr(upper):
                 parsed = _parse_date_add(lower)
                 if parsed and _is_now_expr(parsed[0]) and parsed[1] < 0:
-                    unit_name = _time_unit_name(parsed[2])
+                    unit_name = _relative_time_unit_name(parsed[2])
                     if unit_name:
                         return f"in last {abs(parsed[1])} {unit_name.lower()}"
             if _is_now_expr(lower):
                 parsed = _parse_date_add(upper)
                 if parsed and _is_now_expr(parsed[0]) and parsed[1] > 0:
-                    unit_name = _time_unit_name(parsed[2])
+                    unit_name = _relative_time_unit_name(parsed[2])
                     if unit_name:
                         return f"in next {parsed[1]} {unit_name.lower()}"
 
@@ -365,13 +379,13 @@ def _extract_relative_structured(filter_obj: dict) -> dict | None:
             if _is_now_expr(upper_bound):
                 parsed = _parse_date_add(lower_bound)
                 if parsed and _is_now_expr(parsed[0]) and parsed[1] < 0:
-                    unit_name = _time_unit_name(parsed[2])
+                    unit_name = _relative_time_unit_name(parsed[2])
                     if unit_name:
                         return {"operator": "InLast", "count": abs(parsed[1]), "unit": unit_name}
             if _is_now_expr(lower_bound):
                 parsed = _parse_date_add(upper_bound)
                 if parsed and _is_now_expr(parsed[0]) and parsed[1] > 0:
-                    unit_name = _time_unit_name(parsed[2])
+                    unit_name = _relative_time_unit_name(parsed[2])
                     if unit_name:
                         return {"operator": "InNext", "count": parsed[1], "unit": unit_name}
 

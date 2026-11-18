@@ -75,6 +75,38 @@ def _apply_hierarchy_filter(
     result.filters_added += 1
 
 
+# Keys a filter builder writes with these values even when the user set nothing.
+_BUILDER_DEFAULTS = {
+    "isHiddenInViewMode": False,
+    "isLockedInViewMode": False,
+    "howCreated": "User",
+}
+
+
+def _keep_source_identity(filter_obj: dict, filter_spec: dict, source_by_name: dict[str, dict]) -> dict:
+    """Return the filter to write for ``filter_obj``, built from ``filter_spec``.
+
+    A filter named in the spec keeps that name instead of the builder's
+    ``Filter_<hash>``. When the target already had a filter of that name, the
+    builder's default view-mode flags and ``howCreated`` are dropped unless that
+    filter had them, and a filter that then matches it is written back as it was,
+    key order included. An edited filter keeps only the name.
+    """
+    name = filter_spec.get("name")
+    if not isinstance(name, str) or not name:
+        return filter_obj
+    filter_obj["name"] = name
+    source = source_by_name.get(name)
+    if source is None:
+        return filter_obj
+    for key, default in _BUILDER_DEFAULTS.items():
+        if key not in source and filter_obj.get(key) == default:
+            filter_obj.pop(key, None)
+    if filter_obj == source:
+        return copy.deepcopy(source)
+    return filter_obj
+
+
 def apply_filters_spec(
     data: dict,
     filters_spec: list,
@@ -88,8 +120,12 @@ def apply_filters_spec(
     """Apply filters from the YAML spec."""
     from pbi.visual_analysis import normalize_semantic_data_type
 
+    source_by_name: dict[str, dict] = {}
     if filters_spec and not dry_run:
         config = data.setdefault("filterConfig", {})
+        for source in config.get("filters") or []:
+            if isinstance(source, dict) and isinstance(source.get("name"), str):
+                source_by_name.setdefault(source["name"], copy.deepcopy(source))
         config["filters"] = []
 
     for filter_spec in filters_spec:
@@ -142,6 +178,8 @@ def apply_filters_spec(
             result.filters_added += 1
             continue
 
+        written = data.setdefault("filterConfig", {}).setdefault("filters", [])
+        first_new = len(written)
         raw_filter = filter_spec.get("raw")
         if isinstance(raw_filter, dict):
             config = data.setdefault("filterConfig", {})
@@ -356,6 +394,12 @@ def apply_filters_spec(
             result.warnings.append(
                 f"{context}: filter type '{filter_type}' not yet supported in apply."
             )
+
+        if not isinstance(raw_filter, dict):
+            written[first_new:] = [
+                _keep_source_identity(filter_obj, filter_spec, source_by_name)
+                for filter_obj in written[first_new:]
+            ]
 
 
 def apply_interactions_spec(
