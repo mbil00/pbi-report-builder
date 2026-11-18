@@ -56,9 +56,6 @@ FIXTURE_NAMES = list(FIXTURES)
 
 KNOWN_REPORT_ROUNDTRIP = {
     "report-01-kitchen-sink": "#108, #113",
-    "report-04-desktop-shapes": "#108",
-    "report-04-desktop-shapes-renamed": "#108",
-    "sample-report": "#108",
 }
 
 # Every fixture has a table without measures, so `model measure list --json`
@@ -395,16 +392,12 @@ def test_theme_roundtrip_is_noop(fixture_copy: Callable[[str], Path], tmp_path: 
 
 
 # Desktop-saved fixtures whose numeric visual literals are compared. report-01
-# was partly edited by the CLI, but the CLI writes `1.0D`, never `1D`, so its
-# integer-looking `D` literals are Desktop's.
+# was partly edited by the CLI, which wrote `1.0D`, never `1D`, until #104, so
+# its integer-looking `D` literals are Desktop's.
 LITERAL_FIXTURES = (KITCHEN_SINK_DIR, SHAPES_DIR, SAMPLE_REPORT_DIR)
 NUMERIC_LITERAL = re.compile(r"^(-?\d+(?:\.\d+)?)([DLM])$")
-KNOWN_LITERAL_MISMATCHES = {
-    ("report-01-kitchen-sink", "cardVisual", "objects", "layout", "cellPadding"): "#104",
-    ("report-01-kitchen-sink", "cardVisual", "objects", "layout", "columnCount"): "#104",
-    ("report-01-kitchen-sink", "cardVisual", "objects", "value", "fontSize"): "#104",
-    ("report-04-desktop-shapes", "cardVisual", "objects", "value", "fontSize"): "#104",
-}
+CLI_WHOLE_DECIMAL = re.compile(r"\.0D$")  # the CLI's old `4.0D`
+KNOWN_LITERAL_MISMATCHES: dict[tuple[str, ...], str] = {}
 
 
 def _literal(value: Any) -> Any:
@@ -456,7 +449,11 @@ def test_literal_suffix_matches_desktop(
     visual_file: str,
     desktop: str,
 ) -> None:
-    """``visual set`` writes the literal type (``D``/``L``/``M``) Desktop wrote for the same property."""
+    """``visual set`` writes the literal type (``D``/``L``/``M``) Desktop wrote for the same property.
+
+    Where the fixture literal is Desktop's (Desktop never writes ``4.0D``; the
+    CLI did, on report-01), the whole text must match too: ``0D``, not ``0.0D``.
+    """
     root = fixture_copy(fixture)
     path = report_definition(root) / visual_file
     data = read_json(path)
@@ -480,3 +477,5 @@ def test_literal_suffix_matches_desktop(
         assert match is not None, f"{obj}.{prop}: wrote {literal!r}, Desktop wrote {desktop!r}"
         assert match.group(2) == suffix, f"{obj}.{prop}: wrote {literal!r}, Desktop wrote {desktop!r}"
         assert float(match.group(1)) == float(number)
+        if not CLI_WHOLE_DECIMAL.search(desktop):
+            assert literal == desktop, f"{obj}.{prop}: wrote {literal!r}, Desktop wrote {desktop!r}"

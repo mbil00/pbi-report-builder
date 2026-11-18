@@ -25,8 +25,7 @@ def encode_pbi_value(value: str, value_type: str) -> Any:
         color = value if value.startswith("#") else f"#{value}"
         return {"solid": {"color": {"expr": {"Literal": {"Value": f"'{color}'"}}}}}
     elif value_type == "number":
-        num = float(value)
-        return {"expr": {"Literal": {"Value": f"{num}D"}}}
+        return {"expr": {"Literal": {"Value": decimal_literal(float(value))}}}
     elif value_type == "long":
         num = int(float(value))
         return {"expr": {"Literal": {"Value": f"{num}L"}}}
@@ -38,6 +37,46 @@ def encode_pbi_value(value: str, value_type: str) -> Any:
     elif value_type == "enum":
         return {"expr": {"Literal": {"Value": f"'{value}'"}}}
     return value
+
+
+def decimal_literal(num: float | int) -> str:
+    """Format a number as a PBI decimal literal the way Desktop saves it.
+
+    Desktop writes whole numbers without a fraction (``4D``, ``0D``), never
+    ``4.0D``; fractions keep theirs (``0.5D``).
+    """
+    if isinstance(num, float) and num.is_integer():
+        return f"{int(num)}D"
+    return f"{num}D"
+
+
+_NUMERIC_LITERAL_SUFFIXES = ("D", "L", "M")
+
+
+def _numeric_literal(raw: Any) -> tuple[float, str] | None:
+    """Return (number, suffix) for a ``{"expr": {"Literal": ...}}`` number, else None."""
+    if not isinstance(raw, dict) or set(raw) != {"expr"}:
+        return None
+    literal = raw["expr"].get("Literal", {}).get("Value") if isinstance(raw["expr"], dict) else None
+    if not isinstance(literal, str) or not literal.endswith(_NUMERIC_LITERAL_SUFFIXES):
+        return None
+    try:
+        return float(literal[:-1]), literal[-1]
+    except ValueError:
+        return None
+
+
+def keep_same_number(existing: Any, encoded: Any) -> Any:
+    """Return ``existing`` when it is the number ``encoded`` writes, else ``encoded``.
+
+    Re-setting a property to the value it already has keeps the saved literal
+    text (Desktop's ``4D``, or an older ``4.0D``), so an unedited apply leaves
+    the file alone. A different number or literal type is written as encoded.
+    """
+    old, new = _numeric_literal(existing), _numeric_literal(encoded)
+    if old is not None and old == new:
+        return existing
+    return encoded
 
 
 def decode_pbi_value(raw: Any) -> Any:
@@ -406,7 +445,8 @@ def _set_container_prop(
                 "selector": {"metadata": measure_ref},
             }
             entries.append(target)
-        target.setdefault("properties", {})[prop_def.container_prop] = encoded
+        properties = target.setdefault("properties", {})
+        properties[prop_def.container_prop] = keep_same_number(properties.get(prop_def.container_prop), encoded)
         return
 
     # Use prop_def.selector to find the right entry
@@ -417,7 +457,8 @@ def _set_container_prop(
         if prop_def.selector == "default":
             target["selector"] = {"id": "default"}
         entries.append(target)
-    target.setdefault("properties", {})[prop_def.container_prop] = encoded
+    properties = target.setdefault("properties", {})
+    properties[prop_def.container_prop] = keep_same_number(properties.get(prop_def.container_prop), encoded)
 
 
 def _resolve_value_type(
@@ -433,6 +474,9 @@ def _resolve_value_type(
       "text"  → "enum"     (encoded as quoted string)
       "fmt"   → "enum"     (encoded as quoted string)
       list    → "enum"     (enum values, encoded as quoted string)
+
+    ``visual_schema.DESKTOP_SAVED_PROPERTY_TYPES`` overrides the schema type
+    where Desktop saves a property differently.
     """
     visual_type = data.get("visual", {}).get("visualType")
     if visual_type:
@@ -572,7 +616,8 @@ def _set_dynamic_chart_prop(data: dict, prop_name: str, value: str) -> list[str]
         elif selector is not None:
             target["selector"] = {"metadata": selector}
         entries.append(target)
-    target.setdefault("properties", {})[prop_key] = encoded
+    properties = target.setdefault("properties", {})
+    properties[prop_key] = keep_same_number(properties.get(prop_key), encoded)
     return schema_warnings
 
 
@@ -778,7 +823,7 @@ def _schema_chart_properties(
     syntax) or chart: prefix, but aren't individually registered.
     """
     try:
-        from pbi.visual_schema import get_visual_schema
+        from pbi.visual_schema import get_property_type, get_visual_schema
     except Exception:
         return []
 
@@ -788,10 +833,11 @@ def _schema_chart_properties(
 
     result = []
     for obj_name, props in sorted(schema["objects"].items()):
-        for prop_name, ptype in sorted(props.items()):
+        for prop_name in sorted(props):
             key = f"{obj_name}.{prop_name}"
             if key in registered_keys:
                 continue  # Already registered with a friendly name
+            ptype = get_property_type(visual_type, obj_name, prop_name)
 
             # Determine display type and enum values
             if isinstance(ptype, list):

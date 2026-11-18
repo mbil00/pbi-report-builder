@@ -12,6 +12,7 @@ from typing import Any
 
 from pbi.project import Visual
 from pbi.properties import decode_pbi_value, encode_pbi_value
+from pbi.property_runtime import keep_same_number
 from pbi.visual_queries import resolve_projection_field
 
 
@@ -129,7 +130,8 @@ def set_column_width(visual: Visual, query_ref: str, width: float) -> None:
     # Find existing entry for this column
     for entry in entries:
         if entry.get("selector", {}).get("metadata") == query_ref:
-            entry.setdefault("properties", {})["value"] = value
+            properties = entry.setdefault("properties", {})
+            properties["value"] = keep_same_number(properties.get("value"), value)
             return
 
     # Create new entry

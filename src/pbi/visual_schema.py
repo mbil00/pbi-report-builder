@@ -89,6 +89,19 @@ def get_property_names(visual_type: str, object_name: str) -> list[str] | None:
     return list(obj.keys())
 
 
+# Properties Desktop saves with a different type than the extracted schema
+# gives them. Desktop-saved output wins (#104):
+# - cardVisual `value.fontSize` is `fmt` in the schema, but Desktop saves a
+#   decimal literal (`28D` on report-04's "Delivery KPIs", `22D` on report-01).
+# - cardVisual `layout.columnCount` and `layout.cellPadding` are `int`, but
+#   Desktop saves `1D` and `4D` (report-01), not `1L`/`4L`.
+DESKTOP_SAVED_PROPERTY_TYPES: dict[tuple[str, str, str], str] = {
+    ("cardVisual", "value", "fontSize"): "num",
+    ("cardVisual", "layout", "columnCount"): "num",
+    ("cardVisual", "layout", "cellPadding"): "num",
+}
+
+
 def get_property_type(
     visual_type: str, object_name: str, property_name: str,
 ) -> str | list[str] | None:
@@ -98,7 +111,12 @@ def get_property_type(
         - A string like "bool", "num", "int", "color", "text", "fmt", "any"
         - A list of strings for enum types (the allowed values)
         - None if the property is not found
+
+    `DESKTOP_SAVED_PROPERTY_TYPES` overrides the extracted schema.
     """
+    override = DESKTOP_SAVED_PROPERTY_TYPES.get((visual_type, object_name, property_name))
+    if override is not None:
+        return override
     schema = get_visual_schema(visual_type)
     if schema is None:
         return None

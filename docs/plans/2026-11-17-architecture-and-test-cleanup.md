@@ -66,9 +66,11 @@ and skipped. R3 found that `RelativeTime` unit codes may not match Desktop (#135
 | R1 | apply accepts Desktop-saved cardVisual `Rows` role and keyDriversVisual sort | #109 | fix/apply-desktop-roles-sort | [x] #133 (b3643c0) |
 | R2 | visual content survives: Desktop's empty `{}`/`[]` (`expansionStates[].root`, smart narrative `defaultCase.textRuns`), shape `fill` duplicate `{"metadata":"default"}` entry, `queryState.Y.fieldParameters` dropped | #108 | fix/apply-keep-visual-content | [x] #134 (6b7948a) |
 | R3 | filters survive: names kept (no `Filter_<hash>`), no added `isHiddenInViewMode`/`isLockedInViewMode`/`howCreated`, `RelativeTime` not rewritten as `RelativeDate` | #108 | fix/apply-keep-filters | [x] #136 (4793743) |
-| R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [x] #137 |
-| R5 | Desktop literal types kept (`28D`, `4D`, `0D`; `columnCount`, `cellPadding`) for `visual set` and apply | #104 | fix/desktop-literal-types | [ ] |
+| R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [x] #137 (562d480) |
+| R5 | Desktop literal types kept (`28D`, `4D`, `0D`; `columnCount`, `cellPadding`) for `visual set` and apply | #104 | fix/desktop-literal-types | [x] #138 |
 | R6 | report-01: quoted text-run literals and expr colours, `navigationSection` page name vs id, measure sort as `Column`; remove the last report xfails | #113, #108 | fix/report01-roundtrip | [ ] |
+
+After R5, export → apply on report-01 changes 5 visual files: 3 measure sorts saved as `Column` (`77b69dede4525967c721`, `2931b2aea3d03b834970`, `d4c8f3cb3bc934b11a5b`) and 2 `navigationSection` page names rewritten as ids (`4962ffe2230372e47f86`, `96c806cbe45b1de49dd1`). Its numeric literals, the CLI's old `4.0D` included, are kept.
 
 ## After the relay (not scheduled yet)
 

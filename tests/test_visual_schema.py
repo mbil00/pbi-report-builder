@@ -341,7 +341,7 @@ class SchemaTypeCoercionTests(unittest.TestCase):
         data = self._bar_data()
         set_property(data, "dataPoint.fillTransparency", "50", VISUAL_PROPERTIES)
         raw = self._get_raw(data, "dataPoint", "fillTransparency")
-        self.assertEqual(raw, {"expr": {"Literal": {"Value": "50.0D"}}})
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "50D"}}})
 
     def test_integer_property_encodes_as_long_literal(self) -> None:
         """Schema 'int' type should use L suffix (long), not D (double)."""
@@ -367,8 +367,8 @@ class SchemaTypeCoercionTests(unittest.TestCase):
         data = {"visual": {}}
         set_property(data, "chart:legend.show", "1", VISUAL_PROPERTIES)
         raw = self._get_raw(data, "legend", "show")
-        # Without schema, '1' is inferred as number → "1.0D"
-        self.assertEqual(raw, {"expr": {"Literal": {"Value": "1.0D"}}})
+        # Without schema, '1' is inferred as number → "1D"
+        self.assertEqual(raw, {"expr": {"Literal": {"Value": "1D"}}})
 
     def test_schema_coercion_via_chart_prefix(self) -> None:
         """chart: prefix also uses schema-aware coercion."""

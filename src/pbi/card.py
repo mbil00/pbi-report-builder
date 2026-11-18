@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pbi.property_runtime import decimal_literal
+
 
 # ── Selector helpers ─────────────────────────────────────────────
 
@@ -159,7 +161,7 @@ def expand_kpis(
         if "position" in accent_bar:
             ab_props["position"] = {"expr": {"Literal": {"Value": f"'{accent_bar['position']}'"}}}
         if "width" in accent_bar:
-            ab_props["width"] = {"expr": {"Literal": {"Value": f"{accent_bar['width']}D"}}}
+            ab_props["width"] = {"expr": {"Literal": {"Value": decimal_literal(accent_bar['width'])}}}
         if ab_props:
             ab_entries.append(_obj_entry(_default_selector(), ab_props))
             props_set += len(ab_props)
@@ -183,9 +185,9 @@ def expand_kpis(
         # Value formatting (display units, font size, color, bold)
         value_props: dict[str, Any] = {}
         if "displayUnits" in kpi:
-            value_props["labelDisplayUnits"] = {"expr": {"Literal": {"Value": f"{kpi['displayUnits']}D"}}}
+            value_props["labelDisplayUnits"] = {"expr": {"Literal": {"Value": decimal_literal(kpi['displayUnits'])}}}
         if "fontSize" in kpi:
-            value_props["fontSize"] = {"expr": {"Literal": {"Value": f"{kpi['fontSize']}D"}}}
+            value_props["fontSize"] = {"expr": {"Literal": {"Value": decimal_literal(kpi['fontSize'])}}}
         if "fontColor" in kpi:
             c = kpi["fontColor"]
             value_props["fontColor"] = {"solid": {"color": {"expr": {"Literal": {"Value": f"'{c}'"}}}}}
@@ -249,7 +251,7 @@ def expand_kpis(
             # Value formatting
             rl_value_props: dict[str, Any] = {}
             if "displayUnits" in rl:
-                rl_value_props["valueDisplayUnits"] = {"expr": {"Literal": {"Value": f"{rl['displayUnits']}D"}}}
+                rl_value_props["valueDisplayUnits"] = {"expr": {"Literal": {"Value": decimal_literal(rl['displayUnits'])}}}
             if "fontColor" in rl:
                 c = rl["fontColor"]
                 rl_value_props["valueFontColor"] = {"solid": {"color": {"expr": {"Literal": {"Value": f"'{c}'"}}}}}
@@ -268,7 +270,6 @@ def _map_prop(source: dict, src_key: str, target: dict, tgt_key: str) -> None:
     if isinstance(val, bool):
         target[tgt_key] = {"expr": {"Literal": {"Value": "true" if val else "false"}}}
     elif isinstance(val, (int, float)):
-        v = int(val) if val == int(val) else val
-        target[tgt_key] = {"expr": {"Literal": {"Value": f"{v}D"}}}
+        target[tgt_key] = {"expr": {"Literal": {"Value": decimal_literal(val)}}}
     elif isinstance(val, str):
         target[tgt_key] = {"expr": {"Literal": {"Value": f"'{val}'"}}}
