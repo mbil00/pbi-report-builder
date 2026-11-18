@@ -121,11 +121,45 @@ def apply_bindings(
                 set_column_width(visual, query_ref, item.width)
 
         if new_projections:
-            query_state[canonical_role] = {"projections": new_projections}
+            role_state: dict[str, Any] = {"projections": new_projections}
+            field_parameters = _kept_field_parameters(
+                query_state.get(canonical_role, {}), new_projections
+            )
+            if field_parameters:
+                role_state["fieldParameters"] = field_parameters
+            query_state[canonical_role] = role_state
         else:
             query_state.pop(canonical_role, None)
 
     _prune_unbound_query_metadata(visual)
+
+
+def _kept_field_parameters(
+    role_state: dict[str, Any],
+    new_projections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the role's ``fieldParameters`` whose projections are still bound.
+
+    Desktop marks the projections a field parameter expands to with
+    ``{parameterExpr, index, length}`` (report-04 ``fd84289803c981e2182a``).
+    An entry survives when the same run of fields is still bound in order;
+    its ``index`` follows the run if it moved.
+    """
+    kept: list[dict[str, Any]] = []
+    old_fields = [projection.get("field") for projection in role_state.get("projections", [])]
+    new_fields = [projection.get("field") for projection in new_projections]
+    for entry in role_state.get("fieldParameters", []):
+        index, length = entry.get("index"), entry.get("length")
+        if not isinstance(index, int) or not isinstance(length, int) or length < 1:
+            continue
+        run = old_fields[index : index + length]
+        if len(run) != length:
+            continue
+        for start in range(len(new_fields) - length + 1):
+            if new_fields[start : start + length] == run:
+                kept.append({**entry, "index": start})
+                break
+    return kept
 
 
 def _prune_unbound_query_metadata(visual: Visual) -> None:

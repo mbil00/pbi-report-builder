@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import difflib
 import logging
 from typing import Any
@@ -159,6 +160,11 @@ def set_property(
             )
 
     if prop_def and prop_def.container_key:
+        if bracket_measure == "default":
+            # "[default]" names Desktop's {"id": "default"} entry (as export
+            # writes it and chart: properties read it), not a measure.
+            prop_def = dataclasses.replace(prop_def, selector="default")
+            bracket_measure = None
         _set_container_prop(data, prop_def, value, measure_ref=bracket_measure)
     elif prop_def and prop_def.json_path:
         coerced = _coerce_simple(value, prop_def.value_type)
