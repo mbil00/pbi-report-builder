@@ -340,7 +340,8 @@ def _apply_visual_type_update(data: dict, visual_type: str) -> str:
     visual["visualType"] = canonical
     query_state = visual.setdefault("query", {}).setdefault("queryState", {})
     for role in get_visual_roles(canonical):
-        query_state.setdefault(role["name"], {"projections": []})
+        if role.get("scaffold", True):
+            query_state.setdefault(role["name"], {"projections": []})
     return canonical
 
 

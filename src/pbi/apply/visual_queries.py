@@ -54,7 +54,11 @@ def apply_bindings(
             result.errors.append(f"{context}: invalid binding for role {canonical_role}: {e}")
             return
         resolved_fields: list[BoundField] = []
+        # The role's projections not yet matched to an item, to tell which
+        # items keep an existing Desktop Aggregation projection.
+        unmatched = list(query_state.get(canonical_role, {}).get("projections", []))
         for item in parsed_items:
+            existing = match_existing_projection(unmatched, item)
             if item.hierarchy is not None:
                 # Already resolved against the model by parse_binding_items.
                 resolved_fields.append(
@@ -73,7 +77,14 @@ def apply_bindings(
                 result.errors.append(f"{context}: invalid binding for role {canonical_role}: {e}")
                 return
             resolved_fields.append(
-                BoundField(canonical_role, entity, prop, field_type, data_type)
+                BoundField(
+                    canonical_role,
+                    entity,
+                    prop,
+                    field_type,
+                    data_type,
+                    aggregated=existing is not None and "Aggregation" in existing.get("field", {}),
+                )
             )
         parsed_bindings[canonical_role] = (parsed_items, resolved_fields)
 

@@ -102,6 +102,33 @@ def get_bindings(visual: Visual) -> list[tuple[str, str, str, str]]:
     return bindings
 
 
+def _sort_entry(entity: str, prop: str, field_type: str, descending: bool) -> dict:
+    field_key = "Column" if field_type == "column" else "Measure"
+    return {
+        "field": {
+            field_key: {
+                "Expression": {"SourceRef": {"Entity": entity}},
+                "Property": prop,
+            }
+        },
+        "direction": "Descending" if descending else "Ascending",
+    }
+
+
+def has_sort(
+    visual: Visual,
+    entity: str,
+    prop: str,
+    field_type: str = "column",
+    descending: bool = True,
+) -> bool:
+    """Whether the visual's sort definition is exactly this one sort."""
+    existing = visual.data.get("visual", {}).get("query", {}).get("sortDefinition")
+    return isinstance(existing, dict) and existing.get("sort") == [
+        _sort_entry(entity, prop, field_type, descending)
+    ]
+
+
 def set_sort(
     visual: Visual,
     entity: str,
@@ -118,25 +145,14 @@ def set_sort(
     Pass ``save=False`` when the caller persists the visual itself, e.g. an
     apply session that journals the write for rollback.
     """
-    field_key = "Column" if field_type == "column" else "Measure"
-    sort_entry = {
-        "field": {
-            field_key: {
-                "Expression": {"SourceRef": {"Entity": entity}},
-                "Property": prop,
-            }
-        },
-        "direction": "Descending" if descending else "Ascending",
-    }
-
+    sort_entry = _sort_entry(entity, prop, field_type, descending)
+    if has_sort(visual, entity, prop, field_type, descending):
+        return
     query = (
         visual.data
         .setdefault("visual", {})
         .setdefault("query", {})
     )
-    existing = query.get("sortDefinition")
-    if isinstance(existing, dict) and existing.get("sort") == [sort_entry]:
-        return
     query["sortDefinition"] = {
         "sort": [sort_entry],
         "isDefaultSort": False,

@@ -33,11 +33,35 @@ def get_visual_analysis(visual_type: str) -> dict[str, Any] | None:
     return _load_analysis().get("visuals", {}).get(visual_type)
 
 
+# Data roles Desktop saves that the extracted schema's `dataRoles` leave out.
+# Each entry needs Desktop-saved evidence (Desktop output is ground truth):
+# - cardVisual `Rows`: the card's category well (one card per value).
+#   fixtures/sample-report visual 4881412909e86c0ae023 binds Product.Category
+#   there, and the extracted cardVisual dataViewMapping already names `Rows`
+#   (max 1). A grouping role, so it takes a column.
+# `roles.get_visual_roles` lists them, but new visuals are not scaffolded with them.
+DESKTOP_SAVED_ROLES: dict[str, list[dict[str, Any]]] = {
+    "cardVisual": [
+        {
+            "name": "Rows",
+            "kind": 0,
+            "requiredTypes": [],
+        },
+    ],
+}
+
+
 def get_visual_analysis_roles(visual_type: str) -> list[dict[str, Any]]:
     visual = get_visual_analysis(visual_type)
     if not visual:
         return []
-    return list(visual.get("dataRoles", []))
+    roles = list(visual.get("dataRoles", []))
+    known = {str(role.get("name", "")).lower() for role in roles}
+    roles.extend(
+        role for role in DESKTOP_SAVED_ROLES.get(visual_type, [])
+        if role["name"].lower() not in known
+    )
+    return roles
 
 
 def get_visual_analysis_role(visual_type: str, role_name: str) -> dict[str, Any] | None:

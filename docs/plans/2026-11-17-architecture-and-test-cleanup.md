@@ -46,12 +46,29 @@ Each unit is one PR with a Conventional Commit title, squash-merged. State marke
 | 14 | T4b … model | #85 | [x] #124 (ddfff49) |
 | 15 | T4c … visual/CLI | #85 | [x] #127 (370ff21) |
 | 16 | T4d … themes | #85 | [x] #128 (cf57e5e) |
-| 17 | T4e … misc | #85 | [x] #132 |
+| 17 | T4e … misc | #85 | [x] #132 (58de068) |
 
 Each B unit runs the harness, removes the xfails its fix resolves, and leaves any xfails it
 doesn't resolve. If a fix turns up a further round-trip bug, file an issue and add it as an
 xfail; don't widen the PR. If the B fixes leave an area's harness steps still xfailed, the
 matching T4 PR deletes only what the harness actually covers.
+
+## Round-trip relay (2026-11-18)
+
+Goal: an unedited `pbi export` → `pbi apply` is a byte no-op on every Desktop-saved fixture,
+which clears the remaining `KNOWN_REPORT_ROUNDTRIP` xfails and closes #108, #109, #113 and
+#104. The decisions above still apply. Each unit removes the xfails it fully resolves and adds a
+focused test per shape it fixes. A unit that turns out to be already fixed is marked here
+and skipped. The relay stops after R6, then cuts the release (expected v0.11.0).
+
+| # | Unit | Issues | Branch | State |
+|---|---|---|---|---|
+| R1 | apply accepts Desktop-saved cardVisual `Rows` role and keyDriversVisual sort | #109 | fix/apply-desktop-roles-sort | [x] #133 |
+| R2 | visual content survives: Desktop's empty `{}`/`[]` (`expansionStates[].root`, smart narrative `defaultCase.textRuns`), shape `fill` duplicate `{"metadata":"default"}` entry, `queryState.Y.fieldParameters` dropped | #108 | fix/apply-keep-visual-content | [ ] |
+| R3 | filters survive: names kept (no `Filter_<hash>`), no added `isHiddenInViewMode`/`isLockedInViewMode`/`howCreated`, `RelativeTime` not rewritten as `RelativeDate` | #108 | fix/apply-keep-filters | [ ] |
+| R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [ ] |
+| R5 | Desktop literal types kept (`28D`, `4D`, `0D`; `columnCount`, `cellPadding`) for `visual set` and apply | #104 | fix/desktop-literal-types | [ ] |
+| R6 | report-01: quoted text-run literals and expr colours, `navigationSection` page name vs id, measure sort as `Column`; remove the last report xfails | #113, #108 | fix/report01-roundtrip | [ ] |
 
 ## After the relay (not scheduled yet)
 
