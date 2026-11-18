@@ -54,9 +54,7 @@ FIXTURE_NAMES = list(FIXTURES)
 
 # --- Known failures (fixture name -> issue) -----------------------------------
 
-KNOWN_REPORT_ROUNDTRIP = {
-    "report-01-kitchen-sink": "#108, #113",
-}
+KNOWN_REPORT_ROUNDTRIP: dict[str, str] = {}
 
 # Every fixture has a table without measures, so `model measure list --json`
 # prints prose there.
