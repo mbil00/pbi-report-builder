@@ -27,6 +27,7 @@ def visual_bind(
 ) -> None:
     """Bind a column or measure to a visual's data role."""
     from pbi.roles import get_visual_type_info, normalize_visual_role
+    from pbi.visual_analysis import allowed_role_names
     from pbi.visual_builders import BoundField, existing_bound_fields, validate_incremental_bindings
 
     proj, _pg, vis = resolve_visual_target(project, page, visual)
@@ -51,7 +52,8 @@ def visual_bind(
 
     info = get_visual_type_info(vis.visual_type)
     if info and info.roles:
-        supported_roles = {entry["name"] for entry in info.roles}
+        # Plus the roles Desktop saves beyond the schema's (e.g. cardVisual Rows).
+        supported_roles = {entry["name"] for entry in info.roles} | allowed_role_names(vis.visual_type)
         if canonical_role not in supported_roles:
             console.print(
                 f'[red]Error:[/red] Role "{canonical_role}" is not supported for '

@@ -58,7 +58,7 @@ KNOWN_REPORT_ROUNDTRIP = {
     "report-01-kitchen-sink": "#108, #113",
     "report-04-desktop-shapes": "#108",
     "report-04-desktop-shapes-renamed": "#108",
-    "sample-report": "#108, #109",
+    "sample-report": "#108",
 }
 
 # Every fixture has a table without measures, so `model measure list --json`

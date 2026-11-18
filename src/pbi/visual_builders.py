@@ -7,7 +7,7 @@ from collections import Counter
 
 from pbi.fields import resolve_field_info, resolve_field_type
 from pbi.properties import VISUAL_PROPERTIES, set_property
-from pbi.visual_queries import add_binding, get_bindings, set_sort
+from pbi.visual_queries import add_binding, get_bindings, has_sort, set_sort
 from pbi.visual_analysis import (
     allowed_role_names,
     get_visual_analysis_mappings,
@@ -26,6 +26,9 @@ class BoundField:
     prop: str
     field_type: str
     data_type: str | None = None
+    # Desktop wraps a column in an Aggregation (Sum, Min, ...) when it lands
+    # in a measure well; the result is an implicit measure.
+    aggregated: bool = False
 
 
 DEFAULT_VISUAL_SIZES: dict[str, tuple[int, int]] = {
@@ -137,7 +140,8 @@ def existing_bound_fields(project, visual) -> list[BoundField]:
     for role, entity, prop, field_type in get_bindings(visual):
         # An Aggregation projection (e.g. Sum of a column) wraps a Column or
         # Measure ref; resolve it through the model like an unmarked field.
-        if field_type == "aggregation":
+        aggregated = field_type == "aggregation"
+        if aggregated:
             field_type = "auto"
         resolved_entity, resolved_prop, resolved_field_type, data_type = resolve_field_info(
             project,
@@ -145,7 +149,14 @@ def existing_bound_fields(project, visual) -> list[BoundField]:
             field_type,
         )
         existing.append(
-            BoundField(role, resolved_entity, resolved_prop, resolved_field_type, data_type)
+            BoundField(
+                role,
+                resolved_entity,
+                resolved_prop,
+                resolved_field_type,
+                data_type,
+                aggregated=aggregated,
+            )
         )
     return existing
 
@@ -160,17 +171,21 @@ def apply_initial_sort(
     save: bool = True,
 ) -> tuple[str, str, str, str]:
     """Apply an initial sort and return the resolved field details."""
-    sorting_supported = supports_sorting(visual.visual_type)
-    if sorting_supported is False:
-        raise ValueError(
-            f"{visual.visual_type} does not support sorting in the extracted Desktop schema."
-        )
     entity, prop, resolved_field_type = resolve_field_type(
         project,
         field,
         field_type,
         strict=True,
     )
+    # Desktop saves a default sort on some visuals whose extracted schema has
+    # no sorting behaviour (keyDriversVisual in fixtures/sample-report), so
+    # restating the sort a visual already has is accepted; a new one is not.
+    if supports_sorting(visual.visual_type) is False and not has_sort(
+        visual, entity, prop, resolved_field_type, descending
+    ):
+        raise ValueError(
+            f"{visual.visual_type} does not support sorting in the extracted Desktop schema."
+        )
     set_sort(
         visual,
         entity,
@@ -404,7 +419,9 @@ def _validate_schema_bindings(
                 f'Role "{field.role}" is not supported for {visual_type}. '
                 f'Supported roles: {", ".join(sorted(supported_roles))}'
             )
-        warning = role_type_warning(visual_type, field.role, field.field_type, field.data_type)
+        # An aggregated column is an implicit measure, so a measure role takes it.
+        field_type = "measure" if field.aggregated else field.field_type
+        warning = role_type_warning(visual_type, field.role, field_type, field.data_type)
         if warning:
             raise ValueError(warning)
 
