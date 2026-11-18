@@ -375,10 +375,32 @@ def get_visual_roles(visual_type: str) -> list[dict]:
     schema = _schema_roles(canonical)
 
     if handcrafted and schema:
-        return _merge_roles(handcrafted, schema)
-    if handcrafted:
-        return handcrafted
-    return schema
+        roles = _merge_roles(handcrafted, schema)
+    else:
+        roles = handcrafted or schema
+    return _merge_roles(roles, _desktop_saved_roles(canonical))
+
+
+def _desktop_saved_roles(visual_type: str) -> list[dict]:
+    """Roles Desktop saves beyond the schema's (`DESKTOP_SAVED_ROLES`).
+
+    They bind like any role but carry ``scaffold: False``: Desktop does not
+    write them empty on a new visual, so neither does create.
+    """
+    from pbi.visual_analysis import DESKTOP_SAVED_ROLES, role_accepts_multiple
+
+    kind_desc = {0: "Grouping field", 1: "Measure field", 2: "Any field"}
+    return [
+        {
+            **_role(
+                role["name"],
+                f'{role["name"]} ({kind_desc.get(role["kind"], "field")})',
+                multi=role_accepts_multiple(visual_type, role["name"]),
+            ),
+            "scaffold": False,
+        }
+        for role in DESKTOP_SAVED_ROLES.get(visual_type, [])
+    ]
 
 
 def _stored_role_type(visual_type: str) -> str:
@@ -407,12 +429,8 @@ def normalize_visual_role(visual_type: str, role: str) -> str:
     *visual_type* is the visualType a visual is stored with (or a canonical
     type); a stored legacy `card` keeps its own roles.
     """
-    from pbi.visual_analysis import allowed_role_names
-
     canonical_type = _stored_role_type(visual_type)
     known_roles = [entry["name"] for entry in stored_visual_roles(visual_type)]
-    # Plus the roles Desktop saves beyond the schema's (e.g. cardVisual Rows).
-    known_roles += sorted(allowed_role_names(canonical_type) - set(known_roles))
 
     for known_role in known_roles:
         if known_role.lower() == role.lower():

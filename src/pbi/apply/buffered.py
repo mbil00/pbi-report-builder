@@ -224,7 +224,8 @@ class BufferedPbirApplySession:
 
         query_state: dict[str, Any] = {}
         for role in stored_visual_roles(visual_type):
-            query_state[role["name"]] = {"projections": []}
+            if role.get("scaffold", True):
+                query_state[role["name"]] = {"projections": []}
 
         data = {
             "$schema": VISUAL_CONTAINER_SCHEMA,

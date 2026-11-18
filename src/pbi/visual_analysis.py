@@ -39,7 +39,7 @@ def get_visual_analysis(visual_type: str) -> dict[str, Any] | None:
 #   fixtures/sample-report visual 4881412909e86c0ae023 binds Product.Category
 #   there, and the extracted cardVisual dataViewMapping already names `Rows`
 #   (max 1). A grouping role, so it takes a column.
-# These roles validate bindings; they are not scaffolded on new visuals.
+# `roles.get_visual_roles` lists them, but new visuals are not scaffolded with them.
 DESKTOP_SAVED_ROLES: dict[str, list[dict[str, Any]]] = {
     "cardVisual": [
         {

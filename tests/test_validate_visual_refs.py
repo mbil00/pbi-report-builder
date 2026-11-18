@@ -300,7 +300,7 @@ def test_apply_creates_legacy_card_with_its_own_roles(fixture_copy: Callable[[st
 
 def test_stored_card_roles_differ_from_the_card_alias() -> None:
     assert [role["name"] for role in stored_visual_roles("card")] == ["Values"]
-    assert [role["name"] for role in stored_visual_roles("cardVisual")] == ["Data", "Tooltips"]
+    assert [role["name"] for role in stored_visual_roles("cardVisual")] == ["Data", "Tooltips", "Rows"]
     assert [role["name"] for role in stored_visual_roles("table")] == ["Values"]
     assert normalize_visual_role("card", "values") == "Values"
     assert normalize_visual_role("card", "Fields") == "Values"

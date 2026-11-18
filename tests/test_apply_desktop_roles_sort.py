@@ -130,3 +130,25 @@ def test_card_rows_role_is_case_insensitive(fixture_copy: Callable[[str], Path])
 
     assert bound.exit_code == 0, bound.output
     assert _query(root, CARD)["queryState"]["Rows"] == desktop_rows
+
+
+def test_create_card_binds_rows_but_does_not_scaffold_it(fixture_copy: Callable[[str], Path]) -> None:
+    root = fixture_copy(FIXTURE)
+    desktop_rows = _query(root, CARD)["queryState"]["Rows"]
+
+    with_rows = cli(
+        "visual", "create", PAGE, "cardVisual", "--name", "with-rows",
+        "--bind", "Data=Sales.Total Revenue", "--bind", "Rows=Product.Category",
+        project=root,
+    )
+    plain = cli("visual", "create", PAGE, "cardVisual", "--name", "plain", project=root)
+
+    assert with_rows.exit_code == 0, with_rows.output
+    assert plain.exit_code == 0, plain.output
+    states = {
+        data["name"]: data["visual"]["query"]["queryState"]
+        for data in (read_json(p) for p in report_definition(root).glob("pages/*/visuals/*/visual.json"))
+        if data.get("name") in {"with-rows", "plain"}
+    }
+    assert states["with-rows"]["Rows"] == desktop_rows
+    assert "Rows" not in states["plain"]
