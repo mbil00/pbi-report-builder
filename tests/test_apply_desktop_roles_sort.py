@@ -168,3 +168,21 @@ def test_apply_keeps_card_aggregation_under_an_abbreviated_table_name(
 
     assert applied.exit_code == 0, applied.output
     assert _visual_path(root, CARD).read_bytes() == card_bytes
+
+
+def _column_projection(entity: str, prop: str) -> dict:
+    return {
+        "field": {"Column": {"Expression": {"SourceRef": {"Entity": entity}}, "Property": prop}},
+        "queryRef": f"{entity}.{prop}",
+        "nativeQueryRef": prop,
+    }
+
+
+def test_projection_match_compares_fields_not_display_suffixes() -> None:
+    from pbi.roundtrip_primitives import BindingItem, match_existing_projection
+
+    suffixed = _column_projection("Task", "TaskName (measure)")
+    plain = _column_projection("Task", "TaskName")
+    item = BindingItem(field_ref="Task.TaskName", entity="Task", prop="TaskName", field_type="column")
+
+    assert match_existing_projection([suffixed, plain], item) is plain

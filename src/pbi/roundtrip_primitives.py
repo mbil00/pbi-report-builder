@@ -323,13 +323,29 @@ def match_existing_projection(
         if isinstance(existing_field, str) and existing_field.lower() == target_field:
             return existing_projections.pop(index)
         # The resolved field, so `Sal.SaleID` still finds `Min(Sales.SaleID)`.
-        if (
-            isinstance(existing_field, str)
-            and existing_field.removesuffix(" (measure)").lower() == target_query
+        parts = _projection_entity_prop(projection)
+        if parts is not None and (parts[0].lower(), parts[1].lower()) == (
+            item.entity.lower(),
+            item.prop.lower(),
         ):
             return existing_projections.pop(index)
         if isinstance(existing_query, str) and existing_query.lower() == target_query:
             return existing_projections.pop(index)
+    return None
+
+
+def _projection_entity_prop(projection: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Return the (entity, property) a Column, Measure or Aggregation projection names."""
+    field = projection.get("field", {})
+    if "Aggregation" in field:
+        field = field["Aggregation"].get("Expression", {})
+    for key in ("Column", "Measure"):
+        data = field.get(key)
+        if isinstance(data, dict):
+            entity = data.get("Expression", {}).get("SourceRef", {}).get("Entity")
+            prop = data.get("Property")
+            if isinstance(entity, str) and isinstance(prop, str):
+                return entity, prop
     return None
 
 
