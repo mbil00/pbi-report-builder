@@ -322,14 +322,14 @@ def match_existing_projection(
         existing_query = projection.get("queryRef", "")
         if isinstance(existing_field, str) and existing_field.lower() == target_field:
             return existing_projections.pop(index)
-        # The resolved field, so `Sal.SaleID` still finds `Min(Sales.SaleID)`.
-        parts = _projection_entity_prop(projection)
-        if parts is not None and (parts[0].lower(), parts[1].lower()) == (
-            item.entity.lower(),
-            item.prop.lower(),
-        ):
-            return existing_projections.pop(index)
         if isinstance(existing_query, str) and existing_query.lower() == target_query:
+            return existing_projections.pop(index)
+    # Only when nothing matched by name: the resolved field, so `Sal.SaleID`
+    # still finds `Min(Sales.SaleID)`.
+    target = (item.entity.lower(), item.prop.lower())
+    for index, projection in enumerate(existing_projections):
+        parts = _projection_entity_prop(projection)
+        if parts is not None and (parts[0].lower(), parts[1].lower()) == target:
             return existing_projections.pop(index)
     return None
 

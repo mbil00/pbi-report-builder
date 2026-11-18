@@ -186,3 +186,18 @@ def test_projection_match_compares_fields_not_display_suffixes() -> None:
     item = BindingItem(field_ref="Task.TaskName", entity="Task", prop="TaskName", field_type="column")
 
     assert match_existing_projection([suffixed, plain], item) is plain
+
+
+def test_projection_match_prefers_a_name_match_over_the_resolved_field() -> None:
+    from pbi.roundtrip_primitives import BindingItem, match_existing_projection
+
+    summed = {
+        "field": {"Aggregation": {"Expression": _column_projection("Task", "ActualHours")["field"], "Function": 0}},
+        "queryRef": "Sum(Task.ActualHours)",
+        "nativeQueryRef": "Sum of ActualHours",
+    }
+    plain = _column_projection("Task", "ActualHours")
+    item = BindingItem(field_ref="Tas.ActualHours", entity="Task", prop="ActualHours", field_type="column")
+
+    assert match_existing_projection([summed, plain], item) is plain
+    assert match_existing_projection([summed], item) is summed
