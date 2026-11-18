@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 from .state import (
@@ -121,11 +122,61 @@ def apply_bindings(
                 set_column_width(visual, query_ref, item.width)
 
         if new_projections:
-            query_state[canonical_role] = {"projections": new_projections}
+            role_state: dict[str, Any] = {"projections": new_projections}
+            field_parameters = _kept_field_parameters(
+                query_state.get(canonical_role, {}), new_projections
+            )
+            if field_parameters:
+                role_state["fieldParameters"] = field_parameters
+            query_state[canonical_role] = role_state
         else:
             query_state.pop(canonical_role, None)
 
     _prune_unbound_query_metadata(visual)
+
+
+def _kept_field_parameters(
+    role_state: dict[str, Any],
+    new_projections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the role's ``fieldParameters`` whose projections are still bound.
+
+    Desktop marks the projections a field parameter expands to with
+    ``{parameterExpr, index, length}`` (report-04 ``fd84289803c981e2182a``).
+    Projections are compared on ``field`` and ``queryRef``, so a displayName
+    edit keeps the entry. It stays at its ``index`` when the same run is still
+    bound there; otherwise it follows the run to the one place it now sits.
+    When the run is gone, or could be in more than one place, it is dropped
+    rather than marking a projection the parameter did not make.
+    """
+    kept: list[dict[str, Any]] = []
+    old_keys = [_projection_key(projection) for projection in role_state.get("projections", [])]
+    new_keys = [_projection_key(projection) for projection in new_projections]
+    for entry in role_state.get("fieldParameters", []):
+        index, length = entry.get("index"), entry.get("length")
+        if not isinstance(index, int) or not isinstance(length, int) or index < 0 or length < 1:
+            continue
+        run = old_keys[index : index + length]
+        if len(run) != length:
+            continue
+        if new_keys[index : index + length] == run:
+            kept.append(entry)
+            continue
+        starts = [
+            start for start in range(len(new_keys) - length + 1)
+            if new_keys[start : start + length] == run
+        ]
+        if len(starts) == 1:
+            kept.append({**entry, "index": starts[0]})
+    return kept
+
+
+def _projection_key(projection: dict[str, Any]) -> tuple[str, str]:
+    """Identify a projection by its field expression and query ref."""
+    return (
+        json.dumps(projection.get("field"), sort_keys=True),
+        str(projection.get("queryRef", "")),
+    )
 
 
 def _prune_unbound_query_metadata(visual: Visual) -> None:

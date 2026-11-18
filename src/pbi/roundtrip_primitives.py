@@ -509,8 +509,16 @@ def iter_nested_property_assignments(
 
 
 def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, Any]) -> dict[str, Any]:
-    """Remove PBIR fragments already represented by the canonical YAML surface."""
-    pruned = copy.deepcopy(raw_visual)
+    """Remove PBIR fragments already represented by the canonical YAML surface.
+
+    A container the pruning empties is dropped. An empty ``{}`` / ``[]`` the
+    file already held is kept inside a list item that is kept: apply replaces
+    lists from ``pbir:`` whole, so Desktop's ``expansionStates[].root: {}``
+    and a smart narrative's ``defaultCase: {"textRuns": []}`` would go
+    otherwise. Elsewhere it is dropped: apply merges dicts into the file, which
+    keeps it, so it needs no passthrough.
+    """
+    pruned = _mark_empty_containers(copy.deepcopy(raw_visual))
     pruned.pop("$schema", None)
     pruned.pop("name", None)
     pruned.pop("position", None)
@@ -601,7 +609,8 @@ def prune_visual_pbir(raw_visual: dict[str, Any], exported_visual: Mapping[str, 
         pruned.pop("howCreated", None)
 
     _normalize_resource_package_types(pruned)
-    return _remove_empty_containers(pruned)
+    cleaned = _remove_empty_containers(pruned, in_list=False)
+    return cleaned[0] if cleaned is not None else {}
 
 
 def _canonical_leaf_name(object_name: str, canonical: str, *, raw_name: str) -> str:
@@ -733,22 +742,60 @@ def _normalize_resource_package_types(data: Any) -> None:
             _normalize_resource_package_types(item)
 
 
-def _remove_empty_containers(value: Any) -> Any:
-    """Recursively remove empty dict/list containers from a JSON-like value."""
+class _KeptDict(dict):
+    """An empty dict present in the source, which pruning must not drop."""
+
+
+class _KeptList(list):
+    """An empty list present in the source, which pruning must not drop."""
+
+
+def _mark_empty_containers(value: Any) -> Any:
+    """Return ``value`` with every empty dict/list replaced by a kept marker."""
     if isinstance(value, dict):
-        cleaned: dict[str, Any] = {}
-        for key, child in value.items():
-            normalized = _remove_empty_containers(child)
-            if normalized in ({}, []):
-                continue
-            cleaned[key] = normalized
-        return cleaned
+        if not value:
+            return _KeptDict()
+        return {key: _mark_empty_containers(child) for key, child in value.items()}
     if isinstance(value, list):
-        cleaned_list = []
-        for child in value:
-            normalized = _remove_empty_containers(child)
-            if normalized in ({}, []):
-                continue
-            cleaned_list.append(normalized)
-        return cleaned_list
+        if not value:
+            return _KeptList()
+        return [_mark_empty_containers(child) for child in value]
     return value
+
+
+def _remove_empty_containers(value: Any, *, in_list: bool) -> tuple[Any, bool] | None:
+    """Drop the containers pruning emptied; return ``(value, has_scalars)``.
+
+    ``None`` means the container goes. A container marked by
+    ``_mark_empty_containers`` (empty in the source) comes back as a plain
+    ``{}`` / ``[]``, and so does a container holding only such empties, but
+    only ``in_list`` (inside a list item). Outside a list, containers without
+    scalars go, and so do list items without scalars.
+    """
+    if isinstance(value, _KeptDict):
+        return ({}, False) if in_list else None
+    if isinstance(value, _KeptList):
+        return ([], False) if in_list else None
+    if isinstance(value, dict):
+        kept = {}
+        has_scalars = False
+        for key, child in value.items():
+            cleaned = _remove_empty_containers(child, in_list=in_list)
+            if cleaned is None or not (in_list or cleaned[1]):
+                continue
+            kept[key] = cleaned[0]
+            has_scalars = has_scalars or cleaned[1]
+        return (kept, has_scalars) if kept else None
+    if isinstance(value, list):
+        items = []
+        for child in value:
+            # A list item is carried whole, so its source empties go with it,
+            # but an item holding nothing else is dropped.
+            cleaned = _remove_empty_containers(child, in_list=True)
+            if cleaned is None or not (in_list or cleaned[1]):
+                continue
+            items.append(cleaned)
+        if not items:
+            return None
+        return [item[0] for item in items], any(item[1] for item in items)
+    return value, True
