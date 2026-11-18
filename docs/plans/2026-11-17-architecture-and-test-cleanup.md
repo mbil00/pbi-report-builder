@@ -59,13 +59,13 @@ Goal: an unedited `pbi export` → `pbi apply` is a byte no-op on every Desktop-
 which clears the remaining `KNOWN_REPORT_ROUNDTRIP` xfails and closes #108, #109, #113 and
 #104. The decisions above still apply. Each unit removes the xfails it fully resolves and adds a
 focused test per shape it fixes. A unit that turns out to be already fixed is marked here
-and skipped. The relay stops after R6, then cuts the release (expected v0.11.0).
+and skipped. R3 found that `RelativeTime` unit codes may not match Desktop (#135, needs a Desktop sample); export keeps unknown units raw meanwhile. The relay stops after R6, then cuts the release (expected v0.11.0).
 
 | # | Unit | Issues | Branch | State |
 |---|---|---|---|---|
 | R1 | apply accepts Desktop-saved cardVisual `Rows` role and keyDriversVisual sort | #109 | fix/apply-desktop-roles-sort | [x] #133 (b3643c0) |
-| R2 | visual content survives: Desktop's empty `{}`/`[]` (`expansionStates[].root`, smart narrative `defaultCase.textRuns`), shape `fill` duplicate `{"metadata":"default"}` entry, `queryState.Y.fieldParameters` dropped | #108 | fix/apply-keep-visual-content | [x] #134 |
-| R3 | filters survive: names kept (no `Filter_<hash>`), no added `isHiddenInViewMode`/`isLockedInViewMode`/`howCreated`, `RelativeTime` not rewritten as `RelativeDate` | #108 | fix/apply-keep-filters | [ ] |
+| R2 | visual content survives: Desktop's empty `{}`/`[]` (`expansionStates[].root`, smart narrative `defaultCase.textRuns`), shape `fill` duplicate `{"metadata":"default"}` entry, `queryState.Y.fieldParameters` dropped | #108 | fix/apply-keep-visual-content | [x] #134 (6b7948a) |
+| R3 | filters survive: names kept (no `Filter_<hash>`), no added `isHiddenInViewMode`/`isLockedInViewMode`/`howCreated`, `RelativeTime` not rewritten as `RelativeDate` | #108 | fix/apply-keep-filters | [x] #136 |
 | R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [ ] |
 | R5 | Desktop literal types kept (`28D`, `4D`, `0D`; `columnCount`, `cellPadding`) for `visual set` and apply | #104 | fix/desktop-literal-types | [ ] |
 | R6 | report-01: quoted text-run literals and expr colours, `navigationSection` page name vs id, measure sort as `Column`; remove the last report xfails | #113, #108 | fix/report01-roundtrip | [ ] |
