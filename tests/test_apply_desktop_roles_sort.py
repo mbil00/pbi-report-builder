@@ -116,3 +116,17 @@ def test_card_rows_takes_a_column(fixture_copy: Callable[[str], Path]) -> None:
     assert measure.exit_code == 1
     assert 'Role "Rows" must use a column' in measure.output
     assert _visual_path(root, CARD).read_bytes() == before
+
+
+def test_card_rows_role_is_case_insensitive(fixture_copy: Callable[[str], Path]) -> None:
+    root = fixture_copy(FIXTURE)
+    desktop_rows = _query(root, CARD)["queryState"]["Rows"]
+
+    unbound = cli("visual", "unbind", PAGE, CARD, "rows", project=root)
+    assert unbound.exit_code == 0, unbound.output
+    assert "Rows" not in _query(root, CARD)["queryState"]
+
+    bound = cli("visual", "bind", PAGE, CARD, "rows", "Product.Category", project=root)
+
+    assert bound.exit_code == 0, bound.output
+    assert _query(root, CARD)["queryState"]["Rows"] == desktop_rows

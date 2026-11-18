@@ -407,8 +407,12 @@ def normalize_visual_role(visual_type: str, role: str) -> str:
     *visual_type* is the visualType a visual is stored with (or a canonical
     type); a stored legacy `card` keeps its own roles.
     """
+    from pbi.visual_analysis import allowed_role_names
+
     canonical_type = _stored_role_type(visual_type)
     known_roles = [entry["name"] for entry in stored_visual_roles(visual_type)]
+    # Plus the roles Desktop saves beyond the schema's (e.g. cardVisual Rows).
+    known_roles += sorted(allowed_role_names(canonical_type) - set(known_roles))
 
     for known_role in known_roles:
         if known_role.lower() == role.lower():
