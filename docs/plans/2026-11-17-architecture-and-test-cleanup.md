@@ -66,7 +66,7 @@ and skipped. R3 found that `RelativeTime` unit codes may not match Desktop (#135
 | R1 | apply accepts Desktop-saved cardVisual `Rows` role and keyDriversVisual sort | #109 | fix/apply-desktop-roles-sort | [x] #133 (b3643c0) |
 | R2 | visual content survives: Desktop's empty `{}`/`[]` (`expansionStates[].root`, smart narrative `defaultCase.textRuns`), shape `fill` duplicate `{"metadata":"default"}` entry, `queryState.Y.fieldParameters` dropped | #108 | fix/apply-keep-visual-content | [x] #134 (6b7948a) |
 | R3 | filters survive: names kept (no `Filter_<hash>`), no added `isHiddenInViewMode`/`isLockedInViewMode`/`howCreated`, `RelativeTime` not rewritten as `RelativeDate` | #108 | fix/apply-keep-filters | [x] #136 (4793743) |
-| R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [ ] |
+| R4 | bookmarks survive: `$schema`, `options` order and content, `explorationState.filters`/`objects`, `visualContainers`/`singleVisual` key order | #108 | fix/apply-keep-bookmarks | [x] #137 |
 | R5 | Desktop literal types kept (`28D`, `4D`, `0D`; `columnCount`, `cellPadding`) for `visual set` and apply | #104 | fix/desktop-literal-types | [ ] |
 | R6 | report-01: quoted text-run literals and expr colours, `navigationSection` page name vs id, measure sort as `Column`; remove the last report xfails | #113, #108 | fix/report01-roundtrip | [ ] |
 
