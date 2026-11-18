@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from pbi.apply.visual_queries import _kept_field_parameters
 from pbi.properties import VISUAL_PROPERTIES, set_property
 from pbi.roundtrip_primitives import prune_visual_pbir
 from tests.support import cli, read_json, report_definition
@@ -122,6 +123,51 @@ def test_field_parameter_goes_when_its_projections_are_unbound(
 
     assert len(y["projections"]) == 2
     assert "fieldParameters" not in y
+
+
+def _measure_projection(query_ref: str) -> dict:
+    field = {"Measure": {"Expression": {"SourceRef": {"Entity": "M"}}, "Property": "Hours"}}
+    return {"field": field, "queryRef": query_ref}
+
+
+def test_field_parameter_stays_on_its_own_projection_beside_the_same_measure() -> None:
+    # A direct Hours binding, then the parameter's Hours projection (same
+    # field, its own query ref): the parameter keeps index 1.
+    projections = [_measure_projection("M.Hours"), _measure_projection("M.Hours1")]
+    state = {"projections": projections, "fieldParameters": [{**FIELD_PARAMETERS[0], "index": 1, "length": 1}]}
+
+    assert _kept_field_parameters(state, projections) == state["fieldParameters"]
+
+
+def test_field_parameter_is_dropped_when_its_new_place_is_ambiguous() -> None:
+    hours = _measure_projection("M.Hours")
+    other = {**_measure_projection("M.Other"), "field": {"Measure": {"Property": "Other"}}}
+    state = {"projections": [hours], "fieldParameters": [{**FIELD_PARAMETERS[0], "length": 1}]}
+
+    assert _kept_field_parameters(state, [other, hours, hours]) == []
+    assert _kept_field_parameters(state, [other, hours]) == [{**FIELD_PARAMETERS[0], "index": 1, "length": 1}]
+
+
+def _card_with_default_entry() -> dict:
+    return {
+        "visual": {
+            "visualType": "cardVisual",
+            "objects": {
+                "accentBar": [{"properties": {"show": {"expr": {"Literal": {"Value": "true"}}}}, "selector": {"id": "default"}}]
+            },
+        }
+    }
+
+
+def test_explicit_measure_ref_default_is_a_query_ref() -> None:
+    data = _card_with_default_entry()
+
+    set_property(data, "accentBar.color", "#112233", VISUAL_PROPERTIES, measure_ref="default")
+
+    entries = data["visual"]["objects"]["accentBar"]
+    assert "color" not in entries[0]["properties"]
+    assert entries[1]["selector"] == {"metadata": "default"}
+    assert "color" in entries[1]["properties"]
 
 
 def test_default_bracket_selector_writes_desktop_default_entry() -> None:

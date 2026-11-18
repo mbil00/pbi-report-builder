@@ -160,9 +160,10 @@ def set_property(
             )
 
     if prop_def and prop_def.container_key:
-        if bracket_measure == "default":
-            # "[default]" names Desktop's {"id": "default"} entry (as export
-            # writes it and chart: properties read it), not a measure.
+        if measure_ref is None and bracket_measure == "default":
+            # A "[default]" bracket names Desktop's {"id": "default"} entry (as
+            # export writes it and chart: properties read it), not a measure.
+            # An explicit measure_ref is always a query ref.
             prop_def = dataclasses.replace(prop_def, selector="default")
             bracket_measure = None
         _set_container_prop(data, prop_def, value, measure_ref=bracket_measure)
